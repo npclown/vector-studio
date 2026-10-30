@@ -24,7 +24,9 @@ beforeAll(async () => {
   const fixture = JSON.parse(
     await readFile(path.join(root, 'tests/fixtures/m1-model/containers.json'), 'utf8'),
   ) as { nodes: Record<string, LineNodeV6> };
-  l1 = fixture.nodes.l1!;
+  // The fixture is v2: its stroke reaches v6 with `dash: null` (M4-M1).
+  const raw = fixture.nodes.l1!;
+  l1 = { ...raw, stroke: raw.stroke === null ? null : { ...raw.stroke, dash: null } };
 });
 
 /** Distinct boundary vertices, the renderer's fringe work measure. */

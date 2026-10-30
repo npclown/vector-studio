@@ -219,6 +219,13 @@ function line(
   }) as unknown as NodeV6;
 }
 
+/** `lineContent` of a test line, its stroke at v6 (M4-M1 adds `dash: null`). */
+function lineContentOf(value: unknown): ReturnType<typeof lineContent> {
+  const node = value as { stroke: object | null };
+  const stroke = node.stroke === null ? null : { ...node.stroke, dash: null };
+  return lineContent({ ...node, stroke } as never);
+}
+
 describe('M1-A09 projection of the v2 fixtures', () => {
   it('every v2 fixture and page is accepted by the scene mirror as its projection', async () => {
     for (const name of ['empty.v2.json', 'shapes.v2.json', 'ext-star.v2.json', 'containers.json']) {
@@ -396,7 +403,7 @@ describe('M1-A09 projection of the v2 fixtures', () => {
 
 describe('M1-A09 line projection', () => {
   it('stroke mode: the segment, then each line arrow as an open polyline, P0 end first', () => {
-    const content = lineContent(line('line', 'line') as never);
+    const content = lineContentOf(line('line', 'line'));
     expect(content.style).toEqual({
       fill: null,
       stroke: { color: black, width: 2, cap: 'butt', join: 'miter', miterLimit: 4 },
@@ -407,14 +414,14 @@ describe('M1-A09 line projection', () => {
       points: [0, 0, 100, 0, 8, 4, 0, 0, 8, -4, 92, 4, 100, 0, 92, -4],
       fillRule: 'nonzero',
     });
-    expect(lineContent(line('none', 'line') as never).geometry.points).toEqual([
+    expect(lineContentOf(line('none', 'line') as never).geometry.points).toEqual([
       0, 0, 100, 0, 92, 4, 100, 0, 92, -4,
     ]);
   });
 
   it('no stroke, width 0 or zero length: stroke mode without arrowheads', () => {
     const plain = (overrides: Fields) =>
-      lineContent(line('triangle', 'triangle', 'butt', overrides) as never);
+      lineContentOf(line('triangle', 'triangle', 'butt', overrides));
     const segment = {
       kind: 'path',
       verbs: ['move', 'line'],
@@ -437,7 +444,7 @@ describe('M1-A09 line projection', () => {
   });
 
   it('fill mode: square cap shaft, line-head rectangles, then the triangle head', () => {
-    const content = lineContent(line('line', 'triangle', 'square') as never);
+    const content = lineContentOf(line('line', 'triangle', 'square'));
     expect(content.style).toEqual({ fill: black, stroke: null });
     const g = content.geometry;
     expect(g.fillRule).toBe('nonzero');
@@ -473,7 +480,7 @@ describe('M1-A09 line projection', () => {
   });
 
   it('fill mode: triangle at P0, round cap at P1 as a 16-segment half circle', () => {
-    const g = lineContent(line('triangle', 'none', 'round') as never).geometry;
+    const g = lineContentOf(line('triangle', 'none', 'round')).geometry;
     expect(g.verbs).toEqual([
       'move',
       'line',
@@ -513,11 +520,11 @@ describe('M1-A09 line projection', () => {
   });
 
   it('a line head alone stays in stroke mode; with a triangle end, P0 gets a round half circle', () => {
-    const g = lineContent(line('none', 'line', 'round') as never).geometry;
+    const g = lineContentOf(line('none', 'line', 'round')).geometry;
     // Stroke mode: a line head alone keeps the stroke.
     expect(g.verbs).toEqual(['move', 'line', 'move', 'line', 'line']);
-    const both = lineContent(
-      line('none', 'triangle', 'round', { points: [0, 0, 1, 0] }) as never,
+    const both = lineContentOf(
+      line('none', 'triangle', 'round', { points: [0, 0, 1, 0] }),
     ).geometry;
     // Shaft, then the P0 half circle (N = n = (0, 1), u = (−1, 0)), then the P1 triangle.
     expect(both.verbs.slice(5, 23)).toEqual(['move', ...Array<string>(16).fill('line'), 'close']);
@@ -542,10 +549,10 @@ describe('M1-A09 line projection', () => {
   it('a diagonal line pins the sign of the normal in both modes', () => {
     // P0 = (0, 0), P1 = (30, 40): d = (0.6, 0.8), n = (−0.8, 0.6); B1 = (25.2, 33.6).
     const diagonal = { frame: { x: 0, y: 0, width: 30, height: 40 }, points: [0, 0, 1, 1] };
-    const stroked = lineContent(line('none', 'line', 'butt', diagonal) as never).geometry;
+    const stroked = lineContentOf(line('none', 'line', 'butt', diagonal)).geometry;
     expect(stroked.verbs).toEqual(['move', 'line', 'move', 'line', 'line']);
     expectPoints(stroked.points, [0, 0, 30, 40, 22, 36, 30, 40, 28.4, 31.2]);
-    const filled = lineContent(line('none', 'triangle', 'butt', diagonal) as never).geometry;
+    const filled = lineContentOf(line('none', 'triangle', 'butt', diagonal)).geometry;
     expect(filled.verbs).toEqual([
       'move',
       'line',
@@ -565,10 +572,10 @@ describe('M1-A09 line projection', () => {
   });
 
   it('fill mode omits the shaft and its caps when the heads overlap', () => {
-    const g = lineContent(
+    const g = lineContentOf(
       line('triangle', 'triangle', 'round', {
         frame: { x: 0, y: 0, width: 10, height: 0 },
-      }) as never,
+      }),
     ).geometry;
     expect(g.verbs).toEqual(['move', 'line', 'line', 'close', 'move', 'line', 'line', 'close']);
     expect(g.points).toEqual([0, 0, 8, -4, 8, 4, 10, 0, 2, 4, 2, -4]);

@@ -1141,12 +1141,16 @@ describe('M4-P2 stroke narrowing in the projector (the M4-A05 narrowing part)', 
     const document = parsed(APPEARANCE);
     const nodes = projectPage(document, 'page-1', custom).nodes;
     const style = (id: string) => (nodes.get(id) as Styled).style;
-    expect(style('r1').stroke).toEqual({ color: black, width: 4 });
-    expect(Object.keys(style('r1').stroke!)).toEqual(['color', 'width']);
+    // From M4-U2, r1 (miter join, dash) is a path (M4-P3); r2 and the solid e1 stay primitives.
+    expect(style('r2').stroke).toEqual({ color: black, width: 1 });
+    expect(Object.keys(style('r2').stroke!)).toEqual(['color', 'width']);
     expect(Object.keys(style('e1').stroke!)).toEqual(['color', 'width']);
-    // A dashed path stroke keeps its dash; a solid one has no `dash` key (M4-Q14 (a)).
+    expect(nodes.get('r1')!.kind).toBe('path');
+    // A dashed path stroke keeps its dash; a solid one has no `dash` key (M4-Q14 (a)). From
+    // M4-U2 its gradient is composed in the 100 × 100 box (M4-P1).
+    const p1Color = (document.nodes.p1 as { stroke: { color: object } }).stroke.color;
     expect(style('p1').stroke).toEqual({
-      color: (document.nodes.p1 as { stroke: { color: unknown } }).stroke.color,
+      color: { ...p1Color, transform: [50, 0, 0, 50, 50, 50] },
       width: 3,
       cap: 'square',
       join: 'bevel',
@@ -1166,10 +1170,16 @@ describe('M4-P2 stroke narrowing in the projector (the M4-A05 narrowing part)', 
       (node) => node.id.endsWith('\u0000border') && node.style.stroke !== null,
     );
     expect(borders.map((node) => node.id.split('\u0000')[0]).sort()).toEqual(['f1', 'i1']);
-    // The instance border takes its source's stroke, narrowed.
+    // The instance border takes its source's stroke; its miter join and dash make it a path
+    // from M4-U2 (M4-P3), with the full stroke.
+    expect(nodes.get('i1\u0000border')!.kind).toBe('path');
     expect(style('i1\u0000border').stroke).toEqual({
       color: { r: 0, g: 0.5, b: 0, a: 1 },
       width: 3,
+      cap: 'butt',
+      join: 'miter',
+      miterLimit: 4,
+      dash: { pattern: [6, 3], phase: 1.5 },
     });
   });
 

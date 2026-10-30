@@ -110,8 +110,9 @@ function lineBox(node: Extract<NodeV6, { type: 'line' }>): Box {
     return grow(outline, strokeGrowth(stroke));
   }
   for (const [arrow, tip, u] of ends) {
-    // The shaft's corners at this end (a square cap moves them w/2 outward).
-    const out = arrow === 'none' && stroke.cap === 'square' ? w / 2 : 0;
+    // The shaft's corners at this end: a square cap moves them w/2 outward at every end but a
+    // triangle's base, a `line` head's tip included (M4-U2 review, N5).
+    const out = arrow !== 'triangle' && stroke.cap === 'square' ? w / 2 : 0;
     box = include(box, at(tip, u, out, w / 2));
     box = include(box, at(tip, u, out, -w / 2));
     if (arrow === 'none' && stroke.cap === 'round') box = include(box, tip, w / 2);
@@ -128,8 +129,15 @@ function lineBox(node: Extract<NodeV6, { type: 'line' }>): Box {
 function ownBox(document: DocumentV6, node: NodeV6): Box {
   switch (node.type) {
     case 'rectangle':
-    case 'ellipse':
-      return grow(boxOf(node.frame), node.stroke === null ? 0 : node.stroke.width / 2);
+    case 'ellipse': {
+      // A dash end on a curve (an ellipse, a rounded corner) turns a square cap's corner up to
+      // w/2·√2 from the outline (M4-U2 review, S1); otherwise the stroke reaches w/2 past the
+      // box, a sharp corner's miter tip included.
+      const stroke = node.stroke;
+      if (stroke === null) return boxOf(node.frame);
+      const square = stroke.dash !== null && stroke.cap === 'square';
+      return grow(boxOf(node.frame), (stroke.width / 2) * (square ? Math.SQRT2 : 1));
+    }
     case 'path':
       return pathBox(node);
     case 'line':
