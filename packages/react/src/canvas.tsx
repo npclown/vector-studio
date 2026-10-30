@@ -210,6 +210,7 @@ export function EditorCanvas({
         onPointerDown={(event) => input.pointerDown(event)}
         onMouseDown={(event) => input.mouseDown(event)}
         onPointerMove={(event) => input.pointerMove(event)}
+        onPointerLeave={() => input.pointerLeave()}
         onPointerUp={(event) => input.pointerUp(event)}
         onPointerCancel={(event) => input.pointerCancel(event)}
         onDoubleClick={(event) => input.doubleClick(event)}

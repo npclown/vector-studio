@@ -5,19 +5,27 @@ import type {
 } from '@vector-studio/contracts';
 import {
   DOCUMENT_ERROR_CODES,
+  MAX_TEXT_LENGTH,
   isValidId,
   validateAnyDocument,
   type DocumentV6,
   type ParseResult,
   type TextNode,
 } from '@vector-studio/model';
-import { copyFragment } from './clipboard.js';
+import {
+  copyFragment,
+  fragmentPlainText,
+  isFragmentText,
+  pasteSource,
+  pasteTargetOf,
+} from './clipboard.js';
 import { ExpansionCache, expansionFailure } from './expansion.js';
 import {
   applyEdit,
   applyGestureEdit,
   deepFreeze,
   refitGesture,
+  TEXT_LINE_HEIGHT,
   type EditResult,
   type GestureEdit,
 } from './edits.js';
@@ -695,6 +703,12 @@ class EditorCore implements Editor {
    */
   private clipboard: string | null = null;
   /**
+   * Whether `clipboard` holds the plain text of a text edit mode copy or cut (M6b section 9.2),
+   * which `paste {}` inserts as plain text even when it starts with the fragment marker
+   * (section 9.4); a fragment copy or cut clears it.
+   */
+  private clipboardPlain = false;
+  /**
    * The clipboard generation (M7 contract, section 6): a session counter, 0 at construction,
    * that each successful `loadDocument` increments; `copy` and `cut` record it with the text in
    * `clipboardCopiedIn`. A paste links an instance by its carried source's ID alone only while
@@ -1066,18 +1080,25 @@ class EditorCore implements Editor {
 
   private run(command: Command): CommandResult {
     if (typeof command !== 'object' || command === null) return failure('editor.invalid-command');
-    // Until the edit-mode clipboard of M6b section 9.2 (M6b-U8): in text edit mode `copy`,
-    // `cut` and `paste` do nothing and return no IDs, the collapsed-caret result of 9.2, so the
-    // host leaves the DOM event alone and the edited node is never copied, cut or pasted over.
+    // In text edit mode `copy`, `cut` and `paste` act on the edited text (M6b section 9.2),
+    // after the forced end of an active composition (section 7.3), before their own checks.
     if (
       this.textEdit !== null &&
       (command.type === 'copy' || command.type === 'cut' || command.type === 'paste')
     ) {
-      return { ok: true, ids: [] };
+      this.endTextGesture();
+      // Defensive: the forced end keeps edit mode (its commit holds the node).
+      if (this.textEdit !== null) return this.textClipboard(command);
     }
     // An active text gesture commits first (section 7.3), whatever the command then does; a
     // command that then fails leaves the commit in place.
     if (FORCED_END_COMMANDS.has(command.type)) this.endTextGesture();
+    // Unmarked text outside edit mode creates a text node (M6b section 9.3).
+    if (command.type === 'paste') {
+      const source = pasteSource(command, this.clipboard);
+      if (typeof source !== 'string') return source;
+      if (!this.isFragmentSource(command, source)) return this.pastePlainText(command, source);
+    }
     if (DOCUMENT_COMMANDS.has(command.type)) {
       // A host command during a drag would leave the gesture's base stale, so it applies to the
       // pre-gesture document and, only if it succeeds, cancels the drag first.
@@ -1312,6 +1333,7 @@ class EditorCore implements Editor {
           if (!result.ok) return result;
         }
         this.clipboard = copied.text;
+        this.clipboardPlain = false;
         this.clipboardCopiedIn = this.clipboardGenerationValue;
         this.clipboardLinks = new Set(this.hostIds ? [] : copied.sources);
         // The copied roots in paint order, so a host can tell a copy from an empty one.
@@ -2393,10 +2415,15 @@ class EditorCore implements Editor {
    * The step is an insertion whose caret entry (section 8.1) holds the new ID, from the pending
    * caret 0 to the caret after the text, and following insertions merge into it (section 8.2,
    * "the pending node's creating step merges"); an LF (Enter, or a text holding one) is its own
-   * step. A first composition on a pending node creates it through the text gesture instead
-   * (section 7.1, appendix A case 9, `compositionStep`).
+   * step, and so is a paste (`kind` `own`, section 9.2). A first composition on a pending node
+   * creates it through the text gesture instead (section 7.1, appendix A case 9,
+   * `compositionStep`).
    */
-  private createPendingText(pending: TextEditPending, text: string): CommandResult {
+  private createPendingText(
+    pending: TextEditPending,
+    text: string,
+    kind: TextStepKind = text.includes('\n') ? 'own' : 'insert',
+  ): CommandResult {
     const { parent, frame, sizing, style } = pending;
     const siblings = childrenOf(documentTree(this.document), parent).length;
     const depth = this.undoStack.length;
@@ -2422,7 +2449,7 @@ class EditorCore implements Editor {
     this.setSelectionState([id]);
     this.refresh({ type: 'session', field: 'textEdit' });
     const before = { anchor: edit.anchor, focus: edit.focus, affinity: edit.affinity };
-    this.recordTextStep(depth, id, text.includes('\n') ? 'own' : 'insert', before, false);
+    this.recordTextStep(depth, id, kind, before, false);
     return result;
   }
 
@@ -2931,6 +2958,127 @@ class EditorCore implements Editor {
     );
     this.setSnap(null);
     this.textMerge = record.merge;
+  }
+
+  /**
+   * `copy`, `cut` and `paste` in text edit mode (M6b contract, section 9.2), after the forced
+   * end. With a non-empty selection `copy` and `cut` put its plain text into the in-memory
+   * clipboard (the `clipboard` query), clear the carried-source link set (M7 rule (1)) and
+   * return `[id]`, so the host prevents the DOM event and writes the text as `text/plain`; `cut`
+   * then deletes the selection as one step of its own (a break, section 8.2), before the
+   * clipboard changes, so a failed cut leaves it as it was. With a collapsed caret, or on a
+   * pending node, they change nothing and return no IDs, so the browser's event runs. `ids` is
+   * not read in edit mode.
+   *
+   * `paste` (sections 9.2 and 9.4) checks its fields (`/text`, `/at`, `/pointer`), reads `text`
+   * or the in-memory clipboard (`editor.empty-clipboard` without either), takes unmarked text
+   * normalized (section 9.1) or a fragment's `text` nodes' texts joined by LF (M6b-Q8 (a)), and
+   * replaces the selection in the style before its start as one step of its own (a break); on a
+   * pending node it creates the node (section 7.1). Empty after normalization it fails with
+   * `editor.unsupported-clipboard` and changes nothing; a result over `MAX_TEXT_LENGTH` fails at
+   * the `setText` (or `createText`) path, as `textinput` does.
+   */
+  private textClipboard(
+    command: Extract<Command, { type: 'copy' | 'cut' | 'paste' }>,
+  ): CommandResult {
+    const edit = this.textEdit!;
+    if (command.type === 'paste') {
+      const source = pasteSource(command, this.clipboard);
+      if (typeof source !== 'string') return source;
+      const raw = this.isFragmentSource(command, source)
+        ? fragmentPlainText(source, this.extensions)
+        : source;
+      if (typeof raw !== 'string') return raw;
+      const text = normalizeInputText(raw);
+      if (text.length === 0) return failure('editor.unsupported-clipboard');
+      if (edit.pending !== null) return this.createPendingText(edit.pending, text, 'own');
+      if (edit.id === null) return { ok: true, ids: [] };
+      const start = Math.min(edit.anchor, edit.focus);
+      const end = Math.max(edit.anchor, edit.focus);
+      const result = this.editText(edit.id, start, end, text, 'own');
+      // The edited node, as a fragment paste returns what it pasted into the document.
+      return result.ok ? { ok: true, ids: [edit.id] } : result;
+    }
+    const id = edit.id;
+    const node = id === null ? undefined : this.document.nodes[id];
+    if (id === null || node?.type !== 'text' || edit.anchor === edit.focus) {
+      return { ok: true, ids: [] };
+    }
+    const start = Math.min(edit.anchor, edit.focus);
+    const end = Math.max(edit.anchor, edit.focus);
+    const text = node.runs
+      .map((run) => run.text)
+      .join('')
+      .slice(start, end);
+    if (command.type === 'cut') {
+      const result = this.editText(id, start, end, '', 'own');
+      if (!result.ok) return result;
+    }
+    this.clipboard = text;
+    this.clipboardPlain = true;
+    this.clipboardCopiedIn = this.clipboardGenerationValue;
+    this.clipboardLinks = new Set();
+    return { ok: true, ids: [id] };
+  }
+
+  /**
+   * Whether a paste reads `source` as a fragment: it starts with the marker, unless it is the
+   * in-memory plain text of an edit-mode copy or cut (no `text` given), which stays plain text
+   * (section 9.4).
+   */
+  private isFragmentSource(command: Extract<Command, { type: 'paste' }>, source: string): boolean {
+    if (command.text === undefined && this.clipboardPlain) return false;
+    return isFragmentText(source);
+  }
+
+  /**
+   * `paste` of unmarked text outside text edit mode (M6b contract, sections 9.3 and 9.4): the
+   * text normalized (section 9.1), empty `editor.unsupported-clipboard`; without a port
+   * `editor.no-text-layout`; then one `createText` of an `autoWidth` node in the text tool
+   * style, as one step, in the paste target (the scope, else a single selected frame or symbol,
+   * else the active page), on top, whose page box centre is `pointer`, else `at`, else the
+   * viewport centre (`editor.no-viewport-size` before `setViewportSize`). The box is laid out
+   * first, so its top-left is the centre less half the laid-out size and the creation's refit
+   * keeps it. The node is selected; edit mode is not entered. A text over `MAX_TEXT_LENGTH` is
+   * not laid out and fails at the `createText` path.
+   */
+  private pastePlainText(
+    command: Extract<Command, { type: 'paste' }>,
+    source: string,
+  ): CommandResult {
+    const text = normalizeInputText(source);
+    if (text.length === 0) return failure('editor.unsupported-clipboard');
+    const layouts = this.textLayouts;
+    if (layouts === null) return failure('editor.no-text-layout');
+    const centre = command.pointer ?? command.at ?? this.viewportCentre();
+    if (centre === null) return failure('editor.no-viewport-size');
+    const { family, size, color } = this.textStyle;
+    const laid =
+      text.length > MAX_TEXT_LENGTH
+        ? { width: 0, height: 0 }
+        : layouts.layoutRequest({
+            runs: [{ text, family, size }],
+            width: null,
+            align: 'left',
+            letterSpacing: 0,
+            lineHeight: TEXT_LINE_HEIGHT,
+          });
+    // The target as the fragment paste picks it, on the pre-gesture document a creation uses.
+    const parent = pasteTargetOf(this.gestureState?.base ?? this.document, this.context(true));
+    const result = this.run({
+      type: 'createText',
+      frame: {
+        x: centre.x - laid.width / 2,
+        y: centre.y - laid.height / 2,
+        width: laid.width,
+        height: laid.height,
+      },
+      runs: [{ text, family, size, color }],
+      sizing: 'autoWidth',
+      parent,
+    });
+    if (result.ok) this.setSelectionState(result.ids);
+    return result;
   }
 
   /**

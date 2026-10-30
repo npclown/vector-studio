@@ -43,7 +43,8 @@ import {
 // selected frame, rotated targets included; `at`; cut is one step and a failed cut keeps the
 // clipboard; each paste failure has no partial document and draws no ID; clip depth 32 and 33,
 // tree depth 256 and 257 at the target, and a target failing both gives `document.invalid-field`;
-// foreign and empty text create nothing.
+// foreign and empty text create nothing (without a text layout port; M6b section 9.3 makes
+// unmarked non-empty text a text node, tested in m6b-u8-clipboard.test.ts).
 
 const START = { horizontal: 'start', vertical: 'start' } as const;
 const black = { r: 0, g: 0, b: 0, a: 1 };
@@ -713,21 +714,23 @@ describe('M2-A10 paste failures', () => {
       { type: 'paste', text: '' },
       { ok: false, code: 'editor.unsupported-clipboard' },
     ],
+    // Unmarked non-empty text creates a text node since M6b section 9.3; these editors have
+    // no text layout port, so it fails with `editor.no-text-layout` (m6b-u8-clipboard.test.ts).
     [
       'foreign text',
       { type: 'paste', text: 'hello' },
-      { ok: false, code: 'editor.unsupported-clipboard' },
+      { ok: false, code: 'editor.no-text-layout' },
     ],
     [
       'an unmarked fragment body',
       { type: 'paste', text: JSON.stringify(body({ a: leaf('a') })) },
-      { ok: false, code: 'editor.unsupported-clipboard' },
+      { ok: false, code: 'editor.no-text-layout' },
     ],
     [
       'a document text',
       // The v2 fixture's document text (`serializeDocument` writes v6 nodes only since M4-U1).
       { type: 'paste', text: `${JSON.stringify(FIXTURE, null, 2)}\n` },
-      { ok: false, code: 'editor.unsupported-clipboard' },
+      { ok: false, code: 'editor.no-text-layout' },
     ],
     [
       'the marker alone',
@@ -1017,7 +1020,7 @@ describe('M2-A10 paste failures', () => {
     expect(target.execute({ type: 'paste' })).toEqual({ ok: true, ids: ['x1', 'x2'] });
     const before = documentOf(target);
     expect(target.execute({ type: 'paste' })).toEqual({ ok: false, code: 'editor.duplicate-id' });
-    expect(target.execute({ type: 'paste', text: 'hello' })).toEqual({
+    expect(target.execute({ type: 'paste', text: '' })).toEqual({
       ok: false,
       code: 'editor.unsupported-clipboard',
     });

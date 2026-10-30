@@ -320,32 +320,46 @@ describe('M6b-A08 key routing, React half (M6b-H2, section 5)', () => {
     ]);
   });
 
-  it('copy, cut and paste on the textarea reach the editor', () => {
-    const host = editing();
-    const clipboard = { getData: () => 'z', setData: () => undefined };
-    const copyPrevented: string[] = [];
-    for (const type of ['copy', 'cut']) {
+  it('copy, cut and paste on the textarea reach the editor and act on the text', () => {
+    // "ab cd" with "b c" selected (M6b section 9.2; m6b-u8-clipboard-host.test.ts has the rest).
+    const host = editing(1, 4);
+    const written: [string, string][] = [];
+    const clipboard = {
+      getData: () => 'z',
+      setData: (format: string, data: string) => written.push([format, data]),
+    };
+    const prevented: string[] = [];
+    const fire = (type: string) =>
       host.textarea.fire(type, {
         clipboardData: clipboard,
-        preventDefault: () => copyPrevented.push(type),
+        preventDefault: () => prevented.push(type),
       });
-    }
-    // Until M6b-U8 the edit-mode copy and cut return `ids: []` (U4's no-ops), so the browser's
-    // events run.
-    expect(copyPrevented).toEqual([]);
-    let prevented = false;
-    host.textarea.fire('paste', {
-      clipboardData: clipboard,
-      preventDefault: () => {
-        prevented = true;
-      },
-    });
+    fire('copy');
+    expect(prevented).toEqual(['copy']);
+    expect(written).toEqual([['text/plain', 'b c']]);
+    expect(host.textOf('t')).toBe('ab cd');
+    fire('cut');
+    expect(prevented).toEqual(['copy', 'cut']);
+    expect(written).toEqual([
+      ['text/plain', 'b c'],
+      ['text/plain', 'b c'],
+    ]);
+    expect(host.textOf('t')).toBe('ad');
+    // A collapsed caret now: copy and cut are left to the browser.
+    fire('copy');
+    fire('cut');
+    expect(prevented).toEqual(['copy', 'cut']);
+    fire('paste');
+    expect(prevented).toEqual(['copy', 'cut', 'paste']);
+    expect(host.textOf('t')).toBe('azd');
     expect(host.commands).toEqual([
+      { type: 'copy' },
+      { type: 'cut' },
       { type: 'copy' },
       { type: 'cut' },
       { type: 'paste', text: 'z' },
     ]);
-    expect(prevented).toBe(true);
+    expect(host.focused()).toBe('textarea');
   });
 
   it('a press inside the edited box is prevented and keeps focus on the textarea', () => {

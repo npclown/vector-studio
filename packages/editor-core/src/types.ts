@@ -396,8 +396,16 @@ export type DocumentCommand =
    * pasted source, else is linked to its carried source or pasted detached as a frame. Returns
    * the pasted roots in paint order and selects them. A creating command: inside a gesture it
    * goes through `update` once.
+   *
+   * Plain text (MVP M6b contract, section 9): outside text edit mode, unmarked text that is
+   * non-empty after the section 9.1 normalization creates one `autoWidth` text node in the text
+   * tool style whose box centre is `pointer` (the host's last pointer position over the canvas,
+   * in page space), else `at`, else the viewport centre, in the paste target, selected; empty
+   * text is `editor.unsupported-clipboard`. In text edit mode the normalized text, or the texts
+   * of a fragment's `text` nodes joined by LF, replaces the selection as one step (`at` and
+   * `pointer` are not used) and returns the edited node's ID.
    */
-  | Readonly<{ type: 'paste'; text?: string; at?: PagePoint }>
+  | Readonly<{ type: 'paste'; text?: string; at?: PagePoint; pointer?: PagePoint }>
   // Path commands (MVP M3 contract, section 3) on one `path` node of the active page at any
   // depth; re-normalized after the edit (section 3.1). Relative commands: inside a gesture they
   // go through `replace`, never `update`.
@@ -515,7 +523,9 @@ export type SessionCommand =
    * Serializes the subtrees of `ids` (default the selection) as a fragment into the in-memory
    * clipboard (M2 contract, section 6; fragment version 2 with the carried sources of copied
    * instances, M7 contract, section 6); an empty selection changes nothing. Returns the copied
-   * roots in paint order (none for an empty selection).
+   * roots in paint order (none for an empty selection). In text edit mode (MVP M6b contract,
+   * section 9.2) it copies the selected plain text instead (`ids` is not read) and returns
+   * `[id]`, or nothing with a collapsed caret.
    */
   | Readonly<{ type: 'copy'; ids?: readonly string[] }>
   // Path edit mode (MVP M3 contract, section 4).
@@ -558,6 +568,8 @@ export type Command =
   /**
    * `copy` and `deleteNodes` as one transaction (M2 contract, section 6); a failed cut changes
    * neither the document nor the clipboard. Returns the cut (now removed) roots in paint order.
+   * In text edit mode (MVP M6b contract, section 9.2) it copies and deletes the selected text as
+   * one step and returns `[id]`, or nothing with a collapsed caret.
    */
   | Readonly<{ type: 'cut'; ids?: readonly string[] }>
   /** Runs a registered extension command (P5 plan, section 5). */
@@ -687,7 +699,10 @@ export type Query =
   | Readonly<{ type: 'snapping' }>
   /** The entered container, or null. */
   | Readonly<{ type: 'scope' }>
-  /** The in-memory clipboard's fragment text, or null (M2 contract, section 6). */
+  /**
+   * The in-memory clipboard's text, or null (M2 contract, section 6): fragment text, or the
+   * plain text of a text edit mode copy or cut (MVP M6b contract, section 9.2).
+   */
   | Readonly<{ type: 'clipboard' }>
   /** Path edit mode, or null (M3 contract, section 4). */
   | Readonly<{ type: 'pathEdit' }>
