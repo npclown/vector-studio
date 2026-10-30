@@ -8,6 +8,9 @@ import type { RendererFactory, RendererHandle } from '@vector-studio/react';
 // M1-U5: the service draws rect and mask clips (P4), which M1 frames and mask groups project to.
 // With `?test=1` the backend also enables the E10 frame capture, and `window.__nextHostRenderer`
 // gives the headed M1-A12 spec the next presented frame and the backend's diagnostics.
+// M4-U4 (M4 contract, M4-P7): the service also takes `paints: 'gradient'` (E23) and
+// `groups: 'isolated'` (E25) beside `clips: 'all'`, so gradient paints and translucent
+// containers and instances draw instead of being isolated as `editor.renderer-unsupported`.
 
 const WASM_URL = '/geometry-kernel.wasm';
 
@@ -98,6 +101,8 @@ export const createWebGpuRenderer: RendererFactory = async (canvas, size) => {
       strokeMesh: stroke,
       strokeMeshMemoryBytes: () => stroke.linearMemoryBytes(),
       clips: 'all',
+      paints: 'gradient',
+      groups: 'isolated',
     });
     releases.push(() => service.dispose());
     const source = backend.attachPrimitiveFrameSource(service);

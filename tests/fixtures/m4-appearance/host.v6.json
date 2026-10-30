@@ -1,0 +1,717 @@
+{
+  "schemaVersion": 6,
+  "id": "m4-appearance-host",
+  "pages": [
+    {
+      "id": "p1",
+      "name": "Paints and strokes",
+      "children": [
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6"
+      ]
+    },
+    {
+      "id": "p2",
+      "name": "Opacity",
+      "children": [
+        "h7",
+        "h8",
+        "h9"
+      ]
+    }
+  ],
+  "nodes": {
+    "h1": {
+      "id": "h1",
+      "name": "h1",
+      "parent": "p1",
+      "frame": {
+        "x": 10,
+        "y": 10,
+        "width": 300,
+        "height": 100
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "rectangle",
+      "cornerRadii": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "fill": {
+        "kind": "linear",
+        "transform": [
+          0.6666666666666666,
+          0,
+          0,
+          2,
+          0.16666666666666666,
+          0
+        ],
+        "stops": [
+          {
+            "offset": 0,
+            "color": {
+              "r": 1,
+              "g": 0,
+              "b": 0,
+              "a": 1
+            }
+          },
+          {
+            "offset": 1,
+            "color": {
+              "r": 0,
+              "g": 0,
+              "b": 1,
+              "a": 1
+            }
+          }
+        ],
+        "spread": "pad"
+      },
+      "stroke": null
+    },
+    "h2": {
+      "id": "h2",
+      "name": "h2",
+      "parent": "p1",
+      "frame": {
+        "x": 330,
+        "y": 10,
+        "width": 200,
+        "height": 100
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "ellipse",
+      "fill": {
+        "kind": "radial",
+        "transform": [
+          0.5,
+          0,
+          0,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "stops": [
+          {
+            "offset": 0,
+            "color": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+            }
+          },
+          {
+            "offset": 0.5,
+            "color": {
+              "r": 0,
+              "g": 1,
+              "b": 0,
+              "a": 1
+            }
+          },
+          {
+            "offset": 1,
+            "color": {
+              "r": 0,
+              "g": 0,
+              "b": 0,
+              "a": 1
+            }
+          }
+        ],
+        "spread": "pad"
+      },
+      "stroke": null
+    },
+    "h3": {
+      "id": "h3",
+      "name": "h3",
+      "parent": "p1",
+      "frame": {
+        "x": 570,
+        "y": 10,
+        "width": 200,
+        "height": 160
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 0.5,
+      "visible": true,
+      "type": "path",
+      "path": {
+        "verbs": [
+          "move",
+          "cubic",
+          "line",
+          "line",
+          "close",
+          "move",
+          "line",
+          "line",
+          "line",
+          "close"
+        ],
+        "points": [
+          0,
+          0.25,
+          0.4,
+          0,
+          0.6,
+          0,
+          1,
+          0.25,
+          1,
+          1,
+          0,
+          1,
+          0.3,
+          0.5,
+          0.7,
+          0.5,
+          0.7,
+          0.75,
+          0.3,
+          0.75
+        ],
+        "fillRule": "evenodd"
+      },
+      "fill": {
+        "kind": "linear",
+        "transform": [
+          0.866025,
+          0.625,
+          -0.5,
+          1.0825312500000002,
+          0,
+          0.25
+        ],
+        "stops": [
+          {
+            "offset": 0,
+            "color": {
+              "r": 1,
+              "g": 1,
+              "b": 0,
+              "a": 1
+            }
+          },
+          {
+            "offset": 1,
+            "color": {
+              "r": 1,
+              "g": 0,
+              "b": 1,
+              "a": 1
+            }
+          }
+        ],
+        "spread": "pad"
+      },
+      "stroke": {
+        "color": {
+          "kind": "linear",
+          "transform": [
+            1,
+            0,
+            0,
+            1.25,
+            0,
+            0.25
+          ],
+          "stops": [
+            {
+              "offset": 0,
+              "color": {
+                "r": 0,
+                "g": 1,
+                "b": 1,
+                "a": 1
+              }
+            },
+            {
+              "offset": 1,
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0.6
+              }
+            }
+          ],
+          "spread": "pad"
+        },
+        "width": 12,
+        "cap": "butt",
+        "join": "round",
+        "miterLimit": 4,
+        "dash": null
+      }
+    },
+    "h4": {
+      "id": "h4",
+      "name": "h4",
+      "parent": "p1",
+      "frame": {
+        "x": 20,
+        "y": 200,
+        "width": 200,
+        "height": 120
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "rectangle",
+      "cornerRadii": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "fill": null,
+      "stroke": {
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 1,
+          "a": 1
+        },
+        "width": 8,
+        "cap": "butt",
+        "join": "miter",
+        "miterLimit": 4,
+        "dash": {
+          "pattern": [
+            40,
+            20
+          ],
+          "phase": 25
+        }
+      }
+    },
+    "h5": {
+      "id": "h5",
+      "name": "h5",
+      "parent": "p1",
+      "frame": {
+        "x": 260,
+        "y": 220.25,
+        "width": 300,
+        "height": 0
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "line",
+      "points": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "stroke": {
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 1,
+          "a": 1
+        },
+        "width": 10,
+        "cap": "butt",
+        "join": "miter",
+        "miterLimit": 4,
+        "dash": {
+          "pattern": [
+            30,
+            20
+          ],
+          "phase": 0
+        }
+      },
+      "startArrow": "none",
+      "endArrow": "none"
+    },
+    "h6": {
+      "id": "h6",
+      "name": "h6",
+      "parent": "p1",
+      "frame": {
+        "x": 260,
+        "y": 290,
+        "width": 200,
+        "height": 0
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "line",
+      "points": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "stroke": {
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 1,
+          "a": 1
+        },
+        "width": 6,
+        "cap": "round",
+        "join": "miter",
+        "miterLimit": 4,
+        "dash": {
+          "pattern": [
+            12,
+            18
+          ],
+          "phase": 0
+        }
+      },
+      "startArrow": "none",
+      "endArrow": "triangle"
+    },
+    "h7": {
+      "id": "h7",
+      "name": "h7",
+      "parent": "p2",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 400,
+        "height": 240
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 0.5,
+      "visible": true,
+      "type": "group",
+      "children": [
+        "h7-red",
+        "h7-blue"
+      ]
+    },
+    "h7-blue": {
+      "id": "h7-blue",
+      "name": "h7-blue",
+      "parent": "h7",
+      "frame": {
+        "x": 160,
+        "y": 80,
+        "width": 200,
+        "height": 140
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "ellipse",
+      "fill": {
+        "r": 0,
+        "g": 0,
+        "b": 1,
+        "a": 1
+      },
+      "stroke": null
+    },
+    "h7-red": {
+      "id": "h7-red",
+      "name": "h7-red",
+      "parent": "h7",
+      "frame": {
+        "x": 40,
+        "y": 40,
+        "width": 200,
+        "height": 120
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "rectangle",
+      "cornerRadii": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "fill": {
+        "r": 1,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "stroke": null
+    },
+    "h8": {
+      "id": "h8",
+      "name": "h8",
+      "parent": "p2",
+      "frame": {
+        "x": 420,
+        "y": 0,
+        "width": 400,
+        "height": 300
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 0.5,
+      "visible": true,
+      "type": "maskGroup",
+      "children": [
+        "h8-source",
+        "h8-red",
+        "h8-blue"
+      ]
+    },
+    "h8-blue": {
+      "id": "h8-blue",
+      "name": "h8-blue",
+      "parent": "h8",
+      "frame": {
+        "x": 180,
+        "y": 30,
+        "width": 220,
+        "height": 240
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "ellipse",
+      "fill": {
+        "r": 0,
+        "g": 0,
+        "b": 1,
+        "a": 1
+      },
+      "stroke": null
+    },
+    "h8-red": {
+      "id": "h8-red",
+      "name": "h8-red",
+      "parent": "h8",
+      "frame": {
+        "x": 30,
+        "y": 60,
+        "width": 260,
+        "height": 160
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "rectangle",
+      "cornerRadii": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "fill": {
+        "r": 1,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "stroke": null
+    },
+    "h8-source": {
+      "id": "h8-source",
+      "name": "h8-source",
+      "parent": "h8",
+      "frame": {
+        "x": 60,
+        "y": 40,
+        "width": 300,
+        "height": 240
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "path",
+      "path": {
+        "verbs": [
+          "move",
+          "line",
+          "line",
+          "line",
+          "close",
+          "move",
+          "line",
+          "line",
+          "line",
+          "close"
+        ],
+        "points": [
+          0,
+          0,
+          1,
+          0,
+          1,
+          1,
+          0,
+          1,
+          0.3333333333333333,
+          0.2916666666666667,
+          0.6666666666666666,
+          0.2916666666666667,
+          0.6666666666666666,
+          0.7083333333333334,
+          0.3333333333333333,
+          0.7083333333333334
+        ],
+        "fillRule": "evenodd"
+      },
+      "fill": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "stroke": null
+    },
+    "h9": {
+      "id": "h9",
+      "name": "h9",
+      "parent": "p2",
+      "frame": {
+        "x": 80,
+        "y": 400,
+        "width": 240,
+        "height": 120
+      },
+      "rotation": 0.5235987755982988,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 0.5,
+      "visible": true,
+      "type": "frame",
+      "children": [
+        "h9-red",
+        "h9-blue"
+      ],
+      "fill": null,
+      "stroke": null
+    },
+    "h9-blue": {
+      "id": "h9-blue",
+      "name": "h9-blue",
+      "parent": "h9",
+      "frame": {
+        "x": 70,
+        "y": -140,
+        "width": 100,
+        "height": 400
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "ellipse",
+      "fill": {
+        "r": 0,
+        "g": 0,
+        "b": 1,
+        "a": 1
+      },
+      "stroke": null
+    },
+    "h9-red": {
+      "id": "h9-red",
+      "name": "h9-red",
+      "parent": "h9",
+      "frame": {
+        "x": -180,
+        "y": 30,
+        "width": 600,
+        "height": 60
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "rectangle",
+      "cornerRadii": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "fill": {
+        "r": 1,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "stroke": null
+    }
+  }
+}

@@ -341,11 +341,14 @@ export function applyEdit(
       const siblings = childrenOf(draft, owner);
       const at = siblings.indexOf(node.id);
       // Each child keeps its page placement: the container's transform is composed into it.
+      // M4-Q17 (a) (MVP M4 contract, section 12): the group's opacity is multiplied into each
+      // child's (binary64 product), so pixels stay the same where the children do not overlap.
       const space = localTransform(node.frame, node.rotation);
       for (const id of node.children) {
         const child = document.nodes[id]!;
         const moved = relocate(child.frame, child.rotation, space, node.rotation, IDENTITY, 0);
-        draft.set({ ...child, parent: owner, ...moved });
+        const opacity = node.opacity === 1 ? child.opacity : child.opacity * node.opacity;
+        draft.set({ ...child, parent: owner, ...moved, opacity });
       }
       draft.setChildren(owner, [
         ...siblings.slice(0, at),

@@ -36,6 +36,7 @@ import {
   type TestFontStatus,
   type TextTestHook,
 } from '../src/m6a-text-host';
+import { AppearancePanel } from '../src/m4-appearance-panel';
 import { SelectionOverlay } from '../src/overlay';
 import { createWebGpuRenderer } from '../src/webgpu-renderer';
 
@@ -61,6 +62,10 @@ import { createWebGpuRenderer } from '../src/webgpu-renderer';
 // cleanup disposes the port, so the page prerenders a placeholder; `?fixture=text` registers the
 // committed test font, waits for it to settle and loads the M6a text fixture at zoom 2; the test
 // hook's `text` member exposes the port and the test font (M6a-A11).
+// M4-U4 (M4 contract, section 8): the appearance panel (src/m4-appearance-panel.tsx) to the right
+// of the canvas, so the toolbar rows and the canvas keep their place; one committed edit is one
+// `setStyle` command. `?fixture=appearance` loads the M4 host fixture (H1 to H9, M4-A12) at zoom
+// 1; the headed spec sets the camera to its pixel-centre position per DPR.
 
 const WIDTH = 960;
 const HEIGHT = 640;
@@ -81,6 +86,7 @@ const FIXTURES: Readonly<
   'path-edit': { url: '/m3-path-edit.json', camera: { position: { x: 0, y: 0 }, zoom: 1 } },
   symbols: { url: '/m7-symbols.json', camera: { position: { x: -20, y: -20 }, zoom: 2 } },
   text: { url: '/m6a-text.json', camera: { position: { x: -20, y: -20 }, zoom: 2 }, font: true },
+  appearance: { url: '/m4-appearance.json', camera: { position: { x: 0, y: 0 }, zoom: 1 } },
 };
 /** A rotate cursor (a circular arrow) with a standard fallback; the hotspot is its centre. */
 const ROTATE_CURSOR =
@@ -98,7 +104,7 @@ function hostPlatform(): Platform {
   return typeof navigator !== 'undefined' && /^Mac/u.test(navigator.platform) ? 'mac' : 'other';
 }
 
-/** Test hook for the headed P5, M1, M2, M3, M5, M6a and M7 specs: present only with `?test=1`. */
+/** Test hook for the headed P5, M1, M2, M3, M4, M5, M6a and M7 specs: present only with `?test=1`. */
 declare global {
   interface Window {
     __p5Host?: Readonly<{
@@ -569,32 +575,35 @@ function Surface({
         <Pages />
         <SymbolControls />
       </div>
-      <div
-        data-testid="canvas-host"
-        data-cursor={rotating ? 'rotate' : 'default'}
-        style={{ width: WIDTH, cursor: rotating ? ROTATE_CURSOR : undefined }}
-        onPointerMove={hover}
-        onPointerLeave={() => setRotating(false)}
-      >
-        <EditorCanvas
-          width={WIDTH}
-          height={HEIGHT}
-          createRenderer={createWebGpuRenderer}
-          onRendererError={(error) => {
-            setRenderer('error');
-            setErrors((list) => [...list, String(error)]);
-          }}
-          onRendererReady={() => setRenderer('ready')}
-          style={{ border: '1px solid #ccc' }}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+        <div
+          data-testid="canvas-host"
+          data-cursor={rotating ? 'rotate' : 'default'}
+          style={{ width: WIDTH, cursor: rotating ? ROTATE_CURSOR : undefined }}
+          onPointerMove={hover}
+          onPointerLeave={() => setRotating(false)}
         >
-          <SelectionOverlay
-            snapshot={snapshot}
-            handles={handles}
-            pathOverlay={pathOverlay}
+          <EditorCanvas
             width={WIDTH}
             height={HEIGHT}
-          />
-        </EditorCanvas>
+            createRenderer={createWebGpuRenderer}
+            onRendererError={(error) => {
+              setRenderer('error');
+              setErrors((list) => [...list, String(error)]);
+            }}
+            onRendererReady={() => setRenderer('ready')}
+            style={{ border: '1px solid #ccc' }}
+          >
+            <SelectionOverlay
+              snapshot={snapshot}
+              handles={handles}
+              pathOverlay={pathOverlay}
+              width={WIDTH}
+              height={HEIGHT}
+            />
+          </EditorCanvas>
+        </div>
+        <AppearancePanel />
       </div>
       <Status
         errors={errors}
