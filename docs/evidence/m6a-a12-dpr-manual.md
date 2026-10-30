@@ -1,8 +1,8 @@
 # M6a-A12 manual DPR record (browser zoom and monitor scale)
 
-**Status: TEMPLATE, not filled.** The user fills it on the main PC. Until then, the manual half of M6a-A12 is NOT RUN.
+**Status: FILLED 2026-10-30, result FAIL.** The user ran it on the main PC; zoom 125 % (DPR 1.25 and 1.875) exceeds the 1/64 px bound, DPR 1.5 passes, line breaks and fallbacks are unchanged everywhere. The M6a exit was accepted with this result disclosed ([exit record](m6a-exit-2026-10-30.md)).
 
-[M6a-A12](../plans/mvp-m6a-text-model-contract.md#10-acceptance-criteria) asks for identical line breaks and positions within 1/64 px across DPR 1, 1.25, 1.5 and 2. It also asks for the same across browser zoom 100 % and 125 % and across monitor scale 100 % and 150 %, plus a generation bump on each DPR change. The headed spec `tests/m6a-next-host/m6a-next-host.spec.ts` covers DPR 1 to 2 by CDP emulation and size linearity (`pnpm test:m6a-next-host`). This record covers the two cases emulation cannot reach (section 3.2, handed over from M6-S0). M6-Q3 is already (b) (U4c, #388); a failure here needs a contract amendment before M6c.
+[M6a-A12](../plans/mvp-m6a-text-model-contract.md#10-acceptance-criteria) asks for identical line breaks and positions within 1/64 px across DPR 1, 1.25, 1.5 and 2. It also asks for the same across browser zoom 100 % and 125 % and across monitor scale 100 % and 150 %, plus a generation bump on each DPR change. The headed spec `tests/m6a-next-host/m6a-next-host.spec.ts` covers DPR 1 to 2 by CDP emulation and size linearity (`pnpm test:m6a-next-host`). This record covers the two cases emulation cannot reach (section 3.2, handed over from M6-S0). M6-Q3 is already (b) (U4c, #388); a failure here needs a fix or a contract amendment before M6c.
 
 ## Setup
 
@@ -68,23 +68,25 @@ The snippet lays out a fixed set of requests through the page's text-dom port. I
 
 ## Record
 
-Commit (`git rev-parse --short HEAD`): \_\_\_ Date: \_\_\_ Monitors (resolution and Windows scale): \_\_\_
+Commit (`git rev-parse --short HEAD`): `e66ae55` Date: 2026-10-30 Monitors (resolution and Windows scale): one monitor (resolution not recorded); the 150 % rows change the Windows display scale from 100 % to 150 % (the single-monitor alternative of step 5)
 
 | Browser | Case | Reload | Printed line |
 | --- | --- | --- | --- |
-| Chrome | reset: zoom 100 %, monitor 100 % | - | |
-| Chrome | zoom 125 %, monitor 100 % | no | |
-| Chrome | zoom 125 %, monitor 100 % | yes | |
-| Chrome | zoom 100 %, monitor 150 % (window moved) | no | |
-| Chrome | zoom 100 %, monitor 150 % (window moved) | yes | |
-| Chrome | zoom 125 %, monitor 150 % | yes | |
-| Edge | reset: zoom 100 %, monitor 100 % | - | |
-| Edge | zoom 125 %, monitor 100 % | no | |
-| Edge | zoom 125 %, monitor 100 % | yes | |
-| Edge | zoom 100 %, monitor 150 % (window moved) | no | |
-| Edge | zoom 100 %, monitor 150 % (window moved) | yes | |
-| Edge | zoom 125 %, monitor 150 % | yes | |
+| Chrome | reset: zoom 100 %, monitor 100 % | - | reference stored at zoom/DPR 1, generation 5, bumps since paste 2, new fallbacks 0 |
+| Chrome | zoom 125 %, monitor 100 % | no | FAIL: zoom/DPR 1.25, generation 7, bumps since paste 4, new fallbacks 0, requests with other breaks 0, max position delta 0.03125 (a second attempt, a fresh reset then zoom 125 % without a reload, printed the same FAIL line with bumps since paste 2) |
+| Chrome | zoom 125 %, monitor 100 % | yes | FAIL: zoom/DPR 1.25, generation 3, bumps since paste 0, new fallbacks 0, requests with other breaks 0, max position delta 0.03125 (same line on a second reload) |
+| Chrome | zoom 100 %, monitor 150 % (Windows scale) | no | not captured (no printed line recorded) |
+| Chrome | zoom 100 %, monitor 150 % (Windows scale) | yes | PASS: zoom/DPR 1.5, generation 5, bumps since paste 0, new fallbacks 0, requests with other breaks 0, max position delta 0.0104217529296875 |
+| Chrome | zoom 125 %, monitor 150 % | no (zoomed after the paste; the reload row was not run) | FAIL: zoom/DPR 1.875, generation 5, bumps since paste 2, new fallbacks 0, requests with other breaks 0, max position delta 0.02728271484375 |
+| Chrome | extra: zoom 150 %, monitor 100 % | no | PASS: zoom/DPR 1.5, generation 10, bumps since paste 7, new fallbacks 0, requests with other breaks 0, max position delta 0.0104217529296875 |
+| Chrome | extra: zoom 150 %, monitor 100 % | yes | PASS: zoom/DPR 1.5, generation 3, bumps since paste 0, new fallbacks 0, requests with other breaks 0, max position delta 0.0104217529296875 |
+| Edge | reset: zoom 100 %, monitor 100 % | - | reference stored at zoom/DPR 1, generation 3, bumps since paste 0, new fallbacks 0 |
+| Edge | zoom 125 %, monitor 100 % | no | FAIL: zoom/DPR 1.25, generation 5, bumps since paste 2, new fallbacks 0, requests with other breaks 0, max position delta 0.03125 |
+| Edge | zoom 125 %, monitor 100 % | yes | FAIL: zoom/DPR 1.25, generation 3, bumps since paste 0, new fallbacks 0, requests with other breaks 0, max position delta 0.03125 |
+| Edge | zoom 100 %, monitor 150 % (Windows scale) | no | PASS: zoom/DPR 1.5, generation 6, bumps since paste 3, new fallbacks 0, requests with other breaks 0, max position delta 0.0104217529296875 |
+| Edge | zoom 100 %, monitor 150 % (Windows scale) | yes | PASS: zoom/DPR 1.5, generation 3, bumps since paste 0, new fallbacks 0, requests with other breaks 0, max position delta 0.0104217529296875 |
+| Edge | zoom 125 %, monitor 150 % | yes | FAIL: zoom/DPR 1.875, generation 3, bumps since paste 0, new fallbacks 0, requests with other breaks 0, max position delta 0.02728271484375 |
 
-Browser versions (`chrome://version`, `edge://version`): \_\_\_
+Browser versions (from the executables): Chrome 156.0.8078.74, Edge 156.0.4314.50
 
-Result: \_\_\_ (A12 manual half PASS when each reset line prints "reference stored", every other line prints PASS with new fallbacks 0, and every "no reload" row shows at least 1 bump.)
+Result: **FAIL** (pass rule: each reset line prints "reference stored", every other line prints PASS with new fallbacks 0, and every "no reload" row shows at least 1 bump). Every row with browser zoom 125 % fails in both browsers: max position delta 1/32 px (0.03125) at DPR 1.25 and 0.0273 px at DPR 1.875, against the 1/64 px bound, with or without a reload. DPR 1.5, by monitor scale or by browser zoom 150 %, passes at 0.0104 px. In every row the line breaks and clusters match the reference, new fallbacks are 0, and every "no reload" row with a printed line bumped the generation (the Chrome monitor-150 % no-reload line was not captured). The headed spec's CDP emulation at DPR 1.25 passed at `045fcf9` (exit record, M6a-A12; its own request set, same 1/64 px bound), and browser zoom 150 % passes here, so the difference appears with browser zoom 125 % (DPR 1.25 and 1.875), not with the device pixel ratio alone. Root cause not yet analysed; per the contract this failure needs a fix or a contract amendment before M6c.
