@@ -232,9 +232,10 @@ it('M1-A13 observation: load, projection, one move commit and one forced isolati
         method: 'applyChanges',
         result: { status: 'invalid-scene' },
       });
+      // E26-U5b: one set removes the held page, keeping the renderer's scene epoch.
       expect(calls[1]).toMatchObject({
-        method: 'replaceSnapshot',
-        input: { nodes: [], rootOrder: [] },
+        method: 'applyChanges',
+        input: { inserted: [], updated: [], orders: [{ parentId: null, children: [] }] },
         result: { status: 'applied' },
       });
       for (const call of calls.slice(2)) {
