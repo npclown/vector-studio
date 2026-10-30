@@ -169,7 +169,9 @@ it('M1-A13 observation: load, projection, one move commit and one forced isolati
     sceneNodes = expectSynchronized(target, renderer);
     expect(sceneNodes).toBe(projection.nodes.size);
 
-    // One select-tool move of a nested, rotated two-node selection inside a frame.
+    // One select-tool move of a nested, rotated two-node selection inside a frame. Snapping (M2,
+    // on by default) is off, so the move is exactly the pointer's 10/15.
+    ok(target, { type: 'setSnapping', enabled: false });
     ok(target, { type: 'setSelection', ids: selection.ids });
     const before = boundsOf(target.query({ type: 'document' }), selection.ids)!;
     const press = boundsOf(target.query({ type: 'document' }), [selection.ids[0]])!;
