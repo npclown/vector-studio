@@ -16,6 +16,7 @@ import {
   DECLARED_PAIRS,
   DECLARED_TRANSFORMS,
   buildRecord,
+  type A04Record,
   knownClassOf,
   reviveRow,
   validateRecord,
@@ -256,6 +257,30 @@ describe('E20 known classes and record form', () => {
     expect(
       validateRecord(
         { ...record, rows: all },
+        all.map((r) => r.id),
+      ),
+    ).toEqual([]);
+  });
+
+  it('validates a record with a +∞ aggregate after a JSON round trip (E20-K8)', () => {
+    const rows = [...fullCoverage()];
+    const open = row({ id: 'open', status: 'fail', u: Infinity, l: 1, index: rows.length });
+    const all = [...rows, open];
+    const record = buildRecord({
+      ...passing,
+      selection: { stride: 1, shards: 1, corpusCases: all.length },
+      rows: all,
+    });
+    expect(record.aggregates.overall?.all?.maxU).toBe(Infinity);
+    // As run.check.ts writes it: non-finite numbers become strings.
+    const text = JSON.stringify(record, (_, v: unknown) =>
+      typeof v === 'number' && !Number.isFinite(v) ? String(v) : v,
+    );
+    const back = JSON.parse(text) as A04Record;
+    expect(back.aggregates.overall?.all?.maxU).toBe('Infinity');
+    expect(
+      validateRecord(
+        back,
         all.map((r) => r.id),
       ),
     ).toEqual([]);
