@@ -1027,6 +1027,10 @@ describe('E28 U3 canvas raster port (section 2; E28-A08 unit part)', () => {
     expect(fake.context.lang).toBe('en');
     expect(fake.context.textBaseline).toBe('alphabetic');
     expect(fake.context.textAlign).toBe('left');
+    // Black text, coverage from alpha (E28 amendment 2026-10-31: white text's alpha is not the
+    // coverage of the dark text the browser paints).
+    expect(fake.context.fillStyle).toBe('#000000');
+    expect(CANVAS_GLYPH_RASTER_OPERATION_ID).toBe('canvas-2d/raster-v1');
     const coverage = (result as { coverage: Uint8Array }).coverage;
     expect(coverage).toHaveLength(14 * 17);
     expect([coverage[0], coverage[200], coverage[237]]).toEqual([0, 200, 237]);

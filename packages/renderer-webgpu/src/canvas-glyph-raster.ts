@@ -6,10 +6,18 @@ import type {
 
 // E28 contract (docs/plans/d9-e28-text-glyph-atlas-contract.md), section 2, Raster port: the
 // main-thread canvas implementation. One `OffscreenCanvas` 2D context rasterizes each cluster
-// with white `fillText` on a transparent surface; coverage is the alpha channel. Main-thread
+// with black `fillText` on a transparent surface; coverage is the alpha channel. Main-thread
 // rasterization sees every face registered in `document.fonts` (M6-F2, ADR 0003).
+//
+// Black, not white (E28 amendment 2026-10-31, M6c-U3): Skia's glyph coverage depends on the
+// paint's luminance (its gamma and contrast pre-blend), so white text's alpha is not the coverage
+// of the dark text the browser paints; the M6c-A06 raster term measured it (0.07 CSS px in
+// container Chromium, about 0.3 device px on Windows). With black the coverage composited black
+// on white equals the browser's own paint of the cluster. One coverage serves every run colour,
+// so it matches dark text; light text on a dark background is not matched (a follow-up).
 
-export const CANVAS_GLYPH_RASTER_OPERATION_ID = 'canvas-2d/raster-v0';
+/** v1 (2026-10-31): black fill (v0 filled white); the same bitmap contract. */
+export const CANVAS_GLYPH_RASTER_OPERATION_ID = 'canvas-2d/raster-v1';
 /** A bitmap wider or taller than this is `too-large` (E28-K4). */
 export const CANVAS_GLYPH_RASTER_MAX_EXTENT = 1024;
 /** The transparent border around the measured box, at least 2 px on each side. */
@@ -55,7 +63,7 @@ export function createCanvasGlyphRaster(options: CanvasGlyphRasterOptions = {}):
     if ('lang' in ctx) ctx.lang = request.lang;
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = '#000000';
     return true;
   };
 

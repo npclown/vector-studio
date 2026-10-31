@@ -27,12 +27,12 @@ Per inked cluster of the agreement nodes, it works as follows:
    - `noLayer` (no `will-change`, LCD where the OS uses it);
    - `text-rendering` set to `geometricPrecision`, `optimizeSpeed` or `optimizeLegibility`.
 3. **Canvas side.** The cluster is rasterized by:
-   - **`port`:** E28's real `createCanvasGlyphRaster`;
-   - **`mirror`:** a copy of it, checked byte-equal to `port` (`sameAsPort`);
+   - **`port`:** E28's real `createCanvasGlyphRaster`, whatever the checkout's port does;
+   - **`mirror`:** a copy of the raster-v1 recipe (black fill, from 2026-10-31), byte-equal to `port` on a checkout with the fix (`sameAsPort`);
+   - **`fill-white`:** the v0 recipe (white fill, coverage = alpha), the port before the fix, so the before and after stay visible;
    - one-change variants of the copy:
      - `wrf-false`: `willReadFrequently: false`;
      - `element-canvas`: an HTML canvas instead of `OffscreenCanvas`;
-     - `fill-black`: black text on the transparent surface, coverage = alpha (the port draws white);
      - `opaque-black-on-white`: black on opaque white, coverage `255 − min(R, G, B)`;
      - `ctx.textRendering` (three values);
      - `ctx.fontKerning` `none` or `normal`.
@@ -67,8 +67,10 @@ Command: `node docs/evidence/m6c-u3/diag-raster.mjs --chromium <playwright chrom
 - `port|spec`, DPR 1: max h 0.071, max |v| 0.071, max size 0.141 CSS px.
 - `port|spec`, DPR 2: 0.035, 0.035 and 0.076.
 - No `text-rendering` or `fontKerning` setting, canvas kind or `willReadFrequently` value changes the port's result.
-- **`fill-black` and `opaque-black-on-white` agree with the DOM exactly (0.000 on every measure) at both DPRs.**
+- **`fill-black` (black text on the transparent surface, coverage = alpha; now the port's recipe) and `opaque-black-on-white` agree with the DOM exactly (0.000 on every measure) at both DPRs.**
 
 So in this Chromium the whole remaining raster term comes from the port painting white text and reading its alpha. Skia's text coverage depends on the paint colour's luminance (its gamma and contrast pre-blend), so the coverage of white text is not the coverage of the black text the DOM reference paints. Windows uses its own text gamma and contrast, so the same cause could be several times larger there. The main-PC run is meant to confirm or refute that.
 
-A design point if the port changes its fill: the atlas keeps one coverage per cluster, whatever the run's colour. Coverage from black text matches the browser's paint of dark text (the agreement fixtures are black). It does not match the browser's paint of light text on a dark background, which the M6c fixtures do not test.
+**Port fix (2026-10-31, the commit after the probe).** `createCanvasGlyphRaster` now fills black and reads coverage from alpha (operation ID `canvas-2d/raster-v1`), the `fill-black` variant above. On a checkout with the fix, `port` and `mirror` are that recipe and `fill-white` is the old port. The figures above are from the probe's first commit, where `port` was still white.
+
+A design point of the fix: the atlas keeps one coverage per cluster, whatever the run's colour. Coverage from black text matches the browser's paint of dark text (the agreement fixtures are black). It does not match the browser's paint of light text on a dark background, which the M6c fixtures do not test.

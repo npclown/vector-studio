@@ -48,13 +48,17 @@ const DOM_VARIANTS = {
   'tr-optimizeSpeed': { layer: true, textRendering: 'optimizeSpeed' },
   'tr-optimizeLegibility': { layer: true, textRendering: 'optimizeLegibility' },
 };
-/** The canvas raster: the real port, its copy (`mirror`), then one change each. */
+/**
+ * The canvas raster: the real port (whatever the checkout's `createCanvasGlyphRaster` does), its
+ * copy of the raster-v1 recipe (`mirror`, black fill), the v0 recipe (`fill-white`, the port
+ * before the 2026-10-31 fix), then one change each on the copy.
+ */
 const CANVAS_VARIANTS = {
   port: {},
   mirror: { willReadFrequently: true },
+  'fill-white': { willReadFrequently: true, fill: '#ffffff' },
   'wrf-false': { willReadFrequently: false },
   'element-canvas': { willReadFrequently: true, element: true },
-  'fill-black': { willReadFrequently: true, fill: '#000000' },
   'opaque-black-on-white': { willReadFrequently: true, opaque: true },
   'ctx-tr-geometricPrecision': { willReadFrequently: true, textRendering: 'geometricPrecision' },
   'ctx-tr-optimizeSpeed': { willReadFrequently: true, textRendering: 'optimizeSpeed' },

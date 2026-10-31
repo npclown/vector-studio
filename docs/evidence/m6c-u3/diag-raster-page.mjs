@@ -279,8 +279,9 @@ function rasterRequest(placement) {
 }
 
 /**
- * A copy of createCanvasGlyphRaster's `rasterize` with the variant's settings: `fill` (the text
- * colour on a transparent surface, coverage the alpha), `opaque` (black text on an opaque white
+ * A copy of createCanvasGlyphRaster's `rasterize` (raster-v1, black fill) with the variant's
+ * settings: `fill` (the text colour on a transparent surface, coverage the alpha; `#ffffff` is
+ * the v0 port), `opaque` (black text on an opaque white
  * surface, coverage `255 − min(R, G, B)`), `willReadFrequently`, `element` (an HTML canvas),
  * `textRendering`, `fontKerning`, `fontVariantLigatures` none.
  */
@@ -316,7 +317,7 @@ function rasterVariant(request, variant) {
     context.fillRect(0, 0, width, height);
     context.fillStyle = '#000000';
   } else {
-    context.fillStyle = variant.fill ?? '#ffffff';
+    context.fillStyle = variant.fill ?? '#000000';
   }
   context.fillText(request.text, left + request.phaseX, top);
   const pixels = context.getImageData(0, 0, width, height).data;
