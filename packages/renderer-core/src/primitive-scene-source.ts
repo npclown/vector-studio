@@ -50,6 +50,7 @@ import { GradientRecordTable, paintColorLanes, type GradientPaintRecord } from '
 import type { RetainedSceneMirror, RetainedSceneView } from './scene-mirror.js';
 import {
   ClipStateTable,
+  MaskLevelMemo,
   MaskPlan,
   extendClipChain,
   meetsClipChain,
@@ -109,6 +110,8 @@ type DerivedPrimitive = Readonly<{
   /** E25 contract, U2: the innermost isolated container, or null outside layers. */
   layer: LayerScope | null;
 }>;
+type MaskSource = Readonly<{ source: MaskSourceRecord; key: string }>;
+type MaskSourceMemo = Readonly<{ inputs: readonly unknown[]; result: MaskSource }>;
 /** E28 contract, U2: a text leaf of the traversal. */
 type DerivedText = Readonly<{
   id: string;
@@ -240,6 +243,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   static {
     injectFullDerivation = (source) => {
       source.#fullDerivation = true;
+      source.#clipStates.disableReuseForTesting();
       if (source.#pathMeshes !== undefined) disablePathReuseForTesting(source.#pathMeshes);
     };
     readDerivationCounts = (source) => Object.freeze({ ...source.#derivationCounts });
@@ -266,6 +270,13 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   /** P4 contract, U2: the frame's clip states and their change count. */
   readonly #clipStates = new ClipStateTable();
   #clipStatesUsed = false;
+  /** E26 contract, U5d-2: the mask plan's kept level records and source results. */
+  readonly #maskLevels = new MaskLevelMemo();
+  #maskSources = new Map<string, MaskSourceMemo>();
+  #primitiveMaps = new WeakMap<
+    readonly DerivedPrimitive[],
+    ReadonlyMap<string, DerivedPrimitive>
+  >();
   /** E23 contract, U2: the frame's gradient records. */
   readonly #gradients = new GradientRecordTable();
   /**
@@ -862,39 +873,80 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     camera: Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>,
     target: PrimitiveTarget,
   ): MaskPlan {
-    const primitives = new Map(derived.map((primitive) => [primitive.id, primitive] as const));
+    const reuse = !this.#fullDerivation;
+    let primitives = reuse ? this.#primitiveMaps.get(derived) : undefined;
+    if (primitives === undefined) {
+      primitives = new Map(derived.map((primitive) => [primitive.id, primitive] as const));
+      if (reuse) this.#primitiveMaps.set(derived, primitives);
+    }
+    const byId = primitives;
     const sources = new Map(
       pathDraws.flatMap((draw) => (draw.maskSource === true ? [[draw.nodeId, draw] as const] : [])),
     );
-    const sourceOf = (
-      level: ClipMaskLevel,
-    ): Readonly<{ source: MaskSourceRecord; key: string }> | null => {
+    // E26 contract, U5d-2: a level's source result is kept while every input of its key and its
+    // record is the same, so an unchanged level keeps its record (MaskLevelMemo).
+    const kept = this.#maskSources;
+    const next = new Map<string, MaskSourceMemo>();
+    this.#maskSources = next;
+    const remember = (sourceId: string, inputs: readonly unknown[], build: () => MaskSource) => {
+      const previous = reuse ? (next.get(sourceId) ?? kept.get(sourceId)) : undefined;
+      if (
+        previous !== undefined &&
+        previous.inputs.length === inputs.length &&
+        previous.inputs.every((input, index) => Object.is(input, inputs[index]))
+      ) {
+        next.set(sourceId, previous);
+        return previous.result;
+      }
+      const result = build();
+      if (reuse) next.set(sourceId, Object.freeze({ inputs, result }));
+      return result;
+    };
+    const sourceOf = (level: ClipMaskLevel): MaskSource | null => {
       if (level.sourceId === null) return null;
-      const primitive = primitives.get(level.sourceId);
+      const primitive = byId.get(level.sourceId);
       if (primitive !== undefined) {
         if (primitive.omitted || primitive.node.geometry.kind === 'line') return null;
-        return {
-          source: Object.freeze({ kind: 'primitive', slot: primitive.slot }),
-          key: JSON.stringify(['primitive', primitive.node.geometry, primitive.world]),
-        };
+        return remember(
+          level.sourceId,
+          ['primitive', primitive.slot, primitive.node.geometry, primitive.world],
+          () => ({
+            source: Object.freeze({ kind: 'primitive', slot: primitive.slot }),
+            key: JSON.stringify(['primitive', primitive.node.geometry, primitive.world]),
+          }),
+        );
       }
       const draw = sources.get(level.sourceId);
       const node = scene.getNode(level.sourceId);
       if (draw === undefined || node?.kind !== 'path') return null;
-      return {
-        source: Object.freeze({ kind: 'mesh', nodeId: level.sourceId }),
-        key: JSON.stringify([
+      const revision = scene.getGeometryRevision(level.sourceId) ?? 0;
+      return remember(
+        level.sourceId,
+        [
           'mesh',
-          scene.getGeometryRevision(level.sourceId) ?? 0,
+          revision,
           node.geometry.fillRule,
-          composeSceneAffine(level.world, node.transform),
+          level.world,
+          node.transform,
           draw.toleranceExponent,
           draw.fringeBucket,
-        ]),
-      };
+        ],
+        () => ({
+          source: Object.freeze({ kind: 'mesh', nodeId: level.sourceId! }),
+          key: JSON.stringify([
+            'mesh',
+            revision,
+            node.geometry.fillRule,
+            composeSceneAffine(level.world, node.transform),
+            draw.toleranceExponent,
+            draw.fringeBucket,
+          ]),
+        }),
+      );
     };
     return new MaskPlan({
       sourceOf,
+      ...(reuse ? { memo: this.#maskLevels } : {}),
       camera: { x: camera.position.x, y: camera.position.y, zoom: camera.zoom },
       target,
     });
