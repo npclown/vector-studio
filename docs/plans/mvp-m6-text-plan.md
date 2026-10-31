@@ -222,4 +222,4 @@ Written 2026-10-29: [ADR 0003](../decisions/0003-browser-text-and-glyph-atlas.md
 | M6a | Contract DRAFT 2026-10-29, reviews applied, merged #364; units merged (#367 to #388); exit record #390; M6a exit accepted by the user 2026-10-30 with the A12 manual half FAIL at zoom 125 % disclosed ([M6a contract](mvp-m6a-text-model-contract.md), [exit record](../evidence/m6a-exit-2026-10-30.md)) |
 | R-T | Filed as [E28](d9-rendering-track.md#status-index) ([contract](d9-e28-text-glyph-atlas-contract.md)); Done 2026-10-29, evidence index #380 (fe2e195) |
 | M6b | Contract APPROVED 2026-10-30; merged (#392 contract, #393, #396, #400, #402, #404, #408, #409, #410, #411); U10 closed without recordings (user decision 2026-10-30); exit record #418 accepted by the user 2026-10-31, A14 NOT RUN; DONE ([M6b contract](mvp-m6b-text-editing-contract.md), [exit record](../evidence/m6b-exit-2026-10-30.md)) |
-| M6c | Not started |
+| M6c | Contract drafted 2026-10-31 ([M6c contract](mvp-m6c-gpu-text-contract.md)); not started |
