@@ -1,6 +1,6 @@
 # M6c-U0: the zoom-125 % position difference (cause and text-dom fix)
 
-**Date: 2026-10-31 (review r1 follow-ups applied the same day). Status: cause found, rule (a) fix in text-dom, container checks PASS; main-PC re-run of the manual rows NOT RUN yet.**
+**Date: 2026-10-31 (review r1 follow-ups applied the same day). Status: cause found, rule (a) fix in text-dom, container checks PASS; main-PC re-run at `9ea2c34` (automated) PASS on the position bound, bump rule unresolved, hand-run rows NOT RUN.**
 
 This note follows [the M6c contract, section 3](../../plans/mvp-m6c-gpu-text-contract.md#3-zoom-125--investigation-u0-first) (M6c-A01, unit M6c-U0). It explains the FAIL in [m6a-a12-dpr-manual.md](../m6a-a12-dpr-manual.md): at browser zoom 125 % every row was off by up to 1/32 px.
 
@@ -126,6 +126,29 @@ Checks:
 
 Per section 3's rule this is (a), light tier: no interface change. M6a-A12's bound stays at 1/64 px if the main-PC re-run of the manual rows passes.
 
-## Still to run on the main PC (M6c-A01)
+## Main-PC re-run (M6c-A01), 2026-10-31
 
-The manual rows of [m6a-a12-dpr-manual.md](../m6a-a12-dpr-manual.md), re-run on the fixed build in Chrome and Edge and recorded as a new dated section of that file: **NOT RUN**. Use the setup of that record with [`m6c-u0-snippet.mjs`](m6c-u0-snippet.mjs) in place of its snippet, since the pass rule is the same and only the printout is longer. Run the rows of zoom 100 % (reset), 125 % and 150 % at monitor 100 %, and zoom 100 % and 125 % at Windows scale 150 % (DPR 1.5 and 1.875), each without and with a reload. Also run `pnpm test:m6a-next-host` headed (M6a-A11 and A12), and optionally `pnpm test:m6c-u0-zoom`.
+The re-run is recorded as a dated section of [m6a-a12-dpr-manual.md](../m6a-a12-dpr-manual.md#re-run-2026-10-31-m6c-u0-commit-9ea2c34).
+
+It ran at `9ea2c34`, **automated** with `probe.mjs`:
+
+- real browser zoom in Edge 156 and Playwright Chromium 151;
+- a real device scale (`--force-device-scale-factor`) and CDP emulation in those two and in Chrome 156.
+
+Branded Chrome ignores `--load-extension`, so it has no browser-zoom rows.
+
+Results:
+
+- Every condition PASSes the 1/64 px position bound. The maximum is 1.62e-5 px, and lines, clusters and fallbacks are unchanged.
+- `pnpm test:m6a-next-host` headed Chrome and Edge: 22 of 22 PASS (M6a-A11, and A12 by emulation).
+- `pnpm test:geometry`: PASS.
+
+The record's bump rule is **unresolved** on the main PC. The no-reload zoom rows are reported with 0 bumps since paste, though one truncated Edge run showed 1. In the container the `resolution` listener's bump always arrives before the probe's read. `probe.mjs` now waits up to 5 s for it and prints whether it came, so the next main-PC run settles it.
+
+Still NOT RUN:
+
+- the hand-run rows (Ctrl +/- and a real Windows display-scale change);
+- the combined DPR 1.875 row (a real device scale of 1.5 with browser zoom 125 %; only browser zoom 1.875 and a forced device scale of 1.875 ran, each on its own);
+- browser zoom in branded Chrome.
+
+The main-PC run predates `3a293c6`, the review r1 follow-ups: detection cached on a ratio change, the zoom check and `pnpm test:m6c-u0-zoom`. Those leave positions unchanged, as the container's `probe.mjs` shows with the same deltas before and after. They, and the probe's bump wait, are container-verified only.

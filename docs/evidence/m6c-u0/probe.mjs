@@ -55,6 +55,22 @@ async function open(page) {
     { timeout: 30_000 },
   );
   await page.evaluate(snippet);
+  // The probe's own bump counter (the snippet's is private to its closure), for the no-reload
+  // rows: a zoom change must raise the port's generation through its `resolution` listener.
+  await page.evaluate(() => {
+    window.__m6cU0Bumps = 0;
+    window.__p5Host.text.port.subscribe(() => (window.__m6cU0Bumps += 1));
+  });
+}
+
+/** Waits up to 5 s for a generation bump after `before`; the bump count, or 0 on a timeout. */
+async function bumpAfter(page, before) {
+  return page
+    .waitForFunction((count) => window.__m6cU0Bumps > count, before, { timeout: 5_000 })
+    .then(
+      () => page.evaluate(() => window.__m6cU0Bumps),
+      () => 0,
+    );
 }
 
 const run = (page, mode) => page.evaluate((mode) => window.m6aA12(mode), mode);
@@ -113,7 +129,12 @@ async function browserZoom(stored) {
     await withReference(page, stored);
     record('zoom 1 (same page)', await run(page));
     for (const z of ZOOMS) {
+      const before = await page.evaluate(() => window.__m6cU0Bumps);
       await zoom(z);
+      // The record's rule asks each no-reload row for at least one bump: wait for it (up to 5 s)
+      // before reading, so the row's "bumps since paste" does not race the change event.
+      const bumped = (await bumpAfter(page, before)) > before;
+      console.log(`${''.padEnd(34)} bump after the zoom change: ${bumped ? 'yes' : 'NO (5 s)'}`);
       record(`browser zoom ${z}, no reload`, await run(page));
       await open(page);
       record(`browser zoom ${z}, reload`, await run(page));
