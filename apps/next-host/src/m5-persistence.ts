@@ -147,6 +147,11 @@ export type PersistenceOptions = {
   onStatus?: (status: PersistStatus) => void;
   /** E26-U1b: the bench's write-start hook wraps the opened store (`?bench=1` only). */
   wrapStore?: (store: DocumentStore) => DocumentStore;
+  /**
+   * E26-U6a: whether a canvas press is in progress. While it reads true a due autosave write
+   * waits (the autosave's `holdWhile`); the host calls `release()` when the press ends.
+   */
+  pressed?: () => boolean;
 };
 
 export type PersistenceSession = Readonly<{
@@ -158,6 +163,8 @@ export type PersistenceSession = Readonly<{
   flush(): Promise<void>;
   /** "Discard stored document": `clear`, then autosave attaches. Only after a failed restore. */
   discard(): Promise<void>;
+  /** E26-U6a: the press ended; starts a write the press held, if any. No-op otherwise. */
+  release(): void;
   /** Unsubscribes, disposes the autosave and closes the store; safe under a strict-mode remount. */
   dispose(): void;
 }>;
@@ -203,6 +210,7 @@ export function attachPersistence(
       ...(options.delayMs === undefined ? {} : { delayMs: options.delayMs }),
       ...(options.maxWaitMs === undefined ? {} : { maxWaitMs: options.maxWaitMs }),
       ...(options.timers === undefined ? {} : { timers: options.timers }),
+      ...(options.pressed === undefined ? {} : { holdWhile: options.pressed }),
       onResult,
     });
     autosave = scheduler;
@@ -279,6 +287,9 @@ export function attachPersistence(
       }
       report({ state: 'empty' });
       attach(target, true);
+    },
+    release(): void {
+      if (!disposed) autosave?.release();
     },
     dispose(): void {
       if (disposed) return;

@@ -112,6 +112,12 @@ export class CanvasInput {
   private hover: Readonly<{ clientX: number; clientY: number }> | null = null;
   /** The hidden textarea's host (M6b-H1 to H5), when the component renders one. */
   text: TextInputHost | null = null;
+  /**
+   * E26 contract, section 5: told when a forwarded press starts (before the editor handles it)
+   * and when it ends (after the editor handled the event that ends it): `pointerup`,
+   * `pointercancel`, a lost pointer capture, a reset, or unmount.
+   */
+  onPressChange: ((pressed: boolean) => void) | null = null;
 
   /**
    * `height` is the canvas height in CSS px, the size of a wheel page; `canvas` returns the
@@ -156,7 +162,10 @@ export class CanvasInput {
     if (this.text === null || !this.text.active) {
       event.currentTarget.focus({ preventScroll: true });
     }
-    this.dragging = true;
+    if (!this.dragging) {
+      this.dragging = true;
+      this.onPressChange?.(true);
+    }
     this.send({
       kind: 'pointerdown',
       point: this.toPage(event.currentTarget, event.clientX, event.clientY),
@@ -204,18 +213,42 @@ export class CanvasInput {
   pointerUp(event: MouseLike): void {
     if (!this.dragging) return;
     this.dragging = false;
-    this.send({
-      kind: 'pointerup',
-      point: this.toPage(event.currentTarget, event.clientX, event.clientY),
-      modifiers: modifiersOf(event),
-    });
+    // The press ends even if the editor or a subscriber throws, so no autosave stays held.
+    try {
+      this.send({
+        kind: 'pointerup',
+        point: this.toPage(event.currentTarget, event.clientX, event.clientY),
+        modifiers: modifiersOf(event),
+      });
+    } finally {
+      this.onPressChange?.(false);
+    }
   }
 
   /** A cancelled pointer (pen or touch, lost capture) of a forwarded press. */
   pointerCancel(event: ModifierKeys): void {
     if (!this.dragging) return;
     this.dragging = false;
-    this.send({ kind: 'pointercancel', modifiers: modifiersOf(event) });
+    try {
+      this.send({ kind: 'pointercancel', modifiers: modifiersOf(event) });
+    } finally {
+      this.onPressChange?.(false);
+    }
+  }
+
+  /**
+   * E26 section 5 (amended M2-I4): the canvas lost pointer capture. After a `pointerup` it does
+   * nothing; while a press is forwarded it ends the press as a `pointercancel`.
+   */
+  lostPointerCapture(event: ModifierKeys): void {
+    this.pointerCancel(event);
+  }
+
+  /** E26 section 5: the component unmounts; a forwarded press ends without an editor event. */
+  unmount(): void {
+    if (!this.dragging) return;
+    this.dragging = false;
+    this.onPressChange?.(false);
   }
 
   doubleClick(event: MouseLike): void {
@@ -333,10 +366,15 @@ export class CanvasInput {
    */
   reset(): void {
     if (!this.armed) return;
+    const pressed = this.dragging;
     this.dragging = false;
-    this.send({ kind: 'pointercancel', modifiers: NO_MODIFIERS });
-    this.send({ kind: 'keyup', key: ' ', code: 'Space', modifiers: NO_MODIFIERS });
-    this.armed = false;
+    try {
+      this.send({ kind: 'pointercancel', modifiers: NO_MODIFIERS });
+      this.send({ kind: 'keyup', key: ' ', code: 'Space', modifiers: NO_MODIFIERS });
+      this.armed = false;
+    } finally {
+      if (pressed) this.onPressChange?.(false);
+    }
   }
 }
 

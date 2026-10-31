@@ -164,6 +164,8 @@ type PersistenceView = Readonly<{
   /** null without `?persist=1`. */
   status: PersistStatus | null;
   discard(): void;
+  /** E26-U6a: the canvas press state; a release starts a write the press held. */
+  onPressChange(pressed: boolean): void;
 }>;
 
 /**
@@ -691,6 +693,7 @@ function Surface({
               setErrors((list) => [...list, String(error)]);
             }}
             onRendererReady={() => setRenderer('ready')}
+            onPressChange={persistence.onPressChange}
             style={{ border: '1px solid #ccc' }}
           >
             <SelectionOverlay
@@ -728,6 +731,8 @@ function usePersistence(
 ): PersistenceView & Readonly<{ session: { current: PersistenceSession | null } }> {
   const [status, setStatus] = useState<PersistStatus | null>(null);
   const session = useRef<PersistenceSession | null>(null);
+  // E26-U6a: no autosave write starts while a canvas press is in progress.
+  const pressed = useRef(false);
   useEffect(() => {
     if (!persistQuery(window.location.search).persist) return;
     // E26-U1b: a bench run restores from its own empty database and records its writes.
@@ -735,6 +740,7 @@ function usePersistence(
     const current = attachPersistence(editor, {
       baseRevision,
       onStatus: setStatus,
+      pressed: () => pressed.current,
       ...(bench === null
         ? {}
         : {
@@ -756,6 +762,17 @@ function usePersistence(
   return {
     status,
     discard: () => void session.current?.discard(),
+    // The flag clears before the release, so the autosave reads the press as over. The release
+    // waits for the next frame and then a task (E26 section 5: the held write serializes the
+    // document in the frame after the commit, not in the pointerup task before its paint). A
+    // press that starts in between keeps the write held; the release then does nothing.
+    onPressChange: (next) => {
+      pressed.current = next;
+      if (next) return;
+      requestAnimationFrame(() => {
+        setTimeout(() => session.current?.release(), 0);
+      });
+    },
     session,
   };
 }

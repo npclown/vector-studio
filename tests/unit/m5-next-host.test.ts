@@ -42,6 +42,7 @@ type Session = Readonly<{
   attached(): boolean;
   flush(): Promise<void>;
   discard(): Promise<void>;
+  release(): void;
   dispose(): void;
 }>;
 const host = (await import(path.join(root, 'apps/next-host/src/m5-persistence.ts'))) as {
@@ -62,6 +63,7 @@ const host = (await import(path.join(root, 'apps/next-host/src/m5-persistence.ts
       timers?: Timers;
       baseRevision?: number;
       onStatus?: (status: PersistStatus) => void;
+      pressed?: () => boolean;
     },
   ) => Session;
 };
@@ -229,7 +231,7 @@ type Harness = {
 };
 
 async function harness(
-  options: { factory?: IDBFactory; editor?: Editor; wait?: boolean } = {},
+  options: { factory?: IDBFactory; editor?: Editor; wait?: boolean; pressed?: () => boolean } = {},
 ): Promise<Harness> {
   const factory = options.factory ?? new IDBFactory();
   const editor = options.editor ?? newEditor();
@@ -241,6 +243,7 @@ async function harness(
     indexedDB: factory,
     timers: time,
     onStatus: (status) => statuses.push(status),
+    ...(options.pressed === undefined ? {} : { pressed: options.pressed }),
   });
   if (options.wait !== false) await session.ready;
   const saved = () => {
@@ -997,5 +1000,78 @@ describe('M5-A08 composition: opt-in, strict-mode remount and the status', () =>
     ok(editor, { type: 'createRectangle', frame: { x: 0, y: 0, width: 5, height: 5 } });
     expect(time.pending()).toBe(0);
     await b.flush();
+  });
+});
+
+// E26-U6a (E26 contract, section 5): the host's press state holds a due autosave write until the
+// press ends; the page clears its flag, then calls `release()`.
+describe('E26-U6a press hold: no autosave write starts during a canvas press', () => {
+  async function pressedHarness() {
+    let pressed = false;
+    const h = await harness({ pressed: () => pressed });
+    return {
+      h,
+      press: () => {
+        pressed = true;
+      },
+      release: () => {
+        pressed = false;
+        h.session.release();
+      },
+    };
+  }
+
+  it('holds the write of an edit made during a press and writes it on release', async () => {
+    const { h, press, release } = await pressedHarness();
+    press();
+    rect(h);
+    h.time.advance(5000);
+    await idle();
+    expect(h.saved()).toBe(0);
+    release();
+    await idle();
+    expect(h.saved()).toBe(1);
+    await expectStored(h);
+    await expectNoWrite(h);
+  });
+
+  it('a press that ends before the debounce leaves the M5-A05 timing', async () => {
+    const { h, press, release } = await pressedHarness();
+    press();
+    rect(h);
+    h.time.advance(100);
+    release();
+    await idle();
+    expect(h.saved()).toBe(0);
+    h.time.advance(399);
+    await idle();
+    expect(h.saved()).toBe(0);
+    h.time.advance(1);
+    await idle();
+    expect(h.saved()).toBe(1);
+  });
+
+  it('flush is not held, and release after dispose does nothing', async () => {
+    const { h, press, release } = await pressedHarness();
+    press();
+    rect(h);
+    await h.session.flush();
+    await idle();
+    expect(h.saved()).toBe(1);
+    await expectStored(h);
+    rect(h, 200);
+    h.time.advance(600);
+    await idle();
+    h.session.dispose();
+    release();
+    await idle();
+    expect(h.saved()).toBe(1);
+  });
+
+  it('without the pressed option, release does nothing and writes keep their timing', async () => {
+    const h = await harness();
+    rect(h);
+    h.session.release();
+    expect(await settle(h)).toBe(1);
   });
 });
