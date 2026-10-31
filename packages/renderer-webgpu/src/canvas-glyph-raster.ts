@@ -14,7 +14,8 @@ import type {
 // of the dark text the browser paints; the M6c-A06 raster term measured it (0.07 CSS px in
 // container Chromium, about 0.3 device px on Windows). With black the coverage composited black
 // on white equals the browser's own paint of the cluster. One coverage serves every run colour,
-// so it matches dark text; light text on a dark background is not matched (a follow-up).
+// so it matches near-black text only; any other colour (coloured, grey or light, on any
+// background) is drawn with black's coverage and may be lighter than the browser (a follow-up).
 
 /** v1 (2026-10-31): black fill (v0 filled white); the same bitmap contract. */
 export const CANVAS_GLYPH_RASTER_OPERATION_ID = 'canvas-2d/raster-v1';

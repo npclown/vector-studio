@@ -46,7 +46,7 @@ The real GPU path is not run. In snapped mode the atlas copies the port's bitmap
 
 - A printed table per browser and DPR. It lists every canvas variant against DOM `spec`, and `port` against every DOM variant. Columns: max h, max |v|, max size, max |centroid y|, and failures over clusters compared.
 - For each cluster that fails `port|spec`, its vertical term under every canvas variant.
-- A JSON file (`--json`, by default `diag-raster-result.json` next to the script). It holds every cluster's terms for every pair, the placement (origin, `P`, `phaseX`, bucket), DOM chroma, placement residuals, the browser version, the user agent, and whether the 2D context has `lang` and `textRendering`.
+- A JSON file (`--json`, by default `diag-raster-result.json` next to the script; the main-PC result is committed as evidence). The probe places clusters with the camera at (0, 0) and zoom 1, as next-host shows the agreement page; the A06 spec asserts zoom 1 but not the camera position. It holds every cluster's terms for every pair, the placement (origin, `P`, `phaseX`, bucket), DOM chroma, placement residuals, the browser version, the user agent, and whether the 2D context has `lang` and `textRendering`.
 
 ## Run on the main PC
 
@@ -67,7 +67,7 @@ Command: `node docs/evidence/m6c-u3/diag-raster.mjs --chromium <playwright chrom
 - `port|spec`, DPR 1: max h 0.071, max |v| 0.071, max size 0.141 CSS px.
 - `port|spec`, DPR 2: 0.035, 0.035 and 0.076.
 - No `text-rendering` or `fontKerning` setting, canvas kind or `willReadFrequently` value changes the port's result.
-- **`fill-black` (black text on the transparent surface, coverage = alpha; now the port's recipe) and `opaque-black-on-white` agree with the DOM exactly (0.000 on every measure) at both DPRs.**
+- **`fill-black` (now `mirror`; black text on the transparent surface, coverage = alpha; now the port's recipe) and `opaque-black-on-white` agree with the DOM exactly (0.000 on every measure) at both DPRs.**
 
 So in this Chromium the whole remaining raster term comes from the port painting white text and reading its alpha. Skia's text coverage depends on the paint colour's luminance (its gamma and contrast pre-blend), so the coverage of white text is not the coverage of the black text the DOM reference paints. Windows uses its own text gamma and contrast, so the same cause could be several times larger there. The main-PC run is meant to confirm or refute that.
 
