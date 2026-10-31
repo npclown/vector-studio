@@ -73,6 +73,7 @@ const f = Math.fround;
  * guard construction reparameterizes that affine map; it does not alter geometry.
  * Native interpolation/compiler behavior still requires the P1.5 image fixtures.
  */
+// E26-U5d-1: `primitivePackingWithinBudget` repeats this vertex arithmetic; keep the two in step.
 export function assessPrimitivePacking(
   world: SceneAffine,
   localBounds: SceneBounds,
@@ -190,6 +191,89 @@ export function assessPrimitivePacking(
     quantizationPhysicalPixels: quantization + bookkeeping,
     arithmeticPhysicalPixels: arithmetic + bookkeeping,
   });
+}
+
+/**
+ * E26 contract, U5d: a sufficient condition for `assessPrimitivePacking` to stay within `budget`
+ * on both measures, without its clipping. Each error field is affine over its triangle, so its
+ * absolute value is convex and its maximum over the clipped polygon is at most its maximum over
+ * the four unclipped vertices; the bookkeeping charge uses the same unclipped references as the
+ * assessment. True means the assessment would pass; false means only that the caller must run
+ * the assessment, which also throws whatever this check declines to decide (a singular transform,
+ * a collapsed quad, non-finite arithmetic). The margin covers the float64 rounding of the
+ * interpolation that the assessment does and this check does not. Its vertex arithmetic is the
+ * assessment's, operation for operation: keep the two in step.
+ */
+export function primitivePackingWithinBudget(
+  world: SceneAffine,
+  localBounds: SceneBounds,
+  origin: Readonly<{ x: number; y: number }>,
+  camera: Readonly<{ x: number; y: number }>,
+  zoom: number,
+  devicePixelRatio: number,
+  physicalWidth: number,
+  physicalHeight: number,
+  budget: number,
+  node?: PrimitiveNode,
+): boolean {
+  const l0 = f(world[0]),
+    l1 = f(world[1]),
+    l2 = f(world[2]),
+    l3 = f(world[3]);
+  const t0 = f(world[4] - origin.x),
+    t1 = f(world[5] - origin.y);
+  const o0 = f(origin.x - camera.x),
+    o1 = f(origin.y - camera.y);
+  const z = f(zoom),
+    dpr = f(devicePixelRatio);
+  const determinant = f(f(l0 * l3) - f(l1 * l2));
+  if (
+    !Number.isFinite(l0 + l1 + l2 + l3 + t0 + t1 + o0 + o1 + z + dpr + determinant) ||
+    z <= 0 ||
+    dpr <= 0 ||
+    determinant === 0
+  ) {
+    return false;
+  }
+  const documentGuard = f(2 / f(z * dpr));
+  const g0 = f(f(documentGuard * f(Math.abs(l3) + Math.abs(l2))) / Math.abs(determinant));
+  const g1 = f(f(documentGuard * f(Math.abs(l1) + Math.abs(l0))) / Math.abs(determinant));
+  const stored = storedLocalBounds(localBounds, node);
+  const lowerX = f(stored.minX - g0),
+    lowerY = f(stored.minY - g1);
+  const upperX = f(stored.maxX + g0),
+    upperY = f(stored.maxY + g1);
+  if (!Number.isFinite(g0 + g1 + lowerX + lowerY + upperX + upperY)) return false;
+  if (upperX <= lowerX || upperY <= lowerY) return false;
+  let quantization = 0,
+    arithmetic = 0,
+    reach = 1;
+  for (let corner = 0; corner < 4; corner += 1) {
+    const px = corner & 1 ? upperX : lowerX;
+    const py = corner & 2 ? upperY : lowerY;
+    const r0 = (world[0] * px + world[2] * py + (world[4] - camera.x)) * zoom * devicePixelRatio;
+    const r1 = (world[1] * px + world[3] * py + (world[5] - camera.y)) * zoom * devicePixelRatio;
+    const s0 = (l0 * px + l2 * py + t0 + o0) * z * dpr;
+    const s1 = (l1 * px + l3 * py + t1 + o1) * z * dpr;
+    const p0 = f(f(f(f(f(f(l0 * px) + f(l2 * py)) + t0) + o0) * z) * dpr);
+    const p1 = f(f(f(f(f(f(l1 * px) + f(l3 * py)) + t1) + o1) * z) * dpr);
+    const n0 = f(f(f(p0 * 2) / f(physicalWidth)) - 1);
+    const n1 = f(1 - f(f(p1 * 2) / f(physicalHeight)));
+    const v0 = ((n0 + 1) * physicalWidth) / 2;
+    const v1 = ((1 - n1) * physicalHeight) / 2;
+    if (!Number.isFinite(r0 + r1 + s0 + s1 + p0 + p1 + n0 + n1 + v0 + v1)) return false;
+    quantization = Math.max(quantization, Math.abs(s0 - r0), Math.abs(s1 - r1));
+    arithmetic = Math.max(arithmetic, Math.abs(v0 - s0), Math.abs(v1 - s1));
+    reach = Math.max(reach, Math.abs(r0), Math.abs(r1));
+  }
+  const geometryError =
+    Math.max(Math.abs(world[0]) + Math.abs(world[2]), Math.abs(world[1]) + Math.abs(world[3])) *
+    geometryStorageError(localBounds, node) *
+    zoom *
+    devicePixelRatio;
+  const bookkeeping = 64 * Number.EPSILON * reach;
+  const limit = budget * (1 - 1e-9);
+  return quantization + geometryError + bookkeeping <= limit && arithmetic + bookkeeping <= limit;
 }
 
 function clipErrorPolygon(

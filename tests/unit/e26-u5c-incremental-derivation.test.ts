@@ -50,8 +50,9 @@ import { receiptOf } from '../support/v3b-mesh-harness.js';
 
 const identity = { documentId: 'e26-u5c', pageId: 'page' } as const;
 
-// Counts the packing assessments while keeping the real function; `failing.on` makes every
-// assessment exceed the budget, so a frame throws as a far jump at a high zoom would.
+// Counts the packing assessments while keeping the real functions; `failing.on` makes every
+// assessment exceed the budget (and the U5d bound decline), so a frame throws as a far jump at a
+// high zoom would.
 const failing = vi.hoisted(() => ({ on: false }));
 vi.mock('../../packages/renderer-core/src/primitive-packing.js', async (original) => {
   const actual =
@@ -63,9 +64,14 @@ vi.mock('../../packages/renderer-core/src/primitive-packing.js', async (original
         ? { quantizationPhysicalPixels: 1, arithmeticPhysicalPixels: 0 }
         : actual.assessPrimitivePacking(...args),
     ),
+    primitivePackingWithinBudget: vi.fn(
+      (...args: Parameters<typeof actual.primitivePackingWithinBudget>) =>
+        !failing.on && actual.primitivePackingWithinBudget(...args),
+    ),
   };
 });
 const assessments = vi.mocked(packing.assessPrimitivePacking);
+const bounds = vi.mocked(packing.primitivePackingWithinBudget);
 
 /** mulberry32. */
 function random(seed: number): () => number {
@@ -979,7 +985,7 @@ describe('E26-U5c derivation paths', () => {
     expect(left!.writes.some((write) => write.resourceId === 'transforms')).toBe(true);
   });
 
-  it('assesses a kept primitive once per camera, target and origin', () => {
+  it('checks a kept primitive once per camera, target and origin', () => {
     const nodes = Array.from({ length: 10 }, (_, index) => rect(`r${index}`, index * 50));
     const incremental = twin(false);
     incremental.mirror.replaceSnapshot({
@@ -991,9 +997,12 @@ describe('E26-U5c derivation paths', () => {
     const frame = (x: number, next: PrimitiveTarget = target) => {
       incremental.mirror.setCamera({ position: { x, y: 0 }, zoom: 1 });
       assessments.mockClear();
+      bounds.mockClear();
       const packet = incremental.source.prepare(next)!;
       incremental.source.acknowledge(receiptOf(packet));
-      return assessments.mock.calls.length;
+      // U5d: the unclipped bound decides these primitives, so none reaches the assessment.
+      expect(assessments.mock.calls.length).toBe(0);
+      return bounds.mock.calls.length;
     };
     const visible = frame(0);
     expect(visible).toBeGreaterThan(0);
@@ -1002,7 +1011,7 @@ describe('E26-U5c derivation paths', () => {
     expect(frame(10)).toBe(visible);
     expect(frame(10, { ...target, width: 600 })).toBeGreaterThan(0);
     expect(frame(0)).toBeGreaterThan(0);
-    // The oracle assesses every visible primitive twice, as before U5c.
+    // The oracle assesses every visible primitive twice, as before U5c, without the bound.
     const oracle = twin(true);
     oracle.mirror.replaceSnapshot({
       identity,
@@ -1013,8 +1022,10 @@ describe('E26-U5c derivation paths', () => {
     oracle.mirror.setCamera({ position: { x: 0, y: 0 }, zoom: 1 });
     oracle.source.acknowledge(receiptOf(oracle.source.prepare(target)!));
     assessments.mockClear();
+    bounds.mockClear();
     oracle.source.prepare(target);
     expect(assessments.mock.calls.length).toBe(2 * visible);
+    expect(bounds.mock.calls.length).toBe(0);
   });
 });
 
