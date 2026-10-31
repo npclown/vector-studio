@@ -1,0 +1,2021 @@
+{
+  "records": 120,
+  "rows": [
+    {
+      "scenario": "e26-mixed-view-edit-10k/v1",
+      "variant": "frame",
+      "project": "chrome-dpr1",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "fbacd41cb86ccb66be4dbae73c827cd57934963b741761db21d7e317d777d4a6"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 16.7,
+      "perRunMedianMs": [
+        33.3,
+        33.2,
+        33.2,
+        33.2,
+        33.2
+      ],
+      "perRunP95Ms": [
+        33.5,
+        33.5,
+        33.4,
+        33.5,
+        33.4
+      ],
+      "perRunP99Ms": [
+        50.1,
+        33.6,
+        33.5,
+        33.6,
+        33.5
+      ],
+      "maxPerRunP95Ms": 33.5,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        18.7,
+        17.8,
+        18.5,
+        17.9,
+        17.8
+      ],
+      "longTasksOver50": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "frames": [
+        368,
+        389,
+        384,
+        386,
+        385
+      ]
+    },
+    {
+      "scenario": "e26-mixed-view-edit-10k/v1",
+      "variant": "frame",
+      "project": "chrome-dpr2",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "27b44636f77d3be2ef286e45dd6c4aeecee9def8163af4f889cb7078c2f89951"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 16.7,
+      "perRunMedianMs": [
+        33.3,
+        33.3,
+        33.3,
+        33.2,
+        33.3
+      ],
+      "perRunP95Ms": [
+        33.6,
+        33.5,
+        33.6,
+        33.5,
+        33.9
+      ],
+      "perRunP99Ms": [
+        50.2,
+        34.1,
+        34.2,
+        34.1,
+        50
+      ],
+      "maxPerRunP95Ms": 33.9,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        23.8,
+        20.2,
+        20.8,
+        19.2,
+        22.9
+      ],
+      "longTasksOver50": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "frames": [
+        346,
+        343,
+        333,
+        361,
+        318
+      ]
+    },
+    {
+      "scenario": "e26-mixed-view-edit-10k/v1",
+      "variant": "frame",
+      "project": "edge-dpr1",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "fbacd41cb86ccb66be4dbae73c827cd57934963b741761db21d7e317d777d4a6"
+      ],
+      "browser": "chromium 156.0.4314.50",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 16.7,
+      "perRunMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "perRunP95Ms": [
+        33.4,
+        33.4,
+        33.4,
+        33.4,
+        33.4
+      ],
+      "perRunP99Ms": [
+        33.5,
+        33.4,
+        33.5,
+        33.5,
+        33.5
+      ],
+      "maxPerRunP95Ms": 33.4,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        12.3,
+        12.9,
+        13.1,
+        13.1,
+        13.4
+      ],
+      "longTasksOver50": [
+        0,
+        1,
+        2,
+        1,
+        0
+      ],
+      "frames": [
+        525,
+        516,
+        504,
+        498,
+        508
+      ]
+    },
+    {
+      "scenario": "e26-mixed-view-edit-10k/v1",
+      "variant": "frame",
+      "project": "edge-dpr2",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "27b44636f77d3be2ef286e45dd6c4aeecee9def8163af4f889cb7078c2f89951"
+      ],
+      "browser": "chromium 156.0.4314.50",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 16.7,
+      "perRunMedianMs": [
+        33.3,
+        33.3,
+        33.3,
+        33.3,
+        33.3
+      ],
+      "perRunP95Ms": [
+        33.6,
+        33.9,
+        50.1,
+        33.5,
+        33.7
+      ],
+      "perRunP99Ms": [
+        50.1,
+        50.1,
+        50.3,
+        50.1,
+        50.1
+      ],
+      "maxPerRunP95Ms": 50.1,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        21.3,
+        24.5,
+        25.7,
+        21.2,
+        23.1
+      ],
+      "longTasksOver50": [
+        1,
+        1,
+        3,
+        1,
+        2
+      ],
+      "frames": [
+        344,
+        336,
+        299,
+        347,
+        322
+      ]
+    },
+    {
+      "scenario": "e26-mixed-all-edit-10k/v1",
+      "variant": "frame",
+      "project": "chrome-dpr1",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "115ac4873a673cbc3dfce752f09fdbe3647e2b612518884be9bdebaff58e73d4"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        100,
+        116.6,
+        99.9,
+        83.4,
+        99.9
+      ],
+      "perRunP95Ms": [
+        116.7,
+        116.7,
+        100.1,
+        100.1,
+        100.1
+      ],
+      "perRunP99Ms": [
+        116.8,
+        117,
+        116.6,
+        100.1,
+        100.1
+      ],
+      "maxPerRunP95Ms": 116.7,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        95.6,
+        93.4,
+        90.2,
+        87.2,
+        89.1
+      ],
+      "longTasksOver50": [
+        102,
+        91,
+        105,
+        109,
+        108
+      ],
+      "frames": [
+        101,
+        90,
+        104,
+        109,
+        107
+      ]
+    },
+    {
+      "scenario": "e26-mixed-all-edit-10k/v1",
+      "variant": "frame",
+      "project": "chrome-dpr2",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "56ce01efcba6268fe9febad1da9fcc08ac5a105f5ad0f6136229fcc2abc6efd3"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        116.7,
+        133.2,
+        133.3,
+        100.1,
+        83.3
+      ],
+      "perRunP95Ms": [
+        150,
+        149.9,
+        150.1,
+        133.4,
+        100.1
+      ],
+      "perRunP99Ms": [
+        150.1,
+        150.2,
+        166.7,
+        133.5,
+        116.6
+      ],
+      "maxPerRunP95Ms": 150.1,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        97.9,
+        101.4,
+        109.2,
+        99.5,
+        85.4
+      ],
+      "longTasksOver50": [
+        83,
+        78,
+        77,
+        91,
+        126
+      ],
+      "frames": [
+        82,
+        77,
+        77,
+        91,
+        126
+      ]
+    },
+    {
+      "scenario": "e26-mixed-all-edit-10k/v1",
+      "variant": "frame",
+      "project": "edge-dpr1",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "115ac4873a673cbc3dfce752f09fdbe3647e2b612518884be9bdebaff58e73d4"
+      ],
+      "browser": "chromium 156.0.4314.50",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        66.7,
+        66.7,
+        66.7,
+        100,
+        83.4
+      ],
+      "perRunP95Ms": [
+        83.4,
+        100,
+        83.4,
+        116.8,
+        100.2
+      ],
+      "perRunP99Ms": [
+        83.5,
+        116.7,
+        99.9,
+        155.1,
+        116.7
+      ],
+      "maxPerRunP95Ms": 116.8,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        68.3,
+        89,
+        67.2,
+        108.2,
+        89.1
+      ],
+      "longTasksOver50": [
+        140,
+        138,
+        142,
+        99,
+        112
+      ],
+      "frames": [
+        139,
+        138,
+        141,
+        99,
+        111
+      ]
+    },
+    {
+      "scenario": "e26-mixed-all-edit-10k/v1",
+      "variant": "frame",
+      "project": "edge-dpr2",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "56ce01efcba6268fe9febad1da9fcc08ac5a105f5ad0f6136229fcc2abc6efd3"
+      ],
+      "browser": "chromium 156.0.4314.50",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        116.6,
+        116.7,
+        133.4,
+        116.7,
+        116.7
+      ],
+      "perRunP95Ms": [
+        133.4,
+        150.2,
+        166.5,
+        133.6,
+        133.5
+      ],
+      "perRunP99Ms": [
+        133.6,
+        166.8,
+        166.7,
+        150.3,
+        166.9
+      ],
+      "maxPerRunP95Ms": 166.5,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        117.9,
+        99.2,
+        113.5,
+        124,
+        120.7
+      ],
+      "longTasksOver50": [
+        88,
+        80,
+        76,
+        85,
+        84
+      ],
+      "frames": [
+        88,
+        79,
+        75,
+        84,
+        83
+      ]
+    },
+    {
+      "scenario": "e26-mixed-all-pan-10k/v1",
+      "variant": "frame",
+      "project": "chrome-dpr1",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "ed884b4faf2246f02946a3ce40f1113941a448521fd315561bde47eb08a77345"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        166.7,
+        133.3,
+        133.4,
+        133.4,
+        133.5
+      ],
+      "perRunP95Ms": [
+        183.4,
+        166.7,
+        166.9,
+        150.3,
+        166.5
+      ],
+      "perRunP99Ms": [
+        183.6,
+        200,
+        200,
+        166.9,
+        200.1
+      ],
+      "maxPerRunP95Ms": 183.4,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        148.6,
+        160.5,
+        168.9,
+        150.2,
+        156.2
+      ],
+      "longTasksOver50": [
+        58,
+        74,
+        71,
+        73,
+        70
+      ],
+      "frames": [
+        57,
+        73,
+        71,
+        73,
+        69
+      ]
+    },
+    {
+      "scenario": "e26-mixed-all-pan-10k/v1",
+      "variant": "frame",
+      "project": "chrome-dpr2",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "0e6afa28d67b57ab63f2344654bd153230c386e6ad97c1768b4f8fd2169943e1"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        99.9,
+        99.9,
+        99.9,
+        100,
+        100
+      ],
+      "perRunP95Ms": [
+        116.7,
+        100.1,
+        116.7,
+        116.7,
+        116.6
+      ],
+      "perRunP99Ms": [
+        216.6,
+        216.6,
+        216.5,
+        216.7,
+        216.7
+      ],
+      "maxPerRunP95Ms": 116.7,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        103.8,
+        103.8,
+        104.4,
+        112.8,
+        108.4
+      ],
+      "longTasksOver50": [
+        103,
+        103,
+        104,
+        100,
+        102
+      ],
+      "frames": [
+        102,
+        102,
+        103,
+        100,
+        102
+      ]
+    },
+    {
+      "scenario": "e26-mixed-all-pan-10k/v1",
+      "variant": "frame",
+      "project": "edge-dpr1",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "ed884b4faf2246f02946a3ce40f1113941a448521fd315561bde47eb08a77345"
+      ],
+      "browser": "chromium 156.0.4314.50",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        133.3,
+        133.3,
+        133.3,
+        133.3,
+        133.3
+      ],
+      "perRunP95Ms": [
+        150.1,
+        150,
+        150.1,
+        150.1,
+        150.1
+      ],
+      "perRunP99Ms": [
+        166.7,
+        150.3,
+        166.7,
+        183.3,
+        166.8
+      ],
+      "maxPerRunP95Ms": 150.1,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        142.6,
+        143.8,
+        137.9,
+        144.5,
+        138.6
+      ],
+      "longTasksOver50": [
+        76,
+        76,
+        74,
+        74,
+        76
+      ],
+      "frames": [
+        76,
+        76,
+        74,
+        73,
+        76
+      ]
+    },
+    {
+      "scenario": "e26-mixed-all-pan-10k/v1",
+      "variant": "frame",
+      "project": "edge-dpr2",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "0e6afa28d67b57ab63f2344654bd153230c386e6ad97c1768b4f8fd2169943e1"
+      ],
+      "browser": "chromium 156.0.4314.50",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        150,
+        150,
+        166.7,
+        166.7,
+        150
+      ],
+      "perRunP95Ms": [
+        233.2,
+        216.6,
+        233.4,
+        233.6,
+        199.9
+      ],
+      "perRunP99Ms": [
+        300.1,
+        333.3,
+        333.4,
+        333.5,
+        349.8
+      ],
+      "maxPerRunP95Ms": 233.6,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        224.3,
+        159.4,
+        193.3,
+        233.4,
+        194.5
+      ],
+      "longTasksOver50": [
+        59,
+        63,
+        53,
+        57,
+        61
+      ],
+      "frames": [
+        58,
+        62,
+        52,
+        57,
+        61
+      ]
+    },
+    {
+      "scenario": "e26-simple-stress-10k/v1",
+      "variant": "frame",
+      "project": "chrome-dpr1",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "76665ddc402ad3c6f4e365d499444a0d9a5e869f3110545f52cb610a1bfe7cd1"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        66.7,
+        66.7,
+        66.7,
+        66.7,
+        66.6
+      ],
+      "perRunP95Ms": [
+        83.2,
+        83.4,
+        83.4,
+        83.3,
+        66.9
+      ],
+      "perRunP99Ms": [
+        83.4,
+        83.5,
+        83.5,
+        83.4,
+        83.3
+      ],
+      "maxPerRunP95Ms": 83.4,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        72.1,
+        73.3,
+        73.3,
+        71.9,
+        68.9
+      ],
+      "longTasksOver50": [
+        149,
+        145,
+        144,
+        147,
+        154
+      ],
+      "frames": [
+        148,
+        145,
+        144,
+        147,
+        154
+      ]
+    },
+    {
+      "scenario": "e26-simple-stress-10k/v1",
+      "variant": "frame",
+      "project": "chrome-dpr2",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "dc51ded9f9cdeda87abe4eac3fc51765d211e52f42bd1f8857c86686d3333fe6"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        50,
+        50,
+        50,
+        50,
+        50
+      ],
+      "perRunP95Ms": [
+        50.1,
+        50.1,
+        50.1,
+        50.1,
+        50.1
+      ],
+      "perRunP99Ms": [
+        66.7,
+        66.6,
+        66.6,
+        66.7,
+        66.6
+      ],
+      "maxPerRunP95Ms": 50.1,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        50.9,
+        49.6,
+        52.1,
+        51.1,
+        51.6
+      ],
+      "longTasksOver50": [
+        18,
+        9,
+        22,
+        21,
+        29
+      ],
+      "frames": [
+        207,
+        209,
+        207,
+        208,
+        206
+      ]
+    },
+    {
+      "scenario": "e26-simple-stress-10k/v1",
+      "variant": "frame",
+      "project": "edge-dpr1",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "76665ddc402ad3c6f4e365d499444a0d9a5e869f3110545f52cb610a1bfe7cd1"
+      ],
+      "browser": "chromium 156.0.4314.50",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        66.6,
+        66.6,
+        66.6,
+        66.7,
+        66.7
+      ],
+      "perRunP95Ms": [
+        66.8,
+        66.8,
+        66.8,
+        83.1,
+        83.4
+      ],
+      "perRunP99Ms": [
+        67.1,
+        66.9,
+        83.3,
+        83.4,
+        83.5
+      ],
+      "maxPerRunP95Ms": 83.4,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        65.4,
+        63.6,
+        66,
+        69.5,
+        78.6
+      ],
+      "longTasksOver50": [
+        159,
+        163,
+        162,
+        149,
+        148
+      ],
+      "frames": [
+        158,
+        163,
+        161,
+        148,
+        147
+      ]
+    },
+    {
+      "scenario": "e26-simple-stress-10k/v1",
+      "variant": "frame",
+      "project": "edge-dpr2",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "dc51ded9f9cdeda87abe4eac3fc51765d211e52f42bd1f8857c86686d3333fe6"
+      ],
+      "browser": "chromium 156.0.4314.50",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        50,
+        50,
+        50,
+        50,
+        50
+      ],
+      "perRunP95Ms": [
+        66.7,
+        66.5,
+        50.1,
+        50.1,
+        50.1
+      ],
+      "perRunP99Ms": [
+        66.7,
+        66.7,
+        66.7,
+        50.1,
+        66.6
+      ],
+      "maxPerRunP95Ms": 66.7,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        59.6,
+        55,
+        51.5,
+        49.9,
+        49
+      ],
+      "longTasksOver50": [
+        64,
+        26,
+        18,
+        10,
+        9
+      ],
+      "frames": [
+        201,
+        212,
+        215,
+        212,
+        219
+      ]
+    },
+    {
+      "scenario": "e26-pointer-busy-10k/v1",
+      "variant": "busy",
+      "project": "chrome-dpr1",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "ede80cbc0f054cb636b78f9c25e92297df852bebbd53824dd589b80ea54cbda5"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        126.6,
+        123.8,
+        164.9,
+        164.2,
+        129.8
+      ],
+      "perRunP95Ms": [
+        247.4,
+        332.9,
+        425.7,
+        372,
+        243.4
+      ],
+      "maxPerRunP95Ms": 425.7,
+      "pass": false,
+      "samples": [
+        213,
+        219,
+        175,
+        181,
+        204
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        500,
+        500,
+        500,
+        499,
+        500
+      ],
+      "longTasksOver50OutsideIsolation": [
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        100,
+        94,
+        127,
+        106,
+        107
+      ],
+      "isolationMs": [
+        [
+          202.4
+        ],
+        [
+          191.3
+        ],
+        [
+          225.1
+        ],
+        [
+          240.7
+        ],
+        [
+          184.7
+        ]
+      ],
+      "writesDuringPress": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "firstWriteAfterUpMs": [
+        527,
+        524.4,
+        525.1,
+        526.8,
+        519.1
+      ]
+    },
+    {
+      "scenario": "e26-pointer-busy-10k/v1",
+      "variant": "busy",
+      "project": "chrome-dpr2",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "0e5300b24754dc9d87ea07915e049844922f278008b4bbfe1125f14492df2aa2"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        77.1,
+        77.6,
+        78.2,
+        81.8,
+        76.1
+      ],
+      "perRunP95Ms": [
+        184.4,
+        189,
+        180.5,
+        279.9,
+        172
+      ],
+      "maxPerRunP95Ms": 279.9,
+      "pass": false,
+      "samples": [
+        263,
+        261,
+        257,
+        257,
+        256
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        500,
+        499,
+        500,
+        499,
+        500
+      ],
+      "longTasksOver50OutsideIsolation": [
+        0,
+        0,
+        0,
+        1,
+        1
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        0,
+        0,
+        0,
+        59,
+        69
+      ],
+      "isolationMs": [
+        [
+          129.4
+        ],
+        [
+          124
+        ],
+        [
+          125.8
+        ],
+        [
+          130.7
+        ],
+        [
+          127.8
+        ]
+      ],
+      "writesDuringPress": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "firstWriteAfterUpMs": [
+        515.2,
+        524.5,
+        523.9,
+        526.9,
+        517
+      ]
+    },
+    {
+      "scenario": "e26-pointer-busy-10k/v1",
+      "variant": "busy",
+      "project": "edge-dpr1",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "ede80cbc0f054cb636b78f9c25e92297df852bebbd53824dd589b80ea54cbda5"
+      ],
+      "browser": "chromium 156.0.4314.50",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        140.4,
+        129.8,
+        146.2,
+        164.6,
+        141.3
+      ],
+      "perRunP95Ms": [
+        244,
+        230.2,
+        299.6,
+        279.3,
+        436.8
+      ],
+      "maxPerRunP95Ms": 436.8,
+      "pass": false,
+      "samples": [
+        201,
+        203,
+        199,
+        181,
+        186
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        500,
+        500,
+        499,
+        500,
+        500
+      ],
+      "longTasksOver50OutsideIsolation": [
+        1,
+        1,
+        2,
+        2,
+        1
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        52,
+        52,
+        98,
+        123,
+        94
+      ],
+      "isolationMs": [
+        [
+          222.2
+        ],
+        [
+          210.8
+        ],
+        [
+          212.6
+        ],
+        [
+          225.2
+        ],
+        [
+          198.9
+        ]
+      ],
+      "writesDuringPress": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "firstWriteAfterUpMs": [
+        520.2,
+        526.2,
+        535.5,
+        533.3,
+        524.6
+      ]
+    },
+    {
+      "scenario": "e26-pointer-busy-10k/v1",
+      "variant": "busy",
+      "project": "edge-dpr2",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "0e5300b24754dc9d87ea07915e049844922f278008b4bbfe1125f14492df2aa2"
+      ],
+      "browser": "chromium 156.0.4314.50",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        88,
+        80.1,
+        80.8,
+        75.3,
+        74.8
+      ],
+      "perRunP95Ms": [
+        188.2,
+        190.7,
+        295.8,
+        168.9,
+        184.6
+      ],
+      "maxPerRunP95Ms": 295.8,
+      "pass": false,
+      "samples": [
+        248,
+        265,
+        267,
+        271,
+        267
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        500,
+        499,
+        500,
+        500,
+        500
+      ],
+      "longTasksOver50OutsideIsolation": [
+        0,
+        1,
+        1,
+        1,
+        1
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        0,
+        66,
+        73,
+        73,
+        55
+      ],
+      "isolationMs": [
+        [
+          121.3
+        ],
+        [
+          120.1
+        ],
+        [
+          120.3
+        ],
+        [
+          122.8
+        ],
+        [
+          118.9
+        ]
+      ],
+      "writesDuringPress": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "firstWriteAfterUpMs": [
+        523.1,
+        522.5,
+        530.2,
+        531.7,
+        522.7
+      ]
+    },
+    {
+      "scenario": "e26-pointer-busy-10k/v1",
+      "variant": "plain",
+      "project": "chrome-dpr1",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "6c0600abfd18c9bb5930592e71ae1ce4b732f212236b4d65a8cc8b4c6594b9fb"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        131.9,
+        126.5,
+        139.2,
+        139.1,
+        134.8
+      ],
+      "perRunP95Ms": [
+        188.3,
+        241.1,
+        218.4,
+        245.7,
+        236.1
+      ],
+      "maxPerRunP95Ms": 245.7,
+      "pass": false,
+      "samples": [
+        219,
+        230,
+        213,
+        206,
+        228
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        499,
+        499,
+        500,
+        500,
+        500
+      ],
+      "longTasksOver50OutsideIsolation": [
+        1,
+        0,
+        1,
+        1,
+        0
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        51,
+        0,
+        52,
+        56,
+        0
+      ],
+      "isolationMs": [
+        [],
+        [],
+        [],
+        [],
+        []
+      ],
+      "writesDuringPress": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "firstWriteAfterUpMs": [
+        536.4,
+        529.7,
+        533.4,
+        531.3,
+        522.7
+      ]
+    },
+    {
+      "scenario": "e26-pointer-busy-10k/v1",
+      "variant": "plain",
+      "project": "chrome-dpr2",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "44dcfab65967280d75d3771480fc0b613323bb95568cae46303f8fae60b2b082"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        74.9,
+        84.3,
+        81.1,
+        76.7,
+        73.2
+      ],
+      "perRunP95Ms": [
+        150.7,
+        189,
+        197.6,
+        185.4,
+        155.4
+      ],
+      "maxPerRunP95Ms": 197.6,
+      "pass": false,
+      "samples": [
+        270,
+        264,
+        266,
+        270,
+        269
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        500,
+        500,
+        500,
+        500,
+        500
+      ],
+      "longTasksOver50OutsideIsolation": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "isolationMs": [
+        [],
+        [],
+        [],
+        [],
+        []
+      ],
+      "writesDuringPress": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "firstWriteAfterUpMs": [
+        527.5,
+        530.7,
+        527.1,
+        524.2,
+        529.2
+      ]
+    },
+    {
+      "scenario": "e26-pointer-busy-10k/v1",
+      "variant": "plain",
+      "project": "edge-dpr1",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "6c0600abfd18c9bb5930592e71ae1ce4b732f212236b4d65a8cc8b4c6594b9fb"
+      ],
+      "browser": "chromium 156.0.4314.50",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        125.3,
+        120.8,
+        123.2,
+        134.9,
+        118
+      ],
+      "perRunP95Ms": [
+        197.6,
+        254,
+        187.7,
+        216,
+        277.1
+      ],
+      "maxPerRunP95Ms": 277.1,
+      "pass": false,
+      "samples": [
+        220,
+        233,
+        234,
+        222,
+        222
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        500,
+        500,
+        500,
+        499,
+        500
+      ],
+      "longTasksOver50OutsideIsolation": [
+        0,
+        1,
+        1,
+        0,
+        0
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        0,
+        54,
+        53,
+        0,
+        0
+      ],
+      "isolationMs": [
+        [],
+        [],
+        [],
+        [],
+        []
+      ],
+      "writesDuringPress": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "firstWriteAfterUpMs": [
+        536.6,
+        528.1,
+        529.6,
+        535,
+        526.7
+      ]
+    },
+    {
+      "scenario": "e26-pointer-busy-10k/v1",
+      "variant": "plain",
+      "project": "edge-dpr2",
+      "repetitions": 5,
+      "commits": [
+        "127fba3214a2b7ba89177728a83d09fe22d0fdad"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "44dcfab65967280d75d3771480fc0b613323bb95568cae46303f8fae60b2b082"
+      ],
+      "browser": "chromium 156.0.4314.50",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        69.9,
+        74.4,
+        75.4,
+        76,
+        70.6
+      ],
+      "perRunP95Ms": [
+        138,
+        161.7,
+        185.6,
+        156.9,
+        183.3
+      ],
+      "maxPerRunP95Ms": 185.6,
+      "pass": false,
+      "samples": [
+        282,
+        283,
+        273,
+        281,
+        272
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        499,
+        499,
+        500,
+        500,
+        499
+      ],
+      "longTasksOver50OutsideIsolation": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "isolationMs": [
+        [],
+        [],
+        [],
+        [],
+        []
+      ],
+      "writesDuringPress": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "firstWriteAfterUpMs": [
+        519.4,
+        524,
+        527.8,
+        524.1,
+        524.1
+      ]
+    }
+  ]
+}
