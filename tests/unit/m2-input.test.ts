@@ -542,6 +542,104 @@ describe('M2-A01 EditorCanvas input (M2-I4)', () => {
   });
 });
 
+describe('E26-U6a press state (section 5, amended M2-I4)', () => {
+  function pressed() {
+    const harness = host();
+    const seen: string[] = [];
+    harness.canvasInput.onPressChange = (value) => {
+      // The press starts before the editor sees it and ends after it handled the release.
+      seen.push(`${value ? 'press' : 'release'}@${harness.sent.length}`);
+    };
+    return { ...harness, seen };
+  }
+
+  it('reports a press on a forwarded pointerdown and its end on pointerup', () => {
+    const { canvasInput, seen, pointer, mouse } = pressed();
+    canvasInput.pointerDown(pointer(2, 50, 50).event);
+    canvasInput.pointerUp(mouse(50, 50));
+    expect(seen).toEqual([]);
+    canvasInput.pointerDown(pointer(0, 50, 50).event);
+    canvasInput.pointerMove(mouse(60, 60));
+    canvasInput.pointerUp(mouse(60, 60));
+    canvasInput.pointerUp(mouse(60, 60));
+    expect(seen).toEqual(['press@0', 'release@3']);
+  });
+
+  it('a second pointerdown during a press does not report a second press', () => {
+    const { canvasInput, seen, pointer, mouse } = pressed();
+    canvasInput.pointerDown(pointer(0, 50, 50).event);
+    canvasInput.pointerDown(pointer(1, 50, 50).event);
+    canvasInput.pointerUp(mouse(50, 50));
+    expect(seen).toEqual(['press@0', 'release@3']);
+  });
+
+  it('pointercancel and a lost pointer capture end the press once', () => {
+    const { canvasInput, sent, seen, pointer, mouse } = pressed();
+    canvasInput.pointerDown(pointer(0, 50, 50).event);
+    canvasInput.pointerCancel(keys);
+    canvasInput.lostPointerCapture(keys);
+    canvasInput.pointerDown(pointer(0, 50, 50).event);
+    canvasInput.lostPointerCapture(keys);
+    canvasInput.pointerUp(mouse(50, 50));
+    expect(sent.map((event) => event.kind)).toEqual([
+      'pointerdown',
+      'pointercancel',
+      'pointerdown',
+      'pointercancel',
+    ]);
+    expect(seen).toEqual(['press@0', 'release@2', 'press@2', 'release@4']);
+  });
+
+  it('a lost capture after pointerup sends nothing and reports nothing', () => {
+    const { canvasInput, sent, seen, pointer, mouse } = pressed();
+    canvasInput.pointerDown(pointer(0, 50, 50).event);
+    canvasInput.pointerUp(mouse(50, 50));
+    canvasInput.lostPointerCapture(keys);
+    expect(sent.map((event) => event.kind)).toEqual(['pointerdown', 'pointerup']);
+    expect(seen).toEqual(['press@0', 'release@2']);
+  });
+
+  it('the blur reset ends a press after its sends; without a press it reports nothing', () => {
+    const { canvasInput, seen, pointer, key } = pressed();
+    canvasInput.keyDown(key({ key: 'x', code: 'KeyX' }).event);
+    canvasInput.reset();
+    expect(seen).toEqual([]);
+    canvasInput.pointerDown(pointer(0, 50, 50).event);
+    canvasInput.reset();
+    expect(seen).toEqual(['press@3', 'release@6']);
+  });
+
+  it('unmount ends a press without an editor event', () => {
+    const { canvasInput, sent, seen, pointer } = pressed();
+    canvasInput.unmount();
+    canvasInput.pointerDown(pointer(0, 50, 50).event);
+    canvasInput.unmount();
+    canvasInput.unmount();
+    expect(sent.map((event) => event.kind)).toEqual(['pointerdown']);
+    expect(seen).toEqual(['press@0', 'release@1']);
+  });
+
+  it('a throwing press callback does not break the input path', () => {
+    const { canvasInput, sent, pointer, mouse } = host();
+    canvasInput.onPressChange = () => {
+      throw new Error('host');
+    };
+    canvasInput.pointerDown(pointer(0, 50, 50).event);
+    canvasInput.pointerUp(mouse(50, 50));
+    expect(sent.map((event) => event.kind)).toEqual(['pointerdown', 'pointerup']);
+  });
+
+  it('the press ends even when the editor throws on the release', () => {
+    const { target, canvasInput, seen, pointer, mouse } = pressed();
+    canvasInput.pointerDown(pointer(0, 50, 50).event);
+    target.execute = () => {
+      throw new Error('boom');
+    };
+    expect(() => canvasInput.pointerUp(mouse(50, 50))).toThrow('boom');
+    expect(seen).toEqual(['press@0', 'release@1']);
+  });
+});
+
 /** A fake element or window that records its listeners and dispatches to them. */
 function fakeTarget() {
   const listeners: { type: string; listener: (event: Event) => void; options?: unknown }[] = [];

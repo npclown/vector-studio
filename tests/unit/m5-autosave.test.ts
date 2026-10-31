@@ -458,3 +458,217 @@ describe('M5-A05 autosave on the fake IndexedDB store', () => {
     opened.store.close();
   });
 });
+
+// E26-U6a (E26 contract, section 5; M5-S1 as amended): `holdWhile` holds a write that comes due
+// during a canvas press until `release()`; `flush()` is not held.
+describe('E26-U6a autosave press hold', () => {
+  function gated() {
+    const { store, calls } = double();
+    let pressed = false;
+    let current = empty;
+    const autosave = createAutosave({
+      store,
+      envelope: () => current,
+      holdWhile: () => pressed,
+    });
+    return {
+      autosave,
+      calls,
+      press: (value: boolean) => {
+        pressed = value;
+      },
+      set: (value: PersistenceEnvelope) => {
+        current = value;
+      },
+    };
+  }
+
+  it('holds a trailing write during a press and starts it on release', async () => {
+    const { autosave, calls, press, set } = gated();
+    press(true);
+    autosave.schedule();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(calls.length).toBe(0);
+    set(shapes);
+    press(false);
+    autosave.release();
+    expect(calls.map((call) => [call.at, call.envelope])).toEqual([[5000, shapes]]);
+  });
+
+  it('holds past the maximum wait under schedules during the press', async () => {
+    const { autosave, calls, press } = gated();
+    press(true);
+    for (let step = 0; step < 40; step += 1) {
+      autosave.schedule();
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    expect(calls.length).toBe(0);
+    press(false);
+    autosave.release();
+    expect(calls.map((call) => call.at)).toEqual([4000]);
+    calls[0]!.resolve(WRITTEN);
+    await vi.advanceTimersByTimeAsync(10_000);
+    // The held write read the envelope at its start, so it saved every change of the press.
+    expect(calls.length).toBe(1);
+  });
+
+  it('does not hold when the press ends before the write comes due', async () => {
+    const { autosave, calls, press } = gated();
+    press(true);
+    autosave.schedule();
+    await vi.advanceTimersByTimeAsync(200);
+    press(false);
+    autosave.release();
+    expect(calls.length).toBe(0);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(calls.map((call) => call.at)).toEqual([500]);
+  });
+
+  it('release does nothing with nothing held, while still pressed, or after dispose', async () => {
+    const { autosave, calls, press } = gated();
+    autosave.release();
+    expect(calls.length).toBe(0);
+    press(true);
+    autosave.schedule();
+    await vi.advanceTimersByTimeAsync(600);
+    autosave.release();
+    expect(calls.length).toBe(0);
+    press(false);
+    autosave.dispose();
+    autosave.release();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(calls.length).toBe(0);
+  });
+
+  it('holds the write due after a write in flight ends mid-press', async () => {
+    const { autosave, calls, press } = gated();
+    autosave.schedule();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(calls.length).toBe(1);
+    press(true);
+    autosave.schedule();
+    await vi.advanceTimersByTimeAsync(2500);
+    calls[0]!.resolve(WRITTEN);
+    await settle();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(calls.length).toBe(1);
+    press(false);
+    autosave.release();
+    expect(calls.map((call) => call.at)).toEqual([500, 5000]);
+  });
+
+  it('flush is not held', async () => {
+    const { autosave, calls, press } = gated();
+    press(true);
+    autosave.schedule();
+    await vi.advanceTimersByTimeAsync(600);
+    const flushed = autosave.flush();
+    await settle();
+    expect(calls.map((call) => call.at)).toEqual([600]);
+    calls[0]!.resolve(WRITTEN);
+    await flushed;
+    // The flush wrote the held change, so the release has nothing to start.
+    press(false);
+    autosave.release();
+    expect(calls.length).toBe(1);
+  });
+
+  it('a throwing holdWhile never holds a write', async () => {
+    const { store, calls } = double();
+    const autosave = createAutosave({
+      store,
+      envelope: () => empty,
+      holdWhile: () => {
+        throw new Error('boom');
+      },
+    });
+    autosave.schedule();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(calls.map((call) => call.at)).toEqual([500]);
+  });
+
+  it('without holdWhile, release does nothing and writes keep the M5-A05 timing', async () => {
+    const { store, calls } = double();
+    const autosave = createAutosave({ store, envelope: () => empty });
+    autosave.schedule();
+    autosave.release();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(calls.map((call) => call.at)).toEqual([500]);
+  });
+});
+
+describe('E26-U6a autosave press hold: review cases', () => {
+  it('a schedule after a press ended without release ends the hold', async () => {
+    const { store, calls } = double();
+    let pressed = true;
+    const autosave = createAutosave({ store, envelope: () => empty, holdWhile: () => pressed });
+    autosave.schedule();
+    await vi.advanceTimersByTimeAsync(600);
+    pressed = false;
+    // No release: the next schedule takes the normal path.
+    autosave.schedule();
+    await vi.advanceTimersByTimeAsync(499);
+    expect(calls.length).toBe(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(calls.map((call) => call.at)).toEqual([1100]);
+  });
+
+  it('a held write that fails on release is retried on the next schedule', async () => {
+    const { store, calls } = double();
+    let pressed = true;
+    const results: WriteResult[] = [];
+    const autosave = createAutosave({
+      store,
+      envelope: () => empty,
+      holdWhile: () => pressed,
+      onResult: (result) => results.push(result),
+    });
+    autosave.schedule();
+    await vi.advanceTimersByTimeAsync(600);
+    pressed = false;
+    autosave.release();
+    calls[0]!.resolve(FAILED);
+    await settle();
+    expect(results).toEqual([FAILED]);
+    autosave.schedule();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(calls.map((call) => call.at)).toEqual([600, 1100]);
+  });
+
+  it('a flush write during a hold that fails leaves the store dirty for the next schedule', async () => {
+    const { store, calls } = double();
+    let pressed = true;
+    const autosave = createAutosave({ store, envelope: () => empty, holdWhile: () => pressed });
+    autosave.schedule();
+    await vi.advanceTimersByTimeAsync(600);
+    const flushed = autosave.flush();
+    await settle();
+    calls[0]!.resolve(FAILED);
+    await flushed;
+    pressed = false;
+    // The flush's write cleared the hold, so the release has nothing to start (M5-S1: a failed
+    // write is retried on the next schedule or flush).
+    autosave.release();
+    expect(calls.length).toBe(1);
+    autosave.schedule();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(calls.map((call) => call.at)).toEqual([600, 1100]);
+  });
+
+  it('holds the trailing write a schedule during a write armed when a press starts after it', async () => {
+    const { store, calls } = double();
+    let pressed = false;
+    const autosave = createAutosave({ store, envelope: () => empty, holdWhile: () => pressed });
+    autosave.schedule();
+    await vi.advanceTimersByTimeAsync(500);
+    autosave.schedule();
+    calls[0]!.resolve(WRITTEN);
+    await settle();
+    pressed = true;
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(calls.length).toBe(1);
+    pressed = false;
+    autosave.release();
+    expect(calls.map((call) => call.at)).toEqual([500, 3500]);
+  });
+});
