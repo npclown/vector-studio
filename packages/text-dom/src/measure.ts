@@ -88,13 +88,15 @@ function relative(rect: DOMRect, origin: DOMRect, zoom: number): Rect {
  * emulated ratio while layout stays at the real one. So it is read from the layout unit, 1/64 of
  * a layout px: a host `width` of `w` CSS px is laid out as `floor(64 E w)` units and reads back as
  * that over `64 E`. The smallest `w = 2^k / 64` that reads back non-zero is one unit, so
- * `E = 1 / (64 × reading)`. A result within 1e-6 of `ratio` or of 1 is taken as that value; a
- * zoom outside [1/64, 32) reads as 1 (no cancelling). Assumes Chromium (its 1/64 px layout unit,
+ * `E = 1 / (64 × reading)`. A result within 1e-6 of `ratio` or of 1 is taken as that value.
+ * Null when no unit reads back: the host has no layout box (it or an ancestor is not rendered)
+ * or the zoom is outside [1/64, 32); the caller then measures uncancelled and asks again. Assumes Chromium (its 1/64 px layout unit,
  * floored widths and the font metric rounding this cancels) and no CSS `zoom` on the host's
  * ancestors; `cancelLayoutZoom` checks the result and falls back to 1 when it does not hold.
  */
-export function layoutZoom(host: HTMLElement, ratio: number): number {
+export function layoutZoom(host: HTMLElement, ratio: number): number | null {
   host.style.setProperty('zoom', '1', 'important');
+  if (host.getClientRects().length === 0) return null;
   let unit: number;
   try {
     unit = layoutUnit(host);
@@ -102,7 +104,7 @@ export function layoutZoom(host: HTMLElement, ratio: number): number {
     host.style.setProperty('width', '0', 'important');
   }
   const zoom = 1 / (64 * unit);
-  if (!Number.isFinite(zoom) || zoom <= 0) return 1;
+  if (!Number.isFinite(zoom) || zoom <= 0) return null;
   if (Math.abs(zoom - 1) <= 1e-6) return 1;
   if (ratio > 0 && Math.abs(zoom / ratio - 1) <= 1e-6) return ratio;
   return zoom;
@@ -114,11 +116,12 @@ export function layoutZoom(host: HTMLElement, ratio: number): number {
  * out at zoom 1: host widths of 1.5 and 1000.5 layout units must floor to 1 and 1000 units of its
  * own (a host still at `E` floors them to `floor(1.5 E)` and `floor(1000.5 E)`). Otherwise
  * (another engine, CSS `zoom` on an ancestor, a zoom the browser rounds) it sets `zoom: 1` and
- * returns 1, which keeps the error M6c-U0 removes rather than adding another.
+ * returns 1, which keeps the error M6c-U0 removes rather than adding another. Null, with `zoom: 1`,
+ * when `layoutZoom` cannot read the zoom (the host not rendered): the caller must not keep it.
  */
-export function cancelLayoutZoom(host: HTMLElement, ratio: number): number {
+export function cancelLayoutZoom(host: HTMLElement, ratio: number): number | null {
   const zoom = layoutZoom(host, ratio);
-  if (zoom === 1) return 1;
+  if (zoom === null || zoom === 1) return zoom;
   host.style.setProperty('zoom', String(1 / zoom), 'important');
   const units = (width: number): number => {
     host.style.setProperty('width', `${width / 64}px`, 'important');
@@ -208,10 +211,13 @@ export function createMeasurer(document: Document, lang: string): Measurer {
     // and CDP emulation all do; a request at a stable ratio pays no extra layout. (A real device
     // scale change under unchanged CDP emulation keeps the ratio and is not seen until the next
     // ratio change: test setups only.)
+    // A reading taken while the host is not rendered (`display: none` on it or an ancestor)
+    // is not kept, so the next request detects again (M6c-U0 review r2).
     const ratio = document.defaultView?.devicePixelRatio ?? 1;
     if (ratio !== detectedAt) {
-      zoom = cancelLayoutZoom(host, ratio);
-      detectedAt = ratio;
+      const detected = cancelLayoutZoom(host, ratio);
+      zoom = detected ?? 1;
+      detectedAt = detected === null ? null : ratio;
     }
     return block;
   }

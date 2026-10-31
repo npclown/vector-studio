@@ -105,28 +105,56 @@ async function atScale(
   }
 }
 
+/** The port's layouts of `CASES` at DPR 1 (layout zoom 1), checking the host carries zoom 1. */
+async function dprOneReference(browser: Browser): Promise<TextLayoutResult[]> {
+  const page = await (await browser.newContext({ deviceScaleFactor: 1 })).newPage();
+  await open(page);
+  const results = await layoutAll(
+    page,
+    CASES.map((c) => c.request),
+  );
+  const zoom = await page.evaluate(
+    (tag) => (document.querySelector(tag) as HTMLElement).style.getPropertyValue('zoom'),
+    HOST,
+  );
+  expect.soft(zoom, 'host zoom at DPR 1').toBe('1');
+  await page.context().close();
+  return results;
+}
+
+const launch = (scale: number) =>
+  chromium.launch({
+    ...(executablePath === undefined ? {} : { executablePath }),
+    args: [`--force-device-scale-factor=${scale}`],
+  });
+
+/** Adds each length of `results` beyond 1/64 px of `reference` to `problems`; the worst delta. */
+function compare(
+  reference: readonly TextLayoutResult[],
+  results: readonly TextLayoutResult[],
+  label: string,
+  problems: string[],
+): { delta: number; at: string } {
+  let max = { delta: 0, at: '-' };
+  results.forEach((result, index) => {
+    const name = `${label}: ${CASES[index]!.name}`;
+    if (shape(result) !== shape(reference[index]!)) {
+      problems.push(`${name}: other lines or clusters`);
+      return;
+    }
+    const want = lengths(reference[index]!);
+    lengths(result).forEach(([field, value], k) => {
+      const delta = Math.abs(value - want[k]![1]);
+      if (delta > BOUND) problems.push(`${name}: ${field} ${value} against ${want[k]![1]}`);
+      if (delta > max.delta) max = { delta, at: `${CASES[index]!.name}, ${field}` };
+    });
+  });
+  return max;
+}
+
 test('M6c-U0: a real device scale gives the DPR 1 layouts within 1/64 px', async ({ browser }) => {
   expect(CASES.length).toBeGreaterThan(40);
-  const reference = await (async () => {
-    const page = await (await browser.newContext({ deviceScaleFactor: 1 })).newPage();
-    await open(page);
-    const results = await layoutAll(
-      page,
-      CASES.map((c) => c.request),
-    );
-    const zoom = await page.evaluate(
-      (tag) => (document.querySelector(tag) as HTMLElement).style.getPropertyValue('zoom'),
-      HOST,
-    );
-    expect.soft(zoom, 'host zoom at DPR 1').toBe('1');
-    await page.context().close();
-    return results;
-  })();
-  const launch = (scale: number) =>
-    chromium.launch({
-      ...(executablePath === undefined ? {} : { executablePath }),
-      args: [`--force-device-scale-factor=${scale}`],
-    });
+  const reference = await dprOneReference(browser);
   const worst: Record<string, { delta: number; at: string }> = {};
   const problems: string[] = [];
   for (const scale of SCALES) {
@@ -137,21 +165,67 @@ test('M6c-U0: a real device scale gives the DPR 1 layouts within 1/64 px', async
     expect.soft(Math.abs(ratio - 1), `ratio at scale ${scale}`).toBeLessThan(1e-6);
     expect.soft(Number(zoom), `host zoom at scale ${scale}`).toBeCloseTo(1 / scale, 6);
     expect.soft(mutations, `host style changes at a stable ratio, scale ${scale}`).toBe(0);
-    let max = { delta: 0, at: '-' };
-    results.forEach((result, index) => {
-      const name = `scale ${scale}: ${CASES[index]!.name}`;
-      if (shape(result) !== shape(reference[index]!)) {
-        problems.push(`${name}: other lines or clusters`);
-        return;
-      }
-      const want = lengths(reference[index]!);
-      lengths(result).forEach(([field, value], k) => {
-        const delta = Math.abs(value - want[k]![1]);
-        if (delta > BOUND) problems.push(`${name}: ${field} ${value} against ${want[k]![1]}`);
-        if (delta > max.delta) max = { delta, at: `${CASES[index]!.name}, ${field}` };
+    worst[String(scale)] = compare(reference, results, `scale ${scale}`, problems);
+  }
+  test.info().annotations.push({ type: 'max delta', description: JSON.stringify(worst) });
+  expect(problems).toEqual([]);
+});
+
+// Review r2: a layout while the host is not rendered (`display: none` on `<body>`) reads no
+// layout unit. That reading must not be kept for the ratio, or every later layout carries the
+// pre-fix error until the ratio changes. The ratio is changed by CDP emulation while hidden (the
+// layout zoom stays the real scale), one request is laid out hidden, then the page is shown.
+test('M6c-U0: a layout while the host is hidden does not keep zoom 1 for the ratio', async ({
+  browser,
+}) => {
+  const reference = await dprOneReference(browser);
+  const worst: Record<string, { delta: number; at: string }> = {};
+  const problems: string[] = [];
+  for (const scale of SCALES) {
+    const scaled = await launch(scale);
+    try {
+      const context = await scaled.newContext({ viewport: { width: 1280, height: 900 } });
+      const page = await context.newPage();
+      await open(page);
+      await page.evaluate(() => (document.body.style.display = 'none'));
+      const cdp = await context.newCDPSession(page);
+      await cdp.send('Emulation.setDeviceMetricsOverride', {
+        width: 1280,
+        height: 899,
+        deviceScaleFactor: 2,
+        mobile: false,
       });
-    });
-    worst[String(scale)] = max;
+      await page.waitForFunction(() => Math.abs(window.devicePixelRatio - 2) < 1e-6);
+      const hidden = await page.evaluate(
+        ({ tag, r }) => {
+          const port: Port = (window as unknown as { __p5Host: TextHolder }).__p5Host.text.port;
+          port.layout(r);
+          return (document.querySelector(tag) as HTMLElement).getClientRects().length;
+        },
+        { tag: HOST, r: CASES[0]!.request },
+      );
+      expect.soft(hidden, `host has no layout box while hidden, scale ${scale}`).toBe(0);
+      await page.evaluate(() => (document.body.style.display = ''));
+      const results = await layoutAll(
+        page,
+        CASES.map((c) => c.request),
+      );
+      const zoom = await page.evaluate(
+        (tag) => (document.querySelector(tag) as HTMLElement).style.getPropertyValue('zoom'),
+        HOST,
+      );
+      expect
+        .soft(Number(zoom), `host zoom after showing, scale ${scale}`)
+        .toBeCloseTo(1 / scale, 6);
+      worst[String(scale)] = compare(
+        reference,
+        results,
+        `hidden then shown, scale ${scale}`,
+        problems,
+      );
+    } finally {
+      await scaled.close();
+    }
   }
   test.info().annotations.push({ type: 'max delta', description: JSON.stringify(worst) });
   expect(problems).toEqual([]);

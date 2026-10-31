@@ -1,6 +1,6 @@
 # M6c-U0: the zoom-125 % position difference (cause and text-dom fix)
 
-**Date: 2026-10-31 (review r1 follow-ups applied the same day). Status: cause found, rule (a) fix in text-dom, container checks PASS; main-PC re-run at `9ea2c34` (automated) PASS on the position bound, bump rule unresolved, hand-run rows NOT RUN.**
+**Date: 2026-10-31 (review r1 follow-ups applied the same day). Status: cause found, rule (a) fix in text-dom, container checks PASS; main-PC re-runs (automated) at `9ea2c34` and `83822bf` PASS on the position bound and the bump rule; hand-run rows NOT RUN; final review r2 commit container-verified only, its main-PC run owed before M6c-U3.**
 
 This note follows [the M6c contract, section 3](../../plans/mvp-m6c-gpu-text-contract.md#3-zoom-125--investigation-u0-first) (M6c-A01, unit M6c-U0). It explains the FAIL in [m6a-a12-dpr-manual.md](../m6a-a12-dpr-manual.md): at browser zoom 125 % every row was off by up to 1/32 px.
 
@@ -143,7 +143,16 @@ Results:
 - `pnpm test:m6a-next-host` headed Chrome and Edge: 22 of 22 PASS (M6a-A11, and A12 by emulation).
 - `pnpm test:geometry`: PASS.
 
-The record's bump rule is **unresolved** on the main PC. The no-reload zoom rows are reported with 0 bumps since paste, though one truncated Edge run showed 1. In the container the `resolution` listener's bump always arrives before the probe's read. `probe.mjs` now waits up to 5 s for it and prints whether it came, so the next main-PC run settles it.
+The first run left the record's bump rule unresolved: the no-reload zoom rows were reported with 0 bumps since paste, though one truncated Edge run showed 1.
+
+A follow-up run at `83822bf` closed it. `probe.mjs` now waits up to 5 s for the bump. The run used Playwright Chromium 151 and Edge 156:
+
+- 17 of 17 PASS each, identical line for line.
+- Every zoom row printed `bump after the zoom change: yes`. The no-reload rows show generation 4 and 1 bump; the reload rows show generation 3 and 0.
+- The deltas are unchanged, at most 1.6212e-5.
+- `pnpm test:m6c-u0-zoom` passed, 1 of 1.
+
+The first run's 0 bumps were the read racing the `resolution` listener.
 
 Still NOT RUN:
 
@@ -151,4 +160,22 @@ Still NOT RUN:
 - the combined DPR 1.875 row (a real device scale of 1.5 with browser zoom 125 %; only browser zoom 1.875 and a forced device scale of 1.875 ran, each on its own);
 - browser zoom in branded Chrome.
 
-The main-PC run predates `3a293c6`, the review r1 follow-ups: detection cached on a ratio change, the zoom check and `pnpm test:m6c-u0-zoom`. Those leave positions unchanged, as the container's `probe.mjs` shows with the same deltas before and after. They, and the probe's bump wait, are container-verified only.
+The main-PC run predates `3a293c6`, the review r1 follow-ups: detection cached on a ratio change, the zoom check and `pnpm test:m6c-u0-zoom`. Those leave positions unchanged, as the container's `probe.mjs` shows with the same deltas before and after. The probe's bump wait and `test:m6c-u0-zoom` then ran on the main PC at `83822bf`.
+
+**Review r2 fix: a zoom read while hidden is not kept.** When a request runs while the host has no layout box, the layout unit reads 0. That happens when `<body>` or an ancestor is `display: none`. At `83822bf`, `layoutZoom` then returned 1, and that 1 was cached for the ratio, so every later layout carried the pre-fix error until the ratio changed.
+
+`layoutZoom` and `cancelLayoutZoom` now return null when the host has no layout box or no unit reads back. The measurer then uses zoom 1 for that request and keeps nothing, so the next request detects again.
+
+It is gated in two places:
+
+- a unit test;
+- a second test in `tests/m6c-u0-zoom/`: hide `<body>`, change the ratio by CDP emulation (the layout zoom stays the real scale), lay out one request, show the page, and lay out the 46 cases.
+
+Results:
+
+- **Fixed build:** max delta 1.2e-5 at 1.25 and 1.3e-5 at 1.875, with the host at zoom 1/E.
+- **`83822bf`'s `measure.ts`:** the same test fails, with the host left at zoom 1 and 119 lengths beyond 1/64 px (max 0.03125 at 1.25 and 0.0272 at 1.875).
+
+Unit tests: 65 passed. `pnpm test:m6c-u0-zoom`: 2 passed.
+
+**Owed.** This commit is container-verified only. A main-PC run at the final code is owed before M6c-U3 and the M6c exit, not before U0 merges: `probe.mjs` in Edge, `pnpm test:m6c-u0-zoom` and headed `pnpm test:m6a-next-host`.

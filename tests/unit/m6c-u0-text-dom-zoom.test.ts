@@ -13,7 +13,7 @@ import { cancelLayoutZoom, layoutZoom } from '../../packages/text-dom/src/measur
  * times its own `zoom` (ignored when `honourZoom` is false): floored to 1/64 layout px, reported
  * in page px. Chromium keeps the effective zoom in float, so a product within 1e-9 of 1 is 1.
  */
-function host(layoutAt: number, honourZoom = true) {
+function host(layoutAt: number, honourZoom = true, rendered = true) {
   const style = new Map<string, string>();
   const element = {
     style: {
@@ -21,7 +21,11 @@ function host(layoutAt: number, honourZoom = true) {
         style.set(property, value);
       },
     },
+    getClientRects() {
+      return rendered ? [{}] : [];
+    },
     getBoundingClientRect() {
+      if (!rendered) return { width: 0 } as DOMRect;
       const css = Number.parseFloat(style.get('width') ?? '0');
       const own = honourZoom ? Number.parseFloat(style.get('zoom') ?? '1') : 1;
       let effective = layoutAt * own;
@@ -69,11 +73,22 @@ describe('M6c-U0 layoutZoom', () => {
     expect(layoutZoom(element, 1.25)).toBe(1.25);
   });
 
-  it.each([64, 1 / 128, 0])('gives 1 when the zoom is out of range (%s)', (layoutAt) => {
+  it.each([64, 1 / 128, 0])('gives null when the zoom is out of range (%s)', (layoutAt) => {
     const { element, style } = host(layoutAt);
     if (layoutAt === 0) element.getBoundingClientRect = () => ({ width: 0 }) as DOMRect;
-    expect(layoutZoom(element, 1.25)).toBe(1);
+    expect(layoutZoom(element, 1.25)).toBeNull();
     expect(style.get('width')).toBe('0');
+  });
+
+  it('gives null without reading when the host has no layout box (not rendered)', () => {
+    const { element } = host(1.25, true, false);
+    let reads = 0;
+    element.getBoundingClientRect = () => {
+      reads += 1;
+      return { width: 0 } as DOMRect;
+    };
+    expect(layoutZoom(element, 1.25)).toBeNull();
+    expect(reads).toBe(0);
   });
 });
 
@@ -91,6 +106,12 @@ describe('M6c-U0 cancelLayoutZoom', () => {
   it('leaves zoom 1 when the page is laid out at 1', () => {
     const { element, style } = host(1);
     expect(cancelLayoutZoom(element, 1.25)).toBe(1);
+    expect(style.get('zoom')).toBe('1');
+  });
+
+  it('gives null with zoom 1 when the host is not rendered, so the caller does not keep it', () => {
+    const { element, style } = host(1.25, true, false);
+    expect(cancelLayoutZoom(element, 1.25)).toBeNull();
     expect(style.get('zoom')).toBe('1');
   });
 

@@ -1,6 +1,6 @@
 # M6a-A12 manual DPR record (browser zoom and monitor scale)
 
-**Status: FILLED 2026-10-30, result FAIL. Re-run 2026-10-31 at `9ea2c34`, automated (last section): PASS on the 1/64 px position bound; bump rule unresolved; hand-run rows NOT RUN.** The user ran it on the main PC; zoom 125 % (DPR 1.25 and 1.875) exceeds the 1/64 px bound, DPR 1.5 passes, line breaks and fallbacks are unchanged everywhere. The M6a exit was accepted with this result disclosed ([exit record](m6a-exit-2026-10-30.md)).
+**Status: FILLED 2026-10-30, result FAIL. Re-run 2026-10-31 at `9ea2c34`, automated (last section): PASS on the 1/64 px position bound; follow-up run at `83822bf`: bump rule PASS; hand-run rows NOT RUN.** The user ran it on the main PC; zoom 125 % (DPR 1.25 and 1.875) exceeds the 1/64 px bound, DPR 1.5 passes, line breaks and fallbacks are unchanged everywhere. The M6a exit was accepted with this result disclosed ([exit record](m6a-exit-2026-10-30.md)).
 
 [M6a-A12](../plans/mvp-m6a-text-model-contract.md#10-acceptance-criteria) asks for identical line breaks and positions within 1/64 px across DPR 1, 1.25, 1.5 and 2. It also asks for the same across browser zoom 100 % and 125 % and across monitor scale 100 % and 150 %, plus a generation bump on each DPR change. The headed spec `tests/m6a-next-host/m6a-next-host.spec.ts` covers DPR 1 to 2 by CDP emulation and size linearity (`pnpm test:m6a-next-host`). This record covers the two cases emulation cannot reach (section 3.2, handed over from M6-S0). M6-Q3 is already (b) (U4c, #388); a failure here needs a fix or a contract amendment before M6c.
 
@@ -126,7 +126,7 @@ Browser zoom 2 and the emulation rows have no row in the record.
 | Playwright Chromium 151 | CDP emulation 1.25 / 1.5 / 1.875 / 2 | 0 | 3, 0, 0 | PASS |
 | Edge 156 | every condition above, original script | identical to Playwright Chromium | as reported, see the bump note | PASS on position (17 of 17 lines) |
 | Chrome 156 | browser zoom | not runnable: branded Chrome ignores `--load-extension`, and the probe timed out waiting for the extension's service worker | - | NOT RUN |
-| Chrome 156 | `--force-device-scale-factor` 1.25 / 1.5 / 1.875 / 2 (a copy of the probe with the browser-zoom part commented out) | 1.1444e-5 / 7.629e-6 / 1.6212e-5 / 0 | 3, 0, 0 | PASS |
+| Chrome 156 | `--force-device-scale-factor` 1.25 / 1.5 / 1.875 / 2 (a copy of the probe with the browser-zoom part commented out, and its import path and `here` adjusted for the copy's location) | 1.1444e-5 / 7.629e-6 / 1.6212e-5 / 0 | 3, 0, 0 | PASS |
 | Chrome 156 | CDP emulation 1.25 to 2 | 0 | 3, 0, 0 | PASS (8 of 8 lines) |
 
 In every row, lines and clusters match the reference and new fallbacks are 0.
@@ -142,7 +142,7 @@ Also on the main PC at `9ea2c34`:
 - The combined row, a real device scale of 1.5 with browser zoom 125 % (DPR 1.875 by monitor scale and zoom). Only browser zoom 1.875 and a forced device scale of 1.875 ran, each on its own.
 - Browser zoom in branded Chrome.
 
-**Bump rule: unresolved on the main PC, a finding, not a PASS.** The record's pass rule asks each no-reload row for at least one generation bump.
+**Bump rule, first run (`9ea2c34`): unresolved at the time; resolved by the follow-up run below.** The record's pass rule asks each no-reload row for at least one generation bump.
 
 How the probe orders a no-reload row at `9ea2c34`:
 
@@ -164,8 +164,30 @@ So on that machine the `change` event either reached the page after the probe's 
 
 Since the commit that records this re-run (after `3a293c6`), `probe.mjs` waits up to 5 s for a bump after each zoom change, before reading, and prints `bump after the zoom change: yes` or `NO (5 s)`. That resolves it on the next main-PC run. The emulated DPR changes of the headed spec do bump, as its 22 of 22 shows.
 
-**Result: PASS on the position bound (1/64 px) for every condition that ran.** Lines, clusters and fallbacks are unchanged. The maximum is 1.62e-5 px, against 0.03125 px before the fix.
+**Result of the first run: PASS on the position bound (1/64 px) for every condition that ran.** Lines, clusters and fallbacks are unchanged. The maximum is 1.62e-5 px, against 0.03125 px before the fix.
 
-The bump half of the pass rule is **unresolved** for the browser-zoom no-reload rows: reported 0 bumps, against 1 in the container and once on the main PC. The manual rows and the combined DPR 1.875 row are NOT RUN.
+The bump half of the pass rule was unresolved after this run (reported 0 bumps on the no-reload zoom rows); the follow-up run closes it.
 
 The run predates `3a293c6`, the M6c-U0 review r1 follow-ups: detection cached on a `devicePixelRatio` change, a check that the zoom took, and `pnpm test:m6c-u0-zoom`; the probe's bump wait came after them. Those changes leave positions unchanged: the container's `probe.mjs` gives the same deltas before and after. They are verified in the container only.
+
+### Follow-up run 2026-10-31 (commit 83822bf)
+
+Same method, automated with `probe.mjs`, which now waits up to 5 s for a generation bump after each zoom change and prints whether it came. The browsers were Playwright Chromium 151.0.7922.34 and Edge 156.0.4314.50.
+
+- **Results.** 17 of 17 lines PASS in each browser, and the output of the two is identical line for line.
+- **Bumps.** Every browser-zoom row printed `bump after the zoom change: yes`. The no-reload rows show generation 4 and 1 bump since paste; the reload rows show generation 3 and 0 bumps.
+- **Deltas,** unchanged from the first run:
+  - browser zoom 1.25: 1.1444e-5 (request 7, s 64, `width`);
+  - 1.5: 7.629e-6 (request 1, cluster 27 `x`);
+  - 1.875: 1.6212e-5 (request 7, `width`);
+  - 2: 0.
+- **Other conditions.** The forced device scale gives the same deltas and CDP emulation gives 0. New fallbacks are 0 throughout.
+- **`pnpm test:m6c-u0-zoom`:** 1 passed. That is the one test of `3a293c6`; the hidden-then-shown test came later.
+
+**Bump finding: closed.** The first run's 0 bumps were the probe's read racing text-dom's `resolution` listener: it read as soon as `devicePixelRatio` changed. The bump does fire on the main PC. Every no-reload zoom row now meets the record's rule of at least one bump.
+
+**Result: PASS** on both halves of the record's rule, the 1/64 px position bound and at least one bump on each no-reload row, for every condition run. This is automated browser zoom (Edge and Playwright Chromium), a real device scale and emulation.
+
+The hand-run rows (Ctrl +/-, a real Windows display-scale change), the combined DPR 1.875 row and browser zoom in branded Chrome stay NOT RUN.
+
+The final M6c-U0 commit (review r2: a zoom read while the host is not rendered is not kept) is container-verified only. A main-PC run at the final code is owed before M6c-U3 and the M6c exit, not before U0 merges: `probe.mjs` in Edge, `pnpm test:m6c-u0-zoom` and headed `pnpm test:m6a-next-host`.
