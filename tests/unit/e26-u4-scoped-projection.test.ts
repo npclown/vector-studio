@@ -5,7 +5,12 @@
 // whole-page path (`tests/setup/e26-scoped-projection-check.ts`); here two editors, one scoped
 // and one held to the whole page, run the same seeded commands side by side, with symbols,
 // instances, sources on another page and injected rejections, and the projector-level cases the
-// editor cannot reach (an invalid expansion, a `touched` without the former parent).
+// editor cannot reach (an invalid expansion, a `touched` without the former parent). Since M6c-U1
+// (MVP M6c contract, M6c-A03) text projects: each side has its own fake layout port, the seeded
+// run adds text commands, instance text overrides, typing in edit mode, composition updates,
+// commits and cancels, undo and redo weighted right after text steps (merged steps included),
+// text inside the sources and layout generation changes on both ports, and after every step and
+// bump checks each held text leaf against a fresh projection with no memo.
 import type { RenderChangeSet } from '@vector-studio/contracts';
 import { validateDocument, type DocumentV6 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
@@ -18,6 +23,7 @@ import {
 import { internalsOf } from '../../packages/editor-core/src/editor.js';
 import {
   SceneProjector,
+  projectPage,
   projectorStateForTesting,
   useWholePageProjectionForTesting,
 } from '../../packages/editor-core/src/projector.js';
@@ -25,6 +31,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { ExpansionCache } from '../../packages/editor-core/src/expansion.js';
 import { RecordingRenderer } from '../support/p5-recording-renderer.js';
+import { createFakeTextLayout, type FakeTextLayout } from '../support/fake-text-layout.js';
+import { TextLayoutCache } from '../../packages/editor-core/src/text.js';
 
 /** mulberry32. */
 function random(seed: number): () => number {
@@ -52,10 +60,12 @@ type Side = {
   editor: Editor;
   renderer: RecordingRenderer;
   events: EditorEvent[];
+  port: FakeTextLayout;
 };
 
 function side(wholePage: boolean): Side {
-  const editor = createEditor();
+  const port = createFakeTextLayout();
+  const editor = createEditor({ textLayout: port });
   const renderer = new RecordingRenderer('supported', ALL_FEATURES);
   const events: EditorEvent[] = [];
   editor.subscribe((event) => {
@@ -63,7 +73,7 @@ function side(wholePage: boolean): Side {
   });
   editor.attachRenderer(renderer);
   if (wholePage) useWholePageProjectionForTesting(projectorOf(editor));
-  return { editor, renderer, events };
+  return { editor, renderer, events, port };
 }
 
 function projectorOf(editor: Editor): SceneProjector {
@@ -79,6 +89,125 @@ const frame = (rng: Rng) => ({
   height: 10 + Math.round(rng() * 60),
 });
 const color = (rng: Rng) => ({ r: rng(), g: rng(), b: rng(), a: 1 });
+const WORDS = ['ab', 'cd ef', '가나', 'x', 'long words wrap here', 'a\nb', ' '];
+const textRun = (rng: Rng) => ({
+  text: pick(rng, WORDS)!,
+  family: 'Test',
+  size: 8 + Math.round(rng() * 12),
+  color: color(rng),
+});
+const textLength = (node: { runs?: readonly { text: string }[] }) =>
+  (node.runs ?? []).reduce((total, run) => total + run.text.length, 0);
+
+/** A random text command, edit-mode input or composition event (M6c-A03). */
+function randomText(
+  rng: Rng,
+  editor: Editor,
+  here: readonly string[],
+  parent: () => string,
+): Command {
+  const document = editor.query({ type: 'document' });
+  const texts = here.filter((id) => document.nodes[id]!.type === 'text');
+  const target = pick(rng, texts);
+  const node = target === undefined ? undefined : document.nodes[target]!;
+  const length = node?.type === 'text' ? textLength(node) : 0;
+  const offset = () => Math.floor(rng() * (length + 1));
+  const range = () => {
+    const a = offset();
+    const b = offset();
+    return { start: Math.min(a, b), end: Math.max(a, b) };
+  };
+  const input = (event: unknown) => ({ type: 'input', event }) as Command;
+  const edit = editor.getSnapshot().textEdit;
+  if (edit !== null && edit.composition !== null && rng() < 0.9) {
+    // During a composition: mostly updates, then a commit or a cancel (an empty end).
+    const roll = rng();
+    if (roll < 0.5) {
+      return input({ kind: 'compositionupdate', data: pick(rng, ['ㅎ', '하', '한', '가']) });
+    }
+    return input({ kind: 'compositionend', data: roll < 0.75 ? pick(rng, ['한', '가나'])! : '' });
+  }
+  // An instance text override on a text node of the instance's source (M7-T3).
+  const instances = here.filter((id) => document.nodes[id]!.type === 'instance');
+  if (edit === null && instances.length > 0 && rng() < 0.15) {
+    const instance = document.nodes[pick(rng, instances)!] as { id: string; symbol: string };
+    const inSource = (id: string): boolean => {
+      let cursor = document.nodes[id]?.parent;
+      for (let guard = 0; cursor !== undefined && guard < 64; guard += 1) {
+        if (cursor === instance.symbol) return true;
+        cursor = document.nodes[cursor]?.parent;
+      }
+      return false;
+    };
+    const sourceText = pick(
+      rng,
+      Object.keys(document.nodes).filter(
+        (id) => document.nodes[id]!.type === 'text' && inSource(id),
+      ),
+    );
+    if (sourceText !== undefined) {
+      return rng() < 0.7
+        ? { type: 'setInstanceText', id: instance.id, node: sourceText, runs: [textRun(rng)] }
+        : {
+            type: 'clearInstanceText',
+            id: instance.id,
+            ...(rng() < 0.5 ? { node: sourceText } : {}),
+          };
+    }
+  }
+  // In edit mode, mostly typing, keys and composition starts.
+  const editing = edit !== null && rng() < 0.8;
+  switch (editing ? 7 + Math.floor(rng() * 3) : Math.floor(rng() * 12)) {
+    case 0:
+      return {
+        type: 'createText',
+        frame: frame(rng),
+        runs: [textRun(rng)],
+        sizing: pick(rng, ['autoWidth', 'autoHeight', 'fixed'] as const)!,
+        align: pick(rng, ['left', 'center', 'right'] as const)!,
+        parent: parent(),
+      };
+    case 1:
+      return { type: 'setText', id: target ?? '', ...range(), text: pick(rng, WORDS)! };
+    case 2:
+      return {
+        type: 'setTextStyle',
+        id: target ?? '',
+        ...range(),
+        style: rng() < 0.5 ? { color: color(rng) } : { size: 6 + Math.round(rng() * 20) },
+      };
+    case 3:
+      return {
+        type: 'setTextProps',
+        id: target ?? '',
+        ...(rng() < 0.5
+          ? { align: pick(rng, ['left', 'center', 'right'] as const)! }
+          : { letterSpacing: Math.round(rng() * 4) / 10 - 0.2 }),
+      };
+    case 4:
+      return { type: 'refitText' };
+    case 5:
+    case 6: {
+      const { start, end } = range();
+      return { type: 'enterTextEdit', id: target ?? '', anchor: start, focus: end };
+    }
+    case 7:
+      return input({ kind: 'textinput', text: pick(rng, ['a', 'b', ' ', '가']) });
+    case 8:
+      return input({
+        kind: 'keydown',
+        key: pick(rng, ['Backspace', 'Delete', 'ArrowLeft', 'Enter'])!,
+        modifiers: { shift: false, alt: false, meta: false, ctrl: false },
+      });
+    case 9:
+      return input({ kind: 'compositionstart' });
+    case 10:
+      return input({ kind: 'compositionupdate', data: pick(rng, ['ㅎ', '하', '한', '가']) });
+    default:
+      // A commit, or a cancel (an empty end).
+      return input({ kind: 'compositionend', data: pick(rng, ['한', '가나', '']) });
+  }
+}
 
 /** A random command over the document of `editor` (many fail, which changes nothing). */
 function randomCommand(rng: Rng, editor: Editor): Command {
@@ -110,7 +239,10 @@ function randomCommand(rng: Rng, editor: Editor): Command {
   const parent = () => (rng() < 0.4 ? active : (pick(rng, containers) ?? active));
   const one = pick(rng, here) ?? '';
   const paths = here.filter((id) => document.nodes[id]!.type === 'path');
-  const op = Math.floor(rng() * 30);
+  const edit = editor.getSnapshot().textEdit;
+  const bias = edit === null ? 0 : edit.composition === null ? 0.7 : 0.95;
+  const op = rng() < bias ? 30 : Math.floor(rng() * 36);
+  if (op >= 30) return randomText(rng, editor, here, parent);
   switch (op) {
     case 0:
       return { type: 'createRectangle', frame: frame(rng), fill: color(rng), parent: parent() };
@@ -200,6 +332,17 @@ function randomCommand(rng: Rng, editor: Editor): Command {
         (id) => source !== undefined && document.nodes[id]!.parent === source,
       );
       const target = pick(rng, inside);
+      if (target !== undefined && document.nodes[target]!.type === 'text' && rng() < 0.6) {
+        return { type: 'setText', id: target, start: 0, end: 0, text: pick(rng, WORDS)! };
+      }
+      if (rng() < 0.3) {
+        return {
+          type: 'createText',
+          frame: frame(rng),
+          runs: [textRun(rng)],
+          parent: source ?? active,
+        };
+      }
       return target === undefined
         ? { type: 'createRectangle', frame: frame(rng), parent: source ?? active }
         : { type: 'setFrames', frames: [{ id: target, frame: frame(rng) }] };
@@ -268,13 +411,53 @@ function record(target: Side, from: { calls: number; events: number }) {
 }
 
 describe('E26-U4 change-scoped projection (E26-A09)', () => {
-  it('sends what the whole-page path sends on 1,200 seeded commands with symbols', () => {
+  it('sends what the whole-page path sends on 3,000 seeded commands with symbols and text', () => {
     let steps = 0;
     let scopedSets = 0;
     let rejections = 0;
     let gestures = 0;
     let masks = 0;
-    for (let seed = 1; steps < 1_200; seed += 1) {
+    let textSets = 0;
+    let typed = 0;
+    let composed = 0;
+    let bumps = 0;
+    let updates = 0;
+    let commits = 0;
+    let cancels = 0;
+    let redosAfterText = 0;
+    let overrides = 0;
+    let freshLeaves = 0;
+    /**
+     * Every text leaf a side's renderer holds is at its port's generation and equals a fresh
+     * projection (a new expansion cache, a new layout cache, no memo): the A09 oracle shares the
+     * projector's memo, so it cannot see a stale entry (M6c-A03).
+     */
+    const fresh = (target: Side, label: string) => {
+      const scene = target.renderer.mirror.readRetainedScene();
+      if (scene === null) return;
+      const cache = new TextLayoutCache(target.port);
+      const projection = projectPage(
+        target.editor.query({ type: 'document' }),
+        target.editor.query({ type: 'activePage' }),
+        () => null,
+        new Set(),
+        undefined,
+        new ExpansionCache(),
+        undefined,
+        (node) => cache.layout(node),
+      );
+      for (const node of scene.nodes) {
+        if (node.kind !== 'text') continue;
+        freshLeaves += 1;
+        expect(node.generation, `${label} generation ${JSON.stringify(node.id)}`).toBe(
+          target.port.generation,
+        );
+        expect(node, `${label} fresh ${JSON.stringify(node.id)}`).toEqual(
+          projection.nodes.get(node.id),
+        );
+      }
+    };
+    for (let seed = 1; steps < 3_000; seed += 1) {
       const rng = random(seed * 2654435761);
       const scoped = side(false);
       const whole = side(true);
@@ -284,6 +467,9 @@ describe('E26-U4 change-scoped projection (E26-A09)', () => {
           events: scoped.events.length,
         };
         const fromWhole = { calls: whole.renderer.calls.length, events: whole.events.length };
+        const edit = scoped.editor.getSnapshot().textEdit;
+        const editing = edit !== null;
+        const composing = edit?.composition != null;
         const a = scoped.editor.execute(command);
         const b = whole.editor.execute(command);
         if (command.type === 'groupNodes' && command.kind === 'maskGroup') {
@@ -293,9 +479,49 @@ describe('E26-U4 change-scoped projection (E26-A09)', () => {
         expect(record(scoped, from), `seed ${seed} step ${steps} ${JSON.stringify(command)}`).toBe(
           record(whole, fromWhole),
         );
-        scopedSets += scoped.renderer.calls
+        const sets = scoped.renderer.calls
           .slice(from.calls)
-          .filter((call) => call.method === 'applyChanges').length;
+          .filter((call) => call.method === 'applyChanges');
+        scopedSets += sets.length;
+        textSets += sets.filter(
+          (call) =>
+            call.method === 'applyChanges' &&
+            [...call.input.inserted, ...call.input.updated].some((node) => node.kind === 'text'),
+        ).length;
+        if (command.type === 'input' && editing && a.ok) {
+          const event = command.event as { kind: string; data?: string };
+          if (event.kind === 'textinput') typed += 1;
+          if (event.kind.startsWith('composition')) composed += 1;
+          if (composing && event.kind === 'compositionupdate') updates += 1;
+          if (composing && event.kind === 'compositionend') {
+            if (event.data === '') cancels += 1;
+            else commits += 1;
+          }
+        }
+        if (a.ok && (command.type === 'setInstanceText' || command.type === 'clearInstanceText')) {
+          overrides += 1;
+        }
+        fresh(scoped, `seed ${seed} step ${steps} scoped`);
+        fresh(whole, `seed ${seed} step ${steps} whole`);
+        return a.ok;
+      };
+      /** Whether `command` is a text step: a text command, or input or composition in edit mode. */
+      const textStep = (command: Command) =>
+        command.type === 'input'
+          ? scoped.editor.getSnapshot().textEdit !== null
+          : ['createText', 'setText', 'setTextStyle', 'setTextProps', 'refitText'].includes(
+              command.type,
+            ) || command.type.endsWith('InstanceText');
+      // A layout generation change on both ports (M6c-P4): the editors re-project their text.
+      const bump = () => {
+        const from = { calls: scoped.renderer.calls.length, events: scoped.events.length };
+        const fromWhole = { calls: whole.renderer.calls.length, events: whole.events.length };
+        scoped.port.bump();
+        whole.port.bump();
+        expect(record(scoped, from), `seed ${seed} bump`).toBe(record(whole, fromWhole));
+        fresh(scoped, `seed ${seed} bump scoped`);
+        fresh(whole, `seed ${seed} bump whole`);
+        bumps += 1;
       };
       // A gesture on both sides: setFrames updates, sometimes back to the start (a node moved
       // away and back is a new object of the same value), a replace, then commit or cancel.
@@ -353,6 +579,13 @@ describe('E26-U4 change-scoped projection (E26-A09)', () => {
       });
       both({ type: 'createFrame', frame: { x: 60, y: 0, width: 80, height: 60 } });
       const sourceFrame = Object.keys(scoped.editor.query({ type: 'document' }).nodes).at(-1)!;
+      // Text in the source, so the instances expand it.
+      both({
+        type: 'createText',
+        frame: { x: 4, y: 4, width: 40, height: 12 },
+        runs: [textRun(rng)],
+        parent: sourceFrame,
+      });
       both({ type: 'createSymbol', ids: [sourceFrame] });
       both({ type: 'setActivePage', id: first });
       for (let index = 0; index < 3; index += 1) {
@@ -370,8 +603,28 @@ describe('E26-U4 change-scoped projection (E26-A09)', () => {
           whole.renderer.overrides.applyChanges = rejection;
           rejections += 1;
         }
-        if (rng() < 0.1) gesture(rng);
-        else both(randomCommand(rng, scoped.editor));
+        if (rng() < 0.03) bump();
+        // A gesture would end a composition (the public API is inert while composing).
+        const composing = scoped.editor.getSnapshot().textEdit?.composition != null;
+        if (!composing && rng() < 0.1) {
+          gesture(rng);
+        } else {
+          const command = randomCommand(rng, scoped.editor);
+          const text = textStep(command);
+          const depth = scoped.editor.getSnapshot().history.undoDepth;
+          const ok = both(command);
+          // Undo and redo weighted after a text step that succeeded and left a step (merged
+          // steps included).
+          if (
+            ok &&
+            text &&
+            scoped.editor.getSnapshot().history.undoDepth >= depth &&
+            rng() < 0.25
+          ) {
+            both({ type: 'undo' });
+            if (rng() < 0.7 && both({ type: 'redo' })) redosAfterText += 1;
+          }
+        }
         steps += 1;
       }
       delete scoped.renderer.overrides.applyChanges;
@@ -381,6 +634,23 @@ describe('E26-U4 change-scoped projection (E26-A09)', () => {
     expect(rejections).toBeGreaterThan(20);
     expect(gestures).toBeGreaterThan(80);
     expect(masks).toBeGreaterThan(5);
+    // M6c-A03 (counts at this commit in the U1 notes, contract section 16): sets carrying text
+    // leaves, typing and composition events in edit mode, updates, commits and cancels during a
+    // composition, redos right after a text step, instance text overrides, generation changes,
+    // and the held text leaves checked against a fresh projection.
+    // 3,000 steps at this commit: 1,199 sets, 111 typed, 228 composition events, 65 updates,
+    // 18 commits, 30 cancels, 113 redos after a text step, 30 overrides, 84 bumps and 17,426
+    // fresh leaf checks.
+    expect(textSets).toBeGreaterThan(800);
+    expect(typed).toBeGreaterThan(60);
+    expect(composed).toBeGreaterThan(150);
+    expect(updates).toBeGreaterThan(40);
+    expect(commits).toBeGreaterThan(15);
+    expect(cancels).toBeGreaterThan(20);
+    expect(redosAfterText).toBeGreaterThan(80);
+    expect(overrides).toBeGreaterThan(15);
+    expect(bumps).toBeGreaterThan(50);
+    expect(freshLeaves).toBeGreaterThan(10_000);
   }, 120_000);
 });
 

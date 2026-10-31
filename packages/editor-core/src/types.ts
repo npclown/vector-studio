@@ -815,14 +815,26 @@ export type EditorEvent =
     }>
   | DiagnosticEvent;
 
-/** A structured diagnostic from the scene projector (plan section 4.5). */
-export type DiagnosticEvent = Readonly<{
-  type: 'diagnostic';
-  /** `renderer-unsupported` is a host capability fact; `scene-rejected` is any other rejection. */
-  code: 'editor.scene-rejected' | 'editor.renderer-unsupported';
-  reason: SceneRejectionReason;
-  nodeIds: readonly string[];
-}>;
+/**
+ * A structured diagnostic from the scene projector (plan section 4.5). The text variant (MVP M6c
+ * contract, M6c-P3) tells that the editor has no layout port, so the text units `nodeIds` (sorted
+ * scene IDs: text nodes and expanded instance text) project nothing; it is raised at most once
+ * per renderer attachment and active page, again after a load or a page switch.
+ */
+export type DiagnosticEvent =
+  | Readonly<{
+      type: 'diagnostic';
+      /** `renderer-unsupported` is a host capability fact; `scene-rejected` any other rejection. */
+      code: 'editor.scene-rejected' | 'editor.renderer-unsupported';
+      reason: SceneRejectionReason;
+      nodeIds: readonly string[];
+    }>
+  | Readonly<{
+      type: 'diagnostic';
+      code: 'editor.text-unavailable';
+      reason: 'no-text-layout';
+      nodeIds: readonly string[];
+    }>;
 
 export interface Editor {
   execute(command: Command): CommandResult;

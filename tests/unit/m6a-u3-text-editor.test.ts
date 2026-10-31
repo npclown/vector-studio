@@ -31,6 +31,7 @@ import { scaleAbout } from '../../packages/editor-core/src/resize.js';
 import { snapSet } from '../../packages/editor-core/src/snap.js';
 import { TEXT_LAYOUT_CACHE_SIZE, TextLayoutCache } from '../../packages/editor-core/src/text.js';
 import { createFakeTextLayout, fakeLayout } from '../support/fake-text-layout.js';
+import { RecordingRenderer } from '../support/p5-recording-renderer.js';
 
 // MVP M6a-U3 (docs/plans/mvp-m6a-text-model-contract.md, sections 5 to 8): the `textLayout`
 // option, cache, query and session event; the section 6.1 commands and codes; auto sizing and
@@ -924,9 +925,37 @@ describe('M6a-A10: projection and hit testing', () => {
   const rotated = () =>
     doc([text('t1', 'p1', f(0, 0, 40, 10), [run('ab')], { rotation: Math.PI / 2 })], ['t1']);
 
-  it('projects nothing for text and reports nothing, port or not', () => {
+  // M6c (contract section 1.2, M6c-P1 to P3) replaced the M6a section 7 rule: with a port the
+  // node projects one text leaf from its layout; without one it projects nothing and the editor
+  // reports `editor.text-unavailable` once (tests/unit/m6c-u1-text-projection.test.ts).
+  it('projects a text leaf with a port, and nothing with the M6c-P3 diagnostic without one', () => {
     for (const port of [createFakeTextLayout(), null]) {
       const target = editor(simple(), port);
+      const events: EditorEvent[] = [];
+      target.subscribe((event) => events.push(event));
+      const renderer = new RecordingRenderer('supported', { textNodes: 'supported' });
+      target.attachRenderer(renderer);
+      const scene = renderer.mirror.readRetainedScene()!.nodes;
+      expect(scene.some((node) => node.id === 'r1')).toBe(true);
+      const leaf = scene.find((node) => node.id === 't1');
+      expect(events.filter((event) => event.type === 'diagnostic')).toEqual(
+        port === null
+          ? [
+              {
+                type: 'diagnostic',
+                code: 'editor.text-unavailable',
+                reason: 'no-text-layout',
+                nodeIds: ['t1'],
+              },
+            ]
+          : [],
+      );
+      if (port === null) {
+        expect(leaf).toBeUndefined();
+      } else {
+        expect(leaf).toMatchObject({ kind: 'text', generation: 0, lang: 'ko' });
+      }
+      // The pure page projection without a layouter still leaves text out.
       const projection = projectPage(target.query({ type: 'document' }), 'p1', () => null);
       expect(projection.nodes.has('t1')).toBe(false);
       expect(projection.nodes.has('r1')).toBe(true);
