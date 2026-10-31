@@ -619,7 +619,8 @@ describe('M6c-U2 cluster probe: the one-cluster scene and its crop', () => {
 // arithmetic. A recording port behind the host's options draws each page through `prepare` and
 // `acknowledge` until the raster budget converges; every raster request (text, bucket, phase)
 // must be one `clusterPlacements` predicts for a drawn, non-space cluster of a leaf on the target
-// (E28-K9 culls per leaf, with a 2 device px guard), and every such prediction outside a clip or
+// (E28-K9 culls per leaf, then per cluster, each with a 2 device px guard), and every such
+// prediction outside a clip or
 // mask must be requested. The converged packet's
 // snapped instance records must be exactly the probe's `bitmapRect`s of those clusters.
 describe('M6c-U2 cluster probe against the renderer (review S1)', () => {
@@ -719,14 +720,17 @@ describe('M6c-U2 cluster probe against the renderer (review S1)', () => {
       const rects = new Set<string>();
       const key = (text: string, size: number, phase: number) => `${text}|${size}|${phase}`;
       for (const leaf of scene.leaves) {
-        // E28-K9 culls per leaf, by its node bound against the target with a 2 device px guard.
+        // E28-K9 culls per leaf by its node bound, then per cluster by the cluster's own bound,
+        // each against the target with a 2 device px guard.
+        const meets = (b: { x0: number; y0: number; x1: number; y1: number }) =>
+          !(b.x1 < -2 || b.y1 < -2 || b.x0 > target.width + 2 || b.y0 > target.height + 2);
         const b = leaf.bounds;
-        if (!leaf.shown || b === null) continue;
-        if (b.x1 < -2 || b.y1 < -2 || b.x0 > target.width + 2 || b.y0 > target.height + 2) continue;
+        if (!leaf.shown || b === null || !meets(b)) continue;
         for (const p of probe.clusterPlacements(leaf, scene.camera!, dpr)) {
           if (p.mode === 'omitted' || p.text.trim().length === 0) continue;
           expected.add(key(p.text, p.bucket, p.phaseX));
-          if (!clipped.has(leaf.id)) required.add(key(p.text, p.bucket, p.phaseX));
+          if (!clipped.has(leaf.id) && meets(p.bound))
+            required.add(key(p.text, p.bucket, p.phaseX));
           const rect = probe.bitmapRect(p, port);
           if (rect !== null && !clipped.has(leaf.id)) {
             rects.add([rect.x, rect.y, rect.width, rect.height].join(','));
