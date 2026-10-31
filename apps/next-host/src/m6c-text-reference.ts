@@ -386,7 +386,7 @@ export function placeReference(
   const nodeText = node.runs.map((run) => run.text).join('');
   const placements = clusterPlacements(leaf, camera, dpr);
   const scale = displayScale(leaf, camera, dpr);
-  // Each run at the size its clusters are drawn at (the size bucket), so the line around the
+  // Each run at the size its clusters are drawn at (displayed size, device size / DPR), so the line around the
   // cluster is the one the atlas draws; a run without a cluster at its displayed size.
   // A placement's `run` counts the leaf's scene runs; the layout's cluster gives the node run.
   const styleOf = (run: number) => {
