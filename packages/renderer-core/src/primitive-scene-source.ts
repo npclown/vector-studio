@@ -26,6 +26,7 @@ import {
   PRIMITIVE_STRIDES,
   PrimitiveNumericPreparationError,
   assessPrimitivePacking,
+  primitivePackingWithinBudget,
   normalizeRectangleRadii,
   writePackedRecord,
 } from './primitive-packing.js';
@@ -162,6 +163,8 @@ const MASK_NOTICES_PER_PACKET = 32;
 const LAYER_NOTICES_QUEUED = 4096;
 const LAYER_NOTICES_PER_PACKET = 32;
 const IDENTITY: SceneAffine = [1, 0, 0, 1, 0, 0];
+/** P1 contract (position error): the packet v1 budget, in physical pixels, on both measures. */
+const PACKING_BUDGET_PX = 0.125;
 
 type DerivationCounts = Readonly<{
   /** Frames that kept the derivation unchanged. */
@@ -1505,6 +1508,25 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     const assessed = this.#assessed;
     for (const primitive of primitives) {
       if (!this.#fullDerivation && assessed.has(primitive)) continue;
+      // E26 contract, U5d: the unclipped bound decides most primitives; the rest are assessed.
+      if (
+        !this.#fullDerivation &&
+        primitivePackingWithinBudget(
+          primitive.world,
+          primitive.localBounds,
+          origin,
+          camera.position,
+          camera.zoom,
+          target.devicePixelRatio,
+          target.width,
+          target.height,
+          PACKING_BUDGET_PX,
+          primitive.node,
+        )
+      ) {
+        assessed.add(primitive);
+        continue;
+      }
       const assessment = assessPrimitivePacking(
         primitive.world,
         primitive.localBounds,
@@ -1517,8 +1539,8 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
         primitive.node,
       );
       if (
-        assessment.quantizationPhysicalPixels > 0.125 ||
-        assessment.arithmeticPhysicalPixels > 0.125
+        assessment.quantizationPhysicalPixels > PACKING_BUDGET_PX ||
+        assessment.arithmeticPhysicalPixels > PACKING_BUDGET_PX
       ) {
         throw new PrimitiveNumericPreparationError('packet v1 position precision budget exceeded');
       }
