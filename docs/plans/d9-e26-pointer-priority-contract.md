@@ -274,6 +274,8 @@ Order: U1a, U1b, U1c first (the PC part of U1c when the PC is free). U2 and U4 c
 
 2026-10-30, with the U5 amendment: E26-Q7 (a), the recommended option, auto-adopted under the same rule.
 
+2026-10-31, after the U5d PC re-run ([record](../evidence/e26/rerun-59bf080.md)), the user chose on the decision card to split the remaining misses into their own backlog item, E30 in the [rendering track](d9-rendering-track.md), and to finish E26 with U6a and U6b. U6b's record states the targets each scenario meets and those carried to E30.
+
 ## 11. Review record
 
 - U1a amendment (2026-10-30, with U1a's independent review): drawn-leaf visibility and the renderer's draw bounds and cull guard; the typical view's camera and counts; every drawn leaf, not every scene node; the stress document's v2 generation; viewport culling only, the drag's clip exit recorded; the CPU counters moved to U2 and U3.
