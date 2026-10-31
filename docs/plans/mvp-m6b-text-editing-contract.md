@@ -289,6 +289,8 @@ Independent review (full tier, visualization track) before approval. M6b impleme
 
 **2026-10-30 (M6b-U10 and U11).** The user accepted the M6a exit record on 2026-10-30, with the A12 zoom-125 % failure disclosed. That acceptance changed nothing in M6a, so the started units needed no re-check. The same day, the user tried Korean typing in the editor on the main PC, found that it works normally, and decided not to make the M6-S0 recordings. M6b-U10 closes without them, and M6b-A14 is NOT RUN in the [exit record](../evidence/m6b-exit-2026-10-30.md), which discloses what A14 rests on instead and what is left untested on a real IME (M6b-H4, the previous-version Microsoft IME). The M6b exit is still the user's acceptance of that record.
 
+**2026-10-31 (M6b exit).** The user accepted the M6b-U11 exit record on 2026-10-31, with M6b-A14 NOT RUN and the M6b-Q15 typing observation moved to M6c. M6b is done, and M6c may start under its own contract.
+
 ## 16. Progress
 
 | Unit | State |
@@ -305,9 +307,9 @@ Independent review (full tier, visualization track) before approval. M6b impleme
 | M6b-U8 | Done (#410, 3d7a9a8) |
 | M6b-U9 | Done (#411, 4a40d2a); headed `pnpm test:m6b-next-host` 38 of 38 on the main PC at f72d061, Chrome 156 and Edge 156 |
 | M6b-U10 | Closed without recordings (user decision 2026-10-30) |
-| M6b-U11 | In review ([exit record](../evidence/m6b-exit-2026-10-30.md)) |
+| M6b-U11 | Done: exit record accepted by the user 2026-10-31 ([exit record](../evidence/m6b-exit-2026-10-30.md)) |
 
-**Exit record (2026-10-30).** The [M6b exit record](../evidence/m6b-exit-2026-10-30.md) lists A01 to A15. A01 to A13 PASS, with A12 and A13 headed on the main PC at f72d061. A14 is NOT RUN: no recorded traces exist, by the user's decision of 2026-10-30 (section 15). A15 is PARTIAL only for the user's acceptance: the earlier headed specs ran at 66c8059, and the M1 and M2 regressions they found are fixed in the same PR. The record also lists what is owed to M6c.
+**Exit record (2026-10-30).** The [M6b exit record](../evidence/m6b-exit-2026-10-30.md) lists A01 to A15. A01 to A13 PASS, with A12 and A13 headed on the main PC at f72d061. A14 is NOT RUN: no recorded traces exist, by the user's decision of 2026-10-30 (section 15). A15 is PASS with the user's acceptance of 2026-10-31: the earlier headed specs ran at 66c8059, and the M1 and M2 regressions they found are fixed in the same PR. The record also lists what is owed to M6c.
 
 **M6b-U0 notes** (`docs/graphics-engine-architecture.md`, text reservation; `docs/decisions/0003-browser-text-and-glyph-atlas.md`). Readings the unit took: (1) the text-reservation paragraph takes section 1.2's sentence word for word, with a dated amendment line naming this contract, M6-Q14 (a) and what it replaced; the E28 paragraph after it is unchanged; (2) the ADR 0003 follow-up of the [M6a exit record](../evidence/m6a-exit-2026-10-30.md#follow-ups) (item 4) is a dated sentence after the decision bullet that cites M6-Q3 (a): the plan's M6-Q3 (a) (the port in `contracts`, implemented by text-dom) still holds, and the sentence adds that text-dom measures at a reference scale since #388 (M6a contract section 3.2, M6a-Q3 (b)); the ADR's status, decision and alternatives are unchanged. Section 11 makes the ADR sentence subject to the U0 reviewer's agreement; if the reviewer disagrees, it is dropped and the follow-up stays open.
 
