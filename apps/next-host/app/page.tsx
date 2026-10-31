@@ -20,6 +20,7 @@ import { inRotateZone, zoomLabel } from '../src/m2-geometry';
 import { toggleClosedCommand } from '../src/m3-path-overlay';
 import {
   attachPersistence,
+  createPressGate,
   offersDiscard,
   PERSIST_DATABASE_NAME,
   persistQuery,
@@ -732,7 +733,7 @@ function usePersistence(
   const [status, setStatus] = useState<PersistStatus | null>(null);
   const session = useRef<PersistenceSession | null>(null);
   // E26-U6a: no autosave write starts while a canvas press is in progress.
-  const pressed = useRef(false);
+  const gate = useMemo(() => createPressGate(() => session.current), []);
   useEffect(() => {
     if (!persistQuery(window.location.search).persist) return;
     // E26-U1b: a bench run restores from its own empty database and records its writes.
@@ -740,7 +741,7 @@ function usePersistence(
     const current = attachPersistence(editor, {
       baseRevision,
       onStatus: setStatus,
-      pressed: () => pressed.current,
+      pressed: gate.pressed,
       ...(bench === null
         ? {}
         : {
@@ -755,24 +756,15 @@ function usePersistence(
     document.addEventListener('visibilitychange', hidden);
     return () => {
       document.removeEventListener('visibilitychange', hidden);
+      gate.cancel();
       current.dispose();
       if (session.current === current) session.current = null;
     };
-  }, [editor, baseRevision]);
+  }, [editor, baseRevision, gate]);
   return {
     status,
     discard: () => void session.current?.discard(),
-    // The flag clears before the release, so the autosave reads the press as over. The release
-    // waits for the next frame and then a task (E26 section 5: the held write serializes the
-    // document in the frame after the commit, not in the pointerup task before its paint). A
-    // press that starts in between keeps the write held; the release then does nothing.
-    onPressChange: (next) => {
-      pressed.current = next;
-      if (next) return;
-      requestAnimationFrame(() => {
-        setTimeout(() => session.current?.release(), 0);
-      });
-    },
+    onPressChange: gate.onPressChange,
     session,
   };
 }

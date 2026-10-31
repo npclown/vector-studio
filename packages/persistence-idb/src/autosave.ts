@@ -175,6 +175,7 @@ export function createAutosave(options: AutosaveOptions): Autosave {
       // writes held: the change takes the normal path.
       if (held) {
         if (holding()) return;
+        // This restarts the maximum wait from now; the trailing timer still bounds the write.
         held = false;
       }
       startMaxWait();

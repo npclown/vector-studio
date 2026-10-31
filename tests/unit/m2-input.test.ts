@@ -619,6 +619,16 @@ describe('E26-U6a press state (section 5, amended M2-I4)', () => {
     expect(seen).toEqual(['press@0', 'release@1']);
   });
 
+  it('a throwing press callback does not break the input path', () => {
+    const { canvasInput, sent, pointer, mouse } = host();
+    canvasInput.onPressChange = () => {
+      throw new Error('host');
+    };
+    canvasInput.pointerDown(pointer(0, 50, 50).event);
+    canvasInput.pointerUp(mouse(50, 50));
+    expect(sent.map((event) => event.kind)).toEqual(['pointerdown', 'pointerup']);
+  });
+
   it('the press ends even when the editor throws on the release', () => {
     const { target, canvasInput, seen, pointer, mouse } = pressed();
     canvasInput.pointerDown(pointer(0, 50, 50).event);

@@ -164,7 +164,7 @@ export class CanvasInput {
     }
     if (!this.dragging) {
       this.dragging = true;
-      this.onPressChange?.(true);
+      this.notifyPress(true);
     }
     this.send({
       kind: 'pointerdown',
@@ -221,7 +221,16 @@ export class CanvasInput {
         modifiers: modifiersOf(event),
       });
     } finally {
-      this.onPressChange?.(false);
+      this.notifyPress(false);
+    }
+  }
+
+  /** Reports the press state; a throwing callback never breaks the input path. */
+  private notifyPress(pressed: boolean): void {
+    try {
+      this.onPressChange?.(pressed);
+    } catch {
+      // The host's press callback is best effort, like the autosave's `onResult`.
     }
   }
 
@@ -232,7 +241,7 @@ export class CanvasInput {
     try {
       this.send({ kind: 'pointercancel', modifiers: modifiersOf(event) });
     } finally {
-      this.onPressChange?.(false);
+      this.notifyPress(false);
     }
   }
 
@@ -248,7 +257,7 @@ export class CanvasInput {
   unmount(): void {
     if (!this.dragging) return;
     this.dragging = false;
-    this.onPressChange?.(false);
+    this.notifyPress(false);
   }
 
   doubleClick(event: MouseLike): void {
@@ -373,7 +382,7 @@ export class CanvasInput {
       this.send({ kind: 'keyup', key: ' ', code: 'Space', modifiers: NO_MODIFIERS });
       this.armed = false;
     } finally {
-      if (pressed) this.onPressChange?.(false);
+      if (pressed) this.notifyPress(false);
     }
   }
 }
