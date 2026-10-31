@@ -24,7 +24,10 @@ import {
   F_MAX,
   F_MIN,
   STROKE_E_MIN,
+  bucketHint,
+  bucketsHoldAt,
   computePathBuckets,
+  type BucketHint,
   type PathBuckets,
   type PathLinearMap,
 } from './path-buckets.js';
@@ -376,6 +379,8 @@ type BucketCacheEntry = Readonly<{
   zoom: number;
   devicePixelRatio: number;
   buckets: PathBuckets;
+  /** E26-U5d-3: checks these lanes' buckets at another zoom or DPR (`bucketsHoldAt`). */
+  hint: BucketHint | null;
 }>;
 type BoundsCacheEntry = Readonly<{
   revision: number;
@@ -1122,17 +1127,31 @@ export class PathMeshPipeline {
     const lanes: PathLinearMap = [path.world[0], path.world[1], path.world[2], path.world[3]];
     const previous = this.#buckets.get(path.id);
     // Recomputed only when the world linear lanes, the zoom or the DPR change; a pan never.
-    if (
-      previous !== undefined &&
-      previous.zoom === zoom &&
-      previous.devicePixelRatio === devicePixelRatio &&
-      numbersEqual(previous.lanes, lanes)
-    ) {
+    const same = previous !== undefined && numbersEqual(previous.lanes, lanes);
+    if (same && previous.zoom === zoom && previous.devicePixelRatio === devicePixelRatio) {
       return previous.buckets;
+    }
+    // E26-U5d-3: the lanes' buckets checked at the new zoom and DPR without the exact computation.
+    const hint = same && this.#reuse ? previous.hint : null;
+    if (hint !== null && bucketsHoldAt(hint, zoom, devicePixelRatio)) {
+      this.#buckets.set(
+        path.id,
+        Object.freeze({ lanes, zoom, devicePixelRatio, buckets: hint.buckets, hint }),
+      );
+      return hint.buckets;
     }
     this.#bucketComputations += 1;
     const buckets = computePathBuckets(lanes, zoom, devicePixelRatio);
-    this.#buckets.set(path.id, Object.freeze({ lanes, zoom, devicePixelRatio, buckets }));
+    this.#buckets.set(
+      path.id,
+      Object.freeze({
+        lanes,
+        zoom,
+        devicePixelRatio,
+        buckets,
+        hint: this.#reuse ? bucketHint(lanes, buckets) : null,
+      }),
+    );
     return buckets;
   }
 
