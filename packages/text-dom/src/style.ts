@@ -63,6 +63,46 @@ export const TEXT_DECLARATIONS: StyleDeclarations = freeze([
   ['unicode-bidi', 'bidi-override'],
 ]);
 
+/** Code points of Script Common or Inherited. */
+const COMMON_OR_INHERITED = /^[\p{Script=Common}\p{Script=Inherited}]$/u;
+
+/**
+ * Whether `code` lies in a block of right-to-left scripts or is a bidi control or mark: every
+ * Common character with bidi class R, AL or AN, or an explicit embedding, override or isolate,
+ * is in one of these (checked against Unicode 15.1 and 16.0; JavaScript has no `Bidi_Class`).
+ */
+function isRtlOrBidiControl(code: number): boolean {
+  return (
+    (code >= 0x0590 && code <= 0x08ff) ||
+    (code >= 0xfb1d && code <= 0xfdff) ||
+    (code >= 0xfe70 && code <= 0xfeff) ||
+    (code >= 0x10800 && code <= 0x10fff) ||
+    (code >= 0x1e800 && code <= 0x1efff) ||
+    code === 0x200f ||
+    (code >= 0x202a && code <= 0x202e) ||
+    (code >= 0x2066 && code <= 0x2069)
+  );
+}
+
+/**
+ * Whether a node's text spans take the bidi override (M6a-L1, with the M6c-U3 amendment of
+ * 2026-10-31). They do unless every character of the node is Common or Inherited and none is
+ * right-to-left, AN or a bidi control: such a text has no strong right-to-left character, so in
+ * the block's left-to-right paragraph the override changes no order, while in Chromium a whole
+ * node of Common characters shaped in an override span loses the locale's `locl` forms the glyph
+ * raster port draws (`3.14`, `100%`). Judged over the whole node, since Chromium resolves a Common
+ * piece's script from the rest of the block.
+ */
+export function needsBidiOverride(runs: readonly Readonly<{ text: string }>[]): boolean {
+  for (const run of runs) {
+    for (const char of run.text) {
+      const code = char.codePointAt(0)!;
+      if (!COMMON_OR_INHERITED.test(char) || isRtlOrBidiControl(code)) return true;
+    }
+  }
+  return false;
+}
+
 /** One run's measured style: its font list (M6-F2) at a size in px, and the node's spacing. */
 export type RunStyle = Readonly<{
   fontList: string;
@@ -93,6 +133,8 @@ export type ReferenceStyleInput = RunStyle &
   Readonly<{
     /** The layout's `lang` (BCP 47 by E28-S1's syntax), the block's and each span's `lang`. */
     lang: string;
+    /** The node's whole text (its runs' texts joined), which decides the bidi override. */
+    nodeText: string;
   }>;
 
 /**
@@ -103,7 +145,8 @@ export type ReferenceStyleInput = RunStyle &
  * `lang` attribute of the block and of every span (as text-dom sets them: the block's own is
  * reset by its `all: initial`, so the spans' give the locale; see `BLOCK_TYPOGRAPHY`), `run` a
  * run span's declarations at `size`, and `text` those of a span that holds text between LFs (`run`
- * plus `direction: ltr; unicode-bidi: bidi-override`). The run tree puts every span directly in
+ * plus `direction: ltr; unicode-bidi: bidi-override`, or `run` alone for a node that needs no
+ * override, `needsBidiOverride`). The run tree puts every span directly in
  * the block, an LF in a span of its own with `run`. Throws `TypeError` for a style no measurement
  * could have used.
  */
@@ -129,12 +172,15 @@ export function referenceStyle(input: ReferenceStyleInput): ReferenceStyle {
   if (!(Number.isFinite(input.lineHeight) && input.lineHeight > 0)) {
     throw new TypeError('text-dom: line height is not a positive finite number');
   }
+  if (typeof input.nodeText !== 'string')
+    throw new TypeError('text-dom: node text is not a string');
   const run = runDeclarations(input);
+  const override = needsBidiOverride([{ text: input.nodeText }]);
   return Object.freeze({
     lang: input.lang,
     host: HOST_RESET,
     block: REFERENCE_BLOCK,
     run,
-    text: freeze([...run, ...TEXT_DECLARATIONS]),
+    text: override ? freeze([...run, ...TEXT_DECLARATIONS]) : run,
   });
 }

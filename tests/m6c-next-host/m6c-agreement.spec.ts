@@ -10,10 +10,12 @@ import type {
   PlacedReferenceOptions,
 } from '../../apps/next-host/src/m6c-text-reference';
 import {
+  ACHROMATIC_LIMIT,
   decodeCrop,
   expectedPlacement,
   layoutTerm,
   lineStarts,
+  maxChroma,
   measureInk,
   placementFailures,
   RASTER_BOUNDS,
@@ -72,7 +74,7 @@ type Hook = Readonly<{
     };
     readReference(png: string): Promise<FrameCrop>;
     clearReference(): Promise<void>;
-    minimumFontSize(fontList: string): Promise<MinimumFontSize>;
+    minimumFontSize(fontList: string, lang: string): Promise<MinimumFontSize>;
   }>;
 }>;
 type CounterHook = Readonly<{ glyphRasterCalls: number; glyphUploads: number }>;
@@ -293,6 +295,12 @@ async function clusterTerms(
   }
   row.gpu = inkSummary(gpu);
   row.dom = inkSummary(domInk);
+  // The gated DOM read must be grayscale (composited layer), so ClearType cannot reach the gate.
+  const chroma = maxChroma(decodeCrop(dom.crop));
+  row.domChroma = chroma;
+  if (chroma > ACHROMATIC_LIMIT) {
+    failures.push(`dom chroma ${chroma} > ${ACHROMATIC_LIMIT}: the gated read is not grayscale`);
+  }
   const blank = placement.text.trim().length === 0;
   if (blank || gpu === null || domInk === null) {
     // White space draws nothing on either side; ink on only one side is a failure.
@@ -354,6 +362,8 @@ for (const id of AGREEMENT) {
     const scene = await textScene(page);
     const dpr = scene.devicePixelRatio;
     expect(dpr).toBe(await page.evaluate(() => window.devicePixelRatio));
+    // Section 6.2's gated rows are at camera zoom 1.
+    expect(scene.camera!.zoom).toBe(1);
     const leaf = scene.leaves.find((value) => value.id === id);
     expect(leaf, `${id} is projected`).toBeDefined();
     // M6-G1: the leaf draws the port's positions, no second layout.
@@ -383,8 +393,9 @@ for (const id of AGREEMENT) {
       // Section 6.2 and M6-S0's open small-9 question: the browser's minimum font size (M6-S0's
       // probe in the fixture's font list) and the port's clamp check as the M6a-A11 spec makes it.
       extra.minimumFontSize = await page.evaluate(
-        (fontList) => (window.__p5Host as unknown as Hook).text.minimumFontSize(fontList),
-        leaf!.leaf.runs[0]!.fontList,
+        ([fontList, lang]) =>
+          (window.__p5Host as unknown as Hook).text.minimumFontSize(fontList, lang),
+        [leaf!.leaf.runs[0]!.fontList, leaf!.leaf.lang] as const,
       );
       extra.portClamp = await page.evaluate(() => {
         const port = (window.__p5Host as unknown as Hook).text.port;
@@ -406,9 +417,17 @@ for (const id of AGREEMENT) {
     );
     const max = (pick: (term: RasterTerm) => number) =>
       round(Math.max(0, ...raster.map((term) => Math.abs(pick(term)))));
+    // The browser and whether its 2D context has `lang`, which the raster port sets (the
+    // locale's `locl` forms depend on it, U3 follow-up notes).
+    const environment = {
+      browserVersion: page.context().browser()?.version() ?? null,
+      userAgent: await page.evaluate(() => navigator.userAgent),
+      contextLang: await page.evaluate(() => 'lang' in OffscreenCanvasRenderingContext2D.prototype),
+    };
     const summary = {
       fixture: id,
       project: info.project.name,
+      environment,
       devicePixelRatio: dpr,
       frames,
       bounds,
@@ -538,9 +557,14 @@ test('M6c-A07: a web font that loads after the first draw re-projects and draws 
   await settle(page);
   const holding = await state();
   const fallback = new Map<number, string>();
+  const heldBlank: number[] = [];
   for (const index of inked) {
-    fallback.set(index, (await readCluster(page, id, index)).crop.rgbaBase64);
+    const crop = (await readCluster(page, id, index)).crop;
+    // Every held fallback cluster has ink, so a changed crop below is a change of face.
+    if (measureInk(decodeCrop(crop)) === null) heldBlank.push(index);
+    fallback.set(index, crop.rgbaBase64);
   }
+  expect(heldBlank, 'held fallback clusters without ink').toEqual([]);
   release();
   expect(await page.evaluate(() => window.__m6cFontLoad!)).toBe('loaded');
   await expect
@@ -571,7 +595,8 @@ test('M6c-A07: a web font that loads after the first draw re-projects and draws 
   // The stored frame is unchanged until refitText; the face changed the layout.
   expect(after.frame).toEqual(before.frame);
   expect(after.layout.width).not.toBe(before.layout.width);
-  // The caret overlay follows the new layout.
+  // The caret overlay (`textEditOverlay`, the editor's caret geometry the host draws) follows the
+  // new layout.
   const caretX = (value: typeof after) => value.caret![0].x - value.frame.x;
   expect(caretX(before)).toBeCloseTo(before.layout.clusters[caretOffset]!.x, 9);
   expect(caretX(after)).toBeCloseTo(after.layout.clusters[caretOffset]!.x, 9);
@@ -582,13 +607,17 @@ test('M6c-A07: a web font that loads after the first draw re-projects and draws 
   const scene = await textScene(page);
   const rows: ClusterRow[] = [];
   let changed = 0;
+  const unchanged: number[] = [];
   for (const index of inked) {
     const row = await clusterTerms(page, scene, id, index, NAMED_LIMITS[id] ?? RASTER_BOUNDS);
     rows.push(row);
     const read = await readCluster(page, id, index);
     if (read.crop.rgbaBase64 !== fallback.get(index)) changed += 1;
+    else unchanged.push(index);
   }
-  expect(changed, 'clusters whose GPU raster changed with the face').toBeGreaterThan(0);
+  // Every inked cluster's GPU raster changed with the face (E28-K10: no fallback bitmap reused).
+  expect(unchanged, 'clusters whose GPU raster did not change with the face').toEqual([]);
+  expect(changed).toBe(inked.length);
 
   // refitText refits the frame as one step.
   const refit = await page.evaluate((nodeId) => {
@@ -615,6 +644,8 @@ test('M6c-A07: a web font that loads after the first draw re-projects and draws 
       widths: [before.layout.width, holding.layout.width, after.layout.width],
       caretX: [caretX(before), caretX(after)],
       changed,
+      inked: inked.length,
+      unchanged,
       refit,
       rows,
     }),

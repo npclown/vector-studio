@@ -1,6 +1,6 @@
 import type { TextLayoutRequest } from '@vector-studio/contracts';
 import type { Grapheme, LineSlot } from './assemble.js';
-import { runDeclarations, TEXT_DECLARATIONS } from './style.js';
+import { needsBidiOverride, runDeclarations, TEXT_DECLARATIONS } from './style.js';
 
 // The measurement block's content (docs/plans/mvp-m6a-text-model-contract.md, section 4, with
 // the M6a-U4 amendments of section 16) and the pass-2 insertions, kept apart from the reading so
@@ -9,8 +9,9 @@ import { runDeclarations, TEXT_DECLARATIONS } from './style.js';
 
 /**
  * Each run is a sequence of sibling spans, each with the run's font, size, letter spacing and
- * line height and the layout's `lang` (see `runSpan`): its text between LFs in spans that also set `direction: ltr; unicode-bidi:
- * bidi-override`, and each LF in a span of its own without the override. An LF inside a
+ * line height and the layout's `lang` (see `runSpan`): its text between LFs in spans that also
+ * set `direction: ltr; unicode-bidi: bidi-override` (unless the node needs no override,
+ * `needsBidiOverride`), and each LF in a span of its own without the override. An LF inside a
  * `bidi-override` span carried that run's line height onto the next line in Chromium (review r1
  * S2); an override span nested in a run span put an extra edge at run boundaries, which made an
  * emergency break there (width 0) add a line height (review r2, `ab` at 10 then `CD` at 40).
@@ -141,6 +142,7 @@ export function buildRunTree(
   const texts: RunText[] = [];
   const runStarts: number[] = [];
   let textLength = 0;
+  const override = needsBidiOverride(request.runs);
   request.runs.forEach((run, index) => {
     const text = new RunText();
     let last: HTMLElement | null = null;
@@ -148,7 +150,7 @@ export function buildRunTree(
     for (const piece of run.text.split(/(\n)/u)) {
       if (piece.length === 0) continue;
       const span = styled(index);
-      if (piece !== '\n') {
+      if (piece !== '\n' && override) {
         for (const [property, value] of TEXT_DECLARATIONS) span.style.setProperty(property, value);
       }
       const node = document.createTextNode(piece);

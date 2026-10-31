@@ -5,6 +5,7 @@ import { MEASUREMENT_BLOCK_STYLE } from '../../packages/text-dom/src/measure.js'
 import {
   cssText,
   MEASUREMENT_BLOCK_DECLARATIONS,
+  needsBidiOverride,
   referenceStyle,
 } from '../../packages/text-dom/src/style.js';
 import { buildRunTree, runSpan } from '../../packages/text-dom/src/tree.js';
@@ -55,6 +56,7 @@ describe('M6c-U3 reference style export (M6c-Q6 (a))', () => {
   it('gives the run declarations a measurement run span sets, in the same order', () => {
     const style = referenceStyle({
       lang: 'ko',
+      nodeText: 'Ab\nc한',
       fontList: '"A", sans-serif',
       size: 24,
       letterSpacing: -0.2,
@@ -78,6 +80,7 @@ describe('M6c-U3 reference style export (M6c-Q6 (a))', () => {
     const [ab, lf, c, han] = tree.elements;
     const run0 = referenceStyle({
       lang: 'ko',
+      nodeText: 'Ab\nc한',
       fontList: fontLists[0]!,
       size: 24,
       letterSpacing: 0.3,
@@ -85,6 +88,7 @@ describe('M6c-U3 reference style export (M6c-Q6 (a))', () => {
     });
     const run1 = referenceStyle({
       lang: 'ko',
+      nodeText: 'Ab\nc한',
       fontList: fontLists[1]!,
       size: 40,
       letterSpacing: 0.3,
@@ -119,6 +123,7 @@ describe('M6c-U3 reference style export (M6c-Q6 (a))', () => {
   it('gives the measurement block typography, visible, and the measurement block uses it', () => {
     const style = referenceStyle({
       lang: 'en-US',
+      nodeText: 'Ab\nc한',
       fontList: '"A"',
       size: 9,
       letterSpacing: 0,
@@ -147,7 +152,7 @@ describe('M6c-U3 reference style export (M6c-Q6 (a))', () => {
     }
   });
 
-  it("formats the measurement block as before the export, less the block's own `all: initial`", () => {
+  it('formats the measurement block as before the export, `all: initial` first', () => {
     expect(MEASUREMENT_BLOCK_STYLE).toBe(
       [
         'all: initial',
@@ -168,9 +173,50 @@ describe('M6c-U3 reference style export (M6c-Q6 (a))', () => {
     );
   });
 
+  it('drops the bidi override for a node of Common and Inherited characters only (M6a-L1 amendment)', () => {
+    // A whole node of Common-script characters in an override span shapes without the locale's
+    // `locl` forms in Chromium; without strong RTL, AN or bidi controls the override changes no
+    // order, so such a node is laid out without it.
+    for (const text of ['3.14', '100%', '.', '1,234.5 + 6', '\u00a0.', 'a\u0301'.slice(1), '']) {
+      expect(needsBidiOverride([{ text }]), JSON.stringify(text)).toBe(false);
+    }
+    for (const text of [
+      'Ty.',
+      '한.',
+      'a',
+      '\u05d0',
+      '\u061f',
+      '\u0640',
+      '\u200f.',
+      '\u202e1',
+      '1\u2067',
+    ]) {
+      expect(needsBidiOverride([{ text }]), JSON.stringify(text)).toBe(true);
+    }
+    // Over the whole node: one run with a letter keeps the override on every run.
+    expect(needsBidiOverride([{ text: '3.14' }, { text: '한' }])).toBe(true);
+    const tree = buildRunTree(
+      fakeDocument,
+      { ...request(0, 1.2), runs: [{ text: '3.1\n4', family: 'A', size: 10 }] },
+      ['"A"'],
+      'ko',
+    );
+    const run = referenceStyle({
+      lang: 'ko',
+      nodeText: '3.1\n4',
+      fontList: '"A"',
+      size: 10,
+      letterSpacing: 0,
+      lineHeight: 1.2,
+    });
+    expect(run.text).toEqual(run.run);
+    for (const span of tree.elements) expect(entries(span)).toEqual(run.run);
+  });
+
   it('returns frozen values', () => {
     const style = referenceStyle({
       lang: 'ko',
+      nodeText: 'Ab\nc한',
       fontList: '"A"',
       size: 12,
       letterSpacing: 0,
@@ -185,7 +231,14 @@ describe('M6c-U3 reference style export (M6c-Q6 (a))', () => {
   });
 
   it('rejects inputs no measurement could have used', () => {
-    const base = { lang: 'ko', fontList: '"A"', size: 12, letterSpacing: 0, lineHeight: 1.2 };
+    const base = {
+      lang: 'ko',
+      nodeText: 'a',
+      fontList: '"A"',
+      size: 12,
+      letterSpacing: 0,
+      lineHeight: 1.2,
+    };
     for (const bad of [
       { ...base, lang: 'not a tag' },
       { ...base, lang: '' },
@@ -196,6 +249,7 @@ describe('M6c-U3 reference style export (M6c-Q6 (a))', () => {
       { ...base, letterSpacing: Number.NaN },
       { ...base, lineHeight: 0 },
       { ...base, lineHeight: Number.POSITIVE_INFINITY },
+      { ...base, nodeText: 1 as unknown as string },
     ]) {
       expect(() => referenceStyle(bad), JSON.stringify(bad)).toThrow(TypeError);
     }

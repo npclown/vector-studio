@@ -208,8 +208,8 @@ type TextReferenceHook = Readonly<{
   /** The shown placed cluster's screenshot (PNG, base64) as a device px crop; removes it. */
   readReference(pngBase64: string): Promise<FrameCrop>;
   clearReference(): Promise<void>;
-  /** M6-S0's minimum-font-size probe in a font list, with text-dom's styles. */
-  minimumFontSize(fontList: string): Promise<MinimumFontSize>;
+  /** M6-S0's minimum-font-size probe in a font list and `lang`, with text-dom's styles. */
+  minimumFontSize(fontList: string, lang: string): Promise<MinimumFontSize>;
 }>;
 
 function textReferenceHook(editor: Editor): TextReferenceHook {
@@ -230,7 +230,7 @@ function textReferenceHook(editor: Editor): TextReferenceHook {
     reference,
     readReference: async (png) => (await load()).readReference(png),
     clearReference: async () => (await load()).clearReference(),
-    minimumFontSize: async (fontList) => (await load()).minimumFontSize(fontList),
+    minimumFontSize: async (fontList, lang) => (await load()).minimumFontSize(fontList, lang),
   };
 }
 

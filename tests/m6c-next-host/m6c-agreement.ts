@@ -30,6 +30,23 @@ export function decodeCrop(crop: FrameCrop): Pixels {
   return { x: crop.x, y: crop.y, width: crop.width, height: crop.height, rgba };
 }
 
+/** The largest channel spread of a gated grayscale read (review r1 S4), out of 255. */
+export const ACHROMATIC_LIMIT = 2;
+
+/**
+ * The largest `|R − G|` or `|G − B|` over the crop: 0 for a grayscale paint, larger where LCD
+ * antialiasing coloured the edges. The gated DOM read is on a composited layer, which Chromium
+ * paints grayscale; this checks it.
+ */
+export function maxChroma(pixels: Pixels): number {
+  let spread = 0;
+  for (let offset = 0; offset < pixels.rgba.length; offset += 4) {
+    const [r, g, b] = [pixels.rgba[offset]!, pixels.rgba[offset + 1]!, pixels.rgba[offset + 2]!];
+    spread = Math.max(spread, Math.abs(r - g), Math.abs(g - b));
+  }
+  return spread;
+}
+
 /** M6-S0's subpixel noise floor, out of 255. */
 export const COVERAGE_FLOOR = 2;
 /** M6-S0's lower integer-box threshold, out of 255 (recorded, not gated). */

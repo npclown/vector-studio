@@ -5,10 +5,12 @@ import { describe, expect, it } from 'vitest';
 import type * as ProbeModule from '../../apps/next-host/src/m6c-text-probe.js';
 import type * as ReferenceModule from '../../apps/next-host/src/m6c-text-reference.js';
 import {
+  ACHROMATIC_LIMIT,
   decodeCrop,
   expectedPlacement,
   layoutTerm,
   lineStarts,
+  maxChroma,
   measureInk,
   placementFailures,
   RASTER_BOUNDS,
@@ -99,6 +101,22 @@ describe('M6c-U3 ink measures (M6-S0 ink boxes)', () => {
     const ink = measureInk(crop(0, 0, 3, 3, { '1,1': 255 }, lcd))!;
     expect(ink.left).toBe(1);
     expect(ink.mass).toBe(1);
+  });
+});
+
+describe('M6c-U3 achromatic gated read (review r1 S4)', () => {
+  it('gives the largest |R − G| or |G − B| of a crop, 0 for gray', () => {
+    const pixels = (rgba: number[]): Pixels => ({
+      x: 0,
+      y: 0,
+      width: rgba.length / 4,
+      height: 1,
+      rgba: Uint8Array.from(rgba),
+    });
+    expect(maxChroma(pixels([255, 255, 255, 255, 40, 40, 40, 255]))).toBe(0);
+    expect(maxChroma(pixels([250, 252, 251, 255]))).toBe(2);
+    expect(maxChroma(pixels([200, 180, 230, 255]))).toBe(50);
+    expect(ACHROMATIC_LIMIT).toBe(2);
   });
 });
 
@@ -380,6 +398,24 @@ describe('M6c-U3 placed DOM cluster arithmetic (src/m6c-text-reference.ts)', () 
     expect(() => reference.clusterContext(runs, 3, 4)).toThrow();
   });
 
+  it("builds the placed cluster from the node's whole run tree, the cluster split out (review r1 S1)", () => {
+    const runs = [{ text: 'Ty.\nab' }, { text: '한.' }];
+    expect(reference.referencePieces(runs, 2, 3)).toEqual([
+      { run: 0, start: 0, text: 'Ty.', lf: false, cluster: { before: 'Ty', text: '.', after: '' } },
+      { run: 0, start: 3, text: '\n', lf: true, cluster: null },
+      { run: 0, start: 4, text: 'ab', lf: false, cluster: null },
+      { run: 1, start: 6, text: '한.', lf: false, cluster: null },
+    ]);
+    const last = reference.referencePieces(runs, 7, 8);
+    expect(last.map((piece) => piece.cluster)).toEqual([
+      null,
+      null,
+      null,
+      { before: '한', text: '.', after: '' },
+    ]);
+    expect(() => reference.referencePieces(runs, 3, 4)).toThrow();
+  });
+
   it('groups flowed clusters into lines by baseline and LF', () => {
     expect(
       reference.flowedLines([
@@ -406,7 +442,7 @@ describe('M6c-U3 page hook (apps/next-host/app/page.tsx)', () => {
     for (const member of ['flowedReference', 'placeReference', 'readReference', 'clearReference']) {
       expect(page).toContain(`.${member}(`);
     }
-    expect(page).toMatch(/minimumFontSize\(fontList\)/u);
+    expect(page).toMatch(/minimumFontSize\(fontList, lang\)/u);
     // Only types are imported statically.
     expect(page).not.toMatch(/^import [^t].*m6c-text-reference/mu);
     expect(page).toMatch(/^import type \{[^}]*\} from '\.\.\/src\/m6c-text-reference';/mu);

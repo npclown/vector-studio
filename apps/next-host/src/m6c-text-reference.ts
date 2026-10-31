@@ -167,6 +167,26 @@ export function clusterContext(
   };
 }
 
+/** One span of the placed DOM cluster's tree: a piece, and for the cluster's piece its split. */
+export type ReferencePiece = TextPiece &
+  Readonly<{ cluster: Readonly<{ before: string; text: string; after: string }> | null }>;
+
+/**
+ * The placed DOM cluster's spans (M6c-U3 review r1 S1): the node's whole run tree as text-dom's
+ * `buildRunTree` builds it (each run's text between LFs in a span, each LF in its own), the
+ * cluster `[start, end)` split out of its piece so that only it is painted.
+ */
+export function referencePieces(
+  runs: readonly Readonly<{ text: string }>[],
+  start: number,
+  end: number,
+): ReferencePiece[] {
+  const pieces = textPieces(runs);
+  const { piece: holder } = locatePiece(pieces, start, end);
+  const context = clusterContext(runs, start, end);
+  return pieces.map((piece, index) => ({ ...piece, cluster: index === holder ? context : null }));
+}
+
 /**
  * Line indices of flowed clusters in text order: a cluster starts a new line after `breaks` LFs,
  * or when its baseline is more than 0.5 px below the current line's (as text-dom's pass 1 assigns
@@ -357,14 +377,31 @@ export function placeReference(
   const penTarget = options.pen ?? 'quantized';
   const target = placedTarget(placement, dpr, penTarget);
   const node = textNode(editor, id);
+  const layout = editor.query({ type: 'textLayout', id });
+  const cluster = layout?.clusters[index];
+  if (layout === null || cluster === undefined) {
+    throw new Error(`${id} has no laid-out cluster ${index}.`);
+  }
   const fontSize = displayedSize(placement, dpr);
-  const style = referenceStyle({
-    lang: leaf.leaf.lang,
-    fontList: placement.fontList,
-    size: fontSize,
-    letterSpacing: node.letterSpacing,
-    lineHeight: node.lineHeight,
-  });
+  const nodeText = node.runs.map((run) => run.text).join('');
+  const placements = clusterPlacements(leaf, camera, dpr);
+  const scale = displayScale(leaf, camera, dpr);
+  // Each run at the size its clusters are drawn at (the size bucket), so the line around the
+  // cluster is the one the atlas draws; a run without a cluster at its displayed size.
+  // A placement's `run` counts the leaf's scene runs; the layout's cluster gives the node run.
+  const styleOf = (run: number) => {
+    const first = layout.clusters.findIndex((value) => value.run === run);
+    const drawn = first === -1 ? undefined : placements[first];
+    return referenceStyle({
+      lang: leaf.leaf.lang,
+      nodeText,
+      fontList: layout.fontLists[run]!,
+      size: drawn === undefined ? node.runs[run]!.size * scale : displayedSize(drawn, dpr),
+      letterSpacing: node.letterSpacing,
+      lineHeight: node.lineHeight,
+    });
+  };
+  const style = styleOf(cluster.run);
   const lcd = options.lcd === true;
   // The layer shift moves the painted text and its rects alike, so the read-back below still
   // aims at `target`, and the block's own baseline lands on the whole CSS px under it.
@@ -376,45 +413,54 @@ export function placeReference(
     ['position', 'absolute'],
     ['left', '0px'],
     ['top', '0px'],
-    ['color', '#000000'],
+    ['width', 'max-content'],
   ]);
-  // The cluster in its text piece, as text-dom's run tree shapes it (M6c-U3 follow-up): the
-  // piece's span is transparent and only the cluster's own span, nested without a bidi override
-  // so the piece still shapes as one, is painted. Alone in an override span, a cluster of
-  // Common-script characters only (`.`, digits, spaces) shaped without the locale's `locl`
-  // forms in Chromium, which text-dom's measurement in context and the raster port both use.
-  const layout = editor.query({ type: 'textLayout', id });
-  const cluster = layout?.clusters[index];
-  if (cluster === undefined) throw new Error(`${id} has no laid-out cluster ${index}.`);
-  const context = clusterContext(node.runs, cluster.start, cluster.end);
-  if (context.text !== placement.text) {
-    throw new Error(`Cluster ${index} of ${id} is not the placement's text.`);
+  // The cluster in the node's text as text-dom lays it out (M6c-U3 follow-up and review r1 S1):
+  // the node's whole run tree, every span transparent, and only the cluster's own span, nested
+  // without a bidi override so its piece still shapes as one, painted black. Chromium resolves
+  // a Common character's script, and so the locale's `locl` forms, from the rest of the block, so
+  // a cluster alone (`.`) shaped differently from the same cluster measured in its node. The
+  // block is `max-content` wide, so a piece is not wrapped; shaping happens before line breaking.
+  let text: Text | null = null;
+  let probe: HTMLElement | null = null;
+  for (const piece of referencePieces(node.runs, cluster.start, cluster.end)) {
+    const pieceStyle = styleOf(piece.run);
+    const span = styledSpan(pieceStyle, piece.lf ? pieceStyle.run : pieceStyle.text);
+    span.style.setProperty('color', 'transparent');
+    if (piece.cluster === null) {
+      span.append(document.createTextNode(piece.text));
+    } else {
+      if (piece.cluster.text !== placement.text) {
+        throw new Error(`Cluster ${index} of ${id} is not the placement's text.`);
+      }
+      const inner = document.createElement('span');
+      inner.style.setProperty('color', '#000000');
+      text = document.createTextNode(piece.cluster.text);
+      inner.append(text);
+      // The baseline probe after the piece's text, on the cluster's line.
+      probe = baselineProbe();
+      span.append(
+        document.createTextNode(piece.cluster.before),
+        inner,
+        document.createTextNode(piece.cluster.after),
+        probe,
+      );
+    }
+    block.append(span);
   }
-  apply(block, [['width', 'max-content']]);
-  const span = styledSpan(style, style.text);
-  span.style.setProperty('color', 'transparent');
-  const inner = document.createElement('span');
-  inner.style.setProperty('color', '#000000');
-  const text = document.createTextNode(placement.text);
-  inner.append(text);
-  const probe = baselineProbe();
-  span.append(
-    document.createTextNode(context.before),
-    inner,
-    document.createTextNode(context.after),
-    probe,
-  );
-  block.append(span);
+  if (text === null || probe === null) throw new Error(`No span holds cluster ${index} of ${id}.`);
+  const clusterText = text;
+  const baselineMarker = probe;
   root.append(block);
   const { clip, rect } = referenceClip(placement.bound, dpr, size);
   shown = { host, rect };
   const range = document.createRange();
-  range.selectNodeContents(text);
+  range.selectNodeContents(clusterText);
   const read = () => {
     const rect = range.getClientRects()[0];
     if (rect === undefined)
       throw new Error(`The cluster ${JSON.stringify(placement.text)} has no rect.`);
-    return { pen: rect.left, baseline: probe.getBoundingClientRect().bottom };
+    return { pen: rect.left, baseline: baselineMarker.getBoundingClientRect().bottom };
   };
   let position = { left: 0, top: 0 };
   let measured = read();
@@ -451,7 +497,11 @@ export async function readReference(pngBase64: string): Promise<FrameCrop> {
   if (current === null) throw new Error('No placed reference is shown.');
   try {
     const bytes = Uint8Array.from(atob(pngBase64), (char) => char.charCodeAt(0));
-    const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+    // Decoded as stored: no colour space conversion and no premultiplication of the opaque PNG.
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }), {
+      colorSpaceConversion: 'none',
+      premultiplyAlpha: 'none',
+    });
     const { rect } = current;
     if (bitmap.width !== rect.width || bitmap.height !== rect.height) {
       throw new Error(
@@ -488,6 +538,7 @@ export function flowedReference(editor: Editor, id: string): FlowedReference {
   const styleOf = (run: number) =>
     referenceStyle({
       lang: layout.lang,
+      nodeText: node.runs.map((value) => value.text).join(''),
       fontList: layout.fontLists[run]!,
       size: node.runs[run]!.size * scale,
       letterSpacing: node.letterSpacing,
@@ -505,7 +556,8 @@ export function flowedReference(editor: Editor, id: string): FlowedReference {
     node.runs.forEach((run, index) => {
       const key = runKey(layout.fontLists[index]!, run.size);
       if (pending.some(([seen]) => seen === key)) return;
-      const span = styledSpan(styleOf(index), styleOf(index).text);
+      // As text-dom's ascent samples: a run span, without the text declarations.
+      const span = styledSpan(styleOf(index), styleOf(index).run);
       const text = document.createTextNode(SENTINEL);
       const probe = baselineProbe();
       span.append(text, probe);
@@ -596,11 +648,20 @@ function displayScale(
   return placement.deviceSize / placement.size / devicePixelRatio;
 }
 
-/** M6-S0's minimum-font-size probe in `fontList` with text-dom's styles. */
-export function minimumFontSize(fontList: string): MinimumFontSize {
+const MINIMUM_FONT_SIZE_TEXT = 'Vector 한글 Studio';
+
+/** M6-S0's minimum-font-size probe in `fontList` and `lang` (the leaf's) with text-dom's styles. */
+export function minimumFontSize(fontList: string, lang: string): MinimumFontSize {
   const size = probeHostSize() ?? { width: 960, height: 640, devicePixelRatio: 1 };
   const styleAt = (px: number) =>
-    referenceStyle({ lang: 'ko', fontList, size: px, letterSpacing: 0, lineHeight: 1.2 });
+    referenceStyle({
+      lang,
+      nodeText: MINIMUM_FONT_SIZE_TEXT,
+      fontList,
+      size: px,
+      letterSpacing: 0,
+      lineHeight: 1.2,
+    });
   const { host, root } = createHost(size, false, true, styleAt(9).host);
   try {
     const width = (px: number) => {
@@ -609,7 +670,7 @@ export function minimumFontSize(fontList: string): MinimumFontSize {
       apply(block, style.block);
       block.style.setProperty('width', 'max-content');
       const span = styledSpan(style, style.text);
-      span.append(document.createTextNode('Vector 한글 Studio'));
+      span.append(document.createTextNode(MINIMUM_FONT_SIZE_TEXT));
       block.append(span);
       root.append(block);
       const value = span.getBoundingClientRect().width;
