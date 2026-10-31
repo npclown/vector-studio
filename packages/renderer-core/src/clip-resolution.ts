@@ -141,7 +141,23 @@ export class ClipStateTable {
   #taken = new Set<number>();
   #contentByIndex = new Map<number, string>();
   #frame = new Map<string, ClipStateRecord>();
+  /**
+   * E26 contract, U5d-2: each drawn chain's record and its content string, kept while the chain
+   * object and its index stay the same. A record depends only on its index and the chain's
+   * levels, and a chain object is frozen, so a kept record equals the one a fresh build makes.
+   */
+  #kept = new Map<
+    string,
+    Readonly<{ chain: ClipChain; record: ClipStateRecord; content: string }>
+  >();
   #writes = 0;
+  #reuse = true;
+
+  /** @internal The twin oracle's path (E26 contract, U5c): every record is built afresh. */
+  public disableReuseForTesting(): void {
+    this.#reuse = false;
+    this.#kept.clear();
+  }
 
   public begin(): void {
     this.#frame = new Map();
@@ -159,6 +175,11 @@ export class ClipStateTable {
       this.#indexByKey.set(chain.key, index);
       this.#taken.add(index);
     }
+    const kept = this.#reuse ? this.#kept.get(chain.key) : undefined;
+    if (kept !== undefined && kept.chain === chain && kept.record.index === index) {
+      this.#frame.set(chain.key, kept.record);
+      return index;
+    }
     const record: ClipStateRecord = Object.freeze({
       index,
       chainKey: chain.key,
@@ -167,6 +188,9 @@ export class ClipStateTable {
         chain.levels.filter((level) => level.kind === 'mask').map((level) => level.containerId),
       ),
     });
+    if (this.#reuse) {
+      this.#kept.set(chain.key, Object.freeze({ chain, record, content: recordContent(record) }));
+    }
     this.#frame.set(chain.key, record);
     return index;
   }
@@ -177,11 +201,12 @@ export class ClipStateTable {
       if (this.#frame.has(key)) continue;
       this.#indexByKey.delete(key);
       this.#taken.delete(index);
+      this.#kept.delete(key);
     }
     const records = [...this.#frame.values()].sort((left, right) => left.index - right.index);
     const contents = new Map<number, string>();
     for (const record of records) {
-      const content = recordContent(record);
+      const content = this.#kept.get(record.chainKey)?.content ?? recordContent(record);
       contents.set(record.index, content);
       if (this.#contentByIndex.get(record.index) !== content) this.#writes += 1;
     }
@@ -276,7 +301,71 @@ export type MaskPlanInput = Readonly<{
   camera: Readonly<{ x: number; y: number; zoom: number }>;
   target: Readonly<{ width: number; height: number; devicePixelRatio: number; sampleCount: 1 | 4 }>;
   budget?: number;
+  /** E26 contract, U5d-2: the level records of the previous plan, reused when unchanged. */
+  memo?: MaskLevelMemo;
 }>;
+
+type MaskSourceResult = Readonly<{ source: MaskSourceRecord; key: string }>;
+type KeptLevel = Readonly<{
+  chain: ClipChain;
+  index: number;
+  parent: MaskLevelRecord | null;
+  source: MaskSourceResult;
+  lanes: readonly number[];
+  record: MaskLevelRecord;
+}>;
+
+/**
+ * E26 contract, U5d-2: the drawable level records of the last plan. A level record is a function
+ * of its chain object (frozen), its index in it, its parent record, its source, the camera and
+ * the target; a plan reuses the previous plan's record when all of them are the same. The budget
+ * is checked every frame, before any reuse.
+ */
+export class MaskLevelMemo {
+  #previous = new Map<string, KeptLevel>();
+  #current = new Map<string, KeptLevel>();
+
+  /** Starts a plan: the records of the last one become the ones to reuse. */
+  public begin(): void {
+    this.#previous = this.#current;
+    this.#current = new Map();
+  }
+
+  public reuse(
+    id: string,
+    chain: ClipChain,
+    index: number,
+    parent: MaskLevelRecord | null,
+    source: MaskSourceResult,
+    lanes: readonly number[],
+  ): MaskLevelRecord | null {
+    const kept = this.#previous.get(id);
+    if (
+      kept === undefined ||
+      kept.chain !== chain ||
+      kept.index !== index ||
+      kept.parent !== parent ||
+      !sameSource(kept.source, source) ||
+      !lanes.every((lane, at) => Object.is(lane, kept.lanes[at]))
+    ) {
+      return null;
+    }
+    this.#current.set(id, kept);
+    return kept.record;
+  }
+
+  public keep(id: string, level: KeptLevel): void {
+    this.#current.set(id, level);
+  }
+}
+
+function sameSource(left: MaskSourceResult, right: MaskSourceResult): boolean {
+  if (left === right) return true;
+  if (left.key !== right.key || left.source.kind !== right.source.kind) return false;
+  return left.source.kind === 'primitive'
+    ? left.source.slot === (right.source as Extract<MaskSourceRecord, { kind: 'primitive' }>).slot
+    : left.source.nodeId === (right.source as Extract<MaskSourceRecord, { kind: 'mesh' }>).nodeId;
+}
 
 /**
  * Plans the frame's mask levels over the drawn content chains, in paint order. A level is
@@ -297,6 +386,7 @@ export class MaskPlan {
 
   public constructor(input: MaskPlanInput) {
     this.#input = input;
+    input.memo?.begin();
   }
 
   /** Plans the chain's levels if needed; true when content under the chain may draw. */
@@ -369,9 +459,24 @@ export class MaskPlan {
     this.#resident = resident;
     this.#maxWidth = maxWidth;
     this.#maxHeight = maxHeight;
+    const memo = this.#input.memo;
+    const lanes =
+      memo === undefined
+        ? []
+        : [
+            camera.x,
+            camera.y,
+            camera.zoom,
+            target.devicePixelRatio,
+            target.width,
+            target.height,
+            target.sampleCount,
+          ];
+    const reused = memo?.reuse(level.containerId, chain, index, parent, source, lanes) ?? null;
+    if (reused !== null) return reused;
     const rects = rectRecords(chain.levels, parentIndex + 1, index);
     const device = Object.freeze({ x: minX, y: minY, width, height });
-    return Object.freeze({
+    const record: MaskLevelRecord = Object.freeze({
       id: level.containerId,
       parent: parent?.id ?? null,
       rects,
@@ -389,6 +494,8 @@ export class MaskPlan {
         target.sampleCount,
       ]),
     });
+    memo?.keep(level.containerId, Object.freeze({ chain, index, parent, source, lanes, record }));
+    return record;
   }
 }
 
