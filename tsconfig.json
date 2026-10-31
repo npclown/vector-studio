@@ -9,10 +9,13 @@
   "include": [
     "apps/next-host/app/m6a-*/route.ts",
     "apps/next-host/app/m6b-*/route.ts",
+    "apps/next-host/app/m6c-*/route.ts",
     "apps/next-host/src/m4-appearance.ts",
     "apps/next-host/src/m5-persistence.ts",
     "apps/next-host/src/m6a-text-host.ts",
     "apps/next-host/src/m6b-text-edit.ts",
+    "apps/next-host/src/m6c-text-probe.ts",
+    "apps/next-host/src/renderer-options.ts",
     "playwright*.config.ts",
     "tests/**/*.ts",
     "tests/**/*.mts",

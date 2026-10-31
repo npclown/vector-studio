@@ -142,13 +142,19 @@ export function textTestHook(state: HostCompositionState): TextTestHook {
   };
 }
 
+/** The `?fixture=` documents that ask for the test font (M6a-U5, M6b-U9, M6c-U2). */
+export const TEXT_FIXTURES: readonly string[] = ['text', 'text-edit', 'text-gpu'];
+
 /**
- * `?fixture=text` and `?fixture=text-edit` (M6b-U9) ask for the test font; with `?persist=1` the
- * fixture is ignored (M5 contract, section 5.3), and so is the font.
+ * `?fixture=text`, `?fixture=text-edit` (M6b-U9) and `?fixture=text-gpu` (M6c-U2) ask for the
+ * test font; with `?persist=1` the fixture is ignored (M5 contract, section 5.3), and so is the
+ * font.
  */
 export function textFixtureQuery(search: string): boolean {
   const fixture = new URLSearchParams(search).get('fixture');
-  return (fixture === 'text' || fixture === 'text-edit') && !persistQuery(search).fixtureIgnored;
+  return (
+    fixture !== null && TEXT_FIXTURES.includes(fixture) && !persistQuery(search).fixtureIgnored
+  );
 }
 
 /**

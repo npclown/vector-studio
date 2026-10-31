@@ -1,5 +1,6 @@
 import type { RendererFactory, RendererHandle } from '@vector-studio/react';
 import { benchBackendOptions, pageBench } from './e26-bench';
+import { hostRendererOptions } from './renderer-options';
 
 // P5-U6 (P5 plan, section 6 and P5-Q8): the host's renderer, composed as the V-1 playground page
 // composes it: the P1 primitive and P3 path renderer service on the WebGPU backend, with the
@@ -15,6 +16,11 @@ import { benchBackendOptions, pageBench } from './e26-bench';
 // E26-U1b (E26 contract, section 3.3): with `?bench=1` the backend's clock runs the bench driver
 // and the service is wrapped for the injected rejection (src/e26-bench.ts); frame capture stays
 // off unless `?test=1` is also given, which the harness never does.
+// M6c-U2 (M6c contract, section 5): the service also takes `text: 'atlas'` with the canvas glyph
+// raster port (src/renderer-options.ts), so projected text draws. With `?test=1` the service is
+// wrapped by the cluster probe's scene recorder (src/m6c-text-probe.ts, loaded only then), the
+// probe is registered with the host's size, port and options, and `window.__nextHostRenderer`
+// gains the service's `glyphRasterCalls` and `glyphUploads` counters.
 
 const WASM_URL = '/geometry-kernel.wasm';
 
@@ -35,6 +41,10 @@ declare global {
     __nextHostRenderer?: Readonly<{
       capture: () => Promise<NextHostFrame>;
       diagnostics: readonly NextHostDiagnostic[];
+      /** M6c-U2: the service's glyph raster port calls (E28 `getGlyphRasterCallsForTesting`). */
+      readonly glyphRasterCalls: number;
+      /** M6c-U2: bitmaps uploaded by acknowledged packets (`getGlyphUploadsForTesting`). */
+      readonly glyphUploads: number;
     }>;
   }
 }
@@ -75,6 +85,16 @@ export const createWebGpuRenderer: RendererFactory = async (canvas, size) => {
       benchBackendOptions(window.location.search, bench?.clock ?? null),
     );
     releases.push(() => backend.dispose());
+    const glyphRaster = webgpu.createCanvasGlyphRaster();
+    const service = new core.PrimitiveRendererService(backend, {
+      fillMesh: fill,
+      fillMeshMemoryBytes: () => fill.linearMemoryBytes(),
+      strokeMesh: stroke,
+      strokeMeshMemoryBytes: () => stroke.linearMemoryBytes(),
+      ...hostRendererOptions(glyphRaster),
+    });
+    releases.push(() => service.dispose());
+    let renderer: RendererHandle['renderer'] = service;
     if (testing) {
       const diagnostics: NextHostDiagnostic[] = [];
       const subscription = backend.subscribeDiagnostics(({ code, severity, message }) => {
@@ -96,22 +116,31 @@ export const createWebGpuRenderer: RendererFactory = async (canvas, size) => {
             rgba: frame.rgba,
           };
         },
+        get glyphRasterCalls() {
+          return service.getGlyphRasterCallsForTesting();
+        },
+        get glyphUploads() {
+          return service.getGlyphUploadsForTesting();
+        },
       };
       window.__nextHostRenderer = hook;
       releases.push(() => {
         if (window.__nextHostRenderer === hook) delete window.__nextHostRenderer;
       });
+      const probe = await import('./m6c-text-probe');
+      const recorder = new probe.SceneRecorder();
+      renderer = recorder.wrap(service);
+      releases.push(
+        probe.attachTextProbe({
+          recorder,
+          size,
+          glyphRaster,
+          createBackend: () => new webgpu.WebGpuBackend({ frameCaptureForTesting: true }),
+          createService: (target) =>
+            new core.PrimitiveRendererService(target, hostRendererOptions(glyphRaster)),
+        }),
+      );
     }
-    const service = new core.PrimitiveRendererService(backend, {
-      fillMesh: fill,
-      fillMeshMemoryBytes: () => fill.linearMemoryBytes(),
-      strokeMesh: stroke,
-      strokeMeshMemoryBytes: () => stroke.linearMemoryBytes(),
-      clips: 'all',
-      paints: 'gradient',
-      groups: 'isolated',
-    });
-    releases.push(() => service.dispose());
     const source = backend.attachPrimitiveFrameSource(service);
     releases.push(() => source.dispose());
     const capability = await backend.initialize({
@@ -122,11 +151,10 @@ export const createWebGpuRenderer: RendererFactory = async (canvas, size) => {
     if (!capability.supported) {
       throw new Error(`WebGPU is not available: ${capability.diagnostic.message}`);
     }
-    let renderer: RendererHandle['renderer'] = service;
     if (bench !== null) {
       bench.attach(backend, canvas);
       releases.push(() => bench.detach());
-      renderer = bench.wrapRenderer(service);
+      renderer = bench.wrapRenderer(renderer);
     }
     const handle: RendererHandle = { renderer, dispose };
     return handle;
