@@ -17,7 +17,10 @@ import {
   E26_STRESS,
   E26_TYPICAL_VISIBLE,
   editDragOffset,
+  E26_ISOLATION,
   fittedCamera,
+  isolationBoundsMs,
+  isolationTargets,
   generateStressDocument,
   loadScenarioDocument,
   p1Q,
@@ -205,5 +208,38 @@ describe('E26-U1a scenarios', () => {
     expect(canonicalJson({ b: 1, a: [{ d: 2, c: 3 }] })).toBe('{"a":[{"c":3,"d":2}],"b":1}');
     expect(() => canonicalJson({ a: undefined })).toThrow(TypeError);
     expect(() => canonicalJson({ a: Number.NaN })).toThrow(TypeError);
+  });
+});
+
+describe('E26-U6b A06 isolation targets and bounds', () => {
+  it('picks the middle drawn leaf and 16 distinct leaves spread over the M1-A13 page', () => {
+    const loaded = loadScenarioDocument('m1-a13');
+    const leaves = [...loaded.bounds].filter(([, box]) => box !== null).map(([id]) => id);
+    const targets = isolationTargets(loaded);
+    expect(targets.one).toBe(leaves[Math.floor(leaves.length / 2)]);
+    expect(targets.sixteen).toHaveLength(E26_ISOLATION.scattered);
+    expect(new Set(targets.sixteen).size).toBe(16);
+    const ranks = targets.sixteen.map((id) => leaves.indexOf(id));
+    expect(ranks.every((rank, i) => i === 0 || rank > ranks[i - 1]!)).toBe(true);
+    // Every sixteenth of the leaf order holds one target.
+    ranks.forEach((rank, k) => {
+      expect(rank).toBeGreaterThanOrEqual((k * leaves.length) / 16);
+      expect(rank).toBeLessThan(((k + 1) * leaves.length) / 16);
+    });
+    // Deterministic: the same document gives the same targets.
+    expect(isolationTargets(loadScenarioDocument('m1-a13'))).toEqual(targets);
+  });
+
+  it('refuses a page with fewer than 16 drawn leaves', () => {
+    const loaded = loadScenarioDocument('m1-a13');
+    const bounds = new Map([...loaded.bounds].filter(([, box]) => box !== null).slice(0, 15));
+    expect(() => isolationTargets({ ...loaded, bounds })).toThrow('15 drawn leaves');
+  });
+
+  it('applies min(3R + 50, 500) and min(6R + 100, 1000)', () => {
+    expect(isolationBoundsMs(0)).toEqual({ one: 50, sixteen: 100 });
+    expect(isolationBoundsMs(40)).toEqual({ one: 170, sixteen: 340 });
+    expect(isolationBoundsMs(150)).toEqual({ one: 500, sixteen: 1000 });
+    expect(isolationBoundsMs(149)).toEqual({ one: 497, sixteen: 994 });
   });
 });
