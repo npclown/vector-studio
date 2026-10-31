@@ -270,6 +270,19 @@ type SlotRecord = {
   joint: boolean;
   /** The 16 words of the last written meshInstances record. */
   instance: number[] | null;
+  /**
+   * E26 contract, U5d-2: the inputs of `instance`. The words are a function of the draw, the
+   * variant, the overlay and the link, so equal inputs give equal words and `#writeInstance`
+   * would return early. The arena replacement count is defensive: a replacement moves the bases,
+   * and it also rewrites `instance` itself.
+   */
+  inputs: Readonly<{
+    draw: PathMeshDraw;
+    variant: ResidentVariant;
+    overlay: ResidentVariant | null;
+    link: number;
+    arena: number;
+  }> | null;
 };
 type PendingRelease = Readonly<{ region: GeometryRegion; offset: number; size: number }>;
 
@@ -381,6 +394,7 @@ export class PathMeshPacker {
           overlay: null,
           joint: false,
           instance: null,
+          inputs: null,
         };
         this.#records.set(draw.slot, record);
       }
@@ -407,11 +421,28 @@ export class PathMeshPacker {
         }
       }
       record.joint = joint;
-      this.#writeInstance(
-        draw.slot,
-        record,
-        instanceWords(draw, record.variant!, joint ? record.overlay : null, link),
-      );
+      const variant = record.variant!;
+      const overlay = joint ? record.overlay : null;
+      const inputs = record.inputs;
+      if (
+        inputs !== null &&
+        record.instance !== null &&
+        inputs.draw === draw &&
+        inputs.variant === variant &&
+        inputs.overlay === overlay &&
+        inputs.link === link &&
+        inputs.arena === this.#arenaReplacements
+      ) {
+        continue;
+      }
+      this.#writeInstance(draw.slot, record, instanceWords(draw, variant, overlay, link));
+      record.inputs = Object.freeze({
+        draw,
+        variant,
+        overlay,
+        link,
+        arena: this.#arenaReplacements,
+      });
     }
     // Read placements only after every draw is placed: a repack moves earlier variants.
     const placements = new Map<string, { firstTriangle: number; triangleCount: number }>();

@@ -372,7 +372,14 @@ type PathFrame = Readonly<{
     items: readonly Evaluated[];
     entries: readonly MeshEntry[];
     draws: readonly PathMeshDraw[];
+    /** E26-U5d-2: the joint overlay variant of a joint fill draw, held by the fill entry. */
+    overlay: OverlayVariant | null;
   }> | null;
+  /**
+   * E26-U5d-2: a path that failed on a memoized port failure, with no state code: its paints'
+   * evaluations, replayed against the mesh lookup and the memo (`#failsAgain`).
+   */
+  failed?: readonly Evaluated[];
 }>;
 type BucketCacheEntry = Readonly<{
   lanes: PathLinearMap;
@@ -493,6 +500,25 @@ export class PathMeshPipeline {
   #lastRevisions: ReadonlyMap<string, number> = new Map();
   #reuse = true;
   #reusedPaths = 0;
+  /**
+   * E26 contract, U5d-2: the last prepare's draws, when every path in it served its kept outcome
+   * (or was hidden) and its bounded eviction removed nothing. The cache is then as each kept
+   * outcome's residency check found it, so the same paths array, port readings and frame key
+   * serve every path's kept outcome again, in the same order: the same draws.
+   */
+  #lastFrame: Readonly<{
+    paths: readonly DerivedPath[];
+    readingsKey: string;
+    frameKey: string;
+    draws: readonly PathMeshDraw[];
+    entries: readonly MeshEntry[];
+    overlays: readonly OverlayVariant[];
+    /** Kept memoized failures, replayed every frame (`#failsAgain`). */
+    failures: readonly PathFrame[];
+    kept: number;
+  }> | null = null;
+  /** Entries, variants and overlays removed by eviction, trimming and sweeps, so far. */
+  #removals = 0;
 
   static {
     injectNoReuse = (pipeline) => {
@@ -589,6 +615,29 @@ export class PathMeshPipeline {
       input.packing.frameFinite,
       readingsKey,
     ].join('|');
+    const last = this.#lastFrame;
+    this.#lastFrame = null;
+    if (
+      this.#reuse &&
+      last !== null &&
+      last.paths === input.paths &&
+      last.readingsKey === readingsKey &&
+      last.frameKey === frameKey &&
+      last.failures.every((failure) =>
+        this.#failsAgain(failure.path, failure.revision, failure.failed!, readings, now),
+      )
+    ) {
+      for (const entry of last.entries) entry.lastServed = now;
+      for (const overlay of last.overlays) overlay.lastServed = now;
+      this.#reusedPaths += last.kept;
+      const removals = this.#removals;
+      this.#finishFrame(new Set(last.entries), now);
+      if (this.#removals === removals) this.#lastFrame = last;
+      return last.draws;
+    }
+    let allKept = true;
+    let keptCount = 0;
+    const failures: PathFrame[] = [];
     const culled = (path: DerivedPath, revision: number) => {
       if (this.#reuse) {
         this.#pathFrames.set(path.id, Object.freeze({ path, revision, frameKey, drawn: null }));
@@ -607,12 +656,20 @@ export class PathMeshPipeline {
         kept.path === path &&
         kept.revision === revision &&
         kept.frameKey === frameKey &&
-        (kept.drawn === null || this.#resident(path.id, kept.drawn))
+        (kept.failed !== undefined
+          ? this.#failsAgain(path, revision, kept.failed, readings, now)
+          : kept.drawn === null || this.#resident(path.id, kept.drawn))
       ) {
         // A drawn outcome records the null states its evaluation recorded, which clear a state a
         // frame under other inputs set since (a port-version, say); a culled one records none.
         this.#reusedPaths += 1;
-        if (kept.drawn !== null) {
+        keptCount += 1;
+        if (kept.failed !== undefined) {
+          frameStates.set(stateKey(path.id, null), null);
+          for (const item of kept.failed) frameStates.set(stateKey(path.id, item.paint), null);
+          for (const item of kept.failed) this.#currentE[item.paint].set(path.id, item.e);
+          failures.push(kept);
+        } else if (kept.drawn !== null) {
           frameStates.set(stateKey(path.id, null), null);
           for (const item of kept.drawn.items) frameStates.set(stateKey(path.id, item.paint), null);
           for (const item of kept.drawn.items) this.#currentE[item.paint].set(path.id, item.e);
@@ -622,6 +679,7 @@ export class PathMeshPipeline {
       }
       // Evaluated afresh: the kept outcome goes, so it holds no entry the budget has evicted. A
       // clean outcome of this evaluation is kept again below.
+      allKept = false;
       this.#pathFrames.delete(path.id);
       // B2 section 9.2: the fill is V3's drawable paint; the stroke is drawable with a stroke,
       // width > 0 and stroke world bounds meeting the viewport. A path is culled only when
@@ -730,7 +788,22 @@ export class PathMeshPipeline {
         if (dashed !== null && dashed.verbs.length === 0) this.#publish(request, null);
         else requests.push(request);
       }
-      if (failed) continue;
+      if (failed) {
+        // U5d-2: with no state code, every paint was evaluated and the failure is memoized.
+        if (this.#reuse && items.length === drawable.length) {
+          const failure: PathFrame = Object.freeze({
+            path,
+            revision,
+            frameKey,
+            drawn: null,
+            failed: Object.freeze(items),
+          });
+          this.#pathFrames.set(path.id, failure);
+          failures.push(failure);
+        }
+        // The frame evaluated this path afresh, so it serves no next frame; the one after does.
+        continue;
+      }
       for (const request of requests) missing[request.key.paint].push(request);
       evaluated.push(Object.freeze({ path, items: Object.freeze(items) }));
     }
@@ -747,12 +820,36 @@ export class PathMeshPipeline {
     // Step 8: serve meshes and fringe variants in paint order, then pack the section f lanes.
     const draws: PathMeshDraw[] = [];
     const working = new Set<MeshEntry>();
+    const overlays: OverlayVariant[] = [];
     const { origin, frameFinite } = input.packing;
+    // E26-U5c: a clean outcome is kept for the next prepare; U5d-2 keeps a joint fill one too.
+    const keep = (
+      path: DerivedPath,
+      items: readonly Evaluated[],
+      entries: readonly MeshEntry[],
+      pathDraws: readonly PathMeshDraw[],
+      overlay: OverlayVariant | null,
+    ) => {
+      if (!this.#reuse) return;
+      this.#pathFrames.set(
+        path.id,
+        Object.freeze({
+          path,
+          revision: revisions.get(path.id)!,
+          frameKey,
+          drawn: Object.freeze({ items, entries, draws: Object.freeze([...pathDraws]), overlay }),
+        }),
+      );
+    };
     for (const { path, items, kept } of evaluated) {
       if (kept !== undefined && kept.drawn !== null) {
         for (const entry of kept.drawn.entries) {
           entry.lastServed = now;
           working.add(entry);
+        }
+        if (kept.drawn.overlay !== null) {
+          kept.drawn.overlay.lastServed = now;
+          overlays.push(kept.drawn.overlay);
         }
         draws.push(...kept.drawn.draws);
         continue;
@@ -784,35 +881,22 @@ export class PathMeshPipeline {
       const opacity = path.node.opacity;
       if (path.maskSource !== true && pathDraws.length === 2 && opacity > 0 && opacity < 1) {
         const fillEntry = entries[0]!;
-        const overlay = this.#serveOverlay(path.id, fillEntry, entries[1]!, pathDraws, now);
-        if (overlay === null) continue;
+        const served = this.#serveOverlay(path.id, fillEntry, entries[1]!, pathDraws, now);
+        if (served === null) continue;
         const joint: PathMeshDraw = Object.freeze({
           ...pathDraws[0]!,
           composite: 'joint-fill' as const,
-          overlay,
+          overlay: served.overlay,
         });
-        draws.push(
-          ...(this.#seededDefect === 'ST7-D8' ? [pathDraws[1]!, joint] : [joint, pathDraws[1]!]),
-        );
+        const jointDraws =
+          this.#seededDefect === 'ST7-D8' ? [pathDraws[1]!, joint] : [joint, pathDraws[1]!];
+        draws.push(...jointDraws);
+        overlays.push(served.variant);
+        keep(path, items, entries as MeshEntry[], jointDraws, served.variant);
         continue;
       }
       draws.push(...pathDraws);
-      // E26-U5c: a clean outcome without a joint fill draw is kept for the next prepare.
-      if (this.#reuse) {
-        this.#pathFrames.set(
-          path.id,
-          Object.freeze({
-            path,
-            revision: revisions.get(path.id)!,
-            frameKey,
-            drawn: Object.freeze({
-              items,
-              entries: entries as MeshEntry[],
-              draws: Object.freeze(pathDraws),
-            }),
-          }),
-        );
-      }
+      keep(path, items, entries as MeshEntry[], pathDraws, null);
     }
 
     // State-failure notices on (node, paint, code) transitions only.
@@ -827,15 +911,59 @@ export class PathMeshPipeline {
       }
     }
 
-    // Step 9: bounded eviction. Overlay variants whose parent variant is gone are unreachable
-    // and dropped first (ST-U7 addendum, section 4.6); evicting a fill entry drops its overlays.
+    const removals = this.#removals;
+    this.#finishFrame(working, now);
+    const served = Object.freeze(draws);
+    if (this.#reuse && allKept && this.#removals === removals) {
+      this.#lastFrame = Object.freeze({
+        paths: input.paths,
+        readingsKey,
+        frameKey,
+        draws: served,
+        entries: Object.freeze([...working]),
+        overlays: Object.freeze(overlays),
+        failures: Object.freeze(failures),
+        kept: keptCount,
+      });
+    }
+    return served;
+  }
+
+  /**
+   * Step 9: bounded eviction. Overlay variants whose parent variant is gone are unreachable and
+   * dropped first (ST-U7 addendum, section 4.6); evicting a fill entry drops its overlays.
+   */
+  #finishFrame(working: ReadonlySet<MeshEntry>, now: number): void {
     this.#sweepOverlays();
     this.#peakBytes = Math.max(this.#peakBytes, this.#totalBytes());
     this.#trimToleranceVariants(working);
     this.#evictToBudget(working);
     this.#sweepOverlays();
     this.#evictMemo(now);
-    return Object.freeze(draws);
+  }
+
+  /** E26-U5d-2: whether a kept memoized failure fails again in this prepare. */
+  #failsAgain(
+    path: DerivedPath,
+    revision: number,
+    items: readonly Evaluated[],
+    readings: Record<PathPaint, PortReading | undefined>,
+    now: number,
+  ): boolean {
+    // The evaluation's mesh lookups and memo consultations, in its paint order: a paint with a
+    // resident mesh consults nothing, a missing one consults the memo. A paint that would request
+    // a mesh ends the replay, and the path is evaluated afresh; a consultation repeated by that
+    // evaluation in the same prepare has the same result and the same stamp.
+    let failed = false;
+    for (const item of items) {
+      if (this.#lookup(item.paint, path.id, item.e) !== undefined) continue;
+      const port = readings[item.paint];
+      if (port === undefined || !port.ok) return false;
+      const key = pathPaintKey(path, item.paint)!;
+      if (!this.#consultMemo(path.id, revision, key, item.e, port.operationId, now)) return false;
+      failed = true;
+    }
+    return failed;
   }
 
   /**
@@ -843,6 +971,9 @@ export class PathMeshPipeline {
    * would be served from, in the same slots.
    */
   #resident(nodeId: string, drawn: NonNullable<PathFrame['drawn']>): boolean {
+    // U5d-2: a joint fill draw's overlay is still held by its fill entry. A held overlay is the
+    // one #serveOverlay finds: overlays are unique by their variant ids and never change them.
+    if (drawn.overlay !== null && !drawn.entries[0]!.overlays.includes(drawn.overlay)) return false;
     for (let index = 0; index < drawn.items.length; index += 1) {
       const item = drawn.items[index]!;
       if (this.#lookup(item.paint, nodeId, item.e) !== drawn.entries[index]) return false;
@@ -979,6 +1110,7 @@ export class PathMeshPipeline {
     this.#slotIds = [];
     this.#notices = [];
     this.#pathFrames.clear();
+    this.#lastFrame = null;
     this.#lastPaths = null;
     this.#lastReadings = null;
     this.#lastRevisions = new Map();
@@ -1449,7 +1581,10 @@ export class PathMeshPipeline {
     strokeEntry: MeshEntry,
     pathDraws: readonly PathMeshDraw[],
     now: number,
-  ): Readonly<{ id: symbol; data: JointOverlay }> | null {
+  ): Readonly<{
+    overlay: Readonly<{ id: symbol; data: JointOverlay }>;
+    variant: OverlayVariant;
+  }> | null {
     const [fillDraw, strokeDraw] = pathDraws as readonly [PathMeshDraw, PathMeshDraw];
     const fillVariant = fillDraw.fringe?.id ?? null;
     const strokeVariant = strokeDraw.fringe?.id ?? null;
@@ -1504,7 +1639,10 @@ export class PathMeshPipeline {
     overlay.lastServed = now;
     return overlay.built === null
       ? null
-      : Object.freeze({ id: overlay.built.id, data: overlay.built.overlay });
+      : Object.freeze({
+          overlay: Object.freeze({ id: overlay.built.id, data: overlay.built.overlay }),
+          variant: overlay,
+        });
   }
 
   /** At most overlayVariantsPerNode overlay variants per node; least recently served first. */
@@ -1521,6 +1659,7 @@ export class PathMeshPipeline {
         .sort((left, right) => left.overlay.lastServed - right.overlay.lastServed)[0];
       if (victim === undefined) return;
       victim.entry.overlays = victim.entry.overlays.filter((overlay) => overlay !== victim.overlay);
+      this.#removals += 1;
     }
   }
 
@@ -1539,6 +1678,7 @@ export class PathMeshPipeline {
         for (const variant of entry.variants.values()) {
           if (variant !== 'unsupported') fillVariants.add(variant.id);
         }
+        const before = entry.overlays.length;
         entry.overlays = entry.overlays.filter((overlay) => {
           const stroke =
             strokeEntries === undefined
@@ -1556,6 +1696,7 @@ export class PathMeshPipeline {
           if (!reachable) dropped += overlay.built?.bytes ?? 0;
           return reachable;
         });
+        if (entry.overlays.length !== before) this.#removals += 1;
       }
     }
     return dropped;
@@ -1603,6 +1744,7 @@ export class PathMeshPipeline {
             )[0];
           if (victim === undefined) break;
           nodeCache.entries.delete(victim.e);
+          this.#removals += 1;
           this.#evictions += 1;
         }
       }
@@ -1633,6 +1775,7 @@ export class PathMeshPipeline {
       const nodeCache = this.#cache[paint].get(nodeId)!;
       nodeCache.entries.delete(entry.e);
       if (nodeCache.entries.size === 0) this.#cache[paint].delete(nodeId);
+      this.#removals += 1;
       bytes -= entryBytes(entry);
       this.#evictions += 1;
       // Evicting a stroke parent evicts the overlays that reference it (ST-U7, section 4.6).
