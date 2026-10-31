@@ -1,5 +1,11 @@
 import type { RenderNodeSnapshot } from '@vector-studio/contracts';
 import { describe, expect, it } from 'vitest';
+import { PathMeshPipeline } from '../../packages/renderer-core/src/path-mesh-pipeline.js';
+import {
+  PrimitiveSceneSource,
+  useFullDerivationForTesting,
+} from '../../packages/renderer-core/src/primitive-scene-source.js';
+import { RetainedSceneMirror } from '../../packages/renderer-core/src/scene-mirror.js';
 import {
   ClipStateTable,
   MaskLevelMemo,
@@ -17,7 +23,13 @@ import {
   createStrokeHarness,
   strokedNode,
 } from '../support/st-u6-stroke-harness.js';
-import { createFailingPort, pathNode } from '../support/v3a-path-harness.js';
+import {
+  createCountingPort,
+  createFailingPort,
+  createPathHarness,
+  pathNode,
+  target,
+} from '../support/v3a-path-harness.js';
 
 // E26 contract (docs/plans/d9-e26-pointer-priority-contract.md), section 4.4.1, U5d-2: per-draw
 // work on unchanged frames. The path mesh pipeline serves the last prepare's draws again when
@@ -120,6 +132,36 @@ describe('E26 U5d-2: the path pipeline on unchanged frames', () => {
     }
   });
 
+  it("stamps a served frame's entries, so the byte budget evicts as the twin does", () => {
+    // Two 152-byte entries fit the budget. Path b is served alone for ten frames while path a's
+    // entry ages; a zoom onto a then needs a third entry, and the budget must evict a's old entry,
+    // not b's (which an unstamped served frame would leave older).
+    const run = (reuse: boolean) => {
+      const port = createCountingPort();
+      const h = createPathHarness({
+        port,
+        nodes: [pathNode('a', 0), pathNode('b', 300)],
+        limits: { byteBudget: 304 },
+      });
+      if (!reuse) disablePathReuseForTesting(h.pipeline);
+      const log: unknown[] = [];
+      const frame = () => log.push([h.drawnIds(), port.callCount, h.statistics().evictions]);
+      h.setZoom(1, { x: -10, y: -10 });
+      for (let index = 0; index < 3; index += 1) frame();
+      h.setZoom(1, { x: 250, y: -10 });
+      for (let index = 0; index < 10; index += 1) frame();
+      h.setZoom(4, { x: -2, y: -2 });
+      frame();
+      h.setZoom(1, { x: 250, y: -10 });
+      frame();
+      return { log, calls: port.callCount };
+    };
+    const kept = run(true);
+    expect(kept).toEqual(run(false));
+    // b's entry stayed resident: returning to it called no port.
+    expect(kept.calls).toBe(2);
+  });
+
   it('keeps a joint fill outcome only while its overlay is held', () => {
     const on = harness(true);
     observe(on);
@@ -208,4 +250,108 @@ describe('E26 U5d-2: clip states and mask levels', () => {
     // A changed parent record changes the child's record too.
     expect(resourced[1]).not.toBe(moved[1]);
   });
+});
+
+describe('E26 U5d-2: mask source results', () => {
+  const sourceAt = (kind: 'primitive' | 'path', x: number, fillRule: 'nonzero' | 'evenodd') =>
+    kind === 'primitive'
+      ? ({
+          id: 'src',
+          parentId: 'm',
+          transform: [1, 0, 0, 1, x, 0],
+          visible: true,
+          opacity: 1,
+          kind: 'primitive',
+          geometry: { kind: 'rectangle', width: 200, height: 200, cornerRadii: [0, 0, 0, 0] },
+          style: { fill: { r: 1, g: 0, b: 0, a: 1 }, stroke: null },
+        } as RenderNodeSnapshot)
+      : pathNode('src', 0, {
+          parentId: 'm',
+          transform: [1, 0, 0, 1, x, 0],
+          fillRule,
+          points: [0, 0, 200, 0, 0, 200],
+        });
+  const content: RenderNodeSnapshot = {
+    ...pathNode('content', 0, { parentId: 'm', points: [10, 10, 60, 10, 10, 60] }),
+  };
+  const mask: RenderNodeSnapshot = {
+    id: 'm',
+    parentId: null,
+    transform: [1, 0, 0, 1, 0, 0],
+    visible: true,
+    opacity: 1,
+    kind: 'container',
+    clip: { kind: 'mask' },
+    children: ['src', 'content'],
+  };
+
+  for (const kind of ['primitive', 'path'] as const) {
+    it(`builds a ${kind} source's key afresh when its transform or fill rule changes`, () => {
+      const make = (twin: boolean) => {
+        const mirror = new RetainedSceneMirror(undefined, {
+          pathNodes: 'supported',
+          pathFills: 'supported',
+          clips: 'supported',
+        });
+        const source = new PrimitiveSceneSource(
+          mirror,
+          new PathMeshPipeline({ port: createCountingPort() }),
+        );
+        if (twin) useFullDerivationForTesting(source);
+        mirror.replaceSnapshot({
+          identity: { documentId: 'u5d2', pageId: 'page' },
+          revision: 1,
+          nodes: [mask, sourceAt(kind, 0, 'nonzero'), content],
+          rootOrder: ['m'],
+        });
+        mirror.setCamera({ position: { x: -5, y: -5 }, zoom: 1 });
+        return { mirror, source };
+      };
+      const runs = [make(false), make(true)];
+      // Each step: the source's x, its fill rule, and the mask container's x (which moves the
+      // source's world while the source node stays the same object).
+      const steps: Array<[number, 'nonzero' | 'evenodd', number]> = [
+        [0, 'nonzero', 0],
+        [0, 'nonzero', 0],
+        [0.5, 'nonzero', 0],
+        [0.5, 'nonzero', 0],
+        [0.5, 'evenodd', 0],
+        [0.5, 'evenodd', 0],
+        [0.5, 'evenodd', 0.25],
+        [0.5, 'evenodd', 0.25],
+      ];
+      let revision = 1;
+      let last = steps[0]!;
+      const keys: string[] = [];
+      for (const step of steps) {
+        const [x, fillRule, maskX] = step;
+        const updated: RenderNodeSnapshot[] = [];
+        if (x !== last[0] || fillRule !== last[1]) updated.push(sourceAt(kind, x, fillRule));
+        if (maskX !== last[2]) updated.push({ ...mask, transform: [1, 0, 0, 1, maskX, 0] });
+        last = step;
+        if (updated.length > 0) {
+          for (const { mirror } of runs) {
+            const result = mirror.applyChanges({
+              identity: { documentId: 'u5d2', pageId: 'page' },
+              revision: revision + 1,
+              baseRevision: revision,
+              inserted: [],
+              updated,
+              removed: [],
+              orders: [],
+            });
+            expect(result.status).toBe('applied');
+          }
+          revision += 1;
+        }
+        const [left, right] = runs.map(({ source }) => source.prepare(target)?.clip?.masks);
+        expect(left).toEqual(right);
+        keys.push(left![0]!.key);
+      }
+      // The move changes the key; for a path source, so does the fill rule.
+      expect(keys[2]).not.toBe(keys[1]);
+      if (kind === 'path') expect(keys[4]).not.toBe(keys[3]);
+      expect(keys[6]).not.toBe(keys[5]);
+    });
+  }
 });

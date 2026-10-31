@@ -272,8 +272,9 @@ type SlotRecord = {
   instance: number[] | null;
   /**
    * E26 contract, U5d-2: the inputs of `instance`. The words are a function of the draw, the
-   * variant, the overlay and the link, and the arena replacement count stands for the bases a
-   * replacement moves, so equal inputs give equal words and the comparison is skipped.
+   * variant, the overlay and the link, so equal inputs give equal words and `#writeInstance`
+   * would return early. The arena replacement count is defensive: a replacement moves the bases,
+   * and it also rewrites `instance` itself.
    */
   inputs: Readonly<{
     draw: PathMeshDraw;

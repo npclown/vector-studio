@@ -800,9 +800,8 @@ export class PathMeshPipeline {
           });
           this.#pathFrames.set(path.id, failure);
           failures.push(failure);
-        } else {
-          allKept = false;
         }
+        // The frame evaluated this path afresh, so it serves no next frame; the one after does.
         continue;
       }
       for (const request of requests) missing[request.key.paint].push(request);
@@ -943,10 +942,7 @@ export class PathMeshPipeline {
     this.#evictMemo(now);
   }
 
-  /**
-   * E26-U5c: whether a kept outcome's entries and fringe variants are still the ones its paints
-   * would be served from, in the same slots.
-   */
+  /** E26-U5d-2: whether a kept memoized failure fails again in this prepare. */
   #failsAgain(
     path: DerivedPath,
     revision: number,
@@ -970,6 +966,10 @@ export class PathMeshPipeline {
     return failed;
   }
 
+  /**
+   * E26-U5c: whether a kept outcome's entries and fringe variants are still the ones its paints
+   * would be served from, in the same slots.
+   */
   #resident(nodeId: string, drawn: NonNullable<PathFrame['drawn']>): boolean {
     // U5d-2: a joint fill draw's overlay is still held by its fill entry. A held overlay is the
     // one #serveOverlay finds: overlays are unique by their variant ids and never change them.
