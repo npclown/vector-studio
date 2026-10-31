@@ -372,6 +372,14 @@ describe('M6c-U3 placed DOM cluster arithmetic (src/m6c-text-reference.ts)', () 
     expect(() => reference.locatePiece(pieces, 1, 4)).toThrow();
   });
 
+  it('gives a cluster in the text of its piece, before and after it (M6c-U3 follow-up)', () => {
+    const runs = [{ text: 'Ty.\nab' }, { text: '한.' }];
+    expect(reference.clusterContext(runs, 2, 3)).toEqual({ before: 'Ty', text: '.', after: '' });
+    expect(reference.clusterContext(runs, 4, 5)).toEqual({ before: '', text: 'a', after: 'b' });
+    expect(reference.clusterContext(runs, 7, 8)).toEqual({ before: '한', text: '.', after: '' });
+    expect(() => reference.clusterContext(runs, 3, 4)).toThrow();
+  });
+
   it('groups flowed clusters into lines by baseline and LF', () => {
     expect(
       reference.flowedLines([

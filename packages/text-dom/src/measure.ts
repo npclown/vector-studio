@@ -230,7 +230,7 @@ export function createMeasurer(document: Document, lang: string): Measurer {
     const { keys, firsts } = planAscents(request, fontLists);
     target.style.setProperty('white-space', 'pre');
     const samples = firsts.map((index) => {
-      const span = runSpan(document, request, fontLists, index);
+      const span = runSpan(document, request, fontLists, index, lang);
       const text = document.createTextNode(SENTINEL);
       const marker = probe('baseline');
       span.append(text, marker);
@@ -261,7 +261,7 @@ export function createMeasurer(document: Document, lang: string): Measurer {
         const ascents = measureAscents(target, range, request, fontLists);
         // Pass 1 restores the block style that the ascents' `white-space: pre` replaced.
         target.style.cssText = `${BLOCK_STYLE}; width: ${width}`;
-        const tree = buildRunTree(document, request, fontLists);
+        const tree = buildRunTree(document, request, fontLists, lang);
         const { texts, runStarts, textLength } = tree;
         target.replaceChildren(
           ...tree.elements,

@@ -17,11 +17,11 @@ const freeze = (declarations: (readonly [string, string])[]): StyleDeclarations 
  * The block's own declarations after `all: initial` and `display: block`: it resets every
  * inherited property but `direction` and `unicode-bidi`, which are set explicitly. `font-size: 0`
  * is the zero-size strut (M6a-Q2): sizes, letter spacing and line height are set on the run spans.
- * The block is laid out start-aligned; text-dom applies M6a-L1's alignment itself. Disclosed
- * (M6c-U3, contract U3 notes): in Chromium `all: initial` also resets `-webkit-locale`, the style
- * the block's `lang` attribute sets, and the run spans' `unicode-bidi: bidi-override` drops a
- * locale's `locl` forms as well, so text-dom shapes with the font's default forms, while the
- * canvas glyph raster port draws each cluster with the context's `lang`. Kept as M6a measures.
+ * The block is laid out start-aligned; text-dom applies M6a-L1's alignment itself. In Chromium
+ * the block's `all: initial` also resets `-webkit-locale`, the style the block's own `lang`
+ * attribute sets, so every run span carries the `lang` attribute itself (tree.ts `runSpan`;
+ * M6c-U3 follow-up, contract U3 notes): the text then shapes with the locale's `locl` forms, as
+ * the canvas glyph raster port draws each cluster with the context's `lang`.
  */
 const BLOCK_TYPOGRAPHY: readonly (readonly [string, string])[] = [
   ['direction', 'ltr'],
@@ -91,7 +91,7 @@ export function cssText(declarations: StyleDeclarations): string {
 
 export type ReferenceStyleInput = RunStyle &
   Readonly<{
-    /** The layout's `lang` (BCP 47 by E28-S1's syntax), set as the block's `lang` attribute. */
+    /** The layout's `lang` (BCP 47 by E28-S1's syntax), the block's and each span's `lang`. */
     lang: string;
   }>;
 
@@ -100,7 +100,8 @@ export type ReferenceStyleInput = RunStyle &
  * reset of the element the block's shadow root hangs from (`all: initial`, first; the caller adds
  * its own position and size), `block` the measurement block's declarations without `visibility:
  * hidden` (`all: initial` first; the caller adds its own position, width and paint), `lang` the
- * block's `lang` attribute (set as text-dom sets it; see `BLOCK_TYPOGRAPHY` on its effect), `run` a
+ * `lang` attribute of the block and of every span (as text-dom sets them: the block's own is
+ * reset by its `all: initial`, so the spans' give the locale; see `BLOCK_TYPOGRAPHY`), `run` a
  * run span's declarations at `size`, and `text` those of a span that holds text between LFs (`run`
  * plus `direction: ltr; unicode-bidi: bidi-override`). The run tree puts every span directly in
  * the block, an LF in a span of its own with `run`. Throws `TypeError` for a style no measurement

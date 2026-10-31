@@ -17,6 +17,7 @@ import { buildRunTree, runSpan } from '../../packages/text-dom/src/tree.js';
 
 /** A node tree just large enough for `buildRunTree` and `runSpan`. */
 class FakeElement {
+  lang = '';
   readonly properties = new Map<string, string>();
   readonly children: unknown[] = [];
   readonly style = {
@@ -59,8 +60,9 @@ describe('M6c-U3 reference style export (M6c-Q6 (a))', () => {
       letterSpacing: -0.2,
       lineHeight: 1.5,
     });
-    const span = runSpan(fakeDocument, request(-0.2, 1.5), ['"A", sans-serif', '"B"'], 0);
+    const span = runSpan(fakeDocument, request(-0.2, 1.5), ['"A", sans-serif', '"B"'], 0, 'ko');
     expect(entries(span)).toEqual(style.run);
+    expect((span as unknown as FakeElement).lang).toBe(style.lang);
     expect(style.run).toEqual([
       ['font-family', '"A", sans-serif'],
       ['font-size', '24px'],
@@ -71,7 +73,7 @@ describe('M6c-U3 reference style export (M6c-Q6 (a))', () => {
 
   it('gives the text declarations of a run tree span that holds text, and LF spans the run ones', () => {
     const fontLists = ['"A", sans-serif', '"B", serif'];
-    const tree = buildRunTree(fakeDocument, request(0.3, 1.2), fontLists);
+    const tree = buildRunTree(fakeDocument, request(0.3, 1.2), fontLists, 'ko');
     // 'Ab' | LF | 'c' of run 0, then '한' of run 1.
     const [ab, lf, c, han] = tree.elements;
     const run0 = referenceStyle({
@@ -92,10 +94,26 @@ describe('M6c-U3 reference style export (M6c-Q6 (a))', () => {
     expect(entries(c)).toEqual(run0.text);
     expect(entries(lf)).toEqual(run0.run);
     expect(entries(han)).toEqual(run1.text);
+    // Every span carries the layout's `lang` itself (M6c-U3 follow-up): the block's
+    // `all: initial` resets the locale its own `lang` attribute sets, so only a span's own
+    // attribute reaches shaping, and with it the font's `locl` forms the glyph raster port draws.
+    for (const span of tree.elements) expect((span as unknown as FakeElement).lang).toBe('ko');
     expect(run0.text.slice(-2)).toEqual([
       ['direction', 'ltr'],
       ['unicode-bidi', 'bidi-override'],
     ]);
+  });
+
+  it('puts the lang on the sentinel span too', () => {
+    const tree = buildRunTree(
+      fakeDocument,
+      { ...request(0, 1.2), runs: [{ text: 'a\n', family: 'A', size: 10 }] },
+      ['"A"'],
+      'ja',
+    );
+    expect(tree.sentinel).not.toBeNull();
+    expect((tree.sentinel as unknown as FakeElement).lang).toBe('ja');
+    for (const span of tree.elements) expect((span as unknown as FakeElement).lang).toBe('ja');
   });
 
   it('gives the measurement block typography, visible, and the measurement block uses it', () => {

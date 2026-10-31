@@ -1,5 +1,9 @@
 import type { Editor } from '@vector-studio/editor-core';
-import { referenceStyle, type StyleDeclarations } from '@vector-studio/text-dom';
+import {
+  referenceStyle,
+  type ReferenceStyle,
+  type StyleDeclarations,
+} from '@vector-studio/text-dom';
 import {
   clusterPlacements,
   probeHostSize,
@@ -16,9 +20,10 @@ import {
 // exist only here. Every style comes from text-dom's `referenceStyle`, the declarations its
 // measurement block and run spans are built from, so the reference cannot drift from what
 // text-dom measures.
-// - `reference(id, index)`: the placed DOM cluster. The cluster alone in its own visible span at
-//   the displayed size, in a white box over the page at the viewport origin, which is where the
-//   probe's canvas lies, so a viewport device pixel is a probe frame pixel. The span is moved
+// - `reference(id, index)`: the placed DOM cluster. The cluster alone painted, shaped in its text
+//   piece (the rest transparent) at the displayed size, in a white box over the page at the
+//   viewport origin, which is where the probe's canvas lies, so a viewport device pixel is a probe
+//   frame pixel. The block is moved
 //   until its pen origin (the left of the cluster's text rect) reads back on the target pen and
 //   its baseline (a zero-size baseline-aligned probe, as text-dom reads baselines) on the snapped
 //   corner row `P.y` (`PlacedTarget`); the residual is returned. The page cannot read its own DOM pixels, so the
@@ -140,6 +145,26 @@ export function locatePiece(
   );
   if (index === -1) throw new Error(`No text piece holds [${start}, ${end}).`);
   return { piece: index, local: start - pieces[index]!.start };
+}
+
+/**
+ * The cluster `[start, end)` of `runs` in the text of its piece: the piece's text before it, its
+ * own text and the text after it, as text-dom's run tree shapes the cluster.
+ */
+export function clusterContext(
+  runs: readonly Readonly<{ text: string }>[],
+  start: number,
+  end: number,
+): Readonly<{ before: string; text: string; after: string }> {
+  const pieces = textPieces(runs);
+  const { piece, local } = locatePiece(pieces, start, end);
+  const text = pieces[piece]!.text;
+  const length = end - start;
+  return {
+    before: text.slice(0, local),
+    text: text.slice(local, local + length),
+    after: text.slice(local + length),
+  };
 }
 
 /**
@@ -274,6 +299,18 @@ function createHost(
   return { host, root };
 }
 
+/**
+ * A span in `declarations` (`style.run` or `style.text`) with the layout's `lang` as its own
+ * attribute, as text-dom's run spans: the block's `all: initial` resets the locale its own `lang`
+ * sets, so only the span's attribute gives the locale's `locl` forms.
+ */
+function styledSpan(style: ReferenceStyle, declarations: StyleDeclarations): HTMLElement {
+  const span = document.createElement('span');
+  span.lang = style.lang;
+  apply(span, declarations);
+  return span;
+}
+
 function baselineProbe(): HTMLElement {
   const probe = document.createElement('span');
   probe.style.cssText = PROBE_STYLE;
@@ -341,11 +378,32 @@ export function placeReference(
     ['top', '0px'],
     ['color', '#000000'],
   ]);
-  const span = document.createElement('span');
-  apply(span, style.text);
+  // The cluster in its text piece, as text-dom's run tree shapes it (M6c-U3 follow-up): the
+  // piece's span is transparent and only the cluster's own span, nested without a bidi override
+  // so the piece still shapes as one, is painted. Alone in an override span, a cluster of
+  // Common-script characters only (`.`, digits, spaces) shaped without the locale's `locl`
+  // forms in Chromium, which text-dom's measurement in context and the raster port both use.
+  const layout = editor.query({ type: 'textLayout', id });
+  const cluster = layout?.clusters[index];
+  if (cluster === undefined) throw new Error(`${id} has no laid-out cluster ${index}.`);
+  const context = clusterContext(node.runs, cluster.start, cluster.end);
+  if (context.text !== placement.text) {
+    throw new Error(`Cluster ${index} of ${id} is not the placement's text.`);
+  }
+  apply(block, [['width', 'max-content']]);
+  const span = styledSpan(style, style.text);
+  span.style.setProperty('color', 'transparent');
+  const inner = document.createElement('span');
+  inner.style.setProperty('color', '#000000');
   const text = document.createTextNode(placement.text);
+  inner.append(text);
   const probe = baselineProbe();
-  span.append(text, probe);
+  span.append(
+    document.createTextNode(context.before),
+    inner,
+    document.createTextNode(context.after),
+    probe,
+  );
   block.append(span);
   root.append(block);
   const { clip, rect } = referenceClip(placement.bound, dpr, size);
@@ -447,8 +505,7 @@ export function flowedReference(editor: Editor, id: string): FlowedReference {
     node.runs.forEach((run, index) => {
       const key = runKey(layout.fontLists[index]!, run.size);
       if (pending.some(([seen]) => seen === key)) return;
-      const span = document.createElement('span');
-      apply(span, styleOf(index).text);
+      const span = styledSpan(styleOf(index), styleOf(index).text);
       const text = document.createTextNode(SENTINEL);
       const probe = baselineProbe();
       span.append(text, probe);
@@ -464,8 +521,8 @@ export function flowedReference(editor: Editor, id: string): FlowedReference {
     ]);
     const pieces = textPieces(node.runs);
     const texts = pieces.map((piece) => {
-      const span = document.createElement('span');
-      apply(span, piece.lf ? styleOf(piece.run).run : styleOf(piece.run).text);
+      const style = styleOf(piece.run);
+      const span = styledSpan(style, piece.lf ? style.run : style.text);
       const text = document.createTextNode(piece.text);
       span.append(text);
       block.append(span);
@@ -551,8 +608,7 @@ export function minimumFontSize(fontList: string): MinimumFontSize {
       const block = document.createElement('div');
       apply(block, style.block);
       block.style.setProperty('width', 'max-content');
-      const span = document.createElement('span');
-      apply(span, style.text);
+      const span = styledSpan(style, style.text);
       span.append(document.createTextNode('Vector 한글 Studio'));
       block.append(span);
       root.append(block);
