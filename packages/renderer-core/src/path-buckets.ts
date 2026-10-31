@@ -189,7 +189,7 @@ export function computePathBuckets(
 
 /**
  * E26-U5d-3: what a path's buckets need to be checked at another zoom or DPR without the exact
- * computation: |L|_F^2 and (det L)^2, formed exactly and rounded once to Float64, and the exact
+ * computation: |L|_F^2 and (det L)^2, formed exactly and rounded to Float64 within 1 ulp, and the exact
  * buckets they were found with.
  */
 export type BucketHint = Readonly<{
@@ -225,7 +225,8 @@ export function bucketHint(linear: PathLinearMap, buckets: PathBuckets): BucketH
  * (sigmaMax^2 = (F + sqrt(F^2 - 4 D^2)) / 2, sigmaMin^2 = D^2 / sigmaMax^2). Their relative error is
  * below 2e-7 (the square root's argument loses at most about 8 ulp of F^2, which moves the root by
  * at most sqrt(8 eps) F), so each value must clear its interval by the 1e-6 margin. The
- * orientation and the f32 check do not depend on s. The buckets served are the hint's own object,
+ * orientation and the f32 check do not depend on s. It declines whenever s^2 or s^2 D^2 would be
+ * subnormal, and the hint declines for exponents past ±480 and extreme F or D^2. The buckets served are the hint's own object,
  * so an f of -0 from the exact computation's start estimate may stand for +0: f is used only as an
  * exponent and a fringe variant key, where the two are the same.
  */
@@ -234,6 +235,10 @@ export function bucketsHoldAt(hint: BucketHint, zoom: number, devicePixelRatio: 
   const scale = devicePixelRatio * zoom;
   const scaleSquared = scale * scale;
   const { frobenius, determinantSquared } = hint;
+  // Every intermediate must stay normal: a subnormal s^2 or s^2 D^2 carries no relative bound.
+  if (!(scaleSquared >= 2 ** -1000 && scaleSquared * determinantSquared >= 2 ** -1000)) {
+    return false;
+  }
   const root = Math.sqrt(Math.max(0, frobenius * frobenius - 4 * determinantSquared));
   const maxSquared = (scaleSquared * (frobenius + root)) / 2;
   const minSquared = (scaleSquared * determinantSquared) / ((frobenius + root) / 2);
@@ -247,7 +252,7 @@ export function bucketsHoldAt(hint: BucketHint, zoom: number, devicePixelRatio: 
   );
 }
 
-/** A dyadic rounded to Float64: at most one rounding after an exact 2^-60 truncation. */
+/** A dyadic in Float64 within 1 ulp: a 2^-60 truncation, then one rounding. */
 function dyadicToNumber(value: Dyadic): number {
   if (value.n === 0n) return 0;
   const magnitude = value.n < 0n ? -value.n : value.n;

@@ -6,6 +6,8 @@ import {
   type PathBuckets,
   type PathLinearMap,
 } from '../../packages/renderer-core/src/path-buckets.js';
+import { disablePathReuseForTesting } from '../../packages/renderer-core/src/path-mesh-pipeline.js';
+import { createCountingPort, createPathHarness, pathNode } from '../support/v3a-path-harness.js';
 
 // E26 contract, U5d-3: the bucket hint. Over seeded lanes (rotations, skews, anisotropic and
 // isotropic scales, near-singular maps, huge and tiny scales) and zooms that wander, jump, and land
@@ -100,6 +102,23 @@ describe('E26-U5d-3 bucket hint', () => {
     expect(held).toBeGreaterThan(checked / 6);
   });
 
+  it('declines where an intermediate would be subnormal (U5d-3 review B1)', () => {
+    // s^2 underflows to the smallest subnormal at both zooms, while the buckets differ.
+    const large: PathLinearMap = [
+      8.219686415014789e37, 1.8866159004572928e38, -1.8866159004572928e38, 8.219686415014789e37,
+    ];
+    const hint = bucketHint(large, computePathBuckets(large, 2.389026041289583e-162, 1));
+    expect(hint).not.toBeNull();
+    expect(bucketsHoldAt(hint!, 1.8377123394535251e-162, 1)).toBe(false);
+    // A near-singular map whose s^2 D^2 is subnormal.
+    const thin: PathLinearMap = [
+      1.565205638536304e-52, 3.130411277072608e-52, 4.709551588012324e-52, 9.391233831217824e-52,
+    ];
+    const thinHint = bucketHint(thin, computePathBuckets(thin, 9.728252864619843e-56, 1.25));
+    if (thinHint !== null)
+      expect(bucketsHoldAt(thinHint, 1.0809169849577602e-55, 1.25)).toBe(false);
+  });
+
   it('declines for singular maps and at boundaries', () => {
     expect(bucketHint([1, 2, 2, 4], computePathBuckets([1, 2, 2, 4], 1, 1))).toBeNull();
     const identity: PathLinearMap = [1, 0, 0, 1];
@@ -110,5 +129,20 @@ describe('E26-U5d-3 bucket hint', () => {
     expect(bucketsHoldAt(hint, 1, 1)).toBe(false);
     expect(bucketsHoldAt(hint, 0.5, 1)).toBe(false);
     expect(bucketsHoldAt(hint, 0.375, 2)).toBe(true);
+  });
+
+  it('lets the pipeline skip the computation on small zoom steps, and not the twin', () => {
+    const computations = (reuse: boolean) => {
+      const harness = createPathHarness({ port: createCountingPort(), nodes: [pathNode('a', 0)] });
+      if (!reuse) disablePathReuseForTesting(harness.pipeline);
+      // Zooms 1.10 to 1.29: s sigma stays inside one e and one f interval (sigma = 1, DPR 1).
+      for (let step = 0; step < 20; step += 1) {
+        harness.setZoom(1.1 + step * 0.01);
+        harness.drawnIds();
+      }
+      return harness.statistics().bucketComputations;
+    };
+    expect(computations(true)).toBe(1);
+    expect(computations(false)).toBe(20);
   });
 });
