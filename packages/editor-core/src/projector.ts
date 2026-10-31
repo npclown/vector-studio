@@ -10,6 +10,8 @@ import type {
   ScenePaint,
   ScenePathVerb,
   SceneStroke,
+  SceneTextRun,
+  TextLayoutResult,
 } from '@vector-studio/contracts';
 import type {
   DocumentV6,
@@ -19,10 +21,12 @@ import type {
   Paint,
   PathData,
   Stroke,
+  TextNode,
 } from '@vector-studio/model';
 import { ExpansionCache, type Expansion, type ExpansionResult } from './expansion.js';
 import { localTransform } from './geometry.js';
 import { lineDashes, type LineDash } from './line-dash.js';
+import { nodeText, type TextLayouter } from './text.js';
 import type { DiagnosticEvent } from './types.js';
 
 // The scene projector (P5 plan, section 4.5; MVP M1 contract, section 5): maps the active page of
@@ -39,6 +43,11 @@ import type { DiagnosticEvent } from './types.js';
 // expansion from the editor's expansion cache; an expanded node gets the scene ID of the
 // instance, U+0000, `@` and its source node ID, so `documentIdOf` maps it to the instance, and
 // the instance with its whole expansion is one unit for isolation.
+//
+// A text node (MVP M6c contract, section 4) projects one E28 `text` leaf from the editor's layout
+// of it, the layouter injected into the projector (M6c-Q2 (a)); expanded instance text projects
+// the same way from the expanded node object. Without a layouter text projects nothing and the
+// projector reports `editor.text-unavailable` once per page (M6c-P3).
 
 /** Frame-local path geometry for a custom node (its extension's `toScene`), or null. */
 export type CustomProjection = (node: NodeV6) => PathData | null;
@@ -485,14 +494,53 @@ function dashedShaft(
   }
 }
 
+type TextContent = Pick<
+  Extract<RenderNodeSnapshot, { kind: 'text' }>,
+  'kind' | 'generation' | 'lang' | 'runs'
+>;
+
+/**
+ * M6c-P1: the scene content of text node `node` from its layout `layout` (M6a contract, section
+ * 3.1): `generation` and `lang` of the result, and one scene run per maximal sequence of clusters
+ * with the same run index on one line, in text order, with the run's font list, size and colour
+ * (copied as fills are). Every cluster is emitted, whitespace included; an empty node has none.
+ */
+export function textContent(node: TextNode, layout: TextLayoutResult): TextContent {
+  const text = nodeText(node.runs);
+  const runs: SceneTextRun[] = [];
+  let current: { run: number; line: number; clusters: SceneTextRun['clusters'][number][] } | null =
+    null;
+  for (const cluster of layout.clusters) {
+    if (current === null || current.run !== cluster.run || current.line !== cluster.line) {
+      const style = node.runs[cluster.run]!;
+      current = { run: cluster.run, line: cluster.line, clusters: [] };
+      runs.push({
+        fontList: layout.fontLists[cluster.run]!,
+        size: style.size,
+        color: style.color,
+        clusters: current.clusters,
+      });
+    }
+    current.clusters.push({
+      text: text.slice(cluster.start, cluster.end),
+      x: cluster.x,
+      y: cluster.y,
+      advance: cluster.advance,
+    });
+  }
+  return { kind: 'text', generation: layout.generation, lang: layout.lang, runs };
+}
+
 /**
  * One leaf node's scene snapshot under the scene parent `parentId`, or null when it cannot be
- * projected (an unowned custom type, or a container: containers project through `projectPage`).
+ * projected (an unowned custom type, a text node without `layout`, or a container: containers
+ * project through `projectPage`). A throwing `layout` propagates (M6c-P2).
  */
 export function projectNode(
   node: NodeV6,
   custom: CustomProjection,
   parentId: string | null = null,
+  layout?: TextLayouter,
 ): RenderNodeSnapshot | null {
   const base = {
     id: node.id,
@@ -566,6 +614,8 @@ export function projectNode(
         },
       };
     }
+    case 'text':
+      return layout === undefined ? null : { ...base, ...textContent(node, layout(node)) };
     default:
       return null;
   }
@@ -672,6 +722,11 @@ export type PageProjection = Readonly<{
   unitIds: ReadonlyMap<string, readonly string[]>;
   /** Instances left out because their expansion is invalid (M7-X3), in pre-order. */
   invalid: readonly string[];
+  /**
+   * The scene IDs of the text units the walk left out for want of a layouter (M6c-P3): text
+   * nodes, and expanded text of the instances it walked or kept from the memo.
+   */
+  textless: readonly string[];
 }>;
 
 /** A node's last snapshots, reused while the node, its scene parent and its children hold. */
@@ -685,9 +740,12 @@ type MemoEntry = Readonly<{
    * the entries of its expanded nodes keyed by source node ID.
    */
   instance?: Readonly<{
-    result: ExpansionResult;
+    /** Null after a layout generation change: the entry is rebuilt, its expanded entries kept. */
+    result: ExpansionResult | null;
     source: NodeV6;
     expanded: ReadonlyMap<string, MemoEntry>;
+    /** The expanded text left out for want of a layouter (M6c-P3), as scene IDs. */
+    textless: readonly string[];
   }>;
 }>;
 
@@ -758,6 +816,8 @@ function projectExpanded(
   previous: ReadonlyMap<string, MemoEntry> | undefined,
   next: Map<string, MemoEntry>,
   out: RenderNodeSnapshot[],
+  layout: TextLayouter | undefined,
+  textless: string[],
 ): string[] {
   const walk = (ids: readonly string[], parentId: string): string[] => {
     const projected: string[] = [];
@@ -789,8 +849,11 @@ function projectExpanded(
         if (reuse !== null) {
           snapshots = reuse;
         } else {
-          const snapshot = projectNode(node, custom, parentId);
-          if (snapshot === null) continue;
+          const snapshot = projectNode(node, custom, parentId, layout);
+          if (snapshot === null) {
+            if (node.type === 'text') textless.push(scene);
+            continue;
+          }
           snapshots = keepEqual([{ ...snapshot, id: scene }], old?.snapshots);
         }
       }
@@ -810,7 +873,9 @@ function projectExpanded(
  * from `expansions` (M7-X4), the editor's cache shared with the checks and hit testing; one
  * whose expansion is invalid is left out and listed in `invalid` (M7-X3). With `scope` (and a
  * memo), only the units it names are walked: the result lists those units and the invalid
- * instances among their children, with the full `rootOrder` (E26 contract, section 4.3).
+ * instances among their children, with the full `rootOrder` (E26 contract, section 4.3). Text
+ * nodes, expanded ones included, project through `layout` (M6c-P2); without it they are left
+ * out and listed in `textless`.
  */
 export function projectPage(
   document: DocumentV6,
@@ -820,12 +885,14 @@ export function projectPage(
   memo?: ProjectionMemo,
   expansions: ExpansionCache = new ExpansionCache(),
   scope?: ProjectionScope,
+  layout?: TextLayouter,
 ): PageProjection {
   const built = new Map<string, RenderNodeSnapshot>();
   const order: string[] = [];
   const units: string[] = [];
   const unitIds = new Map<string, readonly string[]>();
   const invalid: string[] = [];
+  const textless: string[] = [];
 
   /** The snapshots of instance `node` and its expansion, or null when it is invalid. */
   const instanceUnit = (
@@ -846,10 +913,12 @@ export function projectPage(
       held.result === result &&
       held.source === source
     ) {
+      textless.push(...held.textless);
       return entry!;
     }
     const content: RenderNodeSnapshot[] = [];
     const expanded = new Map<string, MemoEntry>();
+    const missing: string[] = [];
     const roots = projectExpanded(
       node.id,
       result.expansion,
@@ -857,7 +926,10 @@ export function projectPage(
       held?.expanded,
       expanded,
       content,
+      layout,
+      missing,
     );
+    textless.push(...missing);
     // The instance's own frame nodes: its placement, the source's fill and stroke.
     const own = keepEqual(
       frameSnapshots(
@@ -881,7 +953,7 @@ export function projectPage(
       parentId,
       children: null,
       snapshots: [...own, ...content],
-      instance: { result, source, expanded },
+      instance: { result, source, expanded, textless: missing },
     };
   };
 
@@ -931,8 +1003,11 @@ export function projectPage(
       } else {
         const snapshot =
           reusedFrom(memo?.get(id), node, parentId, null)?.[0] ??
-          projectNode(node, custom, parentId);
-        if (snapshot === null) continue;
+          projectNode(node, custom, parentId, layout);
+        if (snapshot === null) {
+          if (node.type === 'text') textless.push(id);
+          continue;
+        }
         units.push(id);
         entry = { node, parentId, children: null, snapshots: [snapshot] };
       }
@@ -962,7 +1037,7 @@ export function projectPage(
   }
   const nodes = new Map<string, RenderNodeSnapshot>();
   for (const id of order) nodes.set(id, built.get(id)!);
-  return { nodes, rootOrder, units, unitIds, invalid };
+  return { nodes, rootOrder, units, unitIds, invalid, textless };
 }
 
 /**
@@ -1045,21 +1120,28 @@ export class SceneProjector {
   private resyncing = false;
   /** The page the projection shows (M1 contract, section 3). */
   private page = '';
+  /** The editor's text layouter (M6c-Q2 (a)); absent without a port. */
+  private readonly layout: TextLayouter | undefined;
+  /** Whether `editor.text-unavailable` was raised for the current page (M6c-P3). */
+  private textReported = false;
 
   /**
    * `expansions` is the editor's one expansion cache, shared with its checks and hit testing
-   * (M7 contract, M7-X4); by default the projector has its own.
+   * (M7 contract, M7-X4); by default the projector has its own. `layout` is the editor's text
+   * layout cache; without it text projects nothing (M6c contract, M6c-P2 and P3).
    */
   constructor(
     renderer: RendererSceneSynchronization,
     custom: CustomProjection,
     report: (event: DiagnosticEvent) => void,
     expansions: ExpansionCache = new ExpansionCache(),
+    layout?: TextLayouter,
   ) {
     this.renderer = renderer;
     this.custom = custom;
     this.report = report;
     this.expansions = expansions;
+    this.layout = layout;
   }
 
   get active(): boolean {
@@ -1068,10 +1150,17 @@ export class SceneProjector {
 
   /**
    * Sends the whole projection of `page` under the identity `{ documentId, pageId: page }`: on
-   * attach, after a load, after a change of active page and after `resync-required`. The
-   * excluded subtrees that `touched` reaches (the change that caused it) are projected again.
+   * attach, after a load and after a change of active page, each of which may raise
+   * `editor.text-unavailable` again (M6c-P3). The excluded subtrees that `touched` reaches (the
+   * change that caused it) are projected again.
    */
-  replace(
+  replace(document: DocumentV6, page: string, touched: readonly string[] = []): void {
+    this.textReported = false;
+    this.sendSnapshot(document, page, touched);
+  }
+
+  /** The full snapshot of `replace`, also after `resync-required` and a bookkeeping retry. */
+  private sendSnapshot(
     document: DocumentV6,
     page: string,
     touched: readonly string[] = [],
@@ -1105,7 +1194,7 @@ export class SceneProjector {
     if (isBookkeeping(result)) {
       // Revision bookkeeping, not a node rejection: move above the renderer and send once more.
       this.raiseRevision(result.current?.revision);
-      if (!retried) this.replace(document, page, [], true);
+      if (!retried) this.sendSnapshot(document, page, [], true);
       return;
     }
     // A projection of one unit was rejected on its own (P5-U4); otherwise isolate.
@@ -1117,8 +1206,9 @@ export class SceneProjector {
    * The text layout entry point (E26 contract, section 4.3): after a layout generation change,
    * re-projects every text unit of the active page and every instance whose expansion holds
    * text, past the identity-keyed memo (whose entries, and the instances' kept results, do not
-   * see the generation), in one whole-page set. M6c calls it from the editor's `textLayout`
-   * subscription.
+   * see the generation), in one whole-page set. An instance keeps its other expanded entries, so
+   * the set updates the text leaves only. The editor's port listener calls it (M6c-P4); other
+   * pages' entries go too, so they project from the new generation on their page switch.
    */
   relayout(document: DocumentV6): void {
     if (this.disposed) return;
@@ -1137,8 +1227,13 @@ export class SceneProjector {
       return found;
     };
     for (const [id, entry] of this.memo) {
-      if (entry.node.type === 'text' || (entry.node.type === 'instance' && hasText(id))) {
+      if (entry.node.type === 'text') {
         this.memo.delete(id);
+      } else if (entry.instance !== undefined && hasText(id)) {
+        const expanded = new Map(
+          [...entry.instance.expanded].filter(([, held]) => held.node.type !== 'text'),
+        );
+        this.memo.set(id, { ...entry, instance: { ...entry.instance, result: null, expanded } });
       }
     }
     this.scoped = false;
@@ -1152,7 +1247,8 @@ export class SceneProjector {
     const retry = this.release(document, touched);
     if (this.excluded.size !== excluded) this.scoped = false;
     if (this.identity === null || this.base === null || this.page !== page) {
-      this.replace(document, page);
+      if (this.page !== page) this.textReported = false;
+      this.sendSnapshot(document, page);
       return;
     }
     // Released subtrees are retried after the main set.
@@ -1505,7 +1601,7 @@ export class SceneProjector {
     if (this.resyncing) return;
     this.resyncing = true;
     try {
-      this.replace(document, this.page);
+      this.sendSnapshot(document, this.page);
     } finally {
       this.resyncing = false;
     }
@@ -1608,7 +1704,9 @@ export class SceneProjector {
       this.memo,
       this.expansions,
       scope,
+      this.layout,
     );
+    this.noteTextless(projection.textless);
 
     // Removals: scene IDs a walked unit no longer has, and the held subtrees of units that left
     // a walked child list without being projected elsewhere. Memo entries of deleted units go
@@ -1696,6 +1794,8 @@ export class SceneProjector {
       this.excluded,
       memo,
       this.expansions,
+      undefined,
+      this.layout,
     );
     const expected = this.differences(oracle, this.goneFrom(oracle));
     const expectedMet = [...oracle.invalid].sort();
@@ -1780,9 +1880,28 @@ export class SceneProjector {
       omit,
       this.memo,
       this.expansions,
+      undefined,
+      this.layout,
     );
     this.noteInvalid(new Set(projection.invalid), omit);
+    this.noteTextless(projection.textless);
     return projection;
+  }
+
+  /**
+   * M6c-P3: the first projection of the page that leaves text out for want of a layouter
+   * raises `editor.text-unavailable` with those scene IDs, sorted; later ones raise nothing
+   * until `replace` (attach, load, page switch).
+   */
+  private noteTextless(textless: readonly string[]): void {
+    if (this.textReported || textless.length === 0) return;
+    this.textReported = true;
+    this.report({
+      type: 'diagnostic',
+      code: 'editor.text-unavailable',
+      reason: 'no-text-layout',
+      nodeIds: [...textless].sort(),
+    });
   }
 
   /**

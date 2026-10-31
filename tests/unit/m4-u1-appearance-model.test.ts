@@ -1224,6 +1224,13 @@ describe('M4-P2 stroke narrowing in the projector (the M4-A05 narrowing part)', 
     target.attachRenderer(renderer);
     const diagnostics = () => events.filter((event) => event.type === 'diagnostic');
     expect(diagnostics()).toEqual([
+      // No layout port: the text node projects nothing, reported once (M6c contract, M6c-P3).
+      {
+        type: 'diagnostic',
+        code: 'editor.text-unavailable',
+        reason: 'no-text-layout',
+        nodeIds: ['t1'],
+      },
       {
         type: 'diagnostic',
         code: 'editor.renderer-unsupported',

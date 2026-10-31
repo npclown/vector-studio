@@ -687,6 +687,8 @@ class EditorCore implements Editor {
   private draining = false;
   private projector: SceneProjector | null = null;
   private reportTo: EditorEvent[] | null = null;
+  /** The layout generation changes met during a projector action (M6c-P4), run at its end. */
+  private relayoutPending = 0;
   private renderer: RendererSceneSynchronization | null = null;
   private holding = false;
   private overlay: ToolOverlay | null = null;
@@ -918,9 +920,21 @@ class EditorCore implements Editor {
     };
     for (const tool of this.extensions.tools) this.tools.set(tool.id, this.extensionTool(tool));
     // One subscription for the editor's lifetime (M6a-Q20 (a)). A generation change drops the
-    // cache and raises one `textLayout` session event: no document event, step or frame change.
+    // cache, re-projects every text unit of the active page (M6c contract, M6c-P4) and raises one
+    // `textLayout` session event: no document event, step or frame change. The renderer's
+    // diagnostics follow the event, as a document change's do. A bump from inside a projection
+    // (a port that bumps in `layout`) is deferred to the end of that projector action, whose
+    // caller then raises the event and the diagnostics after its own.
     cache?.port.subscribe(() => {
-      if (cache.notify()) this.emit({ type: 'session', field: 'textLayout' });
+      if (!cache.notify()) return;
+      if (this.reportTo !== null) {
+        this.relayoutPending += 1;
+        return;
+      }
+      const diagnostics: EditorEvent[] = [];
+      this.withProjector((projector) => projector.relayout(this.document), diagnostics);
+      this.emit({ type: 'session', field: 'textLayout' });
+      diagnostics.forEach((event) => this.emit(event));
     });
   }
 
@@ -1552,6 +1566,8 @@ class EditorCore implements Editor {
       (node) => this.extensions.geometry(node),
       (event) => (this.reportTo ?? this.pending).push(event),
       this.expansions,
+      // The editor's layout cache (M6c-Q2 (a)); without a port text projects nothing (M6c-P3).
+      this.layout,
     );
     this.projector = projector;
     this.renderer = renderer;
@@ -2252,19 +2268,36 @@ class EditorCore implements Editor {
     if (reset) this.tools.get(this.tool)?.reset();
   }
 
-  /** Runs `action` on the attached projector, collecting its diagnostics into `into`. */
+  /**
+   * Runs `action` on the attached projector, collecting its diagnostics into `into`. A nested
+   * call restores the outer collector. Layout generation changes during the outermost action run
+   * `relayout` once at its end, also when the action throws, with one `textLayout` event per
+   * change and the relayout's diagnostics: into `into`, or emitted at once after a throw.
+   */
   private withProjector(action: (projector: SceneProjector) => void, into: EditorEvent[]): void {
     const projector = this.projector;
     if (projector === null) return;
+    const outer = this.reportTo;
     this.reportTo = into;
+    let threw = true;
     try {
       action(projector);
+      threw = false;
     } finally {
-      this.reportTo = null;
-    }
-    if (!projector.active && this.projector === projector) {
-      this.projector = null;
-      this.renderer = null;
+      this.reportTo = outer;
+      if (!projector.active && this.projector === projector) {
+        this.projector = null;
+        this.renderer = null;
+      }
+      if (outer === null && this.relayoutPending > 0) {
+        const after: EditorEvent[] = [];
+        for (; this.relayoutPending > 0; this.relayoutPending -= 1) {
+          after.push({ type: 'session', field: 'textLayout' });
+        }
+        this.withProjector((attached) => attached.relayout(this.document), after);
+        if (threw) after.forEach((event) => this.emit(event));
+        else into.push(...after);
+      }
     }
   }
 

@@ -8,13 +8,17 @@ import {
   type CommandResult,
   type Editor,
 } from '../../packages/editor-core/src/index.js';
+import { ExpansionCache } from '../../packages/editor-core/src/expansion.js';
 import { projectPage } from '../../packages/editor-core/src/projector.js';
+import { TextLayoutCache } from '../../packages/editor-core/src/text.js';
+import { createFakeTextLayout } from '../support/fake-text-layout.js';
 
 // MVP M6a-U1 interim editor rules (M6a contract, section 16, M6a-U1 notes): editor-core reads
 // and writes schema v4 and holds text nodes it cannot lay out yet. Fragment version 2 is written
 // at schema v4 and read at 3 and 4, version 1 at 2, with a text node failing at its type below 4
 // and rejected inside a copied or carried symbol (section 8);
-// `editor.nested-symbol` covers text (M6a-S7); a text node projects nothing (section 7);
+// `editor.nested-symbol` covers text (M6a-S7); a text node projects nothing (section 7; since
+// M6c, only without a layout port);
 // `setNodeProps` takes the common props only (section 6.1). M6a-U3 replaced the interim hit
 // rule (tests/unit/m6a-u3-text-editor.test.ts). M7-U7 (section 9) moved the editor to schema v5,
 // with fragment version 2 written at v5 and read at 3 to 5, and lifted M6a-S7 (M7-T1): the
@@ -51,11 +55,30 @@ describe('M6a-U1 interim: editor-core at schema v4, v6 since M4-U1', () => {
     expect(createEditor().query({ type: 'document' }).schemaVersion).toBe(6);
   });
 
-  it('projects nothing for a text node and reports no diagnostic', () => {
+  // M6c (contract section 1.2): replaces the M6a section 7 rule. Without a layout port a text
+  // node still projects nothing, now listed for the `editor.text-unavailable` diagnostic
+  // (M6c-P3); with one it projects a text leaf (tests/unit/m6c-u1-text-projection.test.ts).
+  it('projects nothing for a text node without a layouter, and lists it as left out', () => {
     const document = loaded().query({ type: 'document' });
     const projection = projectPage(document, 'page-1', none);
     for (const id of ['t1', 't2', 't3', 't4', 't5']) expect(projection.nodes.has(id)).toBe(false);
     expect(projection.nodes.has('g1')).toBe(true);
+    expect([...projection.textless].sort()).toEqual(['t1', 't2', 't3', 't4', 't5']);
+    const cache = new TextLayoutCache(createFakeTextLayout());
+    const laidOut = projectPage(
+      document,
+      'page-1',
+      none,
+      new Set(),
+      undefined,
+      new ExpansionCache(),
+      undefined,
+      (node) => cache.layout(node),
+    );
+    for (const id of ['t1', 't2', 't3', 't4', 't5']) {
+      expect(laidOut.nodes.get(id)?.kind).toBe('text');
+    }
+    expect(laidOut.textless).toEqual([]);
   });
 
   it('takes the common props on a text node, and no fill', () => {

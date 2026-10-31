@@ -505,9 +505,9 @@ describe('M6b-A06 merged entries under the E26-A09 scoped-projection oracle', ()
     });
     target.attachRenderer(renderer);
     // A creating step with merged insertions, inside the frame, so the merged entry also holds
-    // the frame whose child list the creating step changes. Text units are not projected until
-    // M6c, so the scene sets the oracle compares stay empty here; `complete` checks the lists
-    // the projector is given, which is what the oracle would catch once text is projected.
+    // the frame whose child list the creating step changes. Since M6c-U1 text units project, so
+    // the oracle compares scene sets that hold them; `complete` also checks the lists the
+    // projector is given.
     target.execute({ type: 'setScope', id: 'fr' });
     target.execute({ type: 'setTool', tool: 'text' });
     input(target, { kind: 'pointerdown', point: at(350, 350), modifiers: none });
