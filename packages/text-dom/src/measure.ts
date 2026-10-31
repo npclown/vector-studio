@@ -68,21 +68,75 @@ export interface Measurer {
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
-function relative(rect: DOMRect, origin: DOMRect): Rect {
+/**
+ * `rect` relative to `origin`, in the block's own CSS px: times `zoom`, the layout zoom the host
+ * cancels (see `layoutZoom`), since the browser reports lengths inside the host divided by it.
+ */
+function relative(rect: DOMRect, origin: DOMRect, zoom: number): Rect {
   return {
-    left: rect.left - origin.left,
-    top: rect.top - origin.top,
-    width: rect.width,
-    height: rect.height,
+    left: (rect.left - origin.left) * zoom,
+    top: (rect.top - origin.top) * zoom,
+    width: rect.width * zoom,
+    height: rect.height * zoom,
   };
 }
 
+/**
+ * The page's layout zoom `E`: the factor Chromium lays the document out at, in device px per CSS
+ * px, browser zoom times the real device scale factor (M6c-U0, docs/evidence/m6c-u0/README.md).
+ * `devicePixelRatio` cannot tell it: under CDP `deviceScaleFactor` emulation it reports the
+ * emulated ratio while layout stays at the real one. So it is read from the layout unit, 1/64 of
+ * a layout px: a host `width` of `w` CSS px is laid out as `floor(64 E w)` units and reads back as
+ * that over `64 E`. The smallest `w = 2^k / 64` that reads back non-zero is one unit, so
+ * `E = 1 / (64 × reading)`. A result within 1e-6 of `ratio` or of 1 is taken as that value; a
+ * zoom outside [1/64, 32) reads as 1 (no cancelling). Assumes no CSS `zoom` on the host's
+ * ancestors.
+ */
+export function layoutZoom(host: HTMLElement, ratio: number): number {
+  host.style.setProperty('zoom', '1', 'important');
+  let unit: number;
+  try {
+    unit = layoutUnit(host);
+  } finally {
+    host.style.setProperty('width', '0', 'important');
+  }
+  const zoom = 1 / (64 * unit);
+  if (!Number.isFinite(zoom) || zoom <= 0) return 1;
+  if (Math.abs(zoom - 1) <= 1e-6) return 1;
+  if (ratio > 0 && Math.abs(zoom / ratio - 1) <= 1e-6) return ratio;
+  return zoom;
+}
+
+/** One layout unit of `host`, in CSS px, or 0 for a zoom outside [1/64, 32) (`layoutZoom`). */
+function layoutUnit(host: HTMLElement): number {
+  const read = (k: number): number => {
+    host.style.setProperty('width', `${2 ** k / 64}px`, 'important');
+    return host.getBoundingClientRect().width;
+  };
+  let reading = read(0);
+  if (reading > 0) {
+    // E ≥ 1: halve until it reads 0; the last non-zero reading is one unit.
+    for (let k = -1; k >= -5; k -= 1) {
+      const smaller = read(k);
+      if (!(smaller > 0)) return reading;
+      reading = smaller;
+    }
+    return 0;
+  }
+  // E < 1: double until it reads non-zero, which is then one unit.
+  for (let k = 1; k <= 6; k += 1) {
+    reading = read(k);
+    if (reading > 0) return reading;
+  }
+  return 0;
+}
+
 /** The fragment of `rects` that overlaps `rect` vertically the most, relative to `origin`. */
-function overlapping(rects: DOMRectList, origin: DOMRect, rect: Rect): Rect | null {
+function overlapping(rects: DOMRectList, origin: DOMRect, rect: Rect, zoom: number): Rect | null {
   let best: Rect | null = null;
   let bestOverlap = 0;
   for (const fragment of Array.from(rects)) {
-    const candidate = relative(fragment, origin);
+    const candidate = relative(fragment, origin, zoom);
     const overlap =
       Math.min(candidate.top + candidate.height, rect.top + rect.height) -
       Math.max(candidate.top, rect.top);
@@ -97,6 +151,8 @@ function overlapping(rects: DOMRectList, origin: DOMRect, rect: Rect): Rect | nu
 export function createMeasurer(document: Document, lang: string): Measurer {
   let host: HTMLElement | null = null;
   let block: HTMLElement | null = null;
+  /** The layout zoom the host cancels for the current request (`layoutZoom`). */
+  let zoom = 1;
 
   function ensureBlock(): HTMLElement {
     if (host === null || block === null) {
@@ -115,6 +171,11 @@ export function createMeasurer(document: Document, lang: string): Measurer {
       if (parent === null) throw new Error('text-dom: the document has no element to measure in');
       parent.append(host);
     }
+    // Measured at layout zoom 1 whatever the page's (M6c-U0): Chromium rounds a font's metrics to
+    // whole device px at the size it lays out, so at another zoom they round elsewhere. Read on
+    // every request, since browser zoom changes without a reload.
+    zoom = layoutZoom(host, document.defaultView?.devicePixelRatio ?? 1);
+    host.style.setProperty('zoom', zoom === 1 ? '1' : String(1 / zoom), 'important');
     return block;
   }
 
@@ -153,7 +214,9 @@ export function createMeasurer(document: Document, lang: string): Measurer {
       range.setStart(text, 0);
       range.setEnd(text, text.data.length);
       const rect = range.getClientRects()[0];
-      if (rect !== undefined) ascents.set(key, marker.getBoundingClientRect().bottom - rect.top);
+      if (rect !== undefined) {
+        ascents.set(key, (marker.getBoundingClientRect().bottom - rect.top) * zoom);
+      }
     }
     target.replaceChildren();
     return keys.map((key) => ascents.get(key) ?? null);
@@ -188,7 +251,7 @@ export function createMeasurer(document: Document, lang: string): Measurer {
                 range.setStart(node, at);
                 range.setEnd(node, at + segment.length);
                 const first = range.getClientRects()[0];
-                rect = first === undefined ? null : relative(first, origin);
+                rect = first === undefined ? null : relative(first, origin, zoom);
               }
               const ascent = ascents[index]!;
               const grapheme: Grapheme = {
@@ -237,6 +300,7 @@ export function createMeasurer(document: Document, lang: string): Measurer {
             (node.parentNode as Element).getClientRects(),
             passOne,
             grapheme.rect,
+            zoom,
           );
           return fragment === null ? grapheme : { ...grapheme, anchor: fragment.left };
         });
@@ -268,15 +332,15 @@ export function createMeasurer(document: Document, lang: string): Measurer {
         }
         const origin = target.getBoundingClientRect();
         const metrics = probes.map(([top, baseline]) => ({
-          top: top.getBoundingClientRect().top - origin.top,
-          baseline: baseline.getBoundingClientRect().bottom - origin.top,
+          top: (top.getBoundingClientRect().top - origin.top) * zoom,
+          baseline: (baseline.getBoundingClientRect().bottom - origin.top) * zoom,
         }));
         // Fall back unless pass 2 kept every line start, every cluster's rect top and the
         // block's height: a changed line box shows in one of them.
         const again = read(origin);
         const againLines = assignLines(again, textLength);
         const same =
-          Math.abs(origin.height - passOne.height) <= EPSILON &&
+          Math.abs(origin.height - passOne.height) * zoom <= EPSILON &&
           againLines.length === lines.length &&
           againLines.every((line, index) => line.start === lines[index]!.start) &&
           again.every((grapheme, index) => {
@@ -288,7 +352,7 @@ export function createMeasurer(document: Document, lang: string): Measurer {
           graphemes,
           lines,
           metrics: same ? metrics : null,
-          blockHeight: origin.height,
+          blockHeight: origin.height * zoom,
         };
       } finally {
         // Probes and the sentinel never outlive a request.

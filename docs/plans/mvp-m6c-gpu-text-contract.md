@@ -66,6 +66,8 @@ Out of scope: any change to E28's scene shape, atlas, budget or pipeline (an E28
 
 **Rule.** (a) If a text-dom change brings every manual row within 1/64 px (for example measuring under an ancestor that cancels the page zoom, or choosing `s` so that `s × zoom` keeps the rounding a power-of-two fraction) and keeps M6a-A11, A12 emulation and size linearity passing, U0 fixes text-dom (light tier unless the port's interface changes). (b) U0 takes (b) once every step-3 candidate is recorded as kept or ruled out and no fix tried under (a) passes: it amends M6a-A12's browser-zoom bound to **1/32 px**, the measured worst case (already a power of two), with the cause or "not found", as a dated amendment in M6a section 10, reviewed by both tracks, and the user confirms it (M6c-Q1), since the user accepted M6a with the failure disclosed. The DPR, emulation and monitor-scale rows keep 1/64 px. Either way the manual rows of [m6a-a12-dpr-manual.md](../evidence/m6a-a12-dpr-manual.md) are re-run on the main PC and recorded as a new dated section of that file; under (b) the re-run snippet tests zoom rows against 1/32 and every other row against 1/64. (c) Under M6c-Q1 (c), A01 is a disclosed FAIL in the exit record. Why the residual matters little for M6c: positions feed the caret and the GPU alike (M6-L1), and 1/32 page px at camera zoom 1 is below E28's quarter-device-px phase step; it matters for auto-size frames written at one zoom and read at another (M6-Q6 (a)).
 
+**Amendment 2026-10-31 (M6c-U0 finding).** The container reproduced the record's figures under real browser zoom and under a real device scale (`--force-device-scale-factor`), not under CDP emulation ([U0 evidence](../evidence/m6c-u0/README.md)). The difference follows the layout zoom, browser zoom × the real device scale, not browser zoom alone, so the "not DPR" reading above holds only for emulation; the clue above is also wrong (the 1.5 maximum is half a device px on an `s` 32 request). Cause kept: Chromium rounds line metrics to whole layout px at the effective zoom; the other step-3 candidates are ruled out. U0 takes rule (a): text-dom cancels the layout zoom on its measurement host, and the M6a-A12 bound stays 1/64 px.
+
 **Dependency.** U3 (agreement) and the exit wait for U0's result. U1 and U2 do not read browser-zoom positions and may proceed once U0's cause is recorded (section 11).
 
 ## 4. Projection (U1)
@@ -183,7 +185,7 @@ Order: U0 first; U1 once U0's cause is recorded (it may merge before U0's re-run
 
 M6c-Q2 to Q7, Q9 to Q11, Q13 and Q14 change no requirement and add no dependency; they may be adopted as recommended under the user's standing rule of 2026-10-24 after review. **Needs the user:** M6c-Q8, Q15 and Q16 (decisions; Q15 and Q16 are the open M6a and M6 cards, already auto-adopted as (a) under the standing rule, recorded here so the M6 exit can state them), M6c-Q1 if U0 lands on (b) (confirmation), M6c-Q12 (the action, or the choice to disclose).
 
-**Adopted 2026-10-31 (추천안 자동 채택, the user's standing rule of 2026-10-24).** M6c-Q1 to Q16 are adopted as (a). Q1 (a) means U0 tries a text-dom fix first; if rule (b) is reached, the bound amendment goes to the user for confirmation then. Q8 (a) is put to the user on a decision card, because the run needs the user's time; it must be decided before U5 starts, and another choice replaces (a). Q12, Q15 and Q16 keep what is already built and block nothing; another user choice replaces them and re-checks this contract.
+**Adopted 2026-10-31 (추천안 자동 채택, the user's standing rule of 2026-10-24).** M6c-Q1 to Q16 are adopted as (a). **User decision 2026-10-31:** M6c-Q8 is (c), no manual real-IME run; M6-A07's manual half is NOT RUN and disclosed in the exit record, as M6b-A14 was, and section 8 and U5's IME part do not run. Q1 (a) means U0 tries a text-dom fix first; if rule (b) is reached, the bound amendment goes to the user for confirmation then. Q8 (a) is put to the user on a decision card, because the run needs the user's time; it must be decided before U5 starts, and another choice replaces (a). Q12, Q15 and Q16 keep what is already built and block nothing; another user choice replaces them and re-checks this contract.
 
 ## 14. Gate
 
@@ -198,4 +200,5 @@ Documentation only: `npx prettier --check` on this file (the repository's `.pret
 | Unit | State |
 | --- | --- |
 | Contract | DRAFT 2026-10-31; review r1 NOT READY, applied; r2 READY WITH FOLLOW-UPS, applied |
-| M6c-U0 to U6 | Not started (waits for this contract's approval) |
+| M6c-U0 | In progress: cause found, text-dom fix (rule (a)); main-PC re-run pending |
+| M6c-U1 to U6 | Not started |
