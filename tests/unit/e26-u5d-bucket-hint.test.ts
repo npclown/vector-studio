@@ -115,8 +115,8 @@ describe('E26-U5d-3 bucket hint', () => {
       1.565205638536304e-52, 3.130411277072608e-52, 4.709551588012324e-52, 9.391233831217824e-52,
     ];
     const thinHint = bucketHint(thin, computePathBuckets(thin, 9.728252864619843e-56, 1.25));
-    if (thinHint !== null)
-      expect(bucketsHoldAt(thinHint, 1.0809169849577602e-55, 1.25)).toBe(false);
+    expect(thinHint).not.toBeNull();
+    expect(bucketsHoldAt(thinHint!, 1.0809169849577602e-55, 1.25)).toBe(false);
   });
 
   it('declines for singular maps and at boundaries', () => {

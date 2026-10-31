@@ -189,8 +189,8 @@ export function computePathBuckets(
 
 /**
  * E26-U5d-3: what a path's buckets need to be checked at another zoom or DPR without the exact
- * computation: |L|_F^2 and (det L)^2, formed exactly and rounded to Float64 within 1 ulp, and the exact
- * buckets they were found with.
+ * computation: |L|_F^2 and (det L)^2, formed exactly and rounded to Float64 within 1 ulp, and
+ * the exact buckets they were found with.
  */
 export type BucketHint = Readonly<{
   frobenius: number;
@@ -226,8 +226,8 @@ export function bucketHint(linear: PathLinearMap, buckets: PathBuckets): BucketH
  * below 2e-7 (the square root's argument loses at most about 8 ulp of F^2, which moves the root by
  * at most sqrt(8 eps) F), so each value must clear its interval by the 1e-6 margin. The
  * orientation and the f32 check do not depend on s. It declines whenever s^2 or s^2 D^2 would be
- * subnormal, and the hint declines for exponents past ±480 and extreme F or D^2. The buckets served are the hint's own object,
- * so an f of -0 from the exact computation's start estimate may stand for +0: f is used only as an
+ * subnormal, and the hint declines for exponents past ±480 and extreme F or D^2. The buckets
+ * served are the hint's own object, so an f of -0 from the exact computation's start estimate may stand for +0: f is used only as an
  * exponent and a fringe variant key, where the two are the same.
  */
 export function bucketsHoldAt(hint: BucketHint, zoom: number, devicePixelRatio: number): boolean {
