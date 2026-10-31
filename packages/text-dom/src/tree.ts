@@ -1,5 +1,6 @@
 import type { TextLayoutRequest } from '@vector-studio/contracts';
 import type { Grapheme, LineSlot } from './assemble.js';
+import { runDeclarations, TEXT_DECLARATIONS } from './style.js';
 
 // The measurement block's content (docs/plans/mvp-m6a-text-model-contract.md, section 4, with
 // the M6a-U4 amendments of section 16) and the pass-2 insertions, kept apart from the reading so
@@ -78,7 +79,7 @@ export class RunText {
   }
 }
 
-/** A span in run `index`'s style: font list, size, letter spacing and line height. */
+/** A span in run `index`'s style: font list, size, letter spacing and line height (style.ts). */
 export function runSpan(
   document: Document,
   request: TextLayoutRequest,
@@ -87,10 +88,13 @@ export function runSpan(
 ): HTMLElement {
   const run = request.runs[index]!;
   const span = document.createElement('span');
-  span.style.setProperty('font-family', fontLists[index]!);
-  span.style.setProperty('font-size', `${run.size}px`);
-  span.style.setProperty('letter-spacing', `${request.letterSpacing}em`);
-  span.style.setProperty('line-height', String(request.lineHeight));
+  const declarations = runDeclarations({
+    fontList: fontLists[index]!,
+    size: run.size,
+    letterSpacing: request.letterSpacing,
+    lineHeight: request.lineHeight,
+  });
+  for (const [property, value] of declarations) span.style.setProperty(property, value);
   return span;
 }
 
@@ -136,8 +140,7 @@ export function buildRunTree(
       if (piece.length === 0) continue;
       const span = styled(index);
       if (piece !== '\n') {
-        span.style.setProperty('direction', 'ltr');
-        span.style.setProperty('unicode-bidi', 'bidi-override');
+        for (const [property, value] of TEXT_DECLARATIONS) span.style.setProperty(property, value);
       }
       const node = document.createTextNode(piece);
       span.append(node);

@@ -8,6 +8,7 @@ import {
   type LineSlot,
   type Rect,
 } from './assemble.js';
+import { cssText, HOST_RESET, MEASUREMENT_BLOCK_DECLARATIONS } from './style.js';
 import { buildRunTree, planAscents, planInsertions, runSpan, SENTINEL } from './tree.js';
 
 // The measurement element of the M6a contract (docs/plans/mvp-m6a-text-model-contract.md,
@@ -19,7 +20,7 @@ import { buildRunTree, planAscents, planInsertions, runSpan, SENTINEL } from './
 const HOST_TAG = 'vector-studio-text-measure';
 
 const HOST_STYLE: readonly (readonly [string, string])[] = [
-  ['all', 'initial'],
+  ...HOST_RESET,
   ['display', 'block'],
   ['position', 'fixed'],
   ['left', '0'],
@@ -31,25 +32,9 @@ const HOST_STYLE: readonly (readonly [string, string])[] = [
   ['pointer-events', 'none'],
 ];
 
-// `all: initial` first: it resets every inherited property but `direction` and `unicode-bidi`,
-// which are set explicitly. `font-size: 0` is the zero-size strut (M6a-Q2): sizes, letter
-// spacing and line height are set on the run spans.
-const BLOCK_STYLE = [
-  'all: initial',
-  'display: block',
-  'visibility: hidden',
-  'direction: ltr',
-  'unicode-bidi: isolate',
-  'white-space: pre-wrap',
-  'word-break: keep-all',
-  'overflow-wrap: anywhere',
-  'hyphens: none',
-  'font-variant-ligatures: none',
-  'text-spacing-trim: space-all',
-  'text-autospace: no-autospace',
-  'text-align: left',
-  'font-size: 0',
-].join('; ');
+// The measurement block's style (style.ts): `all: initial` first, then the block typography.
+export const MEASUREMENT_BLOCK_STYLE = cssText(MEASUREMENT_BLOCK_DECLARATIONS);
+const BLOCK_STYLE = MEASUREMENT_BLOCK_STYLE;
 
 const PROBE_STYLE = 'display: inline-block; width: 0; height: 0; margin: 0; padding: 0; border: 0';
 

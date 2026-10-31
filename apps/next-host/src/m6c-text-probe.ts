@@ -518,6 +518,11 @@ export function textScene(): TextScene | null {
   return current.host.recorder.textScene(current.host.size.devicePixelRatio);
 }
 
+/** The host canvas's CSS size and DPR, as the host backend was initialized; null without one. */
+export function probeHostSize(): TextProbeHost['size'] | null {
+  return current?.host.size ?? null;
+}
+
 /** One cluster of `clusterRects(id)`. */
 export type ClusterRect = Readonly<{ index: number; text: string; rect: DeviceRect | null }>;
 

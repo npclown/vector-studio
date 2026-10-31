@@ -596,7 +596,10 @@ describe('M6c-U2 cluster probe: the one-cluster scene and its crop', () => {
   });
 
   it('exposes scene and readCluster on the page hook and the counters on the renderer hook', () => {
-    expect(PAGE_SOURCE).toMatch(/text: \{ \.\.\.textTestHook\(state\), \.\.\.textProbeHook \}/u);
+    // M6c-U3 adds the DOM reference's members beside the probe's.
+    expect(PAGE_SOURCE).toMatch(
+      /text: \{ \.\.\.textTestHook\(state\), \.\.\.textProbeHook, \.\.\.textReferenceHook\(editor\) \}/u,
+    );
     expect(PAGE_SOURCE).toMatch(/import\('\.\.\/src\/m6c-text-probe'\)\)\.textScene\(\)/u);
     expect(PAGE_SOURCE).toMatch(
       /import\('\.\.\/src\/m6c-text-probe'\)\)\.readCluster\(id, index\)/u,

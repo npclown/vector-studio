@@ -5,8 +5,9 @@ import { defineConfig, devices, type Project } from '@playwright/test';
 // `?fixture=text-gpu` (both pages), no editor diagnostic and no renderer diagnostic other than
 // `info`, and the `?test=1` cluster probe (`scene()`, `readCluster()`, the raster counters), in
 // headed Chrome and Edge at DPR 1 (the device presets) and at deviceScaleFactor 2 (`chrome-dpr2`,
-// `edge-dpr2`). Needs `pnpm build` (the next-host production build) and the geometry kernel
-// WASM from `pnpm test:geometry` (or VECTOR_STUDIO_GEOMETRY_WASM), so the headed projects attach
+// `edge-dpr2`). M6c-U3 (M6c-A06, A07): m6c-agreement.spec.ts, the DOM and GPU agreement and
+// the font-load case, runs in the same projects. Both need `pnpm build` (the next-host production
+// build) and the geometry kernel WASM from `pnpm test:geometry` (or VECTOR_STUDIO_GEOMETRY_WASM), so the headed projects attach
 // the WebGPU renderer. Reports are written under test-results/m6c-next-host/.
 //
 // M6C_NEXT_HOST_CHROMIUM names a Chromium executable instead: the spec then runs in one headless

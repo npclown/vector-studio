@@ -15,6 +15,7 @@
     "apps/next-host/src/m6a-text-host.ts",
     "apps/next-host/src/m6b-text-edit.ts",
     "apps/next-host/src/m6c-text-probe.ts",
+    "apps/next-host/src/m6c-text-reference.ts",
     "apps/next-host/src/renderer-options.ts",
     "playwright*.config.ts",
     "tests/**/*.ts",

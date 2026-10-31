@@ -49,7 +49,13 @@ import { BENCH_CANVAS, benchDatabaseName, pageBench } from '../src/e26-bench';
 import { AppearancePanel } from '../src/m4-appearance-panel';
 import { SelectionOverlay } from '../src/overlay';
 import { createWebGpuRenderer } from '../src/webgpu-renderer';
-import type { ClusterRead, ClusterRect, TextScene } from '../src/m6c-text-probe';
+import type { ClusterRead, ClusterRect, FrameCrop, TextScene } from '../src/m6c-text-probe';
+import type {
+  FlowedReference,
+  MinimumFontSize,
+  PlacedReference,
+  PlacedReferenceOptions,
+} from '../src/m6c-text-reference';
 
 // P5-U6 (P5 plan, section 6): the P5 editor page. Its static module graph is React and the
 // editor packages only; the renderer is created in the canvas effect (see webgpu-renderer.ts).
@@ -92,6 +98,10 @@ import type { ClusterRead, ClusterRect, TextScene } from '../src/m6c-text-probe'
 // the M6c GPU text fixture at zoom 1 (page `agreement`, then `scene`); the test hook's `text`
 // member gains `scene()`, `readCluster(id, index)` and `clusterRects(id)` from the cluster probe
 // (src/m6c-text-probe.ts), which is imported only under `?test=1`.
+// M6c-U3 (M6c contract, sections 5 and 6.1, U2 note 3): the hook's `text` member gains
+// `reference(id)` (the flowed DOM block), `reference(id, index)` (the placed DOM cluster, read back
+// by `readReference` from the spec's screenshot), `clearReference()` and `minimumFontSize()`, with
+// text-dom's reference styles (src/m6c-text-reference.ts), also imported only under `?test=1`.
 
 const WIDTH = 960;
 const HEIGHT = 640;
@@ -166,7 +176,7 @@ declare global {
        * M6a contract, section 5: the editor's text-dom port and the test font; M6c contract,
        * section 5: the probe's members (null and a rejection while no renderer exists).
        */
-      text: TextTestHook & TextProbeHook;
+      text: TextTestHook & TextProbeHook & TextReferenceHook;
       /** M6b-U9: the DOM event log of text edit mode. */
       textEdit: TextEditTestHook;
     }>;
@@ -186,6 +196,43 @@ const textProbeHook: TextProbeHook = {
   readCluster: async (id, index) => (await import('../src/m6c-text-probe')).readCluster(id, index),
   clusterRects: async (id) => (await import('../src/m6c-text-probe')).clusterRects(id),
 };
+
+/** M6c-U3: the DOM reference's hook members; the module loads on first use. */
+type TextReferenceHook = Readonly<{
+  /** The flowed DOM block of a projected leaf (the layout term, recorded). */
+  reference: {
+    (id: string): Promise<FlowedReference>;
+    /** Shows the placed DOM cluster `index`; screenshot its `clip`, then `readReference`. */
+    (id: string, index: number, options?: PlacedReferenceOptions): Promise<PlacedReference>;
+  };
+  /** The shown placed cluster's screenshot (PNG, base64) as a device px crop; removes it. */
+  readReference(pngBase64: string): Promise<FrameCrop>;
+  clearReference(): Promise<void>;
+  /** M6-S0's minimum-font-size probe in a font list, with text-dom's styles. */
+  minimumFontSize(fontList: string): Promise<MinimumFontSize>;
+}>;
+
+function textReferenceHook(editor: Editor): TextReferenceHook {
+  const load = () => import('../src/m6c-text-reference');
+  async function reference(id: string): Promise<FlowedReference>;
+  async function reference(
+    id: string,
+    index: number,
+    options?: PlacedReferenceOptions,
+  ): Promise<PlacedReference>;
+  async function reference(id: string, index?: number, options?: PlacedReferenceOptions) {
+    const loaded = await load();
+    return index === undefined
+      ? loaded.flowedReference(editor, id)
+      : loaded.placeReference(editor, id, index, options);
+  }
+  return {
+    reference,
+    readReference: async (png) => (await load()).readReference(png),
+    clearReference: async () => (await load()).clearReference(),
+    minimumFontSize: async (fontList) => (await load()).minimumFontSize(fontList),
+  };
+}
 
 /** The page's persistence state for the toolbar and status (section 5.3). */
 type PersistenceView = Readonly<{
@@ -810,7 +857,7 @@ function Host({ state, textFont }: { state: HostCompositionState; textFont: Test
       editor,
       events,
       persistence: { flush: () => session.current?.flush() ?? Promise.resolve() },
-      text: { ...textTestHook(state), ...textProbeHook },
+      text: { ...textTestHook(state), ...textProbeHook, ...textReferenceHook(editor) },
       textEdit: textEdit.hook,
     };
     return () => {
