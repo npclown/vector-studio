@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { layoutZoom } from '../../packages/text-dom/src/measure.js';
+import { cancelLayoutZoom, layoutZoom } from '../../packages/text-dom/src/measure.js';
 
 // MVP M6c-U0 (docs/plans/mvp-m6c-gpu-text-contract.md, section 3; docs/evidence/m6c-u0/README.md):
 // text-dom cancels the page's layout zoom on its measurement host, so Chromium rounds font
@@ -8,8 +8,12 @@ import { layoutZoom } from '../../packages/text-dom/src/measure.js';
 // stays at the real one. The DOM side is checked in a browser by docs/evidence/m6c-u0/probe.mjs
 // and the M6a headed spec.
 
-/** A host whose width reads back as Chromium lays it out at `layoutAt`: floored to 1/64 px. */
-function host(layoutAt: number) {
+/**
+ * A host whose width reads back as Chromium lays it out at the page's layout zoom `layoutAt`
+ * times its own `zoom` (ignored when `honourZoom` is false): floored to 1/64 layout px, reported
+ * in page px. Chromium keeps the effective zoom in float, so a product within 1e-9 of 1 is 1.
+ */
+function host(layoutAt: number, honourZoom = true) {
   const style = new Map<string, string>();
   const element = {
     style: {
@@ -19,7 +23,10 @@ function host(layoutAt: number) {
     },
     getBoundingClientRect() {
       const css = Number.parseFloat(style.get('width') ?? '0');
-      return { width: Math.floor(css * layoutAt * 64) / (64 * layoutAt) } as DOMRect;
+      const own = honourZoom ? Number.parseFloat(style.get('zoom') ?? '1') : 1;
+      let effective = layoutAt * own;
+      if (Math.abs(effective - 1) <= 1e-9) effective = 1;
+      return { width: (Math.floor(css * effective * 64) / 64 / effective) * own } as DOMRect;
     },
   };
   return { element: element as unknown as HTMLElement, style };
@@ -66,6 +73,31 @@ describe('M6c-U0 layoutZoom', () => {
     const { element, style } = host(layoutAt);
     if (layoutAt === 0) element.getBoundingClientRect = () => ({ width: 0 }) as DOMRect;
     expect(layoutZoom(element, 1.25)).toBe(1);
+    expect(style.get('width')).toBe('0');
+  });
+});
+
+describe('M6c-U0 cancelLayoutZoom', () => {
+  it.each([1.25, 1.5, 1.875, 2, 0.8999999761581421])(
+    'sets zoom 1/E on the host and checks it lays out at 1 (%s)',
+    (ratio) => {
+      const { element, style } = host(ratio);
+      expect(cancelLayoutZoom(element, ratio)).toBe(ratio);
+      expect(style.get('zoom')).toBe(String(1 / ratio));
+      expect(style.get('width')).toBe('0');
+    },
+  );
+
+  it('leaves zoom 1 when the page is laid out at 1', () => {
+    const { element, style } = host(1);
+    expect(cancelLayoutZoom(element, 1.25)).toBe(1);
+    expect(style.get('zoom')).toBe('1');
+  });
+
+  it('falls back to 1 when the host does not lay out at zoom 1 after cancelling', () => {
+    const { element, style } = host(1.25, false);
+    expect(cancelLayoutZoom(element, 1.25)).toBe(1);
+    expect(style.get('zoom')).toBe('1');
     expect(style.get('width')).toBe('0');
   });
 });

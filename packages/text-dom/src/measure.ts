@@ -89,8 +89,9 @@ function relative(rect: DOMRect, origin: DOMRect, zoom: number): Rect {
  * a layout px: a host `width` of `w` CSS px is laid out as `floor(64 E w)` units and reads back as
  * that over `64 E`. The smallest `w = 2^k / 64` that reads back non-zero is one unit, so
  * `E = 1 / (64 × reading)`. A result within 1e-6 of `ratio` or of 1 is taken as that value; a
- * zoom outside [1/64, 32) reads as 1 (no cancelling). Assumes no CSS `zoom` on the host's
- * ancestors.
+ * zoom outside [1/64, 32) reads as 1 (no cancelling). Assumes Chromium (its 1/64 px layout unit,
+ * floored widths and the font metric rounding this cancels) and no CSS `zoom` on the host's
+ * ancestors; `cancelLayoutZoom` checks the result and falls back to 1 when it does not hold.
  */
 export function layoutZoom(host: HTMLElement, ratio: number): number {
   host.style.setProperty('zoom', '1', 'important');
@@ -105,6 +106,33 @@ export function layoutZoom(host: HTMLElement, ratio: number): number {
   if (Math.abs(zoom - 1) <= 1e-6) return 1;
   if (ratio > 0 && Math.abs(zoom / ratio - 1) <= 1e-6) return ratio;
   return zoom;
+}
+
+/**
+ * Sets `zoom: 1/E` on `host` for the page's layout zoom `E` (`layoutZoom`) and returns `E`, the
+ * factor every length read inside the host is multiplied by. It then checks that the host is laid
+ * out at zoom 1: host widths of 1.5 and 1000.5 layout units must floor to 1 and 1000 units of its
+ * own (a host still at `E` floors them to `floor(1.5 E)` and `floor(1000.5 E)`). Otherwise
+ * (another engine, CSS `zoom` on an ancestor, a zoom the browser rounds) it sets `zoom: 1` and
+ * returns 1, which keeps the error M6c-U0 removes rather than adding another.
+ */
+export function cancelLayoutZoom(host: HTMLElement, ratio: number): number {
+  const zoom = layoutZoom(host, ratio);
+  if (zoom === 1) return 1;
+  host.style.setProperty('zoom', String(1 / zoom), 'important');
+  const units = (width: number): number => {
+    host.style.setProperty('width', `${width / 64}px`, 'important');
+    return host.getBoundingClientRect().width * zoom * 64;
+  };
+  let atOne: boolean;
+  try {
+    atOne = Math.abs(units(1.5) - 1) <= 1e-3 && Math.abs(units(1000.5) - 1000) <= 1e-3;
+  } finally {
+    host.style.setProperty('width', '0', 'important');
+  }
+  if (atOne) return zoom;
+  host.style.setProperty('zoom', '1', 'important');
+  return 1;
 }
 
 /** One layout unit of `host`, in CSS px, or 0 for a zoom outside [1/64, 32) (`layoutZoom`). */
@@ -151,8 +179,10 @@ function overlapping(rects: DOMRectList, origin: DOMRect, rect: Rect, zoom: numb
 export function createMeasurer(document: Document, lang: string): Measurer {
   let host: HTMLElement | null = null;
   let block: HTMLElement | null = null;
-  /** The layout zoom the host cancels for the current request (`layoutZoom`). */
+  /** The layout zoom the host cancels (`cancelLayoutZoom`). */
   let zoom = 1;
+  /** The `devicePixelRatio` `zoom` was detected at; null before the first detection. */
+  let detectedAt: number | null = null;
 
   function ensureBlock(): HTMLElement {
     if (host === null || block === null) {
@@ -165,6 +195,7 @@ export function createMeasurer(document: Document, lang: string): Measurer {
       block = document.createElement('div');
       block.lang = lang;
       root.append(block);
+      detectedAt = null;
     }
     if (!host.isConnected) {
       const parent = document.body ?? document.documentElement;
@@ -172,10 +203,16 @@ export function createMeasurer(document: Document, lang: string): Measurer {
       parent.append(host);
     }
     // Measured at layout zoom 1 whatever the page's (M6c-U0): Chromium rounds a font's metrics to
-    // whole device px at the size it lays out, so at another zoom they round elsewhere. Read on
-    // every request, since browser zoom changes without a reload.
-    zoom = layoutZoom(host, document.defaultView?.devicePixelRatio ?? 1);
-    host.style.setProperty('zoom', zoom === 1 ? '1' : String(1 / zoom), 'important');
+    // whole device px at the size it lays out, so at another zoom they round elsewhere. Detected
+    // again only when `devicePixelRatio` changes, which browser zoom, a real device scale change
+    // and CDP emulation all do; a request at a stable ratio pays no extra layout. (A real device
+    // scale change under unchanged CDP emulation keeps the ratio and is not seen until the next
+    // ratio change: test setups only.)
+    const ratio = document.defaultView?.devicePixelRatio ?? 1;
+    if (ratio !== detectedAt) {
+      zoom = cancelLayoutZoom(host, ratio);
+      detectedAt = ratio;
+    }
     return block;
   }
 
