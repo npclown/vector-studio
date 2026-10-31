@@ -73,6 +73,7 @@ const f = Math.fround;
  * guard construction reparameterizes that affine map; it does not alter geometry.
  * Native interpolation/compiler behavior still requires the P1.5 image fixtures.
  */
+// E26-U5d-1: `primitivePackingWithinBudget` repeats this vertex arithmetic; keep the two in step.
 export function assessPrimitivePacking(
   world: SceneAffine,
   localBounds: SceneBounds,
@@ -200,7 +201,8 @@ export function assessPrimitivePacking(
  * assessment. True means the assessment would pass; false means only that the caller must run
  * the assessment, which also throws whatever this check declines to decide (a singular transform,
  * a collapsed quad, non-finite arithmetic). The margin covers the float64 rounding of the
- * interpolation that the assessment does and this check does not.
+ * interpolation that the assessment does and this check does not. Its vertex arithmetic is the
+ * assessment's, operation for operation: keep the two in step.
  */
 export function primitivePackingWithinBudget(
   world: SceneAffine,

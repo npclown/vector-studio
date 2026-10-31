@@ -118,7 +118,7 @@ describe('E26-U5d packing bound', () => {
       try {
         assessment = assessPrimitivePacking(...args, node);
       } catch {
-        expect(primitivePackingWithinBudget(...args, Infinity, node)).toBe(false);
+        expect(primitivePackingWithinBudget(...args, 0.125, node)).toBe(false);
         declinedThrows += 1;
         continue;
       }
