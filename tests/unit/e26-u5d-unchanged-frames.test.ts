@@ -180,7 +180,7 @@ describe('E26 U5d-2: clip states and mask levels', () => {
     Object.freeze({
       kind: 'mask',
       containerId: id,
-      world: [1, 0, 0, 1, 0, 0],
+      world: [1, 0, 0, 1, 0, 0] as const,
       sourceId: `${id}-src`,
     });
   const rect = (id: string) =>
