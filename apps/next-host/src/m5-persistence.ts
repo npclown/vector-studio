@@ -147,6 +147,11 @@ export type PersistenceOptions = {
   onStatus?: (status: PersistStatus) => void;
   /** E26-U1b: the bench's write-start hook wraps the opened store (`?bench=1` only). */
   wrapStore?: (store: DocumentStore) => DocumentStore;
+  /**
+   * E26-U6a: whether a canvas press is in progress. While it reads true a due autosave write
+   * waits (the autosave's `holdWhile`); the host calls `release()` when the press ends.
+   */
+  pressed?: () => boolean;
 };
 
 export type PersistenceSession = Readonly<{
@@ -158,6 +163,8 @@ export type PersistenceSession = Readonly<{
   flush(): Promise<void>;
   /** "Discard stored document": `clear`, then autosave attaches. Only after a failed restore. */
   discard(): Promise<void>;
+  /** E26-U6a: the press ended; starts a write the press held, if any. No-op otherwise. */
+  release(): void;
   /** Unsubscribes, disposes the autosave and closes the store; safe under a strict-mode remount. */
   dispose(): void;
 }>;
@@ -203,6 +210,7 @@ export function attachPersistence(
       ...(options.delayMs === undefined ? {} : { delayMs: options.delayMs }),
       ...(options.maxWaitMs === undefined ? {} : { maxWaitMs: options.maxWaitMs }),
       ...(options.timers === undefined ? {} : { timers: options.timers }),
+      ...(options.pressed === undefined ? {} : { holdWhile: options.pressed }),
       onResult,
     });
     autosave = scheduler;
@@ -280,6 +288,9 @@ export function attachPersistence(
       report({ state: 'empty' });
       attach(target, true);
     },
+    release(): void {
+      if (!disposed) autosave?.release();
+    },
     dispose(): void {
       if (disposed) return;
       disposed = true;
@@ -288,5 +299,74 @@ export function attachPersistence(
       autosave?.dispose();
       store?.close();
     },
+  };
+}
+
+/** E26-U6a: the frame and task scheduling of the press release; tests inject their own. */
+export type PressReleaseScheduler = Readonly<{
+  requestFrame(callback: () => void): unknown;
+  cancelFrame(handle: unknown): void;
+  setTimeout(callback: () => void, ms: number): unknown;
+  clearTimeout(handle: unknown): void;
+}>;
+
+const browserScheduler: PressReleaseScheduler = {
+  requestFrame: (callback) => requestAnimationFrame(() => callback()),
+  cancelFrame: (handle) => cancelAnimationFrame(handle as number),
+  setTimeout: (callback, ms) => globalThis.setTimeout(callback, ms),
+  clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
+};
+
+export type PressGate = Readonly<{
+  /** `PersistenceOptions.pressed`: whether a canvas press is in progress. */
+  pressed: () => boolean;
+  /** `EditorCanvasProps.onPressChange`. */
+  onPressChange: (pressed: boolean) => void;
+  /** Cancels a pending release (the persistence effect's cleanup). */
+  cancel: () => void;
+}>;
+
+/**
+ * E26-U6a (E26 contract, section 5): the host side of the autosave hold. A press sets the flag;
+ * its end clears the flag, then releases the session after the next animation frame and one
+ * task, so the held write serializes the document in the frame after the commit, not in the
+ * pointerup task before its paint. A press that starts within that deferral keeps the write
+ * held (the release then does nothing, and the second press's end releases it). With no
+ * session, nothing is scheduled. A frame never comes in a hidden tab; the host's
+ * `visibilitychange` flush, which is not held, writes then.
+ */
+export function createPressGate(
+  session: () => PersistenceSession | null,
+  scheduler: PressReleaseScheduler = browserScheduler,
+): PressGate {
+  let pressed = false;
+  let frame: { handle: unknown } | null = null;
+  let task: { handle: unknown } | null = null;
+  const cancel = (): void => {
+    if (frame !== null) scheduler.cancelFrame(frame.handle);
+    if (task !== null) scheduler.clearTimeout(task.handle);
+    frame = null;
+    task = null;
+  };
+  return {
+    pressed: () => pressed,
+    onPressChange: (next: boolean): void => {
+      pressed = next;
+      if (next || session() === null) return;
+      // The flag clears before the release, so the autosave reads the press as over.
+      cancel();
+      frame = {
+        handle: scheduler.requestFrame(() => {
+          frame = null;
+          task = {
+            handle: scheduler.setTimeout(() => {
+              task = null;
+              session()?.release();
+            }, 0),
+          };
+        }),
+      };
+    },
+    cancel,
   };
 }

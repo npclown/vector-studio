@@ -20,6 +20,7 @@ import { inRotateZone, zoomLabel } from '../src/m2-geometry';
 import { toggleClosedCommand } from '../src/m3-path-overlay';
 import {
   attachPersistence,
+  createPressGate,
   offersDiscard,
   PERSIST_DATABASE_NAME,
   persistQuery,
@@ -164,6 +165,8 @@ type PersistenceView = Readonly<{
   /** null without `?persist=1`. */
   status: PersistStatus | null;
   discard(): void;
+  /** E26-U6a: the canvas press state; a release starts a write the press held. */
+  onPressChange(pressed: boolean): void;
 }>;
 
 /**
@@ -691,6 +694,7 @@ function Surface({
               setErrors((list) => [...list, String(error)]);
             }}
             onRendererReady={() => setRenderer('ready')}
+            onPressChange={persistence.onPressChange}
             style={{ border: '1px solid #ccc' }}
           >
             <SelectionOverlay
@@ -728,6 +732,8 @@ function usePersistence(
 ): PersistenceView & Readonly<{ session: { current: PersistenceSession | null } }> {
   const [status, setStatus] = useState<PersistStatus | null>(null);
   const session = useRef<PersistenceSession | null>(null);
+  // E26-U6a: no autosave write starts while a canvas press is in progress.
+  const gate = useMemo(() => createPressGate(() => session.current), []);
   useEffect(() => {
     if (!persistQuery(window.location.search).persist) return;
     // E26-U1b: a bench run restores from its own empty database and records its writes.
@@ -735,6 +741,7 @@ function usePersistence(
     const current = attachPersistence(editor, {
       baseRevision,
       onStatus: setStatus,
+      pressed: gate.pressed,
       ...(bench === null
         ? {}
         : {
@@ -749,13 +756,15 @@ function usePersistence(
     document.addEventListener('visibilitychange', hidden);
     return () => {
       document.removeEventListener('visibilitychange', hidden);
+      gate.cancel();
       current.dispose();
       if (session.current === current) session.current = null;
     };
-  }, [editor, baseRevision]);
+  }, [editor, baseRevision, gate]);
   return {
     status,
     discard: () => void session.current?.discard(),
+    onPressChange: gate.onPressChange,
     session,
   };
 }
