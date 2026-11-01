@@ -106,7 +106,7 @@ Each milestone is one visualization-track item with its own contract of 300 line
 
 - Benchmarks, following [`docs/benchmarks/README.md`](../benchmarks/README.md), on the main PC: a 10,000-node mixed editor document (all visible worst case), typical editing at 60 fps, a 10,000-simple-node stress scene at 30 fps or more, and pointer-input latency while background work runs.
 - MVP exit record: one row per requirement bullet with its evidence, the disclosed defects carried from P3 and P4, and the remaining backlog. The MVP exit is the user's acceptance of that record.
-- Contract: [mvp-m9-performance-exit-contract.md](mvp-m9-performance-exit-contract.md) (V-19, draft 2026-11-01).
+- Contract: [mvp-m9-performance-exit-contract.md](mvp-m9-performance-exit-contract.md) (V-19, approved 2026-11-01, #449).
 
 ## 5. Rendering-track needs
 
