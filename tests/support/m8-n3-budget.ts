@@ -156,12 +156,16 @@ export async function expectLayoutBudget(
   const where = `${path.basename(info.config.configFile ?? '')} ${info.project.name}`;
   // 1. The canvas origin.
   expect(live.origin, `${where}: canvas origin`).toEqual(base.origin);
-  // 2. No wider and no taller document; no horizontal scroll unless 17a2b0a overflowed.
+  // 2. No wider and no taller document; no horizontal scroll unless 17a2b0a overflowed. The
+  // scroll sizes never drop below the client sizes, which a scrollbar shrinks: at 1280 x 900 the
+  // 17a2b0a row 1 overflowed, its horizontal scrollbar made both its clientHeight and its
+  // scrollHeight 885, and a page without that overflow fills the whole 900 px viewport. A size
+  // within the live client size is no overflow at all, so the bound is the larger of the two.
   expect(live.scroll.scrollWidth, `${where}: scrollWidth`).toBeLessThanOrEqual(
-    base.scroll.scrollWidth,
+    Math.max(base.scroll.scrollWidth, live.scroll.clientWidth),
   );
   expect(live.scroll.scrollHeight, `${where}: scrollHeight`).toBeLessThanOrEqual(
-    base.scroll.scrollHeight + (options.statusLines ?? 0),
+    Math.max(base.scroll.scrollHeight + (options.statusLines ?? 0), live.scroll.clientHeight),
   );
   const overflowed = (base.canvasRow.width ?? 0) > base.scroll.clientWidth;
   if (overflowed) {
