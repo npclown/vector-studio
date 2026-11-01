@@ -1,4 +1,3 @@
-import path from 'node:path';
 import {
   createCounterIdSource,
   createEditor,
@@ -31,7 +30,6 @@ import {
 // functions, the literal command of each button run against a real editor (each document edit
 // one undo step), and the rows' markup with `renderToString`.
 
-const root = path.resolve(import.meta.dirname, '../..');
 const frame = { x: 10, y: 20, width: 30, height: 40 };
 
 const tool = (id: string): ExtensionTool => ({ id, input: () => false, reset: () => {} });
@@ -205,46 +203,11 @@ describe('M8-A10 toolbar row 1: actions and enable rules (M8-L1)', () => {
     expect(target.getSnapshot().selection).toEqual([]);
   });
 
-  it("toggle closed agrees with next-host's toggleClosedCommand at 17a2b0a", async () => {
-    const host = (await import(path.join(root, 'apps/next-host/src/m3-path-overlay.ts'))) as {
-      toggleClosedCommand: (overlay: PathEditOverlay | null) => Command | null;
-    };
+  // M8-U6 removed next-host's copy of toggleClosedCommand, which this test compared with; the M3
+  // expectations of the command now run against ui's copy in tests/unit/m3-next-host.test.ts.
+  it('toggle closed runs toggleClosedCommand', () => {
     expect(toggleClosedCommand(null)).toBeNull();
     const point = { x: 0, y: 0 };
-    let compared = 0;
-    for (const shape of [
-      [[true, 1]],
-      [[true, 2]],
-      [[true, 4]],
-      [[false, 3]],
-      [
-        [false, 2],
-        [true, 3],
-      ],
-    ] as [boolean, number][][]) {
-      const total = shape.reduce((sum, [, n]) => sum + n, 0);
-      for (let mask = 0; mask < 1 << total; mask += 1) {
-        let bit = 0;
-        const overlay: PathEditOverlay = {
-          id: 'p',
-          subpaths: shape.map(([closed, n]) => ({
-            closed,
-            anchors: Array.from({ length: n }, () => ({
-              point,
-              in: null,
-              out: null,
-              mirrored: false,
-              selected: (mask & (1 << bit++)) !== 0,
-            })),
-          })),
-        };
-        expect(toggleClosedCommand(overlay), JSON.stringify([shape, mask])).toEqual(
-          host.toggleClosedCommand(overlay),
-        );
-        compared += 1;
-      }
-    }
-    expect(compared).toBe(2 + 4 + 16 + 8 + 32);
     const open: PathEditOverlay = {
       id: 'p',
       subpaths: [

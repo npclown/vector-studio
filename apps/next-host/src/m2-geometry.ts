@@ -3,7 +3,8 @@ import type { DocumentV6 } from '@vector-studio/model';
 
 // M2-U8 (MVP M2 contract, sections 3, 4.1 and 5): the host-side geometry of the next-host page's
 // M2 chrome, kept pure so it is unit tested without a DOM. The editor decides every behaviour;
-// these helpers only draw it: the scope outline, the rotate-zone cursor and the zoom label.
+// these helpers only draw it: the scope outline and the rotate-zone cursor. The zoom label moved to
+// `@vector-studio/ui`'s toolbar (MVP M8 contract, M8-L1; removed here in M8-U6).
 
 /** The resize-handle pick radius in CSS px (M2 contract, section 4.1: `6 / zoom` page units). */
 export const HANDLE_PX = 6;
@@ -95,11 +96,6 @@ export function inRotateZone(handles: SelectionHandles, point: PagePoint, zoom: 
   const ly = -dx * sin + dy * cos;
   const outside = lx < 0 || lx > width || ly < 0 || ly > height;
   return outside && handles.corners.some((corner) => near(corner, ROTATE_PX / zoom));
-}
-
-/** The zoom as a percentage with at most two decimals: `1` is `100%`, `1/64` is `1.56%`. */
-export function zoomLabel(zoom: number): string {
-  return `${Math.round(zoom * 10_000) / 100}%`;
 }
 
 /** A page-space angle in radians as degrees with at most one decimal, for the snap label. */

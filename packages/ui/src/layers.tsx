@@ -31,8 +31,9 @@ import { runAction, type ActionButton } from './toolbar-model.js';
 const ROW = { display: 'flex', gap: 8 } as const;
 // next-host's `Pages` nav at 17a2b0a had this padding; it now pads the whole page list.
 const PAGES = { display: 'flex', gap: 8, padding: '0 8px' } as const;
-// A rename textbox no wider than a typical page button, so row 2 keeps its width budget.
-const NAME_INPUT = { width: '8em', font: 'inherit' } as const;
+// A rename textbox no wider than a typical page button, so row 2 keeps its width budget, in the
+// browser's control font like the buttons around it, so row 2 keeps its height (M8-N3; M8-U6).
+const NAME_INPUT = { width: '8em' } as const;
 // M8-N3: the layer tree has a fixed height of 240 px; its list scrolls.
 const TREE = {
   display: 'flex',

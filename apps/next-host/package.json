@@ -12,6 +12,7 @@
     "@vector-studio/renderer-core": "workspace:*",
     "@vector-studio/renderer-webgpu": "workspace:*",
     "@vector-studio/text-dom": "workspace:*",
+    "@vector-studio/ui": "workspace:*",
     "next": "16.4.3",
     "react": "19.3.1",
     "react-dom": "19.3.1"

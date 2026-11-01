@@ -2,6 +2,7 @@ import {
   createEditor,
   starExtension,
   type Editor,
+  type Extension,
   type Platform,
 } from '@vector-studio/editor-core';
 import { createTextDom, type TextDom, type TextDomOptions } from '@vector-studio/text-dom';
@@ -38,6 +39,11 @@ export type HostCompositionOptions = Readonly<{
   platform: Platform;
   /** The text-dom factory; tests inject one. */
   createTextDom?: (options: TextDomOptions) => TextDom;
+  /**
+   * Extensions registered after `starExtension`: the `test.ui` fault extension with
+   * `?test=1&faults=1` (MVP M8 contract, M8-N2); none by default.
+   */
+  extraExtensions?: readonly Extension[];
 }>;
 
 /** Creates the text-dom instance and the editor it feeds, in that order. */
@@ -46,7 +52,7 @@ export function composeHost(options: HostCompositionOptions): HostComposition {
   let editor: Editor;
   try {
     editor = createEditor({
-      extensions: [starExtension],
+      extensions: [starExtension, ...(options.extraExtensions ?? [])],
       platform: options.platform,
       textLayout: textDom,
     });

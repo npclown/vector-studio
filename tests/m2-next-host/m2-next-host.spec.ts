@@ -1,6 +1,7 @@
 import type { Command, Editor, EditorEvent } from '@vector-studio/editor-core';
 import type { DocumentV6, Frame } from '@vector-studio/model';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
 // M2-U8 (MVP M2 contract, section 8): M2-A13, the next-host page's M2 interactions through
 // EditorCanvas with real input in headed Chrome and Edge. Copy, cut and paste go through the
@@ -99,6 +100,8 @@ async function open(page: Page) {
     await expect(status).toHaveAttribute('data-renderer', 'ready', { timeout: 30_000 });
     await expect(page.getByTestId('error')).toHaveCount(0);
   }
+  // M8-N3 (M8-U6): the layout budget against the 17a2b0a measurement of this project.
+  await expectLayoutBudget(page);
   /**
    * A page point on screen with the editor's current camera and the canvas content box's
    * current place (inside its border), both read at call time.

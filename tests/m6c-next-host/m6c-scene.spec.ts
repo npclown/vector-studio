@@ -24,6 +24,7 @@ import {
   type CoverRule,
   type RasterCall,
 } from './m6c-scene';
+import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
 // M6c-U4 (MVP M6c contract, section 10, M6c-A05): M6-A10 through the editor. On
 // `?fixture=text-gpu`'s `scene` page (tests/fixtures/m6-text/gpu/text-gpu.v6.json, U2 note 4),
@@ -134,6 +135,8 @@ async function open(page: Page) {
     expect(ready).toBe(true);
     await expect(page.getByTestId('error')).toHaveCount(0);
   }
+  // M8-N3 (M8-U6): the layout budget against the 17a2b0a measurement of this project.
+  await expectLayoutBudget(page);
   const switched = await page.evaluate(
     () => window.__p5Host!.editor.execute({ type: 'setActivePage', id: 'scene' }).ok,
   );

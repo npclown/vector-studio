@@ -13,6 +13,7 @@ import {
   type KeystrokeLog,
   type TypingReport,
 } from './m6c-observe';
+import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
 // M6c-U5 (MVP M6c contract, section 9 and M6c-A10): the typing observation (M6b-Q15 (a)),
 // recorded, not judged. Run by playwright.m6c-observe.config.ts (`pnpm test:m6c-observe`), not by
@@ -76,6 +77,8 @@ async function open(page: Page) {
     expect(ready).toBe(true);
     await expect(page.getByTestId('error')).toHaveCount(0);
   }
+  // M8-N3 (M8-U6): the layout budget against the 17a2b0a measurement of this project.
+  await expectLayoutBudget(page);
   return { errors, ready };
 }
 

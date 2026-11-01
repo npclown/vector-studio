@@ -167,10 +167,20 @@ export function evaluatePackageBoundaries({ manifest, sources, packageRoots, dis
 // directory; a subpath such as `@vector-studio/react/dist/context.js`, another workspace package
 // or a relative path into another package's sources fails. M8-U6 adds next-host's sample
 // extension panel (M8-N2).
+//
+// A policy with `files` checks only those files of its directory, and with `relative: false` a
+// relative specifier fails too: next-host's star panel (M8-N2, M8-Q13 (a)) imports `ui` and
+// `react` only, never another next-host module.
 export const publicImportPolicies = [
   {
     directory: 'packages/ui/src',
     specifiers: ['react', 'react/jsx-runtime', '@vector-studio/react'],
+  },
+  {
+    directory: 'apps/next-host/src',
+    files: ['m8-star-panel.tsx'],
+    specifiers: ['react', 'react/jsx-runtime', '@vector-studio/ui'],
+    relative: false,
   },
 ];
 
@@ -191,10 +201,16 @@ export function importSpecifiers(text) {
 
 /**
  * M8-B3: every specifier of `sources` is one of `specifiers` exactly, or relative and inside
- * `sourceRoot`. `sources` are `{ path, text }` with absolute paths; failures use `displayPath`
- * for each source when given.
+ * `sourceRoot` (unless `relative` is false, when every relative specifier fails). `sources` are
+ * `{ path, text }` with absolute paths; failures use `displayPath` for each source when given.
  */
-export function evaluatePublicImports({ sources, sourceRoot, specifiers, displayPath }) {
+export function evaluatePublicImports({
+  sources,
+  sourceRoot,
+  specifiers,
+  displayPath,
+  relative = true,
+}) {
   const failures = [];
   const allowed = new Set(specifiers);
   for (const source of sources) {
@@ -203,6 +219,10 @@ export function evaluatePublicImports({ sources, sourceRoot, specifiers, display
       if (allowed.has(specifier)) continue;
       if (!specifier.startsWith('.')) {
         failures.push(`${shown}: import ${specifier} is not a public import`);
+        continue;
+      }
+      if (!relative) {
+        failures.push(`${shown}: relative import ${specifier} is not allowed`);
         continue;
       }
       if (!isInsideDirectory(sourceRoot, source.path, specifier)) {

@@ -8,6 +8,7 @@ import {
 import type { DocumentV6 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
 import { RecordingRenderer } from '../support/p5-recording-renderer.js';
+import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
 // P5-U6 (P5 editor-slice plan, section 7): P5-A12, the next-host page edits a document through
 // EditorCanvas in headed Chrome and Edge, and the headed half of P5-A09, the same command script
@@ -68,6 +69,8 @@ async function open(page: Page) {
     timeout: 30_000,
   });
   await expect(page.getByTestId('error')).toHaveCount(0);
+  // M8-N3 (M8-U6): the layout budget against the 17a2b0a measurement of this project.
+  await expectLayoutBudget(page);
   return errors;
 }
 

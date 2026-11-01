@@ -8,6 +8,10 @@ import { defineConfig, devices, type Project } from '@playwright/test';
 // project on SwiftShader WebGPU, a functional smoke run for machines without a GPU or the branded
 // browsers. It is not M1-A12 evidence, which needs the headed Chrome and Edge projects.
 const webGpuArguments = ['--enable-unsafe-webgpu'];
+// M8-U6 (MVP M8 contract, M8-N3): each project states its viewport. It is the 1280 × 720 the
+// Desktop Chrome and Edge presets always gave these projects, which overrode the config-level
+// 1100 × 800 this config named until M8-U6 (M6b exit, follow-up 9).
+const viewport = { width: 1280, height: 720 };
 const chromium = process.env.M1_NEXT_HOST_CHROMIUM;
 
 const headed: Project[] = [
@@ -15,6 +19,7 @@ const headed: Project[] = [
     name: 'chrome',
     use: {
       ...devices['Desktop Chrome'],
+      viewport,
       channel: 'chrome',
       headless: false,
       launchOptions: { args: webGpuArguments },
@@ -24,6 +29,7 @@ const headed: Project[] = [
     name: 'edge',
     use: {
       ...devices['Desktop Edge'],
+      viewport,
       channel: 'msedge',
       headless: false,
       launchOptions: { args: webGpuArguments },
@@ -36,6 +42,7 @@ const smoke: Project[] = [
     name: 'chromium-swiftshader',
     use: {
       ...devices['Desktop Chrome'],
+      viewport,
       headless: true,
       launchOptions: {
         executablePath: chromium,
@@ -60,7 +67,6 @@ export default defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:4177',
     trace: 'retain-on-failure',
-    viewport: { width: 1100, height: 800 },
   },
   projects: chromium === undefined ? headed : smoke,
   webServer: {

@@ -39,12 +39,14 @@ type Markers = Readonly<{
   anchors: readonly (Marker & Readonly<{ selected: boolean; mirrored: boolean }>)[];
   handles: readonly (Marker & Readonly<{ side: 'in' | 'out'; anchorX: number; anchorY: number }>)[];
 }>;
-const { pathMarkers, toggleClosedCommand } = (await import(
-  path.join(appSource, 'm3-path-overlay.ts')
-)) as {
+const { pathMarkers } = (await import(path.join(appSource, 'm3-path-overlay.ts'))) as {
   pathMarkers: (overlay: PathEditOverlay | null, camera: EditorSnapshot['viewport']) => Markers;
-  toggleClosedCommand: (overlay: PathEditOverlay | null) => Command | null;
 };
+// M8-U6: the toggle-closed button's command moved to the UI package's toolbar (M8-L1); next-host's
+// copy is removed and these expectations run against `ui`'s, unchanged.
+const { toggleClosedCommand } = (await import(
+  path.join(root, 'packages/ui/src/toolbar-model.ts')
+)) as { toggleClosedCommand: (overlay: PathEditOverlay | null) => Command | null };
 const { SelectionOverlay } = (await import(path.join(appSource, 'overlay.tsx'))) as {
   SelectionOverlay: ComponentType<{
     snapshot: EditorSnapshot;

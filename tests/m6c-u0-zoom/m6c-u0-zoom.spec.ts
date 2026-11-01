@@ -2,6 +2,7 @@ import type { TextLayoutRequest, TextLayoutResult } from '@vector-studio/contrac
 import { chromium, expect, test, type Browser, type Page } from '@playwright/test';
 import type { TextTestHook } from '../../apps/next-host/src/m6a-text-host';
 import { A12_CASES, FAMILY, type Case } from '../m6a-next-host/m6a-cases';
+import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
 // M6c-U0 (MVP M6c contract, section 3; docs/evidence/m6c-u0/README.md): under a real device scale
 // the page is laid out at that zoom, and Chromium rounds font metrics to whole layout px there,
@@ -25,7 +26,11 @@ const CASES: readonly Case[] = A12_CASES.filter((c) =>
 const HOST = 'vector-studio-text-measure';
 const executablePath = process.env.M6C_U0_ZOOM_CHROMIUM;
 
-async function open(page: Page) {
+/**
+ * Opens the fixture; `budget` checks the M8-N3 layout budget, which is measured at the project's
+ * DPR 1 and so only applies in the project's own browser, not under a forced device scale.
+ */
+async function open(page: Page, budget: boolean) {
   await page.goto('/?test=1&fixture=text');
   await page.waitForFunction(
     () => (window as unknown as { __p5Host?: unknown }).__p5Host !== undefined,
@@ -33,6 +38,8 @@ async function open(page: Page) {
   const status = page.getByTestId('status');
   await expect(status).toHaveAttribute('data-fixture', 'loaded', { timeout: 30_000 });
   await expect(status).toHaveAttribute('data-text-font', 'loaded');
+  // M8-N3 (M8-U6): the layout budget against the 17a2b0a measurement of this project.
+  if (budget) await expectLayoutBudget(page);
 }
 
 function layoutAll(page: Page, requests: readonly TextLayoutRequest[]) {
@@ -77,7 +84,7 @@ async function atScale(
     const page = await context.newPage();
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    await open(page);
+    await open(page, false);
     const results = await layoutAll(
       page,
       CASES.map((c) => c.request),
@@ -107,8 +114,14 @@ async function atScale(
 
 /** The port's layouts of `CASES` at DPR 1 (layout zoom 1), checking the host carries zoom 1. */
 async function dprOneReference(browser: Browser): Promise<TextLayoutResult[]> {
-  const page = await (await browser.newContext({ deviceScaleFactor: 1 })).newPage();
-  await open(page);
+  // The project's 1280 × 900 viewport, stated: `newContext` would otherwise give 1280 × 720, and
+  // the M8-N3 budget compares with the 17a2b0a row of this 1280 × 900 project.
+  const context = await browser.newContext({
+    deviceScaleFactor: 1,
+    viewport: { width: 1280, height: 900 },
+  });
+  const page = await context.newPage();
+  await open(page, true);
   const results = await layoutAll(
     page,
     CASES.map((c) => c.request),
@@ -186,7 +199,7 @@ test('M6c-U0: a layout while the host is hidden does not keep zoom 1 for the rat
     try {
       const context = await scaled.newContext({ viewport: { width: 1280, height: 900 } });
       const page = await context.newPage();
-      await open(page);
+      await open(page, false);
       await page.evaluate(() => (document.body.style.display = 'none'));
       const cdp = await context.newCDPSession(page);
       await cdp.send('Emulation.setDeviceMetricsOverride', {

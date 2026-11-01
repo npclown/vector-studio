@@ -255,7 +255,12 @@ function compileUi(fixture?: string): { program: ts.Program; diagnostics: string
 
 describe('M8-A08 the UI sources import public exports only (M8-B3, exit gate)', () => {
   it('checks packages/ui/src with the policy check:boundaries runs', () => {
-    expect(publicPolicies).toEqual([{ directory: 'packages/ui/src', specifiers: PUBLIC }]);
+    // M8-U6 adds next-host's star panel as a second policy (M8-N2); tests/unit/m8-u6-next-host.test.ts.
+    expect(publicPolicies[0]).toEqual({ directory: 'packages/ui/src', specifiers: PUBLIC });
+    expect(publicPolicies.map((policy) => policy.directory)).toEqual([
+      'packages/ui/src',
+      'apps/next-host/src',
+    ]);
   });
 
   it('passes the committed sources: public specifiers, or relative inside packages/ui/src', async () => {

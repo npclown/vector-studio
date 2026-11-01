@@ -6,6 +6,7 @@ import type {
   DeviceBox,
   TextScene,
 } from '../../apps/next-host/src/m6c-text-probe';
+import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
 // M6c-U2 (MVP M6c contract, section 5; M6c-A04): next-host draws its projected text with
 // `text: 'atlas'` and the canvas glyph raster port, in headed Chrome and Edge.
@@ -84,6 +85,8 @@ async function open(page: Page, fixture: string) {
     expect(ready).toBe(true);
     await expect(page.getByTestId('error')).toHaveCount(0);
   }
+  // M8-N3 (M8-U6): the layout budget against the 17a2b0a measurement of this project.
+  await expectLayoutBudget(page);
   return { errors, ready };
 }
 

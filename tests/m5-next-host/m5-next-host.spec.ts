@@ -7,6 +7,7 @@ import {
   type DocumentV6,
 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
+import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
 // M5-U5 (MVP M5 contract, section 7): M5-A10, the next-host page's `?persist=1` composition with
 // the browser's own IndexedDB in headed Chrome and Edge. A drawing on page 1 and on an added
@@ -87,6 +88,8 @@ async function open(page: Page, query: string) {
   await page.waitForFunction(() => window.__p5Host !== undefined);
   const status = page.getByTestId('status');
   await rendererSettled(page);
+  // M8-N3 (M8-U6): the layout budget against the 17a2b0a measurement of this project.
+  await expectLayoutBudget(page);
   /** A page point on screen with the current camera and canvas content box, read at call time. */
   const screen = async (p: Point): Promise<Point> => {
     const { origin, position, zoom } = await page.evaluate(() => {
