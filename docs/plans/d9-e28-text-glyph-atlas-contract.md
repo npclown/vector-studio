@@ -358,7 +358,7 @@ U4 amendment, raster budget (2026-10-29):
 - Review R1 NOT READY: T8's over-limit steps assumed 256 and the cost note claimed fallbacks for new text; both fixed as stated here, with the unit tests now checking the per-frame budget after a compaction and one invalidation per deferring frame after a zoom.
 - T8's over-limit steps show the scene until E28-D2 appears (bounded by the frames the budget needs plus 3), then check it is not repeated, instead of a fixed frame count.
 
-U5 (2026-10-29): the evidence index [../evidence/e28/README.md](../evidence/e28/README.md) records E28-A01 to A08 as PASS: the unit criteria in CI, A07's captures on SwiftShader, and the headed spec and the full `pnpm test:gpu` on the reference PC at the tree of #370. That run predates #378, so the budget of 64 is checked by unit tests and a SwiftShader re-run only, and its hardware cost (about 7 ms) is extrapolated from the 256-call figure; timing a 64-call frame passes to M9 or the next reference-PC run. Review: READY WITH FOLLOW-UPS, all applied.
+U5 (2026-10-29): the evidence index [../evidence/e28/README.md](../evidence/e28/README.md) records E28-A01 to A08 as PASS: the unit criteria in CI, A07's captures on SwiftShader, and the headed spec and the full `pnpm test:gpu` on the reference PC at the tree of #370. That run predates #378, so the budget of 64 is checked by unit tests and a SwiftShader re-run only, and its hardware cost (about 7 ms) is extrapolated from the 256-call figure; timing a 64-call frame passes to M9 or the next reference-PC run (closed 2026-11-01 by M6c-U5: 5.7 to 8 ms, [record](../evidence/e28/README.md#m6c-u5-addition-2026-11-01-64-call-raster-frame-on-the-main-pc)). Review: READY WITH FOLLOW-UPS, all applied.
 
 ## 8. Risks
 

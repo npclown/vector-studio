@@ -71,7 +71,7 @@ These figures are also recorded in [the E28 evidence](../e28/README.md#m6c-u5-ad
 
 - **Typing.** At 16,384 units, each keystroke makes one text-dom `layout` call, with a median of about 330 ms (Chrome) to 350 ms (Edge). The longest frame of a keystroke has a median of 350 to 367 ms, so typing at this size runs at roughly 3 frames per second. There are 30 `long-animation-frame` entries for the 30 keystrokes in each browser. The median frame interval of 16.7 ms is the quiet frames around each keystroke.
 - **Raster while typing.** The raster work per keystroke is negligible: 0.233 calls on average (at most 1), at most 0.6 ms.
-- **Raster frame.** The E28 frame of 64 distinct calls takes 5.7 to 8 ms, inside 16.7 ms, in both browsers at DPR 1 and 2. This replaces the extrapolated figure of about 7 ms.
+- **Raster frame.** The E28 frame of 64 distinct calls takes 5.7 to 8 ms, inside 16.7 ms, in both browsers at DPR 1 and 2. It agrees with the extrapolated figure of about 7 ms.
 - **What follows.** Section 9 makes no gate and no claim, and M6b-Q15 (a) asks only for the observation in the exit record. So the typing figures go to the M6 exit record (U6). Section 12's risk stands: the main-thread cost of layout while typing is observed, not bounded, until M9, which owns the performance targets. This record adds no criterion.
 
 ### Raw reports
