@@ -191,7 +191,7 @@ M8 "closes after M7" (MVP plan section 7); M7 was accepted on 2026-10-30, and th
 | Unit | State |
 | --- | --- |
 | M8-U1 | In review: PR (see below); independent review READY WITH FOLLOW-UPS, applied as these notes |
-| M8-U2 | In review: independent review r1 NOT READY (shared-memo owner), fixed; notes below |
+| M8-U2 | In review: independent review r1 NOT READY (shared-memo owner), fixed; r2 READY; notes below |
 | M8-U3 | Not started |
 | M8-U4 | Not started |
 | M8-U5 | Not started |
@@ -212,6 +212,6 @@ M8 "closes after M7" (MVP plan section 7); M7 was accepted on 2026-10-30, and th
 - Reach (M8-T2, T3) of `react`'s built entry: 164 named declarations, 147 of them types (20 `react`, 57 `editor-core`, 45 `model`, 42 `contracts`); `DOCUMENT_ERROR_CODES` is the only `typeof`-only name. `react` re-exports editor-core's 142 type exports as an explicit type-only list, not `export type *`, which would also expose editor-core's values as type names; the A02 test fails when the list drifts.
 - `useHistory` returns a value equal to `snapshot.history`, not always the same object: editor-core builds a new `history` object per snapshot, so the hook keeps the earlier object while the undo and redo depths are equal (M8-H1 stability). A03 checks it with deep equality.
 - M8-A04 "without `isEqual`, behavior equals today's" holds for selectors that return a snapshot part or a primitive. A selector now runs once per snapshot object, so a fresh-array selector no longer returns a new value on each read (which tripped React's cached-snapshot check), and an impure selector that reads `editor.query` goes stale on events that keep the snapshot, such as `textLayout`; the TSDoc says selectors must be pure and points to `useEditorQuery`.
-- Each store records itself as the owner of the shared memo; a store whose memo another store wrote re-runs its selector or query (review r1 blocking item, store-level tests).
+- Each store records itself as the owner of the shared memo; a store whose memo another store wrote re-runs its selector or query (review r1 blocking item, store-level tests); after such a re-run a fresh-array selector gets a new reference unless its `isEqual` matches the other store's value, which can cost one extra synchronous render in a concurrent render, never a wrong value or a loop (review r2).
 - `extensionCommand` comes through the `'use client'` entry, so a Next.js Server Component sees a client reference it cannot call; server code imports it from `editor-core` (TSDoc; host guide in M8-U6).
 - The query store adds one listener per editor that counts events, so a value read between render and subscribe is re-read; it lives as long as the editor.
