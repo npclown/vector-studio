@@ -20,6 +20,9 @@ export const boundaries = new Map([
   ],
   // MVP M6a-U4: the browser text layout port -> contracts only (ADR 0003; M6a contract, section 4).
   ['@vector-studio/text-dom', new Set(['@vector-studio/contracts'])],
+  // MVP M8-U3: the UI package reaches the editor through the React bindings only (M8 contract,
+  // M8-B1, M8-B2; ARCHITECTURE.md, `ui -> react`).
+  ['@vector-studio/ui', new Set(['@vector-studio/react'])],
   [
     // P-B1 (P3 V2): the host composition root may depend on geometry-wasm.
     // The playground manifest edge itself lands in V4 with its first import.
@@ -45,6 +48,8 @@ export const boundaries = new Map([
       '@vector-studio/renderer-webgpu',
       // MVP M6a-U4: the host composition creates text-dom and injects it (M6a contract, 4 and 5).
       '@vector-studio/text-dom',
+      // MVP M8-U3: the host composes the UI package (M8 contract, M8-B2, M8-N1).
+      '@vector-studio/ui',
     ]),
   ],
 ]);
@@ -61,6 +66,8 @@ export const externalDenied = new Map([
   ['@vector-studio/persistence-idb', new Set([...UI_PACKAGES, 'fake-indexeddb'])],
   // MVP M6a-U4: text-dom names no UI package (M6a contract, section 4).
   ['@vector-studio/text-dom', new Set(UI_PACKAGES)],
+  // MVP M8-U3: the UI package uses `react` but names neither react-dom nor next (M8-B2).
+  ['@vector-studio/ui', new Set(['react-dom', 'next'])],
 ]);
 
 export const packageDirectories = [
@@ -74,6 +81,7 @@ export const packageDirectories = [
   'packages/renderer-core',
   'packages/renderer-webgpu',
   'packages/text-dom',
+  'packages/ui',
   'apps/next-host',
   'apps/playground',
 ];
@@ -152,6 +160,76 @@ export function evaluatePackageBoundaries({ manifest, sources, packageRoots, dis
     }
   }
   return failures;
+}
+
+// MVP M8 contract, M8-B3 (exit gate): sources that may import public package entries only. Each
+// specifier must be one of `specifiers` exactly or a relative path that stays inside the
+// directory; a subpath such as `@vector-studio/react/dist/context.js`, another workspace package
+// or a relative path into another package's sources fails. M8-U6 adds next-host's sample
+// extension panel (M8-N2).
+export const publicImportPolicies = [
+  {
+    directory: 'packages/ui/src',
+    specifiers: ['react', 'react/jsx-runtime', '@vector-studio/react'],
+  },
+];
+
+/**
+ * The import and export specifiers of a TypeScript source: static imports and re-exports,
+ * `import type`, dynamic `import()` and `require()` in source order, then each
+ * `/// <reference types="…" />` and each `/// <reference path="…" />` directive; comments are
+ * otherwise skipped.
+ */
+export function importSpecifiers(text) {
+  const info = ts.preProcessFile(text, true, true);
+  return [
+    ...info.importedFiles.map((file) => file.fileName),
+    ...info.typeReferenceDirectives.map((directive) => directive.fileName),
+    ...info.referencedFiles.map((file) => file.fileName),
+  ];
+}
+
+/**
+ * M8-B3: every specifier of `sources` is one of `specifiers` exactly, or relative and inside
+ * `sourceRoot`. `sources` are `{ path, text }` with absolute paths; failures use `displayPath`
+ * for each source when given.
+ */
+export function evaluatePublicImports({ sources, sourceRoot, specifiers, displayPath }) {
+  const failures = [];
+  const allowed = new Set(specifiers);
+  for (const source of sources) {
+    const shown = displayPath ? displayPath(source.path) : source.path;
+    for (const specifier of importSpecifiers(source.text)) {
+      if (allowed.has(specifier)) continue;
+      if (!specifier.startsWith('.')) {
+        failures.push(`${shown}: import ${specifier} is not a public import`);
+        continue;
+      }
+      if (!isInsideDirectory(sourceRoot, source.path, specifier)) {
+        failures.push(
+          `${shown}: import ${specifier} leaves ${displayPath ? displayPath(sourceRoot) : sourceRoot}`,
+        );
+      }
+    }
+  }
+  return failures;
+}
+
+/**
+ * Whether the relative `specifier`, imported by the file `sourcePath`, stays inside `directory`.
+ * TypeScript reads `\\` in a specifier as `/` on every platform, so it is read that way here too;
+ * `api` is the `node:path` flavour (`path.win32` in tests), and Windows paths may mix separators
+ * and letter case, which `path.win32` resolves and compares as Windows does.
+ */
+export function isInsideDirectory(directory, sourcePath, specifier, api = path) {
+  const target = api.resolve(api.dirname(sourcePath), specifier.replaceAll('\\', '/'));
+  const relative = api.relative(directory, target);
+  return !(
+    relative === '..' ||
+    relative.startsWith('../') ||
+    relative.startsWith('..\\') ||
+    api.isAbsolute(relative)
+  );
 }
 
 // P-B2: WASM handle names that packages/contracts/src may not contain. The
