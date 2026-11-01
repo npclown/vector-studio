@@ -1,0 +1,1238 @@
+{
+  "root": "main checkout",
+  "headed": true,
+  "results": [
+    {
+      "config": "playwright.e26.config.ts",
+      "project": "chrome-dpr1",
+      "viewport": {
+        "width": 1400,
+        "height": 1000
+      },
+      "deviceScaleFactor": 1,
+      "channel": "chrome",
+      "headless": false,
+      "bench": true,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1400,
+        "height": 720
+      },
+      "aside": 112,
+      "rightColumn": null,
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 1000,
+      "scroll": {
+        "scrollWidth": 1400,
+        "scrollHeight": 1000,
+        "clientWidth": 1400,
+        "clientHeight": 1000
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.8078.74"
+    },
+    {
+      "config": "playwright.e26.config.ts",
+      "project": "chrome-dpr2",
+      "viewport": {
+        "width": 1400,
+        "height": 1000
+      },
+      "deviceScaleFactor": 2,
+      "channel": "chrome",
+      "headless": false,
+      "bench": true,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1400,
+        "height": 720
+      },
+      "aside": 112,
+      "rightColumn": null,
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 1000,
+      "scroll": {
+        "scrollWidth": 1400,
+        "scrollHeight": 1000,
+        "clientWidth": 1400,
+        "clientHeight": 1000
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.8078.74"
+    },
+    {
+      "config": "playwright.e26.config.ts",
+      "project": "edge-dpr1",
+      "viewport": {
+        "width": 1400,
+        "height": 1000
+      },
+      "deviceScaleFactor": 1,
+      "channel": "msedge",
+      "headless": false,
+      "bench": true,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1400,
+        "height": 720
+      },
+      "aside": 112,
+      "rightColumn": null,
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 1000,
+      "scroll": {
+        "scrollWidth": 1400,
+        "scrollHeight": 1000,
+        "clientWidth": 1400,
+        "clientHeight": 1000
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.4314.58"
+    },
+    {
+      "config": "playwright.e26.config.ts",
+      "project": "edge-dpr2",
+      "viewport": {
+        "width": 1400,
+        "height": 1000
+      },
+      "deviceScaleFactor": 2,
+      "channel": "msedge",
+      "headless": false,
+      "bench": true,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1400,
+        "height": 720
+      },
+      "aside": 112,
+      "rightColumn": null,
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 1000,
+      "scroll": {
+        "scrollWidth": 1400,
+        "scrollHeight": 1000,
+        "clientWidth": 1400,
+        "clientHeight": 1000
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.4314.58"
+    },
+    {
+      "config": "playwright.m1-next-host.config.ts",
+      "project": "chrome",
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "deviceScaleFactor": 1,
+      "channel": "chrome",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1265,
+        "height": 640
+      },
+      "aside": 297,
+      "rightColumn": {
+        "width": 297,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 720,
+      "scroll": {
+        "scrollWidth": 1265,
+        "scrollHeight": 803,
+        "clientWidth": 1265,
+        "clientHeight": 720
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.8078.74"
+    },
+    {
+      "config": "playwright.m1-next-host.config.ts",
+      "project": "edge",
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "deviceScaleFactor": 1,
+      "channel": "msedge",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1265,
+        "height": 640
+      },
+      "aside": 297,
+      "rightColumn": {
+        "width": 297,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 720,
+      "scroll": {
+        "scrollWidth": 1265,
+        "scrollHeight": 803,
+        "clientWidth": 1265,
+        "clientHeight": 720
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.4314.58"
+    },
+    {
+      "config": "playwright.m2-next-host.config.ts",
+      "project": "chrome",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "chrome",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.8078.74"
+    },
+    {
+      "config": "playwright.m2-next-host.config.ts",
+      "project": "edge",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "msedge",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.4314.58"
+    },
+    {
+      "config": "playwright.m3-next-host.config.ts",
+      "project": "chrome",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "chrome",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.8078.74"
+    },
+    {
+      "config": "playwright.m3-next-host.config.ts",
+      "project": "edge",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "msedge",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.4314.58"
+    },
+    {
+      "config": "playwright.m4-next-host.config.ts",
+      "project": "chrome",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "chrome",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.8078.74"
+    },
+    {
+      "config": "playwright.m4-next-host.config.ts",
+      "project": "edge",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "msedge",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.4314.58"
+    },
+    {
+      "config": "playwright.m5-next-host.config.ts",
+      "project": "chrome",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "chrome",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.8078.74"
+    },
+    {
+      "config": "playwright.m5-next-host.config.ts",
+      "project": "edge",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "msedge",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.4314.58"
+    },
+    {
+      "config": "playwright.m6a-next-host.config.ts",
+      "project": "chrome",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "chrome",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.8078.74"
+    },
+    {
+      "config": "playwright.m6a-next-host.config.ts",
+      "project": "edge",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "msedge",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.4314.58"
+    },
+    {
+      "config": "playwright.m6b-next-host.config.ts",
+      "project": "chrome",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "chrome",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.8078.74"
+    },
+    {
+      "config": "playwright.m6b-next-host.config.ts",
+      "project": "edge",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "msedge",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.4314.58"
+    },
+    {
+      "config": "playwright.m6c-next-host.config.ts",
+      "project": "chrome",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "chrome",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.8078.74"
+    },
+    {
+      "config": "playwright.m6c-next-host.config.ts",
+      "project": "edge",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "msedge",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.4314.58"
+    },
+    {
+      "config": "playwright.m6c-next-host.config.ts",
+      "project": "chrome-dpr2",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 2,
+      "channel": "chrome",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.8078.74"
+    },
+    {
+      "config": "playwright.m6c-next-host.config.ts",
+      "project": "edge-dpr2",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 2,
+      "channel": "msedge",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.4314.58"
+    },
+    {
+      "config": "playwright.m6c-observe.config.ts",
+      "project": "typing-chrome",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "chrome",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.8078.74"
+    },
+    {
+      "config": "playwright.m6c-observe.config.ts",
+      "project": "typing-edge",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "msedge",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.4314.58"
+    },
+    {
+      "config": "playwright.m7-next-host.config.ts",
+      "project": "chrome",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "chrome",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.8078.74"
+    },
+    {
+      "config": "playwright.m7-next-host.config.ts",
+      "project": "edge",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "msedge",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.4314.58"
+    },
+    {
+      "config": "playwright.m8-next-host.config.ts",
+      "project": "chrome-720",
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "deviceScaleFactor": 1,
+      "channel": "chrome",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1265,
+        "height": 640
+      },
+      "aside": 297,
+      "rightColumn": {
+        "width": 297,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 720,
+      "scroll": {
+        "scrollWidth": 1265,
+        "scrollHeight": 803,
+        "clientWidth": 1265,
+        "clientHeight": 720
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.8078.74"
+    },
+    {
+      "config": "playwright.m8-next-host.config.ts",
+      "project": "chrome-900",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "chrome",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.8078.74"
+    },
+    {
+      "config": "playwright.m8-next-host.config.ts",
+      "project": "edge-720",
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "deviceScaleFactor": 1,
+      "channel": "msedge",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1265,
+        "height": 640
+      },
+      "aside": 297,
+      "rightColumn": {
+        "width": 297,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 720,
+      "scroll": {
+        "scrollWidth": 1265,
+        "scrollHeight": 803,
+        "clientWidth": 1265,
+        "clientHeight": 720
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.4314.58"
+    },
+    {
+      "config": "playwright.m8-next-host.config.ts",
+      "project": "edge-900",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 1,
+      "channel": "msedge",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1268,
+        "height": 640
+      },
+      "aside": 300,
+      "rightColumn": {
+        "width": 300,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 900,
+      "scroll": {
+        "scrollWidth": 1280,
+        "scrollHeight": 900,
+        "clientWidth": 1280,
+        "clientHeight": 900
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.4314.58"
+    },
+    {
+      "config": "playwright.p5-next-host.config.ts",
+      "project": "chrome",
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "deviceScaleFactor": 1,
+      "channel": "chrome",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1265,
+        "height": 640
+      },
+      "aside": 297,
+      "rightColumn": {
+        "width": 297,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 720,
+      "scroll": {
+        "scrollWidth": 1265,
+        "scrollHeight": 803,
+        "clientWidth": 1265,
+        "clientHeight": 720
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.8078.74"
+    },
+    {
+      "config": "playwright.p5-next-host.config.ts",
+      "project": "edge",
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "deviceScaleFactor": 1,
+      "channel": "msedge",
+      "headless": false,
+      "bench": false,
+      "origin": {
+        "x": 1,
+        "y": 74
+      },
+      "canvasRow": {
+        "width": 1265,
+        "height": 640
+      },
+      "aside": 297,
+      "rightColumn": {
+        "width": 297,
+        "height": 640,
+        "overflowY": "auto"
+      },
+      "row1Width": 1058.59375,
+      "row2Width": 826.046875,
+      "row2Height": 21,
+      "pagesFirst": true,
+      "innerHeight": 720,
+      "scroll": {
+        "scrollWidth": 1265,
+        "scrollHeight": 803,
+        "clientWidth": 1265,
+        "clientHeight": 720
+      },
+      "row2RenameHeight": 21,
+      "browser": "156.0.4314.58"
+    }
+  ]
+}
