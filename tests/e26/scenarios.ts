@@ -512,3 +512,38 @@ export function e26Configuration(
 export function configurationHash(configuration: E26Configuration): string {
   return sha256(canonicalJson(configuration));
 }
+
+// ---------------------------------------------------------------------------------------------
+// E26-U6b: E26-A06, isolation of the M1-A13 page with persistent injected rejections.
+
+/** A06's run: R is the median of five `replaceSnapshot` times, then one isolation of each kind. */
+export const E26_ISOLATION = Object.freeze({
+  id: 'e26-isolation-m1-a13/v1',
+  document: 'm1-a13' as const,
+  replaceRuns: 5,
+  scattered: 16,
+  one: Object.freeze({ factor: 3, constantMs: 50, capMs: 500 }),
+  sixteen: Object.freeze({ factor: 6, constantMs: 100, capMs: 1000 }),
+});
+
+/**
+ * The rejected leaves: the drawn leaves in projection order, the middle one for the single
+ * rejection and 16 at evenly spaced ranks, floor((k + 1/2) · n / 16), for the scattered set.
+ */
+export function isolationTargets(loaded: E26Loaded): { one: string; sixteen: string[] } {
+  const leaves = [...loaded.bounds].filter(([, box]) => box !== null).map(([id]) => id);
+  const n = leaves.length;
+  const count = E26_ISOLATION.scattered;
+  if (n < count) throw new Error(`${n} drawn leaves, fewer than ${count}`);
+  return {
+    one: leaves[Math.floor(n / 2)]!,
+    sixteen: Array.from({ length: count }, (_, k) => leaves[Math.floor(((k + 0.5) * n) / count)]!),
+  };
+}
+
+/** A06's bounds for a median `replaceSnapshot` time R: min(3R + 50, 500) and min(6R + 100, 1000). */
+export function isolationBoundsMs(r: number): { one: number; sixteen: number } {
+  const bound = (rule: { factor: number; constantMs: number; capMs: number }) =>
+    Math.min(rule.factor * r + rule.constantMs, rule.capMs);
+  return { one: bound(E26_ISOLATION.one), sixteen: bound(E26_ISOLATION.sixteen) };
+}

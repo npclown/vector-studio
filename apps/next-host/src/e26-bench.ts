@@ -11,7 +11,7 @@ type SceneApplyResult = ReturnType<RendererSceneSynchronization['applyChanges']>
 
 // E26-U1b (E26 contract, sections 3.3 and 3.4): the host's `?bench=1` option. It installs the
 // benchmark driver and the metric hooks and leaves frame capture off; `doc=`, `reject=` and
-// `reject-mode=` are inert without it, and without `?bench=1` nothing here is installed, as
+// `reject-mode=` and `isolation=` are inert without it, and without `?bench=1` nothing here is installed, as
 // `?test=1` works. The headed harness (U1c) drives a run through `window.__e26Bench`:
 //
 //   - the driver runs at the start of each render callback, by wrapping the backend's
@@ -39,6 +39,11 @@ export type BenchQuery = Readonly<{
   /** The scene node ID the injected rejection targets, or null. */
   reject: string | null;
   rejectMode: 'once' | 'persistent';
+  /**
+   * E26-U6b (A06): `isolation=1` wraps the service with no `?reject=` target, so the harness arms
+   * its own targets (`armReject(targets, mode)`) and reads the `replaceSnapshot` times.
+   */
+  isolation: boolean;
 }>;
 
 /** The bench option of `search`, or null without `?bench=1` (every other flag is then inert). */
@@ -52,6 +57,7 @@ export function benchQuery(search: string): BenchQuery | null {
     persist: params.get('persist') === '1',
     reject: reject === null || reject === '' ? null : reject,
     rejectMode: params.get('reject-mode') === 'persistent' ? 'persistent' : 'once',
+    isolation: params.get('isolation') === '1',
   };
 }
 
@@ -139,6 +145,14 @@ export type BenchLatency = {
 };
 export type BenchLongTask = Readonly<{ startMs: number; durationMs: number }>;
 
+/** E26-U6b: one `replaceSnapshot` the service handled (not one the injected rejection refused). */
+export type BenchReplace = Readonly<{
+  startMs: number;
+  durationMs: number;
+  nodes: number;
+  status: string;
+}>;
+
 export type BenchHook = Readonly<{
   query: BenchQuery;
   editor: () => Editor | null;
@@ -147,8 +161,14 @@ export type BenchHook = Readonly<{
   setDriver(driver: BenchDriver | null): void;
   /** Driver callbacks run so far, and those that sent a pointer move or camera. */
   driverSteps: () => number;
-  /** Arms the injected rejection of `?reject=`. */
-  armReject(): void;
+  /**
+   * Arms the injected rejection of `?reject=`. E26-U6b (A06): `targets` and `mode`, when given,
+   * replace the query's target and mode from this arming on, so one run can measure isolation
+   * with one and with 16 persistent rejections.
+   */
+  armReject(targets?: readonly string[], mode?: 'once' | 'persistent'): void;
+  /** E26-U6b: disarms the injected rejection. */
+  disarmReject(): void;
   rejections: () => number;
   latencies: readonly BenchLatency[];
   /** The input timestamps of dispatched moves that produced no new scene revision. */
@@ -158,6 +178,8 @@ export type BenchHook = Readonly<{
   longTasksAvailable: boolean;
   /** `e26-isolation` measures, from the rejection to the end of the command. */
   isolations: () => readonly BenchLongTask[];
+  /** E26-U6b (A06's R): every `replaceSnapshot` the service handled, timed around the call. */
+  replaces: readonly BenchReplace[];
 }>;
 
 declare global {
@@ -167,9 +189,9 @@ declare global {
   }
 }
 
-/** Whether a set holds scene node `id` (inserted, updated or as the snapshot's node). */
-function holds(nodes: readonly RenderNodeSnapshot[], id: string): boolean {
-  return nodes.some((node) => node.id === id);
+/** Whether a set holds one of the scene nodes `ids` (inserted, updated or a snapshot's node). */
+function holds(nodes: readonly RenderNodeSnapshot[], ids: ReadonlySet<string>): boolean {
+  return ids.size > 0 && nodes.some((node) => ids.has(node.id));
 }
 
 /**
@@ -189,7 +211,10 @@ export class Bench {
   private driver: BenchDriver | null = null;
   private steps = 0;
   private armed = false;
+  private targets: ReadonlySet<string>;
+  private mode: 'once' | 'persistent';
   private rejected = 0;
+  readonly replaces: BenchReplace[] = [];
   private lastSubmitted = 0;
   private pendingInput: Readonly<{ inputMs: number; revision: number }> | null = null;
   private isolationStart: number | null = null;
@@ -198,6 +223,8 @@ export class Bench {
 
   constructor(query: BenchQuery) {
     this.query = query;
+    this.targets = new Set(query.reject === null ? [] : [query.reject]);
+    this.mode = query.rejectMode;
     let available = false;
     if (typeof PerformanceObserver !== 'undefined') {
       try {
@@ -270,14 +297,17 @@ export class Bench {
     this.editorRef = editor;
   }
 
-  /** The service, with the injected rejection of `?reject=` (section 3.4) when armed. */
+  /**
+   * With `?reject=` or `isolation=1`: the service, with the injected rejection (section 3.4) when
+   * armed, and every `replaceSnapshot` it handles timed (E26-U6b, A06's R).
+   */
   wrapRenderer<T extends RendererSceneSynchronization>(renderer: T): T {
     this.rendererRef = renderer;
-    const target = this.query.reject;
-    if (target === null) return renderer;
+    // The frame scenarios run on the unwrapped service.
+    if (this.query.reject === null && !this.query.isolation) return renderer;
     const reject = (nodes: readonly RenderNodeSnapshot[]): SceneApplyResult | null => {
-      if (!this.armed || !holds(nodes, target)) return null;
-      if (this.query.rejectMode === 'once') this.armed = false;
+      if (!this.armed || !holds(nodes, this.targets)) return null;
+      if (this.mode === 'once') this.armed = false;
       this.rejected += 1;
       // Isolation runs inside the command that sent this set; the microtask runs after it. Later
       // rejections in the same command (persistent mode) keep the first start.
@@ -302,8 +332,19 @@ export class Bench {
             reject([...changes.inserted, ...changes.updated]) ?? object.applyChanges(changes);
         }
         if (key === 'replaceSnapshot') {
-          return (snapshot: RenderSceneSnapshot) =>
-            reject(snapshot.nodes) ?? object.replaceSnapshot(snapshot);
+          return (snapshot: RenderSceneSnapshot) => {
+            const refused = reject(snapshot.nodes);
+            if (refused !== null) return refused;
+            const start = performance.now();
+            const result = object.replaceSnapshot(snapshot);
+            this.replaces.push({
+              startMs: start,
+              durationMs: performance.now() - start,
+              nodes: snapshot.nodes.length,
+              status: result.status,
+            });
+            return result;
+          };
         }
         const value: unknown = Reflect.get(object, key, object);
         return typeof value === 'function' ? (value as () => unknown).bind(object) : value;
@@ -395,8 +436,13 @@ export class Bench {
         this.driver = driver;
       },
       driverSteps: () => this.steps,
-      armReject: () => {
+      armReject: (targets, mode) => {
+        if (targets !== undefined) this.targets = new Set(targets);
+        if (mode !== undefined) this.mode = mode;
         this.armed = true;
+      },
+      disarmReject: () => {
+        this.armed = false;
       },
       rejections: () => this.rejected,
       latencies: this.latencies,
@@ -408,6 +454,7 @@ export class Bench {
         performance
           .getEntriesByName('e26-isolation', 'measure')
           .map((entry) => ({ startMs: entry.startTime, durationMs: entry.duration })),
+      replaces: this.replaces,
     };
   }
 

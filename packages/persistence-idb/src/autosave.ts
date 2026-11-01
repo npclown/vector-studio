@@ -20,11 +20,21 @@ export type AutosaveOptions = {
   maxWaitMs?: number;
   timers?: AutosaveTimers;
   onResult?: (result: WriteResult) => void;
+  /**
+   * E26 contract, section 5 (amended M5-S1): while this returns true, a write that comes due by
+   * the trailing timer or the maximum wait waits for `release()`. `flush()` is not held.
+   */
+  holdWhile?: () => boolean;
 };
 
 export type Autosave = Readonly<{
   schedule(): void;
   flush(): Promise<void>;
+  /**
+   * E26 section 5: starts a held write once `holdWhile()` is false. With nothing held, while
+   * `holdWhile()` is still true, or after `dispose()`, it does nothing.
+   */
+  release(): void;
   dispose(): void;
 }>;
 
@@ -35,7 +45,7 @@ const globalTimers: AutosaveTimers = {
 };
 
 export function createAutosave(options: AutosaveOptions): Autosave {
-  const { store, envelope, onResult } = options;
+  const { store, envelope, onResult, holdWhile } = options;
   const delayMs = options.delayMs ?? DEFAULT_DELAY_MS;
   const maxWaitMs = options.maxWaitMs ?? DEFAULT_MAX_WAIT_MS;
   const timers = options.timers ?? globalTimers;
@@ -55,6 +65,16 @@ export function createAutosave(options: AutosaveOptions): Autosave {
   let maxWait: { handle: unknown } | null = null;
   // Resolves true when the write succeeded; it never rejects.
   let inFlight: Promise<boolean> | null = null;
+  // E26 section 5: a write came due while `holdWhile()` was true; it starts on `release()`.
+  let held = false;
+  const holding = (): boolean => {
+    try {
+      return holdWhile?.() ?? false;
+    } catch {
+      // A throwing press-state reader never holds a write.
+      return false;
+    }
+  };
 
   const clearTimers = (): void => {
     if (trailing !== null) timers.clear(trailing.handle);
@@ -83,7 +103,12 @@ export function createAutosave(options: AutosaveOptions): Autosave {
       return;
     }
     clearTimers();
-    if (isDirty()) void startWrite();
+    if (!isDirty()) return;
+    if (holding()) {
+      held = true;
+      return;
+    }
+    void startWrite();
   }
 
   const FAILED: WriteResult = { ok: false, code: 'persistence.write-failed', path: '' };
@@ -116,6 +141,12 @@ export function createAutosave(options: AutosaveOptions): Autosave {
       return;
     }
     if (due) {
+      // A write that ends mid-gesture after the maximum wait ran out is held too.
+      if (holding()) {
+        clearTimers();
+        held = true;
+        return;
+      }
       void startWrite();
       return;
     }
@@ -124,6 +155,7 @@ export function createAutosave(options: AutosaveOptions): Autosave {
 
   function startWrite(): Promise<boolean> {
     clearTimers();
+    held = false;
     dueAfterWrite = false;
     scheduledDuringWrite = false;
     const running = attempt(changes).then((ok) => {
@@ -138,6 +170,14 @@ export function createAutosave(options: AutosaveOptions): Autosave {
     schedule(): void {
       if (disposed) return;
       changes += 1;
+      // A held write reads the envelope when it starts, so it saves this change too. A hold
+      // whose press ended without a `release()` ends here, so a missed release cannot keep
+      // writes held: the change takes the normal path.
+      if (held) {
+        if (holding()) return;
+        // This restarts the maximum wait from now; the trailing timer still bounds the write.
+        held = false;
+      }
       startMaxWait();
       if (inFlight !== null) {
         scheduledDuringWrite = true;
@@ -158,9 +198,17 @@ export function createAutosave(options: AutosaveOptions): Autosave {
       }
     },
 
+    release(): void {
+      if (disposed || !held || holding()) return;
+      held = false;
+      // `held` is set only with no write in flight (and a write's start clears it).
+      if (isDirty()) void startWrite();
+    },
+
     dispose(): void {
       if (disposed) return;
       disposed = true;
+      held = false;
       clearTimers();
     },
   };

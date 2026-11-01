@@ -21,6 +21,7 @@ type Query = Readonly<{
   persist: boolean;
   reject: string | null;
   rejectMode: string;
+  isolation: boolean;
 }>;
 type Write = { startMs: number; endMs: number | null; ok: boolean | null };
 type BenchInstance = {
@@ -37,8 +38,10 @@ type BenchInstance = {
   attach(backend: unknown, canvas: unknown): void;
   setEditor(editor: unknown): void;
   hook(): {
-    armReject(): void;
+    armReject(targets?: readonly string[], mode?: 'once' | 'persistent'): void;
+    disarmReject(): void;
     rejections(): number;
+    replaces: readonly { startMs: number; durationMs: number; nodes: number; status: string }[];
     isolations(): readonly { startMs: number; durationMs: number }[];
     noChangeMoves: readonly number[];
     driverSteps(): number;
@@ -152,10 +155,19 @@ describe('E26-U1b next-host bench option', () => {
       persist: false,
       reject: null,
       rejectMode: 'once',
+      isolation: false,
     });
+    expect(bench.benchQuery('?isolation=1')).toBeNull();
+    expect(bench.benchQuery('?bench=1&isolation=1')).toMatchObject({ isolation: true });
     expect(
       bench.benchQuery('?bench=1&doc=stress&persist=1&reject=n7&reject-mode=persistent'),
-    ).toEqual({ doc: 'stress', persist: true, reject: 'n7', rejectMode: 'persistent' });
+    ).toEqual({
+      doc: 'stress',
+      persist: true,
+      reject: 'n7',
+      rejectMode: 'persistent',
+      isolation: false,
+    });
     expect(bench.benchQuery('?bench=1&doc=other&reject=')).toMatchObject({
       doc: null,
       reject: null,
@@ -238,6 +250,60 @@ describe('E26-U1b next-host bench option', () => {
     expect(renderer.applyChanges(set(['b'])).status).toBe('invalid-scene');
     await Promise.resolve();
     expect(state.hook().isolations()).toHaveLength(2);
+    state.dispose();
+  });
+
+  it('E26-U6b: arming with targets and a mode replaces the query, and disarm stops it', async () => {
+    stubWindow('?bench=1&isolation=1');
+    const state = new bench.Bench(bench.benchQuery('?bench=1&isolation=1')!);
+    const inner = accepting();
+    const renderer = state.wrapRenderer(asSync(inner));
+    expect(renderer).not.toBe(inner);
+    // No `?reject=`: armed with nothing, nothing is refused.
+    state.hook().armReject();
+    expect(renderer.applyChanges(set(['a', 'b'])).status).toBe('applied');
+    state.hook().armReject(['b', 'c'], 'persistent');
+    expect(renderer.applyChanges(set(['b'])).status).toBe('invalid-scene');
+    expect(renderer.applyChanges(set(['c'])).status).toBe('invalid-scene');
+    expect(renderer.applyChanges(set(['a'])).status).toBe('applied');
+    state.hook().disarmReject();
+    expect(renderer.applyChanges(set(['b'])).status).toBe('applied');
+    // A later arming keeps the targets and mode of the last one that gave them.
+    state.hook().armReject();
+    expect(renderer.applyChanges(set(['c'])).status).toBe('invalid-scene');
+    expect(renderer.applyChanges(set(['c'])).status).toBe('invalid-scene');
+    expect(state.hook().rejections()).toBe(4);
+    state.hook().armReject(['a'], 'once');
+    expect(renderer.applyChanges(set(['a'])).status).toBe('invalid-scene');
+    expect(renderer.applyChanges(set(['a'])).status).toBe('applied');
+    await Promise.resolve();
+    state.dispose();
+  });
+
+  it('E26-U6b: times every replaceSnapshot the service handles, not the refused ones', () => {
+    stubWindow('?bench=1&isolation=1');
+    const state = new bench.Bench(bench.benchQuery('?bench=1&isolation=1')!);
+    const renderer = state.wrapRenderer(asSync(accepting()));
+    const snapshot = (ids: readonly string[]): Snapshot => ({
+      identity: { documentId: 'd', pageId: 'p' },
+      revision: 9,
+      nodes: ids.map(leaf),
+      rootOrder: [...ids],
+    });
+    renderer.replaceSnapshot(snapshot(['a', 'b', 'c']));
+    renderer.applyChanges(set(['a']));
+    state.hook().armReject(['b'], 'persistent');
+    expect(renderer.replaceSnapshot(snapshot(['a', 'b'])).status).toBe('invalid-scene');
+    renderer.replaceSnapshot(snapshot(['a']));
+    const replaces = state.hook().replaces;
+    expect(replaces.map(({ nodes, status }) => [nodes, status])).toEqual([
+      [3, 'applied'],
+      [1, 'applied'],
+    ]);
+    for (const entry of replaces) {
+      expect(entry.durationMs).toBeGreaterThanOrEqual(0);
+      expect(Number.isFinite(entry.startMs)).toBe(true);
+    }
     state.dispose();
   });
 

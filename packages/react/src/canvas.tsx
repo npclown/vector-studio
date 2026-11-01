@@ -53,6 +53,12 @@ export type EditorCanvasProps = Readonly<{
   style?: CSSProperties;
   /** Drawn over the canvas, for example the host's selection overlay. */
   children?: ReactNode;
+  /**
+   * E26 contract, section 5: whether a pointer press on the canvas is held. True on a forwarded
+   * `pointerdown`; false after the editor handled the `pointerup` or `pointercancel` that ends it,
+   * on a lost pointer capture, a blur reset, and unmount.
+   */
+  onPressChange?: (pressed: boolean) => void;
 }>;
 
 /**
@@ -108,6 +114,7 @@ export function EditorCanvas({
   className,
   style,
   children,
+  onPressChange,
 }: EditorCanvasProps) {
   const editor = useEditor();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -135,6 +142,15 @@ export function EditorCanvas({
   onError.current = onRendererError;
   const onReady = useRef(onRendererReady);
   onReady.current = onRendererReady;
+  const onPress = useRef(onPressChange);
+  onPress.current = onPressChange;
+  useEffect(() => {
+    input.onPressChange = (pressed) => onPress.current?.(pressed);
+    return () => {
+      input.unmount();
+      input.onPressChange = null;
+    };
+  }, [input]);
 
   useEffect(() => syncViewportSize(editor, width, height), [editor, width, height]);
 
@@ -213,6 +229,7 @@ export function EditorCanvas({
         onPointerLeave={() => input.pointerLeave()}
         onPointerUp={(event) => input.pointerUp(event)}
         onPointerCancel={(event) => input.pointerCancel(event)}
+        onLostPointerCapture={(event) => input.lostPointerCapture(event)}
         onDoubleClick={(event) => input.doubleClick(event)}
         onKeyDown={(event) => input.keyDown(keyOf(event))}
         onKeyUp={(event) => input.keyUp(keyOf(event))}

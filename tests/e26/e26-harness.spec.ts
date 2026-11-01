@@ -4,12 +4,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import {
+  canonicalJson,
   configurationHash,
   E26_DRIVERS,
+  E26_ISOLATION,
   E26_SCENARIOS,
   e26Configuration,
   editDragOffset,
+  isolationBoundsMs,
+  isolationTargets,
   loadScenarioDocument,
+  sha256,
   visibility,
   type E26Camera,
   type E26Loaded,
@@ -32,6 +37,11 @@ import { m1A13MoveSelection } from '../m1-a13/document';
 //     pressed leaf armed 1.0 s after pointer down, and real `page.mouse` moves every 8 ms for 4 s
 //     along the edit drag's path, on demand. The `plain` variant drops the fill and the
 //     rejection (A04's second measure).
+//
+//   - `e26-isolation-m1-a13/v1` (E26-U6b, A06): `isolation=1`; R is the median of five
+//     `replaceSnapshot` times of the M1-A13 page (five `loadDocument` commands), then one
+//     `loadDocument` with one persistent rejection (the middle drawn leaf) and one with 16
+//     scattered persistent rejections, each timed by its `e26-isolation` measure.
 //
 // Each record also holds the environment (the page's DPR, canvas size, screen, refresh estimate,
 // GPU adapter, visibility and focus) and the page errors. A run is invalid, kept and failed, when
@@ -106,6 +116,9 @@ type PageHook = {
   editor(): {
     execute(command: unknown): { ok: boolean; code?: string };
     query(query: unknown): unknown;
+    subscribe(
+      listener: (event: { type: string; code?: string; nodeIds?: readonly string[] }) => void,
+    ): () => void;
   } | null;
   backend(): {
     setMode(mode: 'continuous' | 'on-demand'): void;
@@ -128,8 +141,10 @@ type PageHook = {
   } | null;
   setDriver(driver: unknown): void;
   driverSteps(): number;
-  armReject(): void;
+  armReject(targets?: readonly string[], mode?: 'once' | 'persistent'): void;
+  disarmReject(): void;
   rejections(): number;
+  replaces: readonly { startMs: number; durationMs: number; nodes: number; status: string }[];
   latencies: readonly { inputMs: number; revision: number; doneMs: number | null; failed?: true }[];
   noChangeMoves: readonly number[];
   writes: readonly { startMs: number; endMs: number | null; ok: boolean | null }[];
@@ -642,4 +657,184 @@ for (const { scenario, variant } of runs) {
       if (busy) expect(result.rejections).toBe(1);
     });
   }
+}
+
+// E26-U6b (E26-A06): isolation of the M1-A13 page with one and with 16 persistent rejections.
+const isolationRuns =
+  filter.length === 0 || filter.some((entry) => E26_ISOLATION.id.startsWith(entry));
+for (let repetition = 1; isolationRuns && repetition <= repetitions; repetition += 1) {
+  test(`${E26_ISOLATION.id} r${repetition}`, async ({ page, browser }, testInfo) => {
+    if (!smoke)
+      expect(dirty, 'a clean working tree, so the recorded commit is what ran').toBe(false);
+    const dpr = testInfo.project.use.deviceScaleFactor ?? 1;
+    const document = loaded(E26_ISOLATION.document);
+    const targets = isolationTargets(document);
+    const configuration = {
+      isolation: E26_ISOLATION,
+      documentSha256: sha256(canonicalJson(document.generated)),
+      schemaVersion: document.document.schemaVersion,
+      sceneNodes: document.projection.nodes.size,
+      targets,
+      devicePixelRatio: dpr,
+      repetitions,
+    };
+    const slug = `${testInfo.project.name}--${E26_ISOLATION.id.replace(/[^a-z0-9-]+/gi, '_')}--r${repetition}`;
+    const { errors, consoleErrors } = await installProbe(page);
+    await open(page, `doc=${E26_ISOLATION.document}&isolation=1`, errors);
+    const env = await environment(page);
+    const start = await presence(page);
+    const run = await page.evaluate(
+      async ({ doc, replaceRuns, one, sixteen }) => {
+        const hook = window.__e26Bench!;
+        const editor = hook.editor()!;
+        const backend = hook.backend()!;
+        const response = await fetch(`/e26-bench-doc.json?doc=${doc}`, { cache: 'no-store' });
+        const value: unknown = await response.json();
+        const runStartMs = performance.now();
+        const settleErrors: string[] = [];
+        // Each load is one command; the next starts after its frame's work is done.
+        const settle = async () => {
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          await backend.waitForSubmittedWork().catch((error: unknown) => {
+            settleErrors.push(String(error));
+          });
+        };
+        // The command's own time, and the scene rejections it reported.
+        const load = () => {
+          const rejected: string[] = [];
+          const unsubscribe = editor.subscribe((event) => {
+            if (event.type === 'diagnostic' && event.code === 'editor.scene-rejected') {
+              rejected.push(...(event.nodeIds ?? []));
+            }
+          });
+          const start = performance.now();
+          const result = editor.execute({ type: 'loadDocument', document: value });
+          const commandMs = performance.now() - start;
+          unsubscribe();
+          return {
+            error: result.ok ? null : (result.code ?? 'failed'),
+            commandMs,
+            rejected: [...rejected].sort(),
+          };
+        };
+        const loadErrors: string[] = [];
+        const replaces: { durationMs: number; nodes: number; status: string; commandMs: number }[] =
+          [];
+        for (let i = 0; i < replaceRuns; i += 1) {
+          const before = hook.replaces.length;
+          const loaded = load();
+          if (loaded.error !== null) loadErrors.push(loaded.error);
+          if (loaded.rejected.length > 0) loadErrors.push(`rejected ${loaded.rejected.join(',')}`);
+          const sent = hook.replaces.slice(before).filter((entry) => entry.nodes > 0);
+          replaces.push(
+            ...sent.map(({ durationMs, nodes, status }) => ({
+              durationMs,
+              nodes,
+              status,
+              commandMs: loaded.commandMs,
+            })),
+          );
+          await settle();
+        }
+        const isolate = async (ids: readonly string[]) => {
+          const rejections = hook.rejections();
+          const measures = hook.isolations().length;
+          hook.armReject(ids, 'persistent');
+          const loaded = load();
+          hook.disarmReject();
+          // The measure is taken by a microtask queued at the first rejection.
+          await Promise.resolve();
+          const measure = hook.isolations().slice(measures);
+          await settle();
+          return {
+            error: loaded.error,
+            commandMs: loaded.commandMs,
+            rejected: loaded.rejected,
+            rejections: hook.rejections() - rejections,
+            measures: measure,
+            durationMs: measure.length === 1 ? measure[0]!.durationMs : null,
+          };
+        };
+        // One discarded isolation first, so neither measured one runs on a cold path.
+        const warmUp = await isolate([one]);
+        const single = await isolate([one]);
+        const scattered = await isolate(sixteen);
+        const stats = backend.getStatistics();
+        const runEndMs = performance.now();
+        return {
+          loadErrors,
+          settleErrors,
+          replaces,
+          warmUp,
+          single,
+          scattered,
+          longTasks: hook.longTasks.filter(
+            (task) => task.startMs >= runStartMs && task.startMs <= runEndMs,
+          ),
+          lifecycle: stats.lifecycle,
+          recoveryAttempts: stats.recoveryAttempts,
+        };
+      },
+      {
+        doc: E26_ISOLATION.document,
+        replaceRuns: E26_ISOLATION.replaceRuns,
+        one: targets.one,
+        sixteen: targets.sixteen,
+      },
+    );
+    const end = await presence(page);
+    const sorted = run.replaces.map((entry) => entry.durationMs).sort((a, b) => a - b);
+    // R is the median of exactly five times; anything else records no R (and fails below).
+    const r = sorted.length === E26_ISOLATION.replaceRuns ? sorted[2]! : null;
+    // The rest of a clean load's command (refresh, events, listeners), outside R; the isolation
+    // measure runs from the rejection to the end of its command, so it holds this tail too.
+    const tails = run.replaces
+      .map((entry) => entry.commandMs - entry.durationMs)
+      .sort((a, b) => a - b);
+    const bounds = r === null ? null : isolationBoundsMs(r);
+    record(slug, {
+      scenario: E26_ISOLATION.id,
+      repetition,
+      project: testInfo.project.name,
+      browser: `${browser.browserType().name()} ${browser.version()}`,
+      devicePixelRatio: dpr,
+      commit,
+      dirty,
+      configurationHash: sha256(canonicalJson(configuration)),
+      configuration,
+      environment: env,
+      presence: { start, end },
+      errors,
+      consoleErrors,
+      replaceSnapshotMs: { samples: sorted, median: r },
+      cleanLoadTailMs: { samples: tails, median: tails[Math.floor(tails.length / 2)] ?? null },
+      boundsMs: bounds,
+      oneMs: run.single.durationMs,
+      sixteenMs: run.scattered.durationMs,
+      pass:
+        bounds === null || run.single.durationMs === null || run.scattered.durationMs === null
+          ? null
+          : {
+              one: run.single.durationMs <= bounds.one,
+              sixteen: run.scattered.durationMs <= bounds.sixteen,
+            },
+      run,
+    });
+    expectValidRun(run, { errors, expectedDpr: dpr, pageDpr: env.devicePixelRatio, start, end });
+    expect(run.loadErrors, 'the loads succeeded').toEqual([]);
+    expect(run.replaces.length, 'one replaceSnapshot per load').toBe(E26_ISOLATION.replaceRuns);
+    expect(run.replaces.every((entry) => entry.status === 'applied')).toBe(true);
+    for (const [isolation, ids] of [
+      [run.warmUp, [targets.one]],
+      [run.single, [targets.one]],
+      [run.scattered, targets.sixteen],
+    ] as const) {
+      expect(isolation.error, 'the load with rejections still succeeds').toBeNull();
+      expect(isolation.measures, 'one isolation measure').toHaveLength(1);
+      expect(isolation.rejections, 'every target refused').toBeGreaterThanOrEqual(ids.length);
+      // Exactly the targets were left out: no resync fallback, no wider exclusion.
+      expect(isolation.rejected, 'the rejected scene nodes').toEqual([...ids].sort());
+    }
+  });
 }

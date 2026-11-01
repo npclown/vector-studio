@@ -42,6 +42,7 @@ type Session = Readonly<{
   attached(): boolean;
   flush(): Promise<void>;
   discard(): Promise<void>;
+  release(): void;
   dispose(): void;
 }>;
 const host = (await import(path.join(root, 'apps/next-host/src/m5-persistence.ts'))) as {
@@ -62,8 +63,22 @@ const host = (await import(path.join(root, 'apps/next-host/src/m5-persistence.ts
       timers?: Timers;
       baseRevision?: number;
       onStatus?: (status: PersistStatus) => void;
+      pressed?: () => boolean;
     },
   ) => Session;
+  createPressGate: (
+    session: () => Session | null,
+    scheduler: {
+      requestFrame(callback: () => void): unknown;
+      cancelFrame(handle: unknown): void;
+      setTimeout(callback: () => void, ms: number): unknown;
+      clearTimeout(handle: unknown): void;
+    },
+  ) => {
+    pressed: () => boolean;
+    onPressChange: (pressed: boolean) => void;
+    cancel: () => void;
+  };
 };
 
 const DB = 'vector-studio-next-host';
@@ -229,7 +244,7 @@ type Harness = {
 };
 
 async function harness(
-  options: { factory?: IDBFactory; editor?: Editor; wait?: boolean } = {},
+  options: { factory?: IDBFactory; editor?: Editor; wait?: boolean; pressed?: () => boolean } = {},
 ): Promise<Harness> {
   const factory = options.factory ?? new IDBFactory();
   const editor = options.editor ?? newEditor();
@@ -241,6 +256,7 @@ async function harness(
     indexedDB: factory,
     timers: time,
     onStatus: (status) => statuses.push(status),
+    ...(options.pressed === undefined ? {} : { pressed: options.pressed }),
   });
   if (options.wait !== false) await session.ready;
   const saved = () => {
@@ -997,5 +1013,198 @@ describe('M5-A08 composition: opt-in, strict-mode remount and the status', () =>
     ok(editor, { type: 'createRectangle', frame: { x: 0, y: 0, width: 5, height: 5 } });
     expect(time.pending()).toBe(0);
     await b.flush();
+  });
+});
+
+// E26-U6a (E26 contract, section 5): the host's press state holds a due autosave write until the
+// press ends; the page clears its flag, then calls `release()`.
+describe('E26-U6a press hold: no autosave write starts during a canvas press', () => {
+  async function pressedHarness() {
+    let pressed = false;
+    const h = await harness({ pressed: () => pressed });
+    return {
+      h,
+      press: () => {
+        pressed = true;
+      },
+      release: () => {
+        pressed = false;
+        h.session.release();
+      },
+    };
+  }
+
+  it('holds the write of an edit made during a press and writes it on release', async () => {
+    const { h, press, release } = await pressedHarness();
+    press();
+    rect(h);
+    h.time.advance(5000);
+    await idle();
+    expect(h.saved()).toBe(0);
+    release();
+    await idle();
+    expect(h.saved()).toBe(1);
+    await expectStored(h);
+    await expectNoWrite(h);
+  });
+
+  it('a press that ends before the debounce leaves the M5-A05 timing', async () => {
+    const { h, press, release } = await pressedHarness();
+    press();
+    rect(h);
+    h.time.advance(100);
+    release();
+    await idle();
+    expect(h.saved()).toBe(0);
+    h.time.advance(399);
+    await idle();
+    expect(h.saved()).toBe(0);
+    h.time.advance(1);
+    await idle();
+    expect(h.saved()).toBe(1);
+  });
+
+  it('flush is not held, and release after dispose does nothing', async () => {
+    const { h, press, release } = await pressedHarness();
+    press();
+    rect(h);
+    await h.session.flush();
+    await idle();
+    expect(h.saved()).toBe(1);
+    await expectStored(h);
+    rect(h, 200);
+    h.time.advance(600);
+    await idle();
+    h.session.dispose();
+    release();
+    await idle();
+    expect(h.saved()).toBe(1);
+  });
+
+  it('without the pressed option, release does nothing and writes keep their timing', async () => {
+    const h = await harness();
+    rect(h);
+    h.session.release();
+    expect(await settle(h)).toBe(1);
+  });
+});
+
+// E26-U6a review S1: the page's release order (clear the flag, then release after the next frame
+// and one task) through `createPressGate`, with a real editor and drag.
+describe('E26-U6a press gate: the host release order', () => {
+  /** Frames and tasks run by hand. */
+  function frames() {
+    let next = 0;
+    const pending = new Map<number, { kind: 'frame' | 'task'; fn: () => void }>();
+    const add = (kind: 'frame' | 'task', fn: () => void) => {
+      next += 1;
+      pending.set(next, { kind, fn });
+      return next;
+    };
+    const run = (kind: 'frame' | 'task') => {
+      for (const [id, entry] of [...pending]) {
+        if (entry.kind !== kind) continue;
+        pending.delete(id);
+        entry.fn();
+      }
+    };
+    return {
+      scheduler: {
+        requestFrame: (fn: () => void) => add('frame', fn),
+        cancelFrame: (handle: unknown) => void pending.delete(handle as number),
+        setTimeout: (fn: () => void) => add('task', fn),
+        clearTimeout: (handle: unknown) => void pending.delete(handle as number),
+      },
+      frame: () => run('frame'),
+      task: () => run('task'),
+      pending: () => pending.size,
+    };
+  }
+
+  async function gated() {
+    const clock = frames();
+    let session: Session | null = null;
+    const gate = host.createPressGate(() => session, clock.scheduler);
+    const h = await harness({ pressed: gate.pressed });
+    session = h.session;
+    return { h, gate, clock, detach: () => (session = null) };
+  }
+
+  it('a drag commit writes the committed document once, after the frame and the task', async () => {
+    const { h, gate, clock } = await gated();
+    const id = rect(h);
+    expect(await settle(h)).toBe(1);
+    // A change made just before the press comes due during it and is held.
+    ok(h.editor, { type: 'setStyle', ids: [id], style: { opacity: 0.5 } });
+    gate.onPressChange(true);
+    pointer(h.editor, 'pointerdown', { x: 50, y: 50 });
+    pointer(h.editor, 'pointermove', { x: 80, y: 60 });
+    h.time.advance(5000);
+    await idle();
+    expect(h.saved()).toBe(1);
+    pointer(h.editor, 'pointerup', { x: 80, y: 60 });
+    gate.onPressChange(false);
+    await idle();
+    expect(h.saved()).toBe(1);
+    clock.frame();
+    await idle();
+    expect(h.saved()).toBe(1);
+    clock.task();
+    await idle();
+    expect(h.saved()).toBe(2);
+    await expectStored(h);
+    expect(committed(h.editor).nodes[id]!.frame.x).toBe(30);
+    await expectNoWrite(h);
+  });
+
+  it('a cancelled drag still writes the change held during it', async () => {
+    const { h, gate, clock } = await gated();
+    gate.onPressChange(true);
+    rect(h);
+    pointer(h.editor, 'pointerdown', { x: 50, y: 50 });
+    pointer(h.editor, 'pointermove', { x: 80, y: 60 });
+    h.time.advance(3000);
+    await idle();
+    ok(h.editor, { type: 'input', event: { kind: 'pointercancel', modifiers: none } });
+    gate.onPressChange(false);
+    clock.frame();
+    clock.task();
+    await idle();
+    expect(h.saved()).toBe(1);
+    await expectStored(h);
+  });
+
+  it('a press inside the deferral keeps the write held until the second release', async () => {
+    const { h, gate, clock } = await gated();
+    gate.onPressChange(true);
+    rect(h);
+    h.time.advance(1000);
+    gate.onPressChange(false);
+    clock.frame();
+    gate.onPressChange(true);
+    clock.task();
+    await idle();
+    expect(h.saved()).toBe(0);
+    gate.onPressChange(false);
+    clock.frame();
+    clock.task();
+    await idle();
+    expect(h.saved()).toBe(1);
+  });
+
+  it('cancel drops a pending release, and no session schedules nothing', async () => {
+    const { h, gate, clock, detach } = await gated();
+    gate.onPressChange(true);
+    rect(h);
+    h.time.advance(1000);
+    gate.onPressChange(false);
+    expect(clock.pending()).toBe(1);
+    gate.cancel();
+    expect(clock.pending()).toBe(0);
+    detach();
+    gate.onPressChange(true);
+    gate.onPressChange(false);
+    expect(clock.pending()).toBe(0);
+    expect(gate.pressed()).toBe(false);
   });
 });
