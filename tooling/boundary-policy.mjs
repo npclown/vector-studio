@@ -177,13 +177,15 @@ export const publicImportPolicies = [
 /**
  * The import and export specifiers of a TypeScript source: static imports and re-exports,
  * `import type`, dynamic `import()` and `require()` in source order, then each
- * `/// <reference types="…" />` directive; comments are otherwise skipped.
+ * `/// <reference types="…" />` and each `/// <reference path="…" />` directive; comments are
+ * otherwise skipped.
  */
 export function importSpecifiers(text) {
   const info = ts.preProcessFile(text, true, true);
   return [
     ...info.importedFiles.map((file) => file.fileName),
     ...info.typeReferenceDirectives.map((directive) => directive.fileName),
+    ...info.referencedFiles.map((file) => file.fileName),
   ];
 }
 

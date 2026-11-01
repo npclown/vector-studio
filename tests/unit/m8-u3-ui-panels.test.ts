@@ -25,8 +25,10 @@ import {
   contributionsEqual,
   initialReporter,
   panelErrorKey,
+  pruneReporters,
   reportFailure,
   reportRejections,
+  reporterFor,
   type PanelReporter,
 } from '../../packages/ui/src/panel-report.js';
 import { createElement, type ComponentType, type ReactElement } from 'react';
@@ -289,6 +291,23 @@ describe('M8-A09 onPanelError bookkeeping (M8-P1, M8-P3): each error once, rejec
   it('delivers a panel failure once, queued or not', () => {
     expect(deliveries(failure(F), failure(F), rejections([]), failure(F))).toEqual([F]);
     expect(deliveries(rejections([]), failure(F), failure(F))).toEqual([F]);
+  });
+
+  it('keeps the committed reporter when a render with a new generation is thrown away', () => {
+    const reporters = new Map<number, PanelReporter>();
+    // Generation 0 commits and delivers A.
+    const first = reportRejections(reporterFor(reporters, 0), [A]);
+    reporters.set(0, first.reporter);
+    expect(first.deliver).toEqual([A]);
+    // A render brings in generation 1 and is abandoned: its reporter exists, nothing commits.
+    expect(reporterFor(reporters, 1)).toEqual(initialReporter(1));
+    // The next render is generation 0 again: its reporter is the committed one, A is not resent.
+    expect(reporterFor(reporters, 0)).toBe(first.reporter);
+    expect(reportRejections(reporterFor(reporters, 0), [A]).deliver).toEqual([]);
+    pruneReporters(reporters, 0);
+    expect([...reporters.keys()]).toEqual([0]);
+    // A real generation 1 later starts fresh and reports anew.
+    expect(reportRejections(reporterFor(reporters, 1), [A]).deliver).toEqual([A]);
   });
 
   it('lists each failed panel once for usePanelErrors, keeping the list when unchanged', () => {

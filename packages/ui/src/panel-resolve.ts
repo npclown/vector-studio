@@ -13,7 +13,11 @@ export type PanelContribution = Readonly<{
   id: string;
   /** The panel's heading and accessible name. */
   title: string;
-  /** The panel body; rendered without props inside its own `PanelBoundary` (M8-P3). */
+  /**
+   * The panel body; rendered without props inside its own `PanelBoundary` (M8-P3). It must keep
+   * a stable identity: define it at module level, not inside the host's render, where each
+   * render makes a new component that remounts the panel and re-reports every panel error.
+   */
   component: ComponentType;
 }>;
 

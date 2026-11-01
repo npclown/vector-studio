@@ -31,6 +31,29 @@ export function initialReporter(generation: number): PanelReporter {
 }
 
 /**
+ * The reporter of `generation` in `reporters`, created (and stored) on first use; an existing
+ * one is never reset, so a render that is thrown away leaves the committed one intact.
+ */
+export function reporterFor(
+  reporters: Map<number, PanelReporter>,
+  generation: number,
+): PanelReporter {
+  let reporter = reporters.get(generation);
+  if (reporter === undefined) {
+    reporter = initialReporter(generation);
+    reporters.set(generation, reporter);
+  }
+  return reporter;
+}
+
+/** Drops every reporter but the committed generation's, after that generation commits. */
+export function pruneReporters(reporters: Map<number, PanelReporter>, committed: number): void {
+  for (const generation of [...reporters.keys()]) {
+    if (generation !== committed) reporters.delete(generation);
+  }
+}
+
+/**
  * The provider's effect after a render with the rejections `rejected`: delivers each rejection
  * not delivered before (by code and panel, once even if the list repeats it), then the queued
  * failures, and marks the reporter ready.

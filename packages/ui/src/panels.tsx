@@ -22,9 +22,11 @@ import {
 import {
   addFailure,
   contributionsEqual,
-  initialReporter,
+  pruneReporters,
   reportFailure,
   reportRejections,
+  reporterFor,
+  type PanelReporter,
 } from './panel-report.js';
 
 // MVP M8 contract, section 6: the panel provider, the panel list and each panel's error
@@ -52,7 +54,12 @@ function usePanelContext(caller: string): PanelContextValue {
 
 /** Props of `PanelProvider` (MVP M8 contract, M8-P1). */
 export type PanelProviderProps = Readonly<{
-  /** The host's UI extensions; their owners must be registered with the editor. */
+  /**
+   * The host's UI extensions; their owners must be registered with the editor. Each panel's
+   * `component` must keep a stable identity (defined at module level, or memoized): a component
+   * created in the host's render is a new contribution on every render, which remounts the
+   * panels and reports every error again.
+   */
   contributions: readonly UiExtension[];
   /**
    * Receives each panel error once by code and panel; on mount the rejections first, then the
@@ -91,10 +98,11 @@ export function PanelProvider({ contributions, onPanelError, children }: PanelPr
     setComposition({ editor, contributions, generation });
     setFailures([]);
   }
-  const reporter = useRef(initialReporter(generation));
-  // Reset before the commit, so a boundary that catches in the new composition's first commit
-  // reports into the new reporter.
-  if (reporter.current.generation !== generation) reporter.current = initialReporter(generation);
+  // One reporter per generation, created on first use and never reset, so a render that is
+  // thrown away (an abandoned transition with a new generation) cannot reset the committed
+  // generation's reporter; the effect below drops the others once a generation commits.
+  const reporters = useRef(new Map<number, PanelReporter>());
+  useEffect(() => pruneReporters(reporters.current, generation), [generation]);
 
   const resolution = useMemo(
     () => resolvePanels(contributions, extensions),
@@ -112,17 +120,21 @@ export function PanelProvider({ contributions, onPanelError, children }: PanelPr
   }, [onPanelError]);
 
   useEffect(() => {
-    const step = reportRejections(reporter.current, rejected);
-    reporter.current = step.reporter;
+    const step = reportRejections(reporterFor(reporters.current, generation), rejected);
+    reporters.current.set(generation, step.reporter);
     for (const error of step.deliver) callback.current?.(error);
   }, [rejected, generation]);
 
-  const report = useCallback((error: PanelError) => {
-    const step = reportFailure(reporter.current, error);
-    reporter.current = step.reporter;
-    setFailures((previous) => addFailure(previous, error));
-    for (const delivered of step.deliver) callback.current?.(delivered);
-  }, []);
+  // Bound to its generation: a boundary reports into the reporter of the tree it was committed in.
+  const report = useCallback(
+    (error: PanelError) => {
+      const step = reportFailure(reporterFor(reporters.current, generation), error);
+      reporters.current.set(generation, step.reporter);
+      setFailures((previous) => addFailure(previous, error));
+      for (const delivered of step.deliver) callback.current?.(delivered);
+    },
+    [generation],
+  );
 
   const errors = useMemo(
     () => (failures.length === 0 ? rejected : [...rejected, ...failures]),

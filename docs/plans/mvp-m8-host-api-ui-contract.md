@@ -192,7 +192,7 @@ M8 "closes after M7" (MVP plan section 7); M7 was accepted on 2026-10-30, and th
 | --- | --- |
 | M8-U1 | In review: PR (see below); independent review READY WITH FOLLOW-UPS, applied as these notes |
 | M8-U2 | In review: independent review r1 NOT READY (shared-memo owner), fixed; r2 READY; notes below |
-| M8-U3 | In review: independent review r1 READY WITH FOLLOW-UPS, applied; notes below |
+| M8-U3 | In review: independent review r1 READY WITH FOLLOW-UPS, applied; r2 READY, minor follow-ups applied; notes below |
 | M8-U4 | Not started |
 | M8-U5 | Not started |
 | M8-U6 | Not started |

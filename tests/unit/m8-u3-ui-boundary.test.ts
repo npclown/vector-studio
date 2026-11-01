@@ -359,11 +359,18 @@ describe('M8-A08 the UI sources import public exports only (M8-B3, exit gate)', 
     ]);
   });
 
+  it('fails a path reference directive into another package, by the check', () => {
+    const specifier = '../../editor-core/dist/index.d.ts';
+    const text = `/// <reference path="${specifier}" />\nexport {};\n`;
+    expect(checkPlanted(text)).toEqual([fail(specifier, 'leaves packages/ui/src')]);
+  });
+
   it('reads type imports, re-exports, dynamic imports and type references, and skips comments', () => {
     expect(
       specifiersOf(
         [
           '/// <reference types="node" />',
+          '/// <reference path="./globals.d.ts" />',
           "// import { x } from '@vector-studio/model';",
           "/* export * from '@vector-studio/contracts'; */",
           "import type { A } from '@vector-studio/editor-core';",
@@ -378,6 +385,7 @@ describe('M8-A08 the UI sources import public exports only (M8-B3, exit gate)', 
       '../../react/src/hooks.js',
       'react-dom',
       'node',
+      './globals.d.ts',
     ]);
   });
 });
