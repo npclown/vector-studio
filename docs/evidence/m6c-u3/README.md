@@ -74,3 +74,7 @@ So in this Chromium the whole remaining raster term comes from the port painting
 **Port fix (2026-10-31, the commit after the probe).** `createCanvasGlyphRaster` now fills black and reads coverage from alpha (operation ID `canvas-2d/raster-v1`), the `fill-black` variant above. On a checkout with the fix, `port` and `mirror` are that recipe and `fill-white` is the old port. The figures above are from the probe's first commit, where `port` was still white.
 
 A design point of the fix: the atlas keeps one coverage per cluster, whatever the run's colour. Coverage from black text matches the browser's paint of dark text (the agreement fixtures are black). It does not match the browser's paint of light text on a dark background, which the M6c fixtures do not test.
+
+## Main-PC result (2026-11-01, `bf68c42`)
+
+Chrome 156.0.8078.74 and Edge 156.0.4314.50, DPR 1 and 2, 144 clusters each. `port|spec` (the black-fill port): 0.000 on every measure, 0 failures, in every browser and DPR. `fill-white|spec` (the old port): DPR 1 max h 0.577, |v| 0.314, size 0.780, |cy| 0.273, 14 of 144 failing (the clusters A06 failed on at `2f0745d`); DPR 2 0.300, 0.153, 0.433, 0 failing. Chrome and Edge agree. Every other variant against the spec's DOM read is 0. The JSON (SHA-256 `F5A4E2E8768F734D7367E36AD57654C0314843BF1564A2F406B7DAB0F795BF60`) stays on the main PC.
