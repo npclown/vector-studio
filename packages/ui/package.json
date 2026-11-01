@@ -1,0 +1,25 @@
+{
+  "name": "@vector-studio/ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@vector-studio/react": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc --build"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "react": "19.3.1"
+  },
+  "peerDependencies": {
+    "react": "^19.2.0"
+  }
+}

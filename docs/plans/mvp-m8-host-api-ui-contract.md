@@ -39,7 +39,7 @@ Out of scope: drag and drop in the layer panel (M8-Q7); adopting nodes into a fr
 ## 2. Public type surface
 
 - **M8-T1 editor-core reach.** The *reach* of a package entry is the set of named, exported declarations found by following, from every export of its built `dist/index.d.ts`, each type reference (aliases, interfaces and their members, unions, generic arguments, `typeof` queries) into declaration files of workspace packages; declarations under other `node_modules` (for example `@types/react`) are not followed. `editor-core` re-exports, type only, every `model` and `contracts` type in its reach, with names unchanged; the probe at 17a2b0a finds about 84 such names, including legacy names reached through alias chains (`PageV1` to `PageV5`, `InstanceNodeV5`, `NodeBaseV2`, `GroupNode`; M8-Q2). A value reached only through `typeof` (for example `DOCUMENT_ERROR_CODES` behind `DocumentErrorCode`) is not re-exported: its derived alias is. No other `model` or `contracts` value is re-exported.
-- **M8-T2 react and ui re-exports.** `react` re-exports every type export of `editor-core` and one value, `extensionCommand` (M8-X2), a pure builder with no state, so an extension's UI can type its commands through the public chain without importing `editor-core`; `react -> editor-core, contracts` is unchanged (MVP plan, M8). `ui` re-exports everything `react` exports (`export * from '@vector-studio/react'`), so an extension panel imports `ui` alone (M8-N2).
+- **M8-T2 react and ui re-exports.** `react` re-exports every type export of `editor-core` and one value, `extensionCommand` (M8-X2), a pure builder with no state, so an extension's UI can type its commands through the public chain without importing `editor-core`; `react -> editor-core, contracts` is unchanged (MVP plan, M8). `ui` re-exports everything `react` exports, by explicit named value and type-only lists (amended 2026-11-01 in M8-U3: Next.js rejects `export *` in a `'use client'` module imported by a Server Component, which M8-H5 requires), so an extension panel imports `ui` alone (M8-N2).
 - **M8-T3 check.** A type-level test compiles a consumer fixture that imports only `@vector-studio/react` (and a second that imports only `@vector-studio/ui`) and names every type in the reach of that entry, computed by the TypeScript compiler API from the built declarations, not written by hand; a reached name the fixture cannot import fails the test.
 
 ## 3. React hooks
@@ -192,7 +192,7 @@ M8 "closes after M7" (MVP plan section 7); M7 was accepted on 2026-10-30, and th
 | --- | --- |
 | M8-U1 | In review: PR (see below); independent review READY WITH FOLLOW-UPS, applied as these notes |
 | M8-U2 | In review: independent review r1 NOT READY (shared-memo owner), fixed; r2 READY; notes below |
-| M8-U3 | Not started |
+| M8-U3 | In review; notes below |
 | M8-U4 | Not started |
 | M8-U5 | Not started |
 | M8-U6 | Not started |
@@ -215,3 +215,13 @@ M8 "closes after M7" (MVP plan section 7); M7 was accepted on 2026-10-30, and th
 - Each store records itself as the owner of the shared memo; a store whose memo another store wrote re-runs its selector or query (review r1 blocking item, store-level tests); after such a re-run a fresh-array selector gets a new reference unless its `isEqual` matches the other store's value, which can cost one extra synchronous render in a concurrent render, never a wrong value or a loop (review r2).
 - `extensionCommand` comes through the `'use client'` entry, so a Next.js Server Component sees a client reference it cannot call; server code imports it from `editor-core` (TSDoc; host guide in M8-U6).
 - The query store adds one listener per editor that counts events, so a value read between render and subscribe is re-read; it lives as long as the editor.
+
+### M8-U3 notes
+
+- M8-T2 amendment (2026-11-01): `ui` re-exports `react` through explicit lists (16 values, 147 types) instead of `export *`. Next 16.4.3's flight loader throws "It's currently unsupported to use "export *" in a client boundary. Please use named exports instead." when a Server Component imports such a module. The A02 test keeps the lists equal to `react`'s exports, and an A06 test fails on any `export *` in the entry source or build. Next's SWC transform and flight loader were run on the built entry with a stub compilation: 23 client references, past the `export *` check; a full `next build` with a Server Component import is left to M8-U6.
+- `ui`'s own exports: 7 values (`PanelProvider`, `EditorPanels`, `usePanelErrors`, `resolvePanels`, `PanelBoundary`, `ToolbarPrimaryRow`, `ToolbarSecondaryRow`) and 10 types.
+- `resolvePanels` gives each rejected panel one error, the first that applies in the order `ui.unknown-extension`, `ui.unowned-panel`, `ui.duplicate-panel`; a duplicate repeats the ID of an earlier accepted panel. `usePanelErrors` derives rejection errors during render, so server markup shows them; `onPanelError` gets them in an effect, once per distinct list; `ui.panel-failed` is reported once per panel from `componentDidCatch`, after the rejections.
+- Toolbar rows: row 1 `ToolbarPrimaryRow` (built-in tools, extension tools from the `extensions` query, edit actions), row 2 `ToolbarSecondaryRow` (zoom and symbols); each is `role="toolbar"`, host controls go in as `children` after the row's own controls (next-host's `star` button moves in M8-U6 under M8-Q11), and each row shows its last refused command code in an `output` with test ID `tools-refusal` or `view-refusal`. Test IDs, labels and enable rules match next-host at 17a2b0a.
+- `toggleClosedCommand` and `zoomLabel` are copied from next-host into `ui` (an agreement test pins the toggle copy); M8-U6 removes next-host's copies.
+- The M8-B3 public-import check lives in `tooling/boundary-policy.mjs` and runs in `pnpm check:boundaries`; next-host's allowed set includes `ui`, its manifest changes in M8-U6.
+- Effects, a real error-boundary catch, panel collapse, the refusal output and click wiring run only in a browser; M8-A14 covers them.

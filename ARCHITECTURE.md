@@ -123,6 +123,8 @@ Pointer, 2026-10-25 (P5-U6, [P5 editor-slice plan](docs/plans/p5-editor-slice.md
 
 Pointer, 2026-10-29 (M6a-U4, [M6a contract](docs/plans/mvp-m6a-text-model-contract.md#4-vector-studiotext-dom), [ADR 0003](docs/decisions/0003-browser-text-and-glyph-atlas.md)): `@vector-studio/text-dom` is the browser implementation of the plain-data `TextLayoutPort` in `contracts`. It depends on `contracts` only, keeps its DOM types inside the package and lays text out in a hidden measurement element, so it runs on the main thread of a page. The host composition creates it on the client and injects it into the editor; the renderer holds no layout port and rasterizes glyphs through E28's `GlyphRasterPort`. Among current packages only `next-host` may depend on it. The boundary checker also rejects `react`, `react-dom` and `next` in it.
 
+Pointer, 2026-11-01 (M8-U3, [M8 contract](docs/plans/mvp-m8-host-api-ui-contract.md#5-vector-studioui-and-its-boundary)): `@vector-studio/ui` is the minimal UI package, the reserved `ui -> react` edge. It depends on `@vector-studio/react` and the `react` npm package only, and its entry re-exports everything `react` exports, so an extension panel imports `ui` alone. Its sources import `react`, `react/jsx-runtime` and `@vector-studio/react` exactly, or relative paths inside `packages/ui/src`; the boundary checker rejects any other specifier, such as a subpath of `react` or a path into another package's sources, so the UI uses only the public contracts available to a host. Among current packages only `next-host` may depend on it. The boundary checker also rejects `react-dom` and `next` in it.
+
 Forbidden dependency examples:
 
 - `model -> renderer-webgpu`

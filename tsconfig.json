@@ -34,6 +34,7 @@
     { "path": "./packages/renderer-core" },
     { "path": "./packages/renderer-webgpu" },
     { "path": "./packages/text-dom" },
+    { "path": "./packages/ui" },
     { "path": "./apps/playground" }
   ]
 }

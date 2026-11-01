@@ -8,6 +8,8 @@ import {
   evaluatePackageBoundaries,
   manifestInternalDependencies,
   packageDirectories,
+  evaluatePublicImports,
+  publicImportPolicies,
 } from './boundary-policy.mjs';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -89,6 +91,21 @@ const contractsFailures = evaluateContractsPurity({
 });
 failures.push(...contractsFailures);
 
+// MVP M8-B3: the UI package's sources import public package entries only.
+const publicImportFailures = [];
+for (const { directory, specifiers } of publicImportPolicies) {
+  const sourceRoot = path.join(repositoryRoot, directory);
+  publicImportFailures.push(
+    ...evaluatePublicImports({
+      sources: await readSources(sourceRoot),
+      sourceRoot,
+      specifiers,
+      displayPath,
+    }),
+  );
+}
+failures.push(...publicImportFailures);
+
 console.log('Workspace package graph:');
 for (const line of graphLines) {
   console.log(`  ${line}`);
@@ -102,5 +119,6 @@ if (failures.length > 0) {
   process.exitCode = 1;
 } else {
   console.log('\nContracts purity: PASS');
+  console.log('\nPublic imports: PASS');
   console.log('\nDependency boundaries: PASS');
 }
