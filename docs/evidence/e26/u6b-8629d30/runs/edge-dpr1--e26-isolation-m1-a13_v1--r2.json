@@ -1,0 +1,283 @@
+{
+  "scenario": "e26-isolation-m1-a13/v1",
+  "repetition": 2,
+  "project": "edge-dpr1",
+  "browser": "chromium 156.0.4314.50",
+  "devicePixelRatio": 1,
+  "commit": "8629d300b5d0ebd5bc00ec4986b187e7210ba46a",
+  "dirty": false,
+  "configurationHash": "7c0ce2db463d0ad1f6a8a8a49ae6ac477738166368900e7cea46d3c123b9ff1f",
+  "configuration": {
+    "isolation": {
+      "id": "e26-isolation-m1-a13/v1",
+      "document": "m1-a13",
+      "replaceRuns": 5,
+      "scattered": 16,
+      "one": {
+        "factor": 3,
+        "constantMs": 50,
+        "capMs": 500
+      },
+      "sixteen": {
+        "factor": 6,
+        "constantMs": 100,
+        "capMs": 1000
+      }
+    },
+    "documentSha256": "d8658b14694ca1e6bbcff734e35575222511df96281720068fa4efe2cb9ef974",
+    "schemaVersion": 6,
+    "sceneNodes": 10634,
+    "targets": {
+      "one": "l4634",
+      "sixteen": [
+        "e289",
+        "l876",
+        "l1456",
+        "e2043",
+        "e2623",
+        "r3204",
+        "e3775",
+        "r4344",
+        "p4920",
+        "r5506",
+        "l6084",
+        "p6656",
+        "e7229",
+        "e7817",
+        "r8388",
+        "r8962"
+      ]
+    },
+    "devicePixelRatio": 1,
+    "repetitions": 5
+  },
+  "environment": {
+    "devicePixelRatio": 1,
+    "canvas": {
+      "width": 1280,
+      "height": 720
+    },
+    "screen": {
+      "width": 1400,
+      "height": 1000
+    },
+    "idleRafMedianMs": 16.699999999999818,
+    "adapter": {
+      "vendor": "nvidia",
+      "architecture": "turing",
+      "device": "",
+      "description": ""
+    },
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Safari/537.36 Edg/151.0.7922.34"
+  },
+  "presence": {
+    "start": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    },
+    "end": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    }
+  },
+  "errors": [],
+  "consoleErrors": [],
+  "replaceSnapshotMs": {
+    "samples": [
+      82.69999998807907,
+      83.19999998807907,
+      84.39999997615814,
+      100.09999999403954,
+      100.7999999821186
+    ],
+    "median": 84.39999997615814
+  },
+  "cleanLoadTailMs": {
+    "samples": [
+      75.30000001192093,
+      85.7000000178814,
+      92.5,
+      96.60000002384186,
+      105.2000000178814
+    ],
+    "median": 92.5
+  },
+  "boundsMs": {
+    "one": 303.1999999284744,
+    "sixteen": 606.3999998569489
+  },
+  "oneMs": 112.5,
+  "sixteenMs": 145.5,
+  "pass": {
+    "one": true,
+    "sixteen": true
+  },
+  "run": {
+    "loadErrors": [],
+    "settleErrors": [],
+    "replaces": [
+      {
+        "durationMs": 100.7999999821186,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 197.40000000596046
+      },
+      {
+        "durationMs": 83.19999998807907,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 168.90000000596046
+      },
+      {
+        "durationMs": 82.69999998807907,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 175.19999998807907
+      },
+      {
+        "durationMs": 100.09999999403954,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 205.30000001192093
+      },
+      {
+        "durationMs": 84.39999997615814,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 159.69999998807907
+      }
+    ],
+    "warmUp": {
+      "error": null,
+      "commandMs": 212.80000001192093,
+      "rejected": [
+        "l4634"
+      ],
+      "rejections": 15,
+      "measures": [
+        {
+          "startMs": 7312,
+          "durationMs": 132.7999999821186
+        }
+      ],
+      "durationMs": 132.7999999821186
+    },
+    "single": {
+      "error": null,
+      "commandMs": 208.10000002384186,
+      "rejected": [
+        "l4634"
+      ],
+      "rejections": 15,
+      "measures": [
+        {
+          "startMs": 8410.5,
+          "durationMs": 112.5
+        }
+      ],
+      "durationMs": 112.5
+    },
+    "scattered": {
+      "error": null,
+      "commandMs": 277.90000000596046,
+      "rejected": [
+        "e2043",
+        "e2623",
+        "e289",
+        "e3775",
+        "e7229",
+        "e7817",
+        "l1456",
+        "l6084",
+        "l876",
+        "p4920",
+        "p6656",
+        "r3204",
+        "r4344",
+        "r5506",
+        "r8388",
+        "r8962"
+      ],
+      "rejections": 181,
+      "measures": [
+        {
+          "startMs": 9461,
+          "durationMs": 145.5
+        }
+      ],
+      "durationMs": 145.5
+    },
+    "longTasks": [
+      {
+        "startMs": 5886.5,
+        "durationMs": 198
+      },
+      {
+        "startMs": 6084.699999988079,
+        "durationMs": 75
+      },
+      {
+        "startMs": 6186.0999999940395,
+        "durationMs": 169
+      },
+      {
+        "startMs": 6356,
+        "durationMs": 62
+      },
+      {
+        "startMs": 6435,
+        "durationMs": 176
+      },
+      {
+        "startMs": 6611.199999988079,
+        "durationMs": 69
+      },
+      {
+        "startMs": 6700.699999988079,
+        "durationMs": 206
+      },
+      {
+        "startMs": 6907.899999976158,
+        "durationMs": 72
+      },
+      {
+        "startMs": 6993.199999988079,
+        "durationMs": 160
+      },
+      {
+        "startMs": 7154,
+        "durationMs": 61
+      },
+      {
+        "startMs": 7231.5999999940395,
+        "durationMs": 213
+      },
+      {
+        "startMs": 7445.5999999940395,
+        "durationMs": 835
+      },
+      {
+        "startMs": 8314.799999982119,
+        "durationMs": 208
+      },
+      {
+        "startMs": 8523.699999988079,
+        "durationMs": 790
+      },
+      {
+        "startMs": 9328.5,
+        "durationMs": 279
+      },
+      {
+        "startMs": 9607.5,
+        "durationMs": 788
+      }
+    ],
+    "lifecycle": "ready",
+    "recoveryAttempts": 0
+  }
+}

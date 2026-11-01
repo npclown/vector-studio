@@ -32,6 +32,8 @@ const records = readdirSync(directory)
 
 const groups = new Map();
 for (const record of records) {
+  // E26-U6b: the A06 isolation records carry no variant.
+  record.variant ??= 'isolation';
   const key = `${record.scenario}|${record.variant}|${record.project}`;
   if (!groups.has(key)) groups.set(key, []);
   groups.get(key).push(record);
@@ -56,6 +58,25 @@ const rows = [...groups.values()].map((runs) => {
     adapter: first.environment?.adapter ?? null,
     idleRafMedianMs: runs.map((run) => round(run.environment?.idleRafMedianMs)),
   };
+  if (first.variant === 'isolation') {
+    // E26-A06: one and 16 persistent rejections against min(3R + 50, 500) and min(6R + 100, 1000).
+    const passes = runs.map((run) => run.pass);
+    return {
+      ...common,
+      kind: 'isolation',
+      rMs: runs.map((run) => round(run.replaceSnapshotMs.median)),
+      cleanLoadTailMs: runs.map((run) => round(run.cleanLoadTailMs.median)),
+      oneMs: runs.map((run) => round(run.oneMs)),
+      oneBoundMs: runs.map((run) => round(run.boundsMs?.one)),
+      sixteenMs: runs.map((run) => round(run.sixteenMs)),
+      sixteenBoundMs: runs.map((run) => round(run.boundsMs?.sixteen)),
+      warmUpMs: runs.map((run) => round(run.run.warmUp.durationMs)),
+      rejections: runs.map((run) => [run.run.single.rejections, run.run.scattered.rejections]),
+      perRunP95Ms: [],
+      maxPerRunP95Ms: null,
+      pass: passes.every((entry) => entry !== null && entry.one && entry.sixteen),
+    };
+  }
   if (first.variant === 'frame') {
     const p95 = runs.map((run) => run.rafCallbackIntervalMs.p95);
     const worst = max(p95);
@@ -111,6 +132,7 @@ const order = [
   'e26-mixed-all-pan-10k/v1',
   'e26-simple-stress-10k/v1',
   'e26-pointer-busy-10k/v1',
+  'e26-isolation-m1-a13/v1',
 ];
 rows.sort(
   (a, b) =>
@@ -132,9 +154,17 @@ const lines = [
       `\`${row.scenario}\``,
       row.variant,
       row.project,
-      row.perRunP95Ms.join(', '),
-      row.maxPerRunP95Ms,
-      row.kind === 'frame' ? `≤ ${row.ceilingMs}` : `< ${row.boundMs}`,
+      row.kind === 'isolation'
+        ? row.oneMs.map((one, i) => `${one} / ${row.sixteenMs[i]}`).join(', ')
+        : row.perRunP95Ms.join(', '),
+      row.kind === 'isolation'
+        ? `${Math.max(...row.oneMs)} / ${Math.max(...row.sixteenMs)}`
+        : row.maxPerRunP95Ms,
+      row.kind === 'frame'
+        ? `≤ ${row.ceilingMs}`
+        : row.kind === 'latency'
+          ? `< ${row.boundMs}`
+          : `≤ ${Math.min(...row.oneBoundMs)} / ${Math.min(...row.sixteenBoundMs)}`,
       row.pass ? 'pass' : 'miss',
       '',
     ]

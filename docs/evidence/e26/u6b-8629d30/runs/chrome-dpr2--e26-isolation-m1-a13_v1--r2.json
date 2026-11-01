@@ -1,0 +1,283 @@
+{
+  "scenario": "e26-isolation-m1-a13/v1",
+  "repetition": 2,
+  "project": "chrome-dpr2",
+  "browser": "chromium 156.0.8078.74",
+  "devicePixelRatio": 2,
+  "commit": "8629d300b5d0ebd5bc00ec4986b187e7210ba46a",
+  "dirty": false,
+  "configurationHash": "30e42bac4151e0c199af74238f477ae9cb957b6444fee1306547124475a1073b",
+  "configuration": {
+    "isolation": {
+      "id": "e26-isolation-m1-a13/v1",
+      "document": "m1-a13",
+      "replaceRuns": 5,
+      "scattered": 16,
+      "one": {
+        "factor": 3,
+        "constantMs": 50,
+        "capMs": 500
+      },
+      "sixteen": {
+        "factor": 6,
+        "constantMs": 100,
+        "capMs": 1000
+      }
+    },
+    "documentSha256": "d8658b14694ca1e6bbcff734e35575222511df96281720068fa4efe2cb9ef974",
+    "schemaVersion": 6,
+    "sceneNodes": 10634,
+    "targets": {
+      "one": "l4634",
+      "sixteen": [
+        "e289",
+        "l876",
+        "l1456",
+        "e2043",
+        "e2623",
+        "r3204",
+        "e3775",
+        "r4344",
+        "p4920",
+        "r5506",
+        "l6084",
+        "p6656",
+        "e7229",
+        "e7817",
+        "r8388",
+        "r8962"
+      ]
+    },
+    "devicePixelRatio": 2,
+    "repetitions": 5
+  },
+  "environment": {
+    "devicePixelRatio": 2,
+    "canvas": {
+      "width": 2560,
+      "height": 1440
+    },
+    "screen": {
+      "width": 1400,
+      "height": 1000
+    },
+    "idleRafMedianMs": 16.699999999999818,
+    "adapter": {
+      "vendor": "nvidia",
+      "architecture": "turing",
+      "device": "",
+      "description": ""
+    },
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Safari/537.36"
+  },
+  "presence": {
+    "start": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    },
+    "end": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    }
+  },
+  "errors": [],
+  "consoleErrors": [],
+  "replaceSnapshotMs": {
+    "samples": [
+      80.69999998807907,
+      85.40000000596046,
+      87.40000000596046,
+      95.7999999821186,
+      102
+    ],
+    "median": 87.40000000596046
+  },
+  "cleanLoadTailMs": {
+    "samples": [
+      73.19999998807907,
+      76.5,
+      83.80000001192093,
+      86.40000003576279,
+      102
+    ],
+    "median": 83.80000001192093
+  },
+  "boundsMs": {
+    "one": 312.2000000178814,
+    "sixteen": 624.4000000357628
+  },
+  "oneMs": 103.5,
+  "sixteenMs": 130.30000001192093,
+  "pass": {
+    "one": true,
+    "sixteen": true
+  },
+  "run": {
+    "loadErrors": [],
+    "settleErrors": [],
+    "replaces": [
+      {
+        "durationMs": 102,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 204
+      },
+      {
+        "durationMs": 80.69999998807907,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 164.5
+      },
+      {
+        "durationMs": 95.7999999821186,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 182.2000000178814
+      },
+      {
+        "durationMs": 85.40000000596046,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 161.90000000596046
+      },
+      {
+        "durationMs": 87.40000000596046,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 160.59999999403954
+      }
+    ],
+    "warmUp": {
+      "error": null,
+      "commandMs": 210,
+      "rejected": [
+        "l4634"
+      ],
+      "rejections": 15,
+      "measures": [
+        {
+          "startMs": 7023.199999988079,
+          "durationMs": 133.59999999403954
+        }
+      ],
+      "durationMs": 133.59999999403954
+    },
+    "single": {
+      "error": null,
+      "commandMs": 191.09999999403954,
+      "rejected": [
+        "l4634"
+      ],
+      "rejections": 15,
+      "measures": [
+        {
+          "startMs": 8130.199999988079,
+          "durationMs": 103.5
+        }
+      ],
+      "durationMs": 103.5
+    },
+    "scattered": {
+      "error": null,
+      "commandMs": 220,
+      "rejected": [
+        "e2043",
+        "e2623",
+        "e289",
+        "e3775",
+        "e7229",
+        "e7817",
+        "l1456",
+        "l6084",
+        "l876",
+        "p4920",
+        "p6656",
+        "r3204",
+        "r4344",
+        "r5506",
+        "r8388",
+        "r8962"
+      ],
+      "rejections": 181,
+      "measures": [
+        {
+          "startMs": 9152.899999976158,
+          "durationMs": 130.30000001192093
+        }
+      ],
+      "durationMs": 130.30000001192093
+    },
+    "longTasks": [
+      {
+        "startMs": 5505.799999982119,
+        "durationMs": 205
+      },
+      {
+        "startMs": 5711,
+        "durationMs": 72
+      },
+      {
+        "startMs": 5796.199999988079,
+        "durationMs": 165
+      },
+      {
+        "startMs": 5961.799999982119,
+        "durationMs": 70
+      },
+      {
+        "startMs": 6105.799999982119,
+        "durationMs": 183
+      },
+      {
+        "startMs": 6289.199999988079,
+        "durationMs": 77
+      },
+      {
+        "startMs": 6405.399999976158,
+        "durationMs": 162
+      },
+      {
+        "startMs": 6568.299999982119,
+        "durationMs": 58
+      },
+      {
+        "startMs": 6676.799999982119,
+        "durationMs": 161
+      },
+      {
+        "startMs": 6838.5,
+        "durationMs": 61
+      },
+      {
+        "startMs": 6946.5,
+        "durationMs": 211
+      },
+      {
+        "startMs": 7157.699999988079,
+        "durationMs": 860
+      },
+      {
+        "startMs": 8042.5,
+        "durationMs": 191
+      },
+      {
+        "startMs": 8234.5,
+        "durationMs": 813
+      },
+      {
+        "startMs": 9063.09999999404,
+        "durationMs": 220
+      },
+      {
+        "startMs": 9283.899999976158,
+        "durationMs": 840
+      }
+    ],
+    "lifecycle": "ready",
+    "recoveryAttempts": 0
+  }
+}
