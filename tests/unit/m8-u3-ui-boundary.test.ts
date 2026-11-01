@@ -2,12 +2,14 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { posixPath } from '../support/m8-type-reach.js';
 import {
   boundaries,
   evaluatePackageBoundaries,
   evaluatePublicImports,
   externalDenied,
   importSpecifiers,
+  isInsideDirectory,
   packageDirectories,
   publicImportPolicies,
   // @ts-expect-error The repository's executable boundary policy is JavaScript tooling.
@@ -42,6 +44,12 @@ const evaluatePublic = evaluatePublicImports as (input: {
   displayPath?: (sourcePath: string) => string;
 }) => string[];
 const specifiersOf = importSpecifiers as (text: string) => string[];
+const isInside = isInsideDirectory as (
+  directory: string,
+  sourcePath: string,
+  specifier: string,
+  api?: typeof path.win32,
+) => boolean;
 const publicPolicies = publicImportPolicies as { directory: string; specifiers: string[] }[];
 
 const UI = '@vector-studio/ui';
@@ -271,7 +279,7 @@ describe('M8-A08 the UI sources import public exports only (M8-B3, exit gate)', 
       const entry = path.join(root, 'packages/react/dist/index.d.ts');
       let seen = 0;
       for (const file of program.getSourceFiles()) {
-        if (!file.fileName.startsWith(`${uiSource}/`)) continue;
+        if (!posixPath(file.fileName).startsWith(`${posixPath(uiSource)}/`)) continue;
         for (const specifier of specifiersOf(file.text)) {
           if (specifier !== '@vector-studio/react') continue;
           const resolved = ts.resolveModuleName(
@@ -281,7 +289,9 @@ describe('M8-A08 the UI sources import public exports only (M8-B3, exit gate)', 
             ts.sys,
           ).resolvedModule;
           expect(resolved, file.fileName).toBeDefined();
-          expect(ts.sys.realpath!(resolved!.resolvedFileName), file.fileName).toBe(entry);
+          expect(posixPath(ts.sys.realpath!(resolved!.resolvedFileName)), file.fileName).toBe(
+            posixPath(entry),
+          );
           seen += 1;
         }
       }
@@ -346,7 +356,7 @@ describe('M8-A08 the UI sources import public exports only (M8-B3, exit gate)', 
         evaluate({ manifest: { name: UI }, sources: [{ path: planted, text }], packageRoots }),
       ).toEqual([]);
       expect(compileUi(text).diagnostics).toContainEqual(
-        `packages/ui/src/planted.ts: TS6059: File '${path.join(root, 'packages/react/src/context.tsx')}' is not under 'rootDir' '${uiSource}'. 'rootDir' is expected to contain all source files.`,
+        `packages/ui/src/planted.ts: TS6059: File '${posixPath(path.join(root, 'packages/react/src/context.tsx'))}' is not under 'rootDir' '${posixPath(uiSource)}'. 'rootDir' is expected to contain all source files.`,
       );
     },
     PROGRAM_TIMEOUT,
@@ -357,6 +367,42 @@ describe('M8-A08 the UI sources import public exports only (M8-B3, exit gate)', 
     expect(checkPlanted(text)).toEqual([
       fail('@vector-studio/editor-core', 'is not a public import'),
     ]);
+  });
+
+  it('fails a backslash relative path out of packages/ui/src, as tsc reads it', () => {
+    const specifier = '..\\..\\react\\src\\context.js';
+    // JSON.stringify escapes the backslashes, so the planted string literal holds them.
+    const text = `import { useEditor } from ${JSON.stringify(specifier)};\nexport const hook = useEditor;\n`;
+    expect(checkPlanted(text)).toEqual([fail(specifier, 'leaves packages/ui/src')]);
+  });
+
+  it('keeps the inside test separator- and case-independent on Windows paths', () => {
+    const src = 'D:\\a\\vs\\packages\\ui\\src';
+    const file = 'D:/a/vs/packages/ui/src/panels.tsx';
+    const win = path.win32;
+    expect(isInside(src, file, './panel-resolve.js', win)).toBe(true);
+    expect(isInside(src, 'd:\\A\\VS\\packages\\ui\\src\\x.ts', './y.js', win)).toBe(true);
+    expect(isInside(src, file, '../../react/src/context.js', win)).toBe(false);
+    expect(isInside(src, file, '..\\..\\react\\src\\context.js', win)).toBe(false);
+    expect(isInside(src, file, '..', win)).toBe(false);
+    expect(isInside(src, 'E:/other/x.ts', './y.js', win)).toBe(false);
+    // POSIX, the platform default here.
+    expect(isInside('/r/packages/ui/src', '/r/packages/ui/src/a.ts', './b.js', path.posix)).toBe(
+      true,
+    );
+    expect(isInside('/r/packages/ui/src', '/r/packages/ui/src/a.ts', '../b.js', path.posix)).toBe(
+      false,
+    );
+  });
+
+  it('normalizes Windows separators in posixPath', () => {
+    expect(posixPath('D:\\a\\vs\\packages\\ui\\dist')).toBe('D:/a/vs/packages/ui/dist');
+    expect(posixPath('D:/a/vs/packages/react/dist/index.d.ts')).toBe(
+      'D:/a/vs/packages/react/dist/index.d.ts',
+    );
+    expect(posixPath(path.win32.join('D:/a', 'packages/react/src/context.tsx'))).toBe(
+      'D:/a/packages/react/src/context.tsx',
+    );
   });
 
   it('fails a path reference directive into another package, by the check', () => {

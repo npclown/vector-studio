@@ -10,6 +10,15 @@ import ts from 'typescript';
 
 const root = path.resolve(import.meta.dirname, '../..');
 
+/**
+ * A path with forward slashes only. TypeScript reports file names with `/` on every platform
+ * (`D:/a/...` on Windows) while `node:path` joins with the platform separator, so tests
+ * normalize both sides with this before comparing or building expected messages.
+ */
+export function posixPath(file: string): string {
+  return file.replaceAll('\\', '/');
+}
+
 /** One named declaration in the reach. */
 export type ReachedName = Readonly<{
   name: string;

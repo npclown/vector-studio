@@ -205,9 +205,7 @@ export function evaluatePublicImports({ sources, sourceRoot, specifiers, display
         failures.push(`${shown}: import ${specifier} is not a public import`);
         continue;
       }
-      const target = path.resolve(path.dirname(source.path), specifier);
-      const relative = path.relative(sourceRoot, target);
-      if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      if (!isInsideDirectory(sourceRoot, source.path, specifier)) {
         failures.push(
           `${shown}: import ${specifier} leaves ${displayPath ? displayPath(sourceRoot) : sourceRoot}`,
         );
@@ -215,6 +213,23 @@ export function evaluatePublicImports({ sources, sourceRoot, specifiers, display
     }
   }
   return failures;
+}
+
+/**
+ * Whether the relative `specifier`, imported by the file `sourcePath`, stays inside `directory`.
+ * TypeScript reads `\\` in a specifier as `/` on every platform, so it is read that way here too;
+ * `api` is the `node:path` flavour (`path.win32` in tests), and Windows paths may mix separators
+ * and letter case, which `path.win32` resolves and compares as Windows does.
+ */
+export function isInsideDirectory(directory, sourcePath, specifier, api = path) {
+  const target = api.resolve(api.dirname(sourcePath), specifier.replaceAll('\\', '/'));
+  const relative = api.relative(directory, target);
+  return !(
+    relative === '..' ||
+    relative.startsWith('../') ||
+    relative.startsWith('..\\') ||
+    api.isAbsolute(relative)
+  );
 }
 
 // P-B2: WASM handle names that packages/contracts/src may not contain. The

@@ -7,7 +7,12 @@ import * as reactBindings from '@vector-studio/react';
 import * as ui from '@vector-studio/ui';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { compileConsumer, computeReach, type ReachedName } from '../support/m8-type-reach.js';
+import {
+  compileConsumer,
+  computeReach,
+  posixPath,
+  type ReachedName,
+} from '../support/m8-type-reach.js';
 
 // MVP M8 contract, unit M8-U3: the `ui` half of M8-T2 and M8-T3 (M8-A02), the client directive
 // of its entry (M8-H5, M8-A06) and the TSDoc of its own exports (section 9). The reach is
@@ -203,7 +208,7 @@ describe('MVP M8 section 9: every own export of ui carries TSDoc', () => {
       const target =
         symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
       const file = target.declarations?.[0]?.getSourceFile().fileName ?? '';
-      if (!file.startsWith(path.join(root, UI, 'dist'))) continue;
+      if (!posixPath(file).startsWith(`${posixPath(path.join(root, UI, 'dist'))}/`)) continue;
       own += 1;
       const text = ts.displayPartsToString(target.getDocumentationComment(checker)).trim();
       if (text === '') undocumented.push(symbol.name);
