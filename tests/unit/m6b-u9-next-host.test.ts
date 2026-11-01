@@ -31,6 +31,7 @@ const FIXTURE_TEXT = readFileSync(
 );
 const FIXTURE = JSON.parse(FIXTURE_TEXT) as DocumentV6;
 const PAGE_SOURCE = readFileSync(path.join(appDir, 'app/page.tsx'), 'utf8');
+const UI_TOOLBAR_SOURCE = readFileSync(path.join(root, 'packages/ui/src/toolbar-model.ts'), 'utf8');
 
 const edit = (await import(path.join(appDir, 'src/m6b-text-edit.ts'))) as typeof EditModule;
 const host = (await import(path.join(appDir, 'src/m6a-text-host.ts'))) as typeof HostModule;
@@ -118,9 +119,14 @@ describe('M6b-U9 text-edit fixture', () => {
       size: 20,
       color: { r: 0, g: 0, b: 0, a: 1 },
     });
-    // The page lists the fixture, its style and the text tool button.
+    // The page lists the fixture, its style and the text tool button. Since M8-U6 the button is
+    // the UI package's toolbar row 1 (`BUILT_IN_TOOLS`, M8-L1), which the page renders.
     expect(PAGE_SOURCE).toMatch(/'text-edit': \{\s+url: '\/m6b-text-edit\.json'/u);
-    expect(PAGE_SOURCE).toMatch(/'path',\s+'text',\s+\];/u);
+    expect(UI_TOOLBAR_SOURCE).toMatch(/'path',\s+'text',\s+\]\);/u);
+    expect(PAGE_SOURCE).toMatch(/<ToolbarPrimaryRow>/u);
+    expect(PAGE_SOURCE).toMatch(
+      /^import \{[^}]*\bToolbarPrimaryRow\b[^}]*\} from '@vector-studio\/ui';/mu,
+    );
   });
 });
 

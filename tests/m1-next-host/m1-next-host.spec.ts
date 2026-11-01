@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { Command, Editor, EditorEvent, SelectionHandles } from '@vector-studio/editor-core';
 import type { DocumentV6, NodeV6 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
+import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
 // M1-U5 (MVP M1 contract, section 8): M1-A12, the next-host page renders the M1 containers
 // fixture (two pages, a rotated frame with clipped children and a border, a mask group and an
@@ -92,6 +93,8 @@ async function open(page: Page) {
   await expect(status).toHaveAttribute('data-renderer', 'ready', { timeout: 30_000 });
   await expect(status).toHaveAttribute('data-fixture', 'loaded');
   await expect(page.getByTestId('error')).toHaveCount(0);
+  // M8-N3 (M8-U6): the layout budget against the 17a2b0a measurement of this project.
+  await expectLayoutBudget(page);
   // Snapping is on by default since M2-U3 (M2 contract, section 4.2); the exact M1 values below
   // are raw drag deltas, so it is turned off through the session command (M2-U3 note 10).
   await page.evaluate(() =>

@@ -23,6 +23,7 @@ import {
   type Placement,
   type Point,
 } from './m6b-geometry';
+import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
 // M6b-U9 (MVP M6b contract, sections 4 to 7, 9 and 16, appendix A): M6b-A12 and M6b-A13 on the
 // next-host page with `?fixture=text-edit` (tests/fixtures/m6-text/edit-host.v6.json, the
@@ -83,6 +84,8 @@ async function open(page: Page) {
   const status = page.getByTestId('status');
   await expect(status).toHaveAttribute('data-fixture', 'loaded', { timeout: 30_000 });
   await expect(status).toHaveAttribute('data-text-font', 'loaded');
+  // M8-N3 (M8-U6): the layout budget against the 17a2b0a measurement of this project.
+  await expectLayoutBudget(page);
   return { errors };
 }
 

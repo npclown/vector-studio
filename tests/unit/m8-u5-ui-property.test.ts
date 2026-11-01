@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import {
   createCounterIdSource,
   createEditor,
@@ -55,17 +53,14 @@ import {
 import { createFakeTextLayout } from '../support/fake-text-layout.js';
 
 // MVP M8 contract, unit M8-U5, M8-A11 (section 7.3, M8-R1 to M8-R5): the property panel. The M4
-// appearance panel's pure module and component moved to `ui`; until M8-U6 removes next-host's
-// copies, the module's text and the panel's markup are checked equal to next-host's (the moved
-// M4 tests, `m4-u4-next-host.test.ts`, run against the `ui` module). The transform, layer, line,
+// appearance panel's pure module and component moved to `ui` (the moved M4 tests,
+// `m4-u4-next-host.test.ts`, run against the `ui` module; M8-U6 removed next-host's copies and
+// the agreement block that compared them). The transform, layer, line,
 // constraint, text and symbol models give literal commands for one node, run against a real
 // editor (each one undo step), the common or mixed values for several, and refusals; the markup
 // (`renderToString`, M8-Q5 (a)) shows one-node fields editable, several-node fields read-only,
 // the run fields disabled at a collapsed caret (M8-Q9 (a)) and the section 7.3 buttons without a
 // test ID (M8-R5).
-
-const root = path.resolve(import.meta.dirname, '../..');
-const source = (file: string) => readFileSync(path.join(root, file), 'utf8');
 
 const BLACK = { r: 0, g: 0, b: 0, a: 1 };
 const RED = { r: 1, g: 0, b: 0, a: 1 };
@@ -222,46 +217,9 @@ function control(html: string, label: string): string {
   return match[0];
 }
 
-describe('M8-R1: the moved M4 appearance panel agrees with next-host until M8-U6', () => {
-  it("the pure module's text below its imports and header equals next-host's", () => {
-    const marker = "/** A field's value across the selection";
-    const body = (file: string) => {
-      const text = source(file);
-      return text.slice(text.indexOf(marker));
-    };
-    expect(body('packages/ui/src/appearance-model.ts')).toBe(
-      body('apps/next-host/src/m4-appearance.ts'),
-    );
-  });
-
-  it("the aside's markup equals next-host's panel for each kind of selection", async () => {
-    const host = (await import(path.join(root, 'apps/next-host/src/m4-appearance-panel.tsx'))) as {
-      AppearancePanel: ComponentType;
-    };
-    const target = editor();
-    const gradient = {
-      kind: 'linear',
-      transform: [1, 0, 0, 1, 0, 0.5],
-      stops: [
-        { offset: 0, color: RED },
-        { offset: 1, color: { ...RED, a: 0 } },
-      ],
-      spread: 'pad',
-    } as const;
-    target.execute({
-      type: 'setStyle',
-      ids: ['q'],
-      style: { fill: gradient, stroke: { width: 3, dash: { pattern: [4, 2], phase: 1 } } },
-    });
-    for (const selection of [[], ['r'], ['q'], ['r', 'q'], ['l'], ['t'], ['f', 'c', 'l'], ['i']]) {
-      target.execute({ type: 'setSelection', ids: selection });
-      const moved = markup(target, AppearancePanel);
-      expect(moved).toBe(markup(target, host.AppearancePanel));
-      expect(moved).toContain('aria-label="Appearance"');
-      expect(moved).toContain('data-testid="appearance-panel"');
-    }
-  });
-
+// M8-U6 removed next-host's copies of the appearance module and panel, and with them the
+// agreement block that pinned `ui`'s copies to next-host's until then (M8-U5 notes).
+describe('M8-R1: the moved M4 appearance panel', () => {
   it("the section layout differs from the aside only in the box's style (M8-N3, M8-N5)", () => {
     const target = editor();
     target.execute({ type: 'setSelection', ids: ['r'] });

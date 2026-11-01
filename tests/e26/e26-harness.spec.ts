@@ -21,6 +21,7 @@ import {
   type E26Scenario,
 } from './scenarios';
 import { m1A13MoveSelection } from '../m1-a13/document';
+import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
 // E26-U1c (E26 contract, sections 3 and 6): the headed harness. Each test is one repetition of
 // one scenario on `apps/next-host?bench=1` (apps/next-host/src/e26-bench.ts) in a fresh context,
@@ -274,6 +275,8 @@ async function open(page: Page, query: string, errors: readonly string[]): Promi
   await expect(status).toHaveAttribute('data-fixture', 'bench-loaded', { timeout: 90_000 });
   await expect(status).toHaveAttribute('data-renderer', 'ready', { timeout: 90_000 });
   expect(errors).toEqual([]);
+  // M8-N3 (M8-U6): the layout budget against the 17a2b0a measurement of this project.
+  await expectLayoutBudget(page, { bench: true });
   // The loaded scene reached the GPU: one more submission after both are set, and its work done.
   await page.evaluate(async () => {
     const backend = window.__e26Bench!.backend()!;

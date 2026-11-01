@@ -6,7 +6,6 @@ import {
   type PathEditOverlay,
   type Platform,
   type TextStyle,
-  type ToolName,
 } from '@vector-studio/editor-core';
 import {
   EditorCanvas,
@@ -15,9 +14,15 @@ import {
   useEditorCommands,
   useEditorSelector,
 } from '@vector-studio/react';
+import {
+  PageList,
+  PanelProvider,
+  ToolbarPrimaryRow,
+  ToolbarSecondaryRow,
+  usePanelErrors,
+} from '@vector-studio/ui';
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
-import { inRotateZone, zoomLabel } from '../src/m2-geometry';
-import { toggleClosedCommand } from '../src/m3-path-overlay';
+import { inRotateZone } from '../src/m2-geometry';
 import {
   attachPersistence,
   createPressGate,
@@ -47,7 +52,8 @@ import {
   type TextEditTestHook,
 } from '../src/m6b-text-edit';
 import { BENCH_CANVAS, benchDatabaseName, pageBench } from '../src/e26-bench';
-import { AppearancePanel } from '../src/m4-appearance-panel';
+import { CanvasSide, hostContributions } from '../src/m8-layout';
+import { faultPanelsQuery, testUiExtension } from '../src/m8-test-panels';
 import { SelectionOverlay } from '../src/overlay';
 import { createWebGpuRenderer } from '../src/webgpu-renderer';
 import type { ClusterRead, ClusterRect, FrameCrop, TextScene } from '../src/m6c-text-probe';
@@ -103,18 +109,18 @@ import type {
 // `reference(id)` (the flowed DOM block), `reference(id, index)` (the placed DOM cluster, read back
 // by `readReference` from the spec's screenshot), `clearReference()` and `minimumFontSize()`, with
 // text-dom's reference styles (src/m6c-text-reference.ts), also imported only under `?test=1`.
+// M8-U6 (MVP M8 contract, section 8, M8-N1 to M8-N6): the page is composed from
+// `@vector-studio/ui`: toolbar row 1 (`ToolbarPrimaryRow`: the built-in and extension tools and the
+// edit actions, then the host's `star` button and file controls), row 2 (`PageList` on the left,
+// then `ToolbarSecondaryRow`: zoom and symbols), and the canvas row's right column (src/m8-layout.tsx:
+// `LayerTree`, `PropertyPanel` with the moved M4 Appearance section, then `EditorPanels` with the
+// `ext.star` sample panel, src/m8-star-panel.tsx). The canvas origin is the 17a2b0a one (M8-N3).
+// `?test=1&faults=1` also registers the `test.ui` fault panels (src/m8-test-panels.tsx); panel
+// errors show in the status under `panel-error`. `?bench=1` keeps the 17a2b0a Appearance aside
+// and mounts none of the M8 sections or panels (M8-N5).
 
 const WIDTH = 960;
 const HEIGHT = 640;
-const TOOLS: readonly ToolName[] = [
-  'select',
-  'rectangle',
-  'ellipse',
-  'line',
-  'frame',
-  'path',
-  'text',
-];
 /** The `?fixture=` documents and the camera each is shown at. */
 const FIXTURES: Readonly<
   Record<
@@ -287,112 +293,56 @@ function useTextEditMarkers(): TextEditMarkers | null {
   );
 }
 
-function Toolbar({ onFileStatus }: { onFileStatus: (status: string) => void }) {
-  const editor = useEditor();
+/**
+ * The host's `star` button (P5-U6), placed in toolbar row 1 after the UI package's controls: it
+ * runs `ext.star.create` with the frame the P5 spec expects.
+ */
+function StarButton() {
   const execute = useEditorCommands();
-  const tool = useEditorSelector((snapshot) => snapshot.tool);
-  const history = useEditorSelector((snapshot) => snapshot.history);
-  const selection = useEditorSelector((snapshot) => snapshot.selection);
-  const toggleClosed = toggleClosedCommand(usePathOverlay());
-  const group = (kind: 'group' | 'maskGroup') => {
-    const result = execute({ type: 'groupNodes', ids: selection, kind });
-    if (result.ok) execute({ type: 'setSelection', ids: result.ids });
-  };
-  // As the `ungroup` action: the released children become the selection (M2-U1 note 3).
-  const ungroup = () => {
-    const id = selection[0]!;
-    const node = editor.query({ type: 'node', id });
-    const released = node !== null && 'children' in node ? node.children : [];
-    const result = execute({ type: 'ungroupNodes', id });
-    if (result.ok) execute({ type: 'setSelection', ids: released });
-  };
   return (
-    <div role="toolbar" style={{ display: 'flex', gap: 8, padding: 8 }}>
-      {TOOLS.map((name) => (
-        <button
-          key={name}
-          type="button"
-          data-testid={`tool-${name}`}
-          aria-pressed={tool === name}
-          onClick={() => execute({ type: 'setTool', tool: name })}
-        >
-          {name}
-        </button>
-      ))}
-      <button
-        type="button"
-        data-testid="star"
-        onClick={() =>
-          execute({
-            type: 'runCommand',
-            id: 'ext.star.create',
-            args: { frame: { x: 360, y: 220, width: 160, height: 160 } },
-          })
-        }
-      >
-        star
-      </button>
-      <button
-        type="button"
-        data-testid="group"
-        disabled={selection.length === 0}
-        onClick={() => group('group')}
-      >
-        group
-      </button>
-      <button
-        type="button"
-        data-testid="mask"
-        disabled={selection.length < 2}
-        onClick={() => group('maskGroup')}
-      >
-        mask
-      </button>
-      <button
-        type="button"
-        data-testid="ungroup"
-        disabled={selection.length !== 1}
-        onClick={ungroup}
-      >
-        ungroup
-      </button>
-      <button
-        type="button"
-        data-testid="undo"
-        disabled={history.undoDepth === 0}
-        onClick={() => execute({ type: 'undo' })}
-      >
-        undo
-      </button>
-      <button
-        type="button"
-        data-testid="redo"
-        disabled={history.redoDepth === 0}
-        onClick={() => execute({ type: 'redo' })}
-      >
-        redo
-      </button>
-      <button
-        type="button"
-        data-testid="delete"
-        disabled={selection.length === 0}
-        onClick={() => execute({ type: 'deleteNodes', ids: selection })}
-      >
-        delete
-      </button>
-      <button
-        type="button"
-        data-testid="toggle-closed"
-        disabled={toggleClosed === null}
-        onClick={() => {
-          if (toggleClosed !== null) execute(toggleClosed);
-        }}
-      >
-        toggle closed
-      </button>
-      <FileControls onFileStatus={onFileStatus} />
-      <ZoomControls />
-    </div>
+    <button
+      type="button"
+      data-testid="star"
+      onClick={() =>
+        execute({
+          type: 'runCommand',
+          id: 'ext.star.create',
+          args: { frame: { x: 360, y: 220, width: 160, height: 160 } },
+        })
+      }
+    >
+      star
+    </button>
+  );
+}
+
+/**
+ * M8-N3 rule 1 (M8-U6): keeps toolbar row 1 at its 17a2b0a height, so the canvas origin is
+ * unchanged. At 17a2b0a row 1 was wider than the viewport, so its flex items shrank and the
+ * two-word labels ("toggle closed", "Save file", "Open file") wrapped onto two lines; the row now
+ * fits, its labels stay on one line, and this hidden two-line button holds the row's height at
+ * that of a wrapped button in the browser's own control font, on any machine. It has no width,
+ * no name and takes no focus or pointer.
+ */
+function RowHeightStrut() {
+  return (
+    <button
+      type="button"
+      aria-hidden
+      tabIndex={-1}
+      data-testid="row-1-strut"
+      style={{
+        visibility: 'hidden',
+        width: 0,
+        paddingInline: 0,
+        borderInlineWidth: 0,
+        pointerEvents: 'none',
+      }}
+    >
+      &nbsp;
+      <br />
+      &nbsp;
+    </button>
   );
 }
 
@@ -452,113 +402,6 @@ function FileControls({ onFileStatus }: { onFileStatus: (status: string) => void
   );
 }
 
-/**
- * M2 contract, section 3: the zoom commands and the current zoom, in the toolbar row so the
- * canvas keeps its place (the M1 spec measures it once).
- */
-function ZoomControls() {
-  const execute = useEditorCommands();
-  const zoom = useEditorSelector((snapshot) => snapshot.viewport.zoom);
-  const selected = useEditorSelector((snapshot) => snapshot.selection.length);
-  const buttons = [
-    ['zoom-in', 'zoom in', () => execute({ type: 'zoomBy', factor: 2 })],
-    ['zoom-out', 'zoom out', () => execute({ type: 'zoomBy', factor: 0.5 })],
-    ['zoom-fit', 'fit', () => execute({ type: 'zoomTo', target: 'fit' })],
-    ['zoom-selection', 'selection', () => execute({ type: 'zoomTo', target: 'selection' })],
-    ['zoom-actual', '100%', () => execute({ type: 'zoomTo', target: 'actual' })],
-  ] as const;
-  return (
-    <span role="group" aria-label="zoom" style={{ display: 'flex', gap: 8 }}>
-      {buttons.map(([id, label, run]) => (
-        <button
-          key={id}
-          type="button"
-          data-testid={id}
-          disabled={id === 'zoom-selection' && selected === 0}
-          onClick={run}
-        >
-          {label}
-        </button>
-      ))}
-      <output data-testid="zoom" data-zoom={zoom} style={{ alignSelf: 'center' }}>
-        {zoomLabel(zoom)}
-      </output>
-    </span>
-  );
-}
-
-/**
- * M7 contract, section 5: "symbol", "instance" and "detach" for the selection, in the page row so
- * the toolbar row and the canvas keep their place (the earlier specs measure them). The new
- * source or instance becomes the selection, as a group does; a detach keeps the selection, whose
- * IDs are now frames (section 5.2).
- */
-function SymbolControls() {
-  const execute = useEditorCommands();
-  const selection = useEditorSelector((snapshot) => snapshot.selection);
-  // The selected nodes' types as one string, so a detach (same IDs, new type) re-renders.
-  const types = useEditorSelector((snapshot) =>
-    snapshot.selection.map((id) => snapshot.document.nodes[id]?.type ?? '').join(' '),
-  ).split(' ');
-  const createSymbol = () => {
-    const result = execute({ type: 'createSymbol', ids: selection });
-    if (result.ok) execute({ type: 'setSelection', ids: result.ids });
-  };
-  const createInstance = () => {
-    const result = execute({ type: 'createInstance', symbol: selection[0]! });
-    if (result.ok) execute({ type: 'setSelection', ids: result.ids });
-  };
-  return (
-    <span role="group" aria-label="symbols" style={{ display: 'flex', gap: 8 }}>
-      <button
-        type="button"
-        data-testid="create-symbol"
-        disabled={selection.length === 0}
-        onClick={createSymbol}
-      >
-        symbol
-      </button>
-      <button
-        type="button"
-        data-testid="create-instance"
-        disabled={selection.length !== 1 || types[0] !== 'symbol'}
-        onClick={createInstance}
-      >
-        instance
-      </button>
-      <button
-        type="button"
-        data-testid="detach"
-        disabled={selection.length === 0 || types.some((type) => type !== 'instance')}
-        onClick={() => execute({ type: 'detachInstances', ids: selection })}
-      >
-        detach
-      </button>
-    </span>
-  );
-}
-
-function Pages() {
-  const execute = useEditorCommands();
-  const pages = useEditorSelector((snapshot) => snapshot.document.pages);
-  const active = useEditorSelector((snapshot) => snapshot.activePage);
-  return (
-    <nav data-testid="pages" style={{ display: 'flex', gap: 8, padding: '0 8px' }}>
-      {pages.map((page) => (
-        <button
-          key={page.id}
-          type="button"
-          data-testid={`page-${page.id}`}
-          aria-pressed={page.id === active}
-          onClick={() => execute({ type: 'setActivePage', id: page.id })}
-        >
-          {page.name}
-        </button>
-      ))}
-    </nav>
-  );
-}
-
 function Status({
   errors,
   renderer,
@@ -586,6 +429,8 @@ function Status({
   const scopeName = useEditorSelector((snapshot) =>
     snapshot.scope === null ? null : (snapshot.document.nodes[snapshot.scope]?.name ?? null),
   );
+  // M8-N2: panel errors under their own test ID, never `error`.
+  const panelErrors = usePanelErrors();
   return (
     <p
       data-testid="status"
@@ -632,6 +477,17 @@ function Status({
       {errors.map((error) => (
         <span key={error} data-testid="error" style={{ display: 'block', color: '#b00' }}>
           {error}
+        </span>
+      ))}
+      {panelErrors.map((error) => (
+        <span
+          key={`${error.code} ${error.panel}`}
+          data-testid="panel-error"
+          data-code={error.code}
+          data-panel={error.panel}
+          style={{ display: 'block', color: '#b00' }}
+        >
+          {error.code} {error.panel}
         </span>
       ))}
     </p>
@@ -747,10 +603,14 @@ function Surface({
   };
   return (
     <>
-      <Toolbar onFileStatus={setFile} />
+      <ToolbarPrimaryRow>
+        <StarButton />
+        <FileControls onFileStatus={setFile} />
+        <RowHeightStrut />
+      </ToolbarPrimaryRow>
       <div style={{ display: 'flex', gap: 8 }}>
-        <Pages />
-        <SymbolControls />
+        <PageList />
+        <ToolbarSecondaryRow />
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
         <div
@@ -782,7 +642,7 @@ function Surface({
             />
           </EditorCanvas>
         </div>
-        <AppearancePanel />
+        <CanvasSide bench={bench !== null} height={height} />
       </div>
       <Status
         errors={errors}
@@ -875,11 +735,18 @@ function Host({ state, textFont }: { state: HostCompositionState; textFont: Test
       delete window.__p5Host;
     };
   }, [editor, session, state]);
+  // M8-P1: the host's UI extensions, fixed for the page's lifetime (none with `?bench=1`).
+  const contributions = useMemo(
+    () => hostContributions(window.location.search, pageBench() !== null),
+    [],
+  );
   return (
     <EditorProvider editor={editor}>
-      <main>
-        <Surface persistence={persistence} testFont={state.testFont} textFont={textFont} />
-      </main>
+      <PanelProvider contributions={contributions}>
+        <main>
+          <Surface persistence={persistence} testFont={state.testFont} textFont={textFont} />
+        </main>
+      </PanelProvider>
     </EditorProvider>
   );
 }
@@ -899,6 +766,8 @@ export default function Page() {
       {
         document,
         platform: hostPlatform(),
+        // M8-N2: the `test.ui` editor extension owns the fault panels of `?test=1&faults=1`.
+        extraExtensions: faultPanelsQuery(window.location.search) ? [testUiExtension] : [],
         textFixture: textFixtureQuery(window.location.search),
         publish: (value) => {
           published = value;

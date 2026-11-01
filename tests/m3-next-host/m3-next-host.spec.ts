@@ -1,6 +1,7 @@
 import type { Editor, EditorEvent, PathEditOverlay } from '@vector-studio/editor-core';
 import { validateDocument, type DocumentV6, type NodeV6 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
+import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
 // M3-U4 (MVP M3 contract, section 6): M3-A12, the next-host page's path edit mode on the
 // `?fixture=path-edit` document through EditorCanvas with real input in headed Chrome and Edge.
@@ -49,6 +50,8 @@ async function open(page: Page) {
     await expect(status).toHaveAttribute('data-renderer', 'ready', { timeout: 30_000 });
     await expect(page.getByTestId('error')).toHaveCount(0);
   }
+  // M8-N3 (M8-U6): the layout budget against the 17a2b0a measurement of this project.
+  await expectLayoutBudget(page);
   // The editor's own state at load: the fixture camera, no history and no edit mode.
   expect(await page.evaluate(() => window.__p5Host!.editor.getSnapshot().viewport)).toEqual({
     position: { x: 0, y: 0 },

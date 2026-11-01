@@ -24,6 +24,7 @@ When instructions conflict, the narrower document owns details inside its declar
 | `docs/requirements.md`                    | Product goals, supported behavior, scope and deferrals                     | Implementation sequence                   |
 | `ARCHITECTURE.md`                         | System boundaries, ownership, dependency direction                         | Renderer algorithms                       |
 | `docs/graphics-engine-architecture.md`    | Graphics-engine internals and accepted rendering decisions                 | Whole-system package policy               |
+| `docs/host-api.md`                        | Host embedding: editor, provider, hooks, commands, events, extensions, UI  | Type declarations; product behavior       |
 | `docs/prototype-plan.md`                  | P0-P5 milestone order and milestone-level gates                            | Active task checklist                     |
 | Active milestone plan under `docs/plans/` | Milestone execution order, status, acceptance criteria and evidence        | Cross-project validation policy           |
 | `docs/plans/d9-rendering-track.md`        | Rendering-track items, status, acceptance criteria, P3 exit evidence index | The D9 decision text; visualization items |

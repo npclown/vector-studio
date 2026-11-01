@@ -29,6 +29,7 @@ import {
   measurementScale,
   REFERENCE_SCALE,
 } from '../../packages/text-dom/src/scale.js';
+import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
 // M6a-U6 (MVP M6a contract, sections 10 and 16): M6a-A11 and the emulated part of M6a-A12, the
 // text-dom port of the next-host page on `?fixture=text` (the committed `text.v4.json` with the
@@ -87,6 +88,8 @@ async function open(page: Page) {
   const status = page.getByTestId('status');
   await expect(status).toHaveAttribute('data-fixture', 'loaded', { timeout: 30_000 });
   await expect(status).toHaveAttribute('data-text-font', 'loaded');
+  // M8-N3 (M8-U6): the layout budget against the 17a2b0a measurement of this project.
+  await expectLayoutBudget(page);
   await page.evaluate(installProbe, {
     referenceScale: REFERENCE_SCALE,
     maxMeasuredSize: MAX_MEASURED_SIZE,

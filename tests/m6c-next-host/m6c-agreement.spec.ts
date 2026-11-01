@@ -25,6 +25,7 @@ import {
   type RasterBounds,
   type RasterTerm,
 } from './m6c-agreement';
+import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
 // M6c-U3 (MVP M6c contract, sections 6 and 7; M6c-A06, M6c-A07): the DOM and GPU agreement and
 // the font-load case through next-host, in headed Chrome and Edge at DPR 1 (`chrome`, `edge`) and
@@ -144,6 +145,8 @@ async function open(page: Page) {
     expect(ready).toBe(true);
     await expect(page.getByTestId('error')).toHaveCount(0);
   }
+  // M8-N3 (M8-U6): the layout budget against the 17a2b0a measurement of this project.
+  await expectLayoutBudget(page);
   const switched = await page.evaluate(
     () => window.__p5Host!.editor.execute({ type: 'setActivePage', id: 'agreement' }).ok,
   );

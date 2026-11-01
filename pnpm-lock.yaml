@@ -104,6 +104,9 @@ importers:
       '@vector-studio/text-dom':
         specifier: workspace:*
         version: link:../../packages/text-dom
+      '@vector-studio/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       next:
         specifier: 16.4.3
         version: 16.4.3(@playwright/test@1.62.1)(@types/node@26.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)

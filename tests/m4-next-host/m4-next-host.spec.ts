@@ -17,6 +17,7 @@ import { paintAt } from '../support/e23-gradient-oracle.js';
 import { expectedLayeredAt, isolationDepth, type LayerTree } from '../support/e25-layer-oracle.js';
 import { sceneLayerTree } from '../support/m4-scene-oracle.js';
 import { generateM4A13Document } from '../m4-a13/document.js';
+import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
 // M4-U4 (MVP M4 contract, section 10): M4-A12, the next-host page on the `?fixture=appearance`
 // document (the committed `tests/fixtures/m4-appearance/host.v6.json`) in headed Chrome and Edge
@@ -95,7 +96,10 @@ async function open(page: Page, query: string) {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(`/?test=1${query}`);
-  return { errors, status: await settled(page) };
+  const status = await settled(page);
+  // M8-N3 (M8-U6): the layout budget against the 17a2b0a measurement of this project.
+  await expectLayoutBudget(page);
+  return { errors, status };
 }
 
 /** Waits for the hook and the renderer state after a navigation or reload. */

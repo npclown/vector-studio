@@ -91,17 +91,22 @@ const contractsFailures = evaluateContractsPurity({
 });
 failures.push(...contractsFailures);
 
-// MVP M8-B3: the UI package's sources import public package entries only.
+// MVP M8-B3: the UI package's sources, and next-host's star panel (M8-N2), import public package
+// entries only.
 const publicImportFailures = [];
-for (const { directory, specifiers } of publicImportPolicies) {
+for (const { directory, files, specifiers, relative } of publicImportPolicies) {
   const sourceRoot = path.join(repositoryRoot, directory);
+  const sources =
+    files === undefined
+      ? await readSources(sourceRoot)
+      : await Promise.all(
+          files.map(async (file) => {
+            const sourcePath = path.join(sourceRoot, file);
+            return { path: sourcePath, text: await readFile(sourcePath, 'utf8') };
+          }),
+        );
   publicImportFailures.push(
-    ...evaluatePublicImports({
-      sources: await readSources(sourceRoot),
-      sourceRoot,
-      specifiers,
-      displayPath,
-    }),
+    ...evaluatePublicImports({ sources, sourceRoot, specifiers, displayPath, relative }),
   );
 }
 failures.push(...publicImportFailures);

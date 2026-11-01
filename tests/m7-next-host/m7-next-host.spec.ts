@@ -9,6 +9,7 @@ import {
   type NodeV6,
 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
+import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
 // M7-U6 (MVP M7 contract, section 10): M7-A11, the next-host page on the `?fixture=symbols`
 // document (the committed `tests/fixtures/m7-symbols/symbols.v3.json`: the source `s1` and its
@@ -109,7 +110,10 @@ async function open(page: Page, query: string) {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(`/?test=1${query}`);
-  return { errors, status: await settled(page) };
+  const status = await settled(page);
+  // M8-N3 (M8-U6): the layout budget against the 17a2b0a measurement of this project.
+  await expectLayoutBudget(page);
+  return { errors, status };
 }
 
 /** Waits for the hook and the renderer state after a navigation or reload. */

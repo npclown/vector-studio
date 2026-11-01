@@ -22,14 +22,18 @@ import {
 // imported by path and typed here.
 const appSource = path.resolve(import.meta.dirname, '../../apps/next-host/src');
 type Quad = readonly [PagePoint, PagePoint, PagePoint, PagePoint];
-const { degreesLabel, inRotateZone, nodePageCorners, zoomLabel } = (await import(
+const { degreesLabel, inRotateZone, nodePageCorners } = (await import(
   path.join(appSource, 'm2-geometry.ts')
 )) as {
   degreesLabel: (radians: number) => string;
   inRotateZone: (handles: SelectionHandles, point: PagePoint, zoom: number) => boolean;
   nodePageCorners: (document: DocumentV6, id: string) => Quad | null;
-  zoomLabel: (zoom: number) => string;
 };
+// M8-U6: the zoom label moved to the UI package's toolbar (M8-L1); next-host's copy is removed
+// and these expectations run against `ui`'s, unchanged.
+const { zoomLabel } = (await import(
+  path.resolve(import.meta.dirname, '../../packages/ui/src/toolbar-model.ts')
+)) as { zoomLabel: (zoom: number) => string };
 const { SelectionOverlay } = (await import(path.join(appSource, 'overlay.tsx'))) as {
   SelectionOverlay: ComponentType<{
     snapshot: EditorSnapshot;
