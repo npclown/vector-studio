@@ -17,7 +17,8 @@
 //     source size and half are scaled. Instances of source 0 alternate between no text override
 //     and one. Each projects 9 expanded copies of the source's descendants (1,008 in all).
 //   - Text. In page-1 clusters 1, 3, ..., 399 (200 text nodes), G's rectangle becomes a text node
-//     at the rectangle's frame, with one to three runs, alternately `autoHeight` (fixed width) and
+//     at the rectangle's frame, with one to three runs that meet only at word starts (never
+//     inside a word, see `wordStart`), alternately `autoHeight` (fixed width) and
 //     `autoWidth`, in the committed test font family (M6a-Q13) and only its subset's code points
 //     (ASCII and the listed Hangul syllables). Every fourth (j = 1 mod 4, 50 nodes) names
 //     `M9_SECOND_FAMILY` instead; the bench lists the test family after it, as text-dom's
@@ -212,6 +213,22 @@ export function projectM9Page(
     undefined,
     layout,
   );
+}
+
+/**
+ * The word start (an offset just after a space) nearest `at` and after `after`, ties to the
+ * earlier one. M9-U1 pre-run fix: a run boundary inside a word let browser versions differ on
+ * line breaks. The block lays out with `word-break: keep-all` (text-dom), and Chrome 156 broke a
+ * Hangul word at a run boundary where the Chromium 153 recording broke at the space before it, so
+ * runs now meet only at word starts.
+ */
+function wordStart(text: string, at: number, after: number): number {
+  for (let distance = 0; distance < text.length; distance += 1) {
+    for (const offset of [at - distance, at + distance]) {
+      if (offset > after && offset < text.length && text[offset - 1] === ' ') return offset;
+    }
+  }
+  throw new Error(`no word start in ${JSON.stringify(text)}`);
 }
 
 /** The cluster frames of M1-A13's page 1, by index (650 of them). */
@@ -484,13 +501,19 @@ export function generateM9V2Document(seed = M9_V2_SEED): M9GeneratedDocument {
     const family = j % 4 === 1 ? M9_SECOND_FAMILY : M9_TEST_FAMILY;
     const text = target ? ascii60() : words(30 + Math.floor(next() * 11), j % 3 !== 0);
     const count = target ? 1 : 1 + (j % 3);
-    // Split at roughly equal offsets; adjacent runs differ in size and colour (canonical runs).
+    // Split at roughly equal offsets, each moved to the nearest word start; adjacent runs differ
+    // in size and colour (canonical runs).
     const size = 4 + (j % 3);
+    const cuts = [0];
+    for (let r = 1; r < count; r += 1) {
+      cuts.push(wordStart(text, Math.floor((r * text.length) / count), cuts[r - 1]!));
+    }
+    cuts.push(text.length);
     const runs = [];
     for (let r = 0; r < count; r += 1) {
-      const start = Math.floor((r * text.length) / count);
-      const end = Math.floor(((r + 1) * text.length) / count);
-      runs.push({ text: text.slice(start, end), family, size: size + r * 0.5, color: color() });
+      const run = text.slice(cuts[r], cuts[r + 1]);
+      if (run.length === 0) throw new Error(`text ${j}: empty run ${r}`);
+      runs.push({ text: run, family, size: size + r * 0.5, color: color() });
     }
     nodes[id] = {
       ...base1(id),

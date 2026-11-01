@@ -9,6 +9,7 @@ import {
   E26_DRIVERS,
   E26_ISOLATION,
   E26_SCENARIOS,
+  E26_TYPICAL_VISIBLE,
   e26Configuration,
   editDragOffset,
   isolationBoundsMs,
@@ -16,7 +17,10 @@ import {
   loadScenarioDocument,
   M9_SCENARIOS,
   M9_WINDOW,
+  m9CameraClaims,
+  m9Cameras,
   m9Configuration,
+  m9LayoutTableSha256,
   sha256,
   visibility,
   type E26Camera,
@@ -28,6 +32,7 @@ import { generateM9V2Document } from '../m9/document';
 import {
   compactLayout,
   M9_LAYOUT_TABLE,
+  m9LayoutDiff,
   m9LayoutRequests,
   requestKey,
   type M9LayoutTable,
@@ -35,6 +40,7 @@ import {
 import { parseDocument } from '@vector-studio/model';
 import type { TextLayoutRequest, TextLayoutResult } from '@vector-studio/contracts';
 import { expectLayoutBudget } from '../support/m8-n3-budget.js';
+import { installPageProbe, type Probe } from './probe';
 
 // E26-U1c (E26 contract, sections 3 and 6): the headed harness. Each test is one repetition of
 // one scenario on `apps/next-host?bench=1` (apps/next-host/src/e26-bench.ts) in a fresh context,
@@ -58,9 +64,12 @@ import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 //     scattered persistent rejections, each timed by its `e26-isolation` measure.
 //
 // Each record also holds the environment (the page's DPR, canvas size, screen, refresh estimate,
-// GPU adapter, visibility and focus) and the page errors. A run is invalid, kept and failed, when
-// the device was lost or recovered, the page was hidden or lost focus, its DPR differs from the
-// project's, a page error was thrown, or the interaction did not happen (section 3.5). Non-smoke
+// GPU adapter, visibility and focus) and the page errors, with their stacks and page times
+// (`pageErrors`; in the latency run also relative to the press and the font-load change). The
+// probe (tests/e26/probe.ts) counts only canvas presses: an M9 run's layer-toggle clicks are
+// listed apart. A run is invalid, kept and failed, when the device was lost or recovered, the
+// page was hidden or lost focus, its DPR differs from the project's, a page error was thrown, or
+// the interaction did not happen (section 3.5). Non-smoke
 // runs refuse modified tracked files, so the recorded commit is what ran (untracked files
 // are not checked: the reference PC keeps standing untracked entries). Do not touch the mouse
 // during a run: the real pointer is captured on the canvas.
@@ -84,8 +93,10 @@ import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 //     characters through `page.keyboard`, each sent on a 120 ms cadence without waiting for the
 //     page, as the latency drag's moves are; `keyToWorkDoneMs` per key from the bench hook.
 //   - `m9-v2-layouts` (only when `E26_SCENARIOS` names it): lays out every page-1 text request
-//     of the v2 document through the page's port (`?test=1`) and compares the answers with the
-//     committed table tests/m9/m9-v2-layouts.json, or writes it with `M9_RECORD_LAYOUTS=1`.
+//     of the v2 document through the page's port (`?test=1`) in each -v2 project, asserts the
+//     camera claims over those live layouts (`m9CameraClaims` at the cameras chosen from the
+//     committed table tests/m9/m9-v2-layouts.json) and reports, without failing, how they differ
+//     from that table; or, with `M9_RECORD_LAYOUTS=1`, writes the table (one project only).
 //   - `m9-ui-geometry`: the canvas size and origin are equal with and without `ui=1`, and no
 //     bench flag does anything without `?bench=1` (M9-A03).
 
@@ -214,16 +225,6 @@ type PageHook = {
   }[];
   enterTextEdit(id: string, offset: number): { ok: boolean; code?: string };
 };
-/** Installed before the page loads (`installProbe`): press and release times, focus, visibility. */
-type Probe = {
-  /** Event timestamps (when the browser received the input) and handling times. */
-  downs: number[];
-  ups: number[];
-  downsHandled: number[];
-  upsHandled: number[];
-  visibilityChanges: number;
-  blurs: number;
-};
 declare global {
   interface Window {
     __e26Bench?: PageHook;
@@ -239,41 +240,7 @@ async function installProbe(page: Page) {
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
-  await page.addInitScript(() => {
-    const probe: Probe = {
-      downs: [],
-      ups: [],
-      downsHandled: [],
-      upsHandled: [],
-      visibilityChanges: 0,
-      blurs: 0,
-    };
-    window.__e26Probe = probe;
-    // Capture listeners on the window run before the canvas handles the event, so these are
-    // the events' own timestamps, not a later evaluate (U1c review S1).
-    window.addEventListener(
-      'pointerdown',
-      (event) => {
-        probe.downs.push(event.timeStamp);
-        probe.downsHandled.push(performance.now());
-      },
-      {
-        capture: true,
-      },
-    );
-    window.addEventListener(
-      'pointerup',
-      (event) => {
-        probe.ups.push(event.timeStamp);
-        probe.upsHandled.push(performance.now());
-      },
-      {
-        capture: true,
-      },
-    );
-    window.addEventListener('blur', () => (probe.blurs += 1));
-    document.addEventListener('visibilitychange', () => (probe.visibilityChanges += 1));
-  });
+  await page.addInitScript(installPageProbe);
   return { errors, consoleErrors };
 }
 
@@ -600,6 +567,7 @@ async function typingRun(
     };
   }, startMs);
   const presenceEnd = await presence(page);
+  const pageErrors = await page.evaluate(() => window.__e26Probe!.pageErrors);
   const samples = state.keyLatencies
     .filter((entry) => entry.doneMs !== null && Number.isFinite(entry.doneMs))
     .map((entry) => entry.doneMs! - entry.inputMs);
@@ -610,6 +578,7 @@ async function typingRun(
     environment: env,
     presence: { start: presenceStart, end: presenceEnd },
     errors,
+    pageErrors,
     consoleErrors: o.consoleErrors,
     loadWriteOk,
     layers,
@@ -782,12 +751,14 @@ for (const { scenario, variant } of runs) {
         );
         if (scenario.interaction === 'edit-drag') await page.mouse.up();
         const end = await presence(page);
+        const pageErrors = await page.evaluate(() => window.__e26Probe!.pageErrors);
         const intervals = run.measurements.frameIntervalsMs;
         record(slug, {
           ...base,
           environment: env,
           presence: { start, end },
           errors,
+          pageErrors,
           consoleErrors,
           ...(layers === null ? {} : { layers }),
           rafCallbackIntervalMs: summary(intervals),
@@ -960,11 +931,19 @@ for (const { scenario, variant } of runs) {
       const presenceEnd = await presence(page);
       const open_ = (entry: (typeof state.latencies)[number]) =>
         entry.failed !== true && (entry.doneMs === null || Number.isNaN(entry.doneMs));
+      // M9-U1: each page error placed against the press and the font-load change (page clock).
+      const fontStartMs = state.fontLoads[0]?.startMs ?? null;
+      const pageErrors = probe.pageErrors.map((entry) => ({
+        ...entry,
+        sinceDownMs: entry.atMs - downMs,
+        sinceFontLoadMs: fontStartMs === null ? null : entry.atMs - fontStartMs,
+      }));
       const result = {
         ...base,
         environment: env,
         presence: { start: presenceStart, end: presenceEnd },
         errors,
+        pageErrors,
         consoleErrors,
         downMs,
         upMs,
@@ -1008,8 +987,12 @@ for (const { scenario, variant } of runs) {
         end: presenceEnd,
       });
       expect(loadWriteOk, 'the load write succeeded').toBe(true);
+      // Canvas presses only (tests/e26/probe.ts): the layer toggles are the only other presses.
       expect(probe.downs.length, 'one press').toBe(1);
       expect(probe.ups.length, 'one release').toBe(1);
+      expect(probe.otherDowns.length, 'presses outside the canvas: the layer toggles').toBe(
+        layers?.expanded.length ?? 0,
+      );
       expect(state.mode).toBe('on-demand');
       expect(result.failed).toBe(0);
       expect(result.unresolved).toBe(0);
@@ -1283,10 +1266,13 @@ if (geometryRuns) {
 // with the committed table (or written with M9_RECORD_LAYOUTS=1). Run only on request.
 if (filter.includes('m9-v2-layouts')) {
   test('m9-v2-layouts', async ({ page, browser }, testInfo) => {
-    // One project records (or checks) the one table.
+    // One project records the one table; every v2 project (Chrome and Edge headed) checks it.
+    const recording = process.env.M9_RECORD_LAYOUTS === '1';
     test.skip(
-      testInfo.project.name !== (smoke ? 'chromium-smoke-dpr1-v2' : 'chrome-dpr1-v2'),
-      'the table is recorded in one project only',
+      recording
+        ? testInfo.project.name !== (smoke ? 'chromium-smoke-dpr1-v2' : 'chrome-dpr1-v2')
+        : !v2Project(testInfo.project.name),
+      recording ? 'the table is recorded in one project only' : 'the -v2 projects only',
     );
     const parsed = parseDocument(JSON.stringify(generateM9V2Document()));
     if (!parsed.ok) throw new Error(`parse: ${parsed.code}`);
@@ -1323,7 +1309,7 @@ if (filter.includes('m9-v2-layouts')) {
         ]),
       ),
     };
-    if (process.env.M9_RECORD_LAYOUTS === '1') {
+    if (recording) {
       // Formatted as the repository's `format:check` wants it.
       const prettier = await import('prettier');
       const options = (await prettier.resolveConfig(M9_LAYOUT_TABLE)) ?? {};
@@ -1334,11 +1320,48 @@ if (filter.includes('m9-v2-layouts')) {
       return;
     }
     const committed = JSON.parse(readFileSync(M9_LAYOUT_TABLE, 'utf8')) as M9LayoutTable;
-    // Generations differ between pages; the layouts must not.
-    const strip = (value: M9LayoutTable) =>
-      Object.fromEntries(
-        Object.entries(value.layouts).map(([key, layout]) => [key, { ...layout, generation: 0 }]),
-      );
-    expect(strip(table)).toEqual(strip(committed));
+    // M9-U1 pre-run fix: exact layouts move between browser versions (Chrome 156 against the
+    // Chromium 153 recording: 170 of 207 layouts, almost all by at most 0.001 px, one with other
+    // line breaks), so the diff is reported, not failed. What the runs rely on is asserted: the
+    // camera claims, at the cameras chosen from the committed table, over this browser's layouts.
+    const diff = m9LayoutDiff(table, committed);
+    const claims = m9CameraClaims(loadScenarioDocument('m9-v2', table), m9Cameras(loaded('m9-v2')));
+    record(`${testInfo.project.name}--m9-v2-layouts`, {
+      scenario: 'm9-v2-layouts',
+      variant: 'layouts',
+      repetition: 1,
+      project: testInfo.project.name,
+      browser: table.recordedWith.browser,
+      committedBrowser: committed.recordedWith.browser,
+      commit,
+      dirty,
+      liveTableSha256: m9LayoutTableSha256(table),
+      committedTableSha256: m9LayoutTableSha256(committed),
+      diff,
+      claims,
+      // The live table itself, so a difference can be studied without rerunning.
+      table,
+    });
+    testInfo.annotations.push({
+      type: 'm9-v2-layouts',
+      description: `${diff.differing} of ${diff.layouts} layouts differ, max numeric delta ${diff.maxNumericDelta}, ${diff.lineBreaks.length} with other line breaks`,
+    });
+    expect(diff.missing, 'every request answered and recorded').toEqual([]);
+    for (const entry of claims.typical.atDpr) {
+      const at = `the typical view at DPR ${entry.dpr}: 900 to 1,100 drawn leaves`;
+      expect(entry.visible, at).toBeGreaterThanOrEqual(E26_TYPICAL_VISIBLE.min);
+      expect(entry.visible, at).toBeLessThanOrEqual(E26_TYPICAL_VISIBLE.max);
+      expect(entry.visible, `${at}, not all`).toBeLessThan(entry.leaves);
+    }
+    expect(claims.fitted.insideAtF, 'every drawn leaf inside the viewport at F').toBe(
+      claims.fitted.leaves,
+    );
+    expect(claims.fitted.panFirstMissMs, 'every drawn leaf inside along the pan path').toBeNull();
+    expect(
+      claims.moveSelection.typical.firstMissMs,
+      'the move selection inside (typical)',
+    ).toBeNull();
+    expect(claims.moveSelection.fitted.firstMissMs, 'the move selection inside (F)').toBeNull();
+    expect(claims.holds).toBe(true);
   });
 }

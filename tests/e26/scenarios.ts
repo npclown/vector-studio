@@ -564,8 +564,15 @@ export type E26Loaded = Readonly<{
   bounds: ReadonlyMap<string, SceneBounds | null>;
 }>;
 
-/** Generates, parses (migrating to the current version) and projects a scenario document. */
-export function loadScenarioDocument(document: E26Scenario['document']): E26Loaded {
+/**
+ * Generates, parses (migrating to the current version) and projects a scenario document. The v2
+ * page's text lays out from `table` (the committed one unless given: M9-U1's headed check passes
+ * a browser's live layouts).
+ */
+export function loadScenarioDocument(
+  document: E26Scenario['document'],
+  table?: M9LayoutTable,
+): E26Loaded {
   const generated =
     document === 'm1-a13'
       ? generateM1A13Document()
@@ -579,7 +586,7 @@ export function loadScenarioDocument(document: E26Scenario['document']): E26Load
   // M9-U1: the v2 page's text projects through the committed font's recorded layouts.
   const projection =
     document === 'm9-v2'
-      ? projectM9Page(parsed.document, pageId, m9ReplayLayout(readM9LayoutTable()))
+      ? projectM9Page(parsed.document, pageId, m9ReplayLayout(table ?? readM9LayoutTable()))
       : projectPage(parsed.document, pageId, () => null);
   return {
     generated,
@@ -698,6 +705,91 @@ export function m9Configuration(
           ? null
           : m9TypingTarget(loaded.generated as M9GeneratedDocument),
     },
+  };
+}
+
+/**
+ * M9-U1 (M9-A02): the camera claims of the v2 document, judged over `loaded`'s draw bounds at the
+ * cameras chosen from the committed layouts (the runs' cameras): the typical view shows 900 to
+ * 1,100 drawn leaves at DPR 1 and 2; every drawn leaf is inside the viewport at F and along the
+ * whole pan and zoom path (1 ms steps); and the move selection stays inside through the edit
+ * drag at both cameras (10 ms steps). The unit test judges the committed layouts; the headed
+ * `m9-v2-layouts` check judges a browser's live ones, so the claims hold where the runs measure.
+ */
+export function m9CameraClaims(
+  loaded: E26Loaded,
+  cameras: Readonly<{ typical: E26Camera; fitted: E26Camera }> = m9Cameras(),
+) {
+  const { typical, fitted } = cameras;
+  const atDpr = [1, 2].map((dpr) => ({ dpr, ...visibility(loaded.bounds, typical, dpr) }));
+  const typicalHolds = atDpr.every(
+    (entry) =>
+      entry.visible >= E26_TYPICAL_VISIBLE.min &&
+      entry.visible <= E26_TYPICAL_VISIBLE.max &&
+      entry.visible < entry.leaves,
+  );
+  const atF = visibility(loaded.bounds, fitted);
+  let panMinInside = atF.inside;
+  let panFirstMissMs: number | null = null;
+  for (let t = 0; t < E26_DRIVERS.thetaPeriodMs; t += 1) {
+    const { inside, leaves } = visibility(loaded.bounds, panZoomCamera(fitted, t));
+    panMinInside = Math.min(panMinInside, inside);
+    if (inside !== leaves && panFirstMissMs === null) panFirstMissMs = t;
+  }
+  const { ids } = m1A13MoveSelection(loaded.generated as Parameters<typeof m1A13MoveSelection>[0]);
+  const drag = (camera: E26Camera) => {
+    const view = worldViewport(camera);
+    let firstMissMs: number | null = null;
+    for (let t = 0; t < E26_DRIVERS.thetaPeriodMs && firstMissMs === null; t += 10) {
+      const offset = editDragOffset(t);
+      const dx = offset.x / camera.zoom;
+      const dy = offset.y / camera.zoom;
+      for (const id of ids) {
+        const box = loaded.bounds.get(id);
+        if (
+          box == null ||
+          !contains(view, {
+            minX: box.minX + dx,
+            minY: box.minY + dy,
+            maxX: box.maxX + dx,
+            maxY: box.maxY + dy,
+          })
+        ) {
+          firstMissMs = t;
+          break;
+        }
+      }
+    }
+    return { holds: firstMissMs === null, firstMissMs };
+  };
+  const moveSelection = { typical: drag(typical), fitted: drag(fitted) };
+  const fittedHolds = atF.inside === atF.leaves && panFirstMissMs === null;
+  return {
+    typical: { zoom: typical.zoom, atDpr, holds: typicalHolds },
+    fitted: {
+      zoom: fitted.zoom,
+      leaves: atF.leaves,
+      insideAtF: atF.inside,
+      panMinInside,
+      panFirstMissMs,
+      holds: fittedHolds,
+    },
+    moveSelection: {
+      ...moveSelection,
+      holds: moveSelection.typical.holds && moveSelection.fitted.holds,
+    },
+    holds: typicalHolds && fittedHolds && moveSelection.typical.holds && moveSelection.fitted.holds,
+  };
+}
+
+/** The v2 runs' cameras: the typical view and F, chosen from the committed layouts. */
+export function m9Cameras(loaded: E26Loaded = loadScenarioDocument('m9-v2')): {
+  typical: E26Camera;
+  fitted: E26Camera;
+} {
+  return {
+    typical: typicalCamera(loaded.bounds),
+    fitted: fittedCamera(contentBounds(loaded.bounds)),
   };
 }
 
