@@ -352,10 +352,18 @@ describe('M8-A08 the UI sources import public exports only (M8-B3, exit gate)', 
     PROGRAM_TIMEOUT,
   );
 
-  it('reads type imports, re-exports and dynamic imports, and skips comments', () => {
+  it('fails a type reference directive to another package, by the check', () => {
+    const text = '/// <reference types="@vector-studio/editor-core" />\nexport {};\n';
+    expect(checkPlanted(text)).toEqual([
+      fail('@vector-studio/editor-core', 'is not a public import'),
+    ]);
+  });
+
+  it('reads type imports, re-exports, dynamic imports and type references, and skips comments', () => {
     expect(
       specifiersOf(
         [
+          '/// <reference types="node" />',
           "// import { x } from '@vector-studio/model';",
           "/* export * from '@vector-studio/contracts'; */",
           "import type { A } from '@vector-studio/editor-core';",
@@ -369,6 +377,7 @@ describe('M8-A08 the UI sources import public exports only (M8-B3, exit gate)', 
       './local.js',
       '../../react/src/hooks.js',
       'react-dom',
+      'node',
     ]);
   });
 });

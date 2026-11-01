@@ -192,7 +192,7 @@ M8 "closes after M7" (MVP plan section 7); M7 was accepted on 2026-10-30, and th
 | --- | --- |
 | M8-U1 | In review: PR (see below); independent review READY WITH FOLLOW-UPS, applied as these notes |
 | M8-U2 | In review: independent review r1 NOT READY (shared-memo owner), fixed; r2 READY; notes below |
-| M8-U3 | In review; notes below |
+| M8-U3 | In review: independent review r1 READY WITH FOLLOW-UPS, applied; notes below |
 | M8-U4 | Not started |
 | M8-U5 | Not started |
 | M8-U6 | Not started |
@@ -220,8 +220,9 @@ M8 "closes after M7" (MVP plan section 7); M7 was accepted on 2026-10-30, and th
 
 - M8-T2 amendment (2026-11-01): `ui` re-exports `react` through explicit lists (16 values, 147 types) instead of `export *`. Next 16.4.3's flight loader throws "It's currently unsupported to use "export *" in a client boundary. Please use named exports instead." when a Server Component imports such a module. The A02 test keeps the lists equal to `react`'s exports, and an A06 test fails on any `export *` in the entry source or build. Next's SWC transform and flight loader were run on the built entry with a stub compilation: 23 client references, past the `export *` check; a full `next build` with a Server Component import is left to M8-U6.
 - `ui`'s own exports: 7 values (`PanelProvider`, `EditorPanels`, `usePanelErrors`, `resolvePanels`, `PanelBoundary`, `ToolbarPrimaryRow`, `ToolbarSecondaryRow`) and 10 types.
-- `resolvePanels` gives each rejected panel one error, the first that applies in the order `ui.unknown-extension`, `ui.unowned-panel`, `ui.duplicate-panel`; a duplicate repeats the ID of an earlier accepted panel. `usePanelErrors` derives rejection errors during render, so server markup shows them; `onPanelError` gets them in an effect, once per distinct list; `ui.panel-failed` is reported once per panel from `componentDidCatch`, after the rejections.
+- `resolvePanels` gives each rejected panel one error, the first that applies in the order `ui.unknown-extension`, `ui.unowned-panel`, `ui.duplicate-panel`; a duplicate repeats the ID of an earlier accepted panel. `usePanelErrors` derives rejection errors during render, so server markup shows them; `onPanelError` gets each error once by code and panel: on mount the rejections first, from the provider's effect, then the `ui.panel-failed` errors that `componentDidCatch` queued in the same commit; after that each new rejection or failure as it occurs. A new editor or structurally different contributions remount the panels, clear the recorded failures and report anew.
 - Toolbar rows: row 1 `ToolbarPrimaryRow` (built-in tools, extension tools from the `extensions` query, edit actions), row 2 `ToolbarSecondaryRow` (zoom and symbols); each is `role="toolbar"`, host controls go in as `children` after the row's own controls (next-host's `star` button moves in M8-U6 under M8-Q11), and each row shows its last refused command code in an `output` with test ID `tools-refusal` or `view-refusal`. Test IDs, labels and enable rules match next-host at 17a2b0a.
 - `toggleClosedCommand` and `zoomLabel` are copied from next-host into `ui` (an agreement test pins the toggle copy); M8-U6 removes next-host's copies.
 - The M8-B3 public-import check lives in `tooling/boundary-policy.mjs` and runs in `pnpm check:boundaries`; next-host's allowed set includes `ui`, its manifest changes in M8-U6.
+- The refusal `output` sits inline in its row, so M8-U6's M8-N3 width and row 2 height budget includes it while a refusal shows (review r1).
 - Effects, a real error-boundary catch, panel collapse, the refusal output and click wiring run only in a browser; M8-A14 covers them.

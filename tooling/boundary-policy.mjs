@@ -175,11 +175,16 @@ export const publicImportPolicies = [
 ];
 
 /**
- * The import and export specifiers of a TypeScript source, in source order: static imports and
- * re-exports, `import type`, dynamic `import()` and `require()`; comments are skipped.
+ * The import and export specifiers of a TypeScript source: static imports and re-exports,
+ * `import type`, dynamic `import()` and `require()` in source order, then each
+ * `/// <reference types="…" />` directive; comments are otherwise skipped.
  */
 export function importSpecifiers(text) {
-  return ts.preProcessFile(text, true, true).importedFiles.map((file) => file.fileName);
+  const info = ts.preProcessFile(text, true, true);
+  return [
+    ...info.importedFiles.map((file) => file.fileName),
+    ...info.typeReferenceDirectives.map((directive) => directive.fileName),
+  ];
 }
 
 /**

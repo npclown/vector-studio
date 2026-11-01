@@ -1,6 +1,7 @@
-import { useEditorQuery } from '@vector-studio/react';
+import { useEditor, useEditorQuery } from '@vector-studio/react';
 import {
   Component,
+  Fragment,
   createContext,
   useCallback,
   useContext,
@@ -18,6 +19,13 @@ import {
   type ResolvedPanel,
   type UiExtension,
 } from './panel-resolve.js';
+import {
+  addFailure,
+  contributionsEqual,
+  initialReporter,
+  reportFailure,
+  reportRejections,
+} from './panel-report.js';
 
 // MVP M8 contract, section 6: the panel provider, the panel list and each panel's error
 // boundary. Panel open and collapsed state is React state in this module: no command, document,
@@ -27,6 +35,8 @@ type PanelContextValue = Readonly<{
   panels: readonly ResolvedPanel[];
   errors: readonly PanelError[];
   report: (error: PanelError) => void;
+  /** The composition; the panels remount when it changes. */
+  generation: number;
 }>;
 
 const PanelContext = createContext<PanelContextValue | null>(null);
@@ -44,7 +54,10 @@ function usePanelContext(caller: string): PanelContextValue {
 export type PanelProviderProps = Readonly<{
   /** The host's UI extensions; their owners must be registered with the editor. */
   contributions: readonly UiExtension[];
-  /** Receives each panel error once, from an effect or after a panel failed; optional. */
+  /**
+   * Receives each panel error once by code and panel; on mount the rejections first, then the
+   * failures; optional.
+   */
   onPanelError?: (error: PanelError) => void;
   children?: ReactNode;
 }>;
@@ -54,17 +67,41 @@ export type PanelProviderProps = Readonly<{
  * `EditorProvider` and above both `EditorPanels` and whatever reads `usePanelErrors`. It checks
  * `contributions` against the editor's `extensions` query with `resolvePanels`, keeps the
  * rejected panels' errors and the `ui.panel-failed` errors of panels that threw, and calls
- * `onPanelError` once for each: for a rejection in an effect after the render that found it, for
- * a failure when the panel's boundary caught it.
+ * `onPanelError` once for each error, by code and panel. The order is fixed: on mount the
+ * rejections come first, from an effect, then the failures boundaries caught in that commit;
+ * after that each new rejection or failure is delivered when it occurs (a rejection from the
+ * effect after the render that found it). A new editor, or contributions that differ in an
+ * extension, panel ID, title or component, start a new composition: the panels remount, the
+ * recorded failures are cleared and its errors are reported anew.
  */
 export function PanelProvider({ contributions, onPanelError, children }: PanelProviderProps) {
+  const editor = useEditor();
   const extensions = useEditorQuery(EXTENSIONS);
+  const [failures, setFailures] = useState<readonly PanelError[]>([]);
+
+  // The composition: the editor and the contributions, compared structurally so an equal inline
+  // array keeps it. A change is stored during render (React's "previous render" state pattern).
+  const [composition, setComposition] = useState({ editor, contributions, generation: 0 });
+  let { generation } = composition;
+  if (
+    composition.editor !== editor ||
+    !contributionsEqual(composition.contributions, contributions)
+  ) {
+    generation += 1;
+    setComposition({ editor, contributions, generation });
+    setFailures([]);
+  }
+  const reporter = useRef(initialReporter(generation));
+  // Reset before the commit, so a boundary that catches in the new composition's first commit
+  // reports into the new reporter.
+  if (reporter.current.generation !== generation) reporter.current = initialReporter(generation);
+
   const resolution = useMemo(
     () => resolvePanels(contributions, extensions),
     [contributions, extensions],
   );
   // The same rejections keep one list object, so an inline `contributions` array neither
-  // re-reports them nor changes what `usePanelErrors` returns.
+  // changes what `usePanelErrors` returns nor re-runs the reporting effect.
   const stable = useRef(resolution.errors);
   if (!panelErrorsEqual(stable.current, resolution.errors)) stable.current = resolution.errors;
   const rejected = stable.current;
@@ -74,20 +111,17 @@ export function PanelProvider({ contributions, onPanelError, children }: PanelPr
     callback.current = onPanelError;
   }, [onPanelError]);
 
-  const reported = useRef<readonly PanelError[] | null>(null);
   useEffect(() => {
-    if (reported.current === rejected) return;
-    reported.current = rejected;
-    for (const error of rejected) callback.current?.(error);
-  }, [rejected]);
+    const step = reportRejections(reporter.current, rejected);
+    reporter.current = step.reporter;
+    for (const error of step.deliver) callback.current?.(error);
+  }, [rejected, generation]);
 
-  const [failures, setFailures] = useState<readonly PanelError[]>([]);
-  const failed = useRef(new Set<string>());
   const report = useCallback((error: PanelError) => {
-    if (failed.current.has(error.panel)) return;
-    failed.current.add(error.panel);
-    setFailures((previous) => [...previous, error]);
-    callback.current?.(error);
+    const step = reportFailure(reporter.current, error);
+    reporter.current = step.reporter;
+    setFailures((previous) => addFailure(previous, error));
+    for (const delivered of step.deliver) callback.current?.(delivered);
   }, []);
 
   const errors = useMemo(
@@ -95,8 +129,8 @@ export function PanelProvider({ contributions, onPanelError, children }: PanelPr
     [rejected, failures],
   );
   const value = useMemo(
-    () => ({ panels: resolution.panels, errors, report }),
-    [resolution.panels, errors, report],
+    () => ({ panels: resolution.panels, errors, report, generation }),
+    [resolution.panels, errors, report, generation],
   );
   return <PanelContext.Provider value={value}>{children}</PanelContext.Provider>;
 }
@@ -187,12 +221,14 @@ function PanelSection({
  * `PanelBoundary`. Throws outside a `PanelProvider`.
  */
 export function EditorPanels() {
-  const { panels, report } = usePanelContext('EditorPanels');
+  const { panels, report, generation } = usePanelContext('EditorPanels');
+  // Keyed by the composition, so a new editor or new contributions remount every panel and its
+  // boundary, which drops a failed state together with the provider's recorded failures.
   return (
-    <>
+    <Fragment key={generation}>
       {panels.map(({ panel }) => (
         <PanelSection key={panel.id} panel={panel} report={report} />
       ))}
-    </>
+    </Fragment>
   );
 }

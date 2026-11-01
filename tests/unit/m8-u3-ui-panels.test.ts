@@ -20,6 +20,15 @@ import {
   type PanelError,
   type UiExtension,
 } from '@vector-studio/ui';
+import {
+  addFailure,
+  contributionsEqual,
+  initialReporter,
+  panelErrorKey,
+  reportFailure,
+  reportRejections,
+  type PanelReporter,
+} from '../../packages/ui/src/panel-report.js';
 import { createElement, type ComponentType, type ReactElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -211,7 +220,7 @@ describe('M8-A09 PanelProvider and EditorPanels (M8-P1, M8-P4)', () => {
   it('sends no command from the panel modules: they read the extensions query only', async () => {
     for (const file of ['panels.tsx', 'panel-resolve.ts']) {
       const text = await readFile(path.join(root, 'packages/ui/src', file), 'utf8');
-      expect(text, file).not.toMatch(/useEditorCommands|useEditor\(|\.execute\(/u);
+      expect(text, file).not.toMatch(/useEditorCommands|\.execute\(/u);
       expect(
         specifiersOf(text).filter((name) => !name.startsWith('.')),
         file,
@@ -225,6 +234,84 @@ describe('M8-A09 PanelProvider and EditorPanels (M8-P1, M8-P4)', () => {
       expect(() =>
         renderToString(createElement(EditorProvider, { editor: target }, createElement(component))),
       ).toThrow(/no PanelProvider above this component/u);
+    }
+  });
+});
+
+describe('M8-A09 onPanelError bookkeeping (M8-P1, M8-P3): each error once, rejections first', () => {
+  const A: PanelError = { code: 'ui.unowned-panel', panel: 'a' };
+  const B: PanelError = { code: 'ui.unknown-extension', panel: 'b' };
+  const F: PanelError = { code: 'ui.panel-failed', panel: 'f' };
+  const G: PanelError = { code: 'ui.panel-failed', panel: 'g' };
+  /** Runs steps from a fresh reporter and returns what was delivered, in order. */
+  function deliveries(
+    ...steps: ((reporter: PanelReporter) => {
+      reporter: PanelReporter;
+      deliver: readonly PanelError[];
+    })[]
+  ): PanelError[] {
+    let reporter = initialReporter(0);
+    const out: PanelError[] = [];
+    for (const step of steps) {
+      const next = step(reporter);
+      reporter = next.reporter;
+      out.push(...next.deliver);
+    }
+    return out;
+  }
+  const rejections = (list: readonly PanelError[]) => (r: PanelReporter) =>
+    reportRejections(r, list);
+  const failure = (error: PanelError) => (r: PanelReporter) => reportFailure(r, error);
+
+  it('keys an error by code and panel', () => {
+    expect(panelErrorKey(A)).toBe('ui.unowned-panel a');
+    expect(initialReporter(3)).toEqual({
+      generation: 3,
+      reported: new Set(),
+      ready: false,
+      queue: [],
+    });
+  });
+
+  it('delivers only the new rejection when [A] becomes [A, B]', () => {
+    expect(deliveries(rejections([A]), rejections([A, B]))).toEqual([A, B]);
+    // The same list again, or a repeat inside one list, delivers nothing more.
+    expect(deliveries(rejections([A, A]), rejections([A]), rejections([B, A]))).toEqual([A, B]);
+  });
+
+  it('queues failures caught before the rejections were reported, then rejections first', () => {
+    // A boundary's componentDidCatch runs in the commit, before the provider's passive effect.
+    expect(deliveries(failure(F), failure(G), rejections([A, B]))).toEqual([A, B, F, G]);
+    // After that, a failure is delivered when it occurs.
+    expect(deliveries(rejections([A]), failure(F), rejections([A, B]))).toEqual([A, F, B]);
+  });
+
+  it('delivers a panel failure once, queued or not', () => {
+    expect(deliveries(failure(F), failure(F), rejections([]), failure(F))).toEqual([F]);
+    expect(deliveries(rejections([]), failure(F), failure(F))).toEqual([F]);
+  });
+
+  it('lists each failed panel once for usePanelErrors, keeping the list when unchanged', () => {
+    const one = addFailure([], F);
+    expect(one).toEqual([F]);
+    expect(addFailure(one, F)).toBe(one);
+    expect(addFailure(addFailure(one, G), F)).toEqual([F, G]);
+  });
+
+  it('compares contributions by extension, panel ID, title and component', () => {
+    const base: UiExtension[] = [{ extension: 'x', panels: [panel('x', 'X', SelectionPanel)] }];
+    const same: UiExtension[] = [{ extension: 'x', panels: [panel('x', 'X', SelectionPanel)] }];
+    expect(contributionsEqual(base, same)).toBe(true);
+    expect(contributionsEqual(base, base)).toBe(true);
+    for (const other of [
+      [],
+      [{ extension: 'y', panels: [panel('x', 'X', SelectionPanel)] }],
+      [{ extension: 'x', panels: [panel('x.y', 'X', SelectionPanel)] }],
+      [{ extension: 'x', panels: [panel('x', 'Y', SelectionPanel)] }],
+      [{ extension: 'x', panels: [panel('x', 'X', Empty)] }],
+      [{ extension: 'x', panels: [] }],
+    ] as UiExtension[][]) {
+      expect(contributionsEqual(base, other), JSON.stringify(other)).toBe(false);
     }
   });
 });
