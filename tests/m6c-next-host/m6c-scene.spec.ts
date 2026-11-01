@@ -8,14 +8,17 @@ import {
   deviceMap,
   devicePolygon,
   deviceRect,
+  emptyJudgement,
   extraInk,
-  inkMask,
   inkOutside,
   judgeCluster,
   localInkShare,
   OPEN_RULE,
+  othersMask,
   rasterCallFailures,
   rasterKeySets,
+  showableInk,
+  unionMask,
   type Camera,
   type ClusterJudgement,
   type CoverRule,
@@ -472,31 +475,22 @@ async function judgeScene(page: Page, camera: Camera) {
       });
     }
   }
-  // Each leaf's probe ink, grown by 1 px: a hidden pixel of one leaf under another's is shared.
-  const masks = new Map<string, Uint8Array>();
-  for (const id of new Set(reads.map((value) => value.leaf.id))) {
-    masks.set(
+  // Each leaf's probe ink, grown by 1 px, where its own cover rule lets it show (review S1 of
+  // 2dfd5c4): a hidden pixel of one leaf under another's showable ink is shared.
+  const showable = showableInk(
+    canvas.width,
+    canvas.height,
+    [...new Set(reads.map((value) => value.leaf.id))].map((id) => ({
       id,
-      inkMask(
-        canvas.width,
-        canvas.height,
-        reads.flatMap((value) =>
-          value.leaf.id === id && value.probe !== null ? [value.probe] : [],
-        ),
+      rule: rules[id] ?? OPEN_RULE,
+      crops: reads.flatMap((value) =>
+        value.leaf.id === id && value.probe !== null ? [value.probe] : [],
       ),
-    );
-  }
-  const othersOf = (id: string) => {
-    const mask = new Uint8Array(canvas.width * canvas.height);
-    for (const [other, ink] of masks) {
-      if (other === id) continue;
-      for (let i = 0; i < ink.length; i += 1) if (ink[i] === 1) mask[i] = 1;
-    }
-    return { mask, width: canvas.width };
-  };
+    })),
+  );
   // Pass 2: the judgement.
   const rows: Row[] = [];
-  const others = new Map<string, ReturnType<typeof othersOf>>();
+  const others = new Map<string, ReturnType<typeof othersMask>>();
   for (const { leaf, index, cluster, size, mode, bound, read, probe } of reads) {
     const failures: string[] = [];
     if (read.status !== 'applied') failures.push(`probe status ${read.status}`);
@@ -509,11 +503,24 @@ async function judgeScene(page: Page, camera: Camera) {
         failures.push(`placement ${failure}`);
       }
     }
-    if (probe === null) continue;
+    if (probe === null) {
+      // An empty crop is judged on its probe status, mode and placement alone (review N3).
+      rows.push({
+        id: leaf.id,
+        index,
+        text: cluster.text,
+        mode: read.placement.mode,
+        share: null,
+        outsideRect: null,
+        failures,
+        ...emptyJudgement(),
+      });
+      continue;
+    }
     const [shown, background] = (await keptCrops(page, ['shown', 'hidden'], read.crop)).map(
       decodeCrop,
     );
-    if (!others.has(leaf.id)) others.set(leaf.id, othersOf(leaf.id));
+    if (!others.has(leaf.id)) others.set(leaf.id, othersMask(showable, leaf.id, canvas.width));
     const judgement = judgeCluster({
       probe,
       shown: shown!,
@@ -562,8 +569,7 @@ async function judgeScene(page: Page, camera: Camera) {
   }
   // Review S3: no changed pixel that no probe cluster's ink (grown by 1 px) accounts for.
   const changed = await changedBits(page);
-  const crops = reads.flatMap((value) => (value.probe === null ? [] : [value.probe]));
-  const extra = extraInk(changed, inkMask(canvas.width, canvas.height, crops), canvas.width);
+  const extra = extraInk(changed, unionMask(showable), canvas.width);
   return { scene, rows, outside, extra, frames };
 }
 
@@ -697,6 +703,11 @@ for (const zoom of ZOOMS) {
       ),
     );
     expect(failures).toEqual([]);
+    // Only the clip's tail and the masked text overlap other text (review N4 of 2dfd5c4).
+    const shared = rows.filter(
+      (row) => row.hiddenShared > 0 && row.id !== 'clip-text' && row.id !== 'mask-text',
+    );
+    expect(shared.map((row) => `${row.id} ${row.index}: ${row.hiddenShared}`)).toEqual([]);
     for (const feature of zoom.features) {
       for (const [name, count] of Object.entries(counts[feature])) {
         expect(count, `${zoom.name}: ${feature} ${name}`).toBeGreaterThan(0);

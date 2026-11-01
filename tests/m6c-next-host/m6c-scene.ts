@@ -216,22 +216,7 @@ export function judgeCluster(
   }
   const margin = input.margin ?? EDGE_MARGIN;
   const tolerance = input.tolerance ?? COMPOSITE_TOLERANCE;
-  const out: ClusterJudgement = {
-    visible: 0,
-    hidden: 0,
-    edge: 0,
-    strong: 0,
-    strongChanged: 0,
-    strongOnColour: 0,
-    solid: 0,
-    hiddenChanged: 0,
-    hiddenShared: 0,
-    samples: { hiddenChanged: [], tooLight: [], tooDark: [], strongUnchanged: [] },
-    tooLight: 0,
-    tooDark: 0,
-    worstLight: 0,
-    worstDark: 0,
-  };
+  const out = emptyJudgement();
   for (let row = 0; row < probe.height; row += 1) {
     for (let column = 0; column < probe.width; column += 1) {
       const i = (row * probe.width + column) * 4;
@@ -599,6 +584,87 @@ export function packBits(flags: ArrayLike<number>): Uint8Array {
     if (flags[index] !== 0) out[index >> 3]! |= 1 << (index & 7);
   }
   return out;
+}
+
+/** One leaf's probe crops and its cover rule, for `showableInk`. */
+export type LeafInk = Readonly<{ id: string; rule: CoverRule; crops: readonly Pixels[] }>;
+
+/**
+ * Each leaf's probe ink grown by `grow` px (as `inkMask`), kept only where the leaf's own cover
+ * rule does not say hidden: the pixels that leaf's ink may change in the shown frame.
+ */
+export function showableInk(
+  width: number,
+  height: number,
+  leaves: readonly LeafInk[],
+  margin = EDGE_MARGIN,
+  grow = 1,
+): Map<string, Uint8Array> {
+  const out = new Map<string, Uint8Array>();
+  for (const { id, rule, crops } of leaves) {
+    const mask = inkMask(width, height, crops, grow);
+    for (let index = 0; index < mask.length; index += 1) {
+      if (mask[index] !== 1) continue;
+      const x = (index % width) + 0.5;
+      const y = Math.floor(index / width) + 0.5;
+      if (pixelState(rule, x, y, margin) === 'hidden') mask[index] = 0;
+    }
+    const prior = out.get(id);
+    if (prior === undefined) out.set(id, mask);
+    else
+      for (let index = 0; index < mask.length; index += 1) if (mask[index] === 1) prior[index] = 1;
+  }
+  return out;
+}
+
+/**
+ * The union of every leaf's showable ink but `id`'s, as `judgeCluster`'s `others`: a hidden pixel
+ * of `id` there may change by another leaf's ink that is allowed to show.
+ */
+export function othersMask(
+  showable: ReadonlyMap<string, Uint8Array>,
+  id: string,
+  width: number,
+): Readonly<{ mask: Uint8Array; width: number }> {
+  let length = 0;
+  for (const ink of showable.values()) length = Math.max(length, ink.length);
+  const mask = new Uint8Array(length);
+  for (const [other, ink] of showable) {
+    if (other === id) continue;
+    for (let index = 0; index < ink.length; index += 1) if (ink[index] === 1) mask[index] = 1;
+  }
+  return { mask, width };
+}
+
+/** The union of every leaf's showable ink: the pixels any text may change. */
+export function unionMask(showable: ReadonlyMap<string, Uint8Array>): Uint8Array {
+  let length = 0;
+  for (const ink of showable.values()) length = Math.max(length, ink.length);
+  const mask = new Uint8Array(length);
+  for (const ink of showable.values()) {
+    for (let index = 0; index < ink.length; index += 1) if (ink[index] === 1) mask[index] = 1;
+  }
+  return mask;
+}
+
+/** A judgement of no pixels (a cluster whose crop is empty). */
+export function emptyJudgement(): ClusterJudgement {
+  return {
+    visible: 0,
+    hidden: 0,
+    edge: 0,
+    strong: 0,
+    strongChanged: 0,
+    strongOnColour: 0,
+    solid: 0,
+    hiddenChanged: 0,
+    hiddenShared: 0,
+    samples: { hiddenChanged: [], tooLight: [], tooDark: [], strongUnchanged: [] },
+    tooLight: 0,
+    tooDark: 0,
+    worstLight: 0,
+    worstDark: 0,
+  };
 }
 
 /**

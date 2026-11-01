@@ -18,13 +18,17 @@ import {
   judgeCluster,
   localInkShare,
   OPEN_RULE,
+  othersMask,
   packBits,
   pixelState,
   rasterCallFailures,
   rasterKeySets,
+  showableInk,
   signedDistance,
   uniformPixels,
+  unionMask,
   type Affine,
+  type CoverRule,
   type KeyLeaf,
 } from '../m6c-next-host/m6c-scene.js';
 
@@ -539,5 +543,125 @@ describe('M6c-U4 host raster log (src/renderer-options.ts, review S2)', () => {
     expect(source).toMatch(
       /rasterLog!\.setGeneration\(\(\) => recorder\.newestTextGeneration\(\)\)/u,
     );
+  });
+});
+
+describe('M6c-U4 shared hidden pixels (review S1 and S3 of 2dfd5c4)', () => {
+  const white: [number, number, number] = [255, 255, 255];
+  const W = 10;
+  /** A 10 by 1 crop at the origin with ink `coverage` at the listed columns. */
+  const row = (coverage: number, columns: readonly number[], rgb = white) =>
+    pixels(0, 0, W, 1, rgb, Object.fromEntries(columns.map((x) => [`${x},0`, gray(coverage)])));
+  // Inside a far rectangle only: every pixel here is hidden (a clip or mask the text lies outside).
+  const hiddenRule: CoverRule = {
+    within: [{ kind: 'rect', x0: 100, y0: 100, x1: 200, y1: 200 }],
+    occluders: [],
+  };
+  const blank = row(0, []);
+
+  it('keeps a leaf ink only where its own rule lets it show, and never in its own others', () => {
+    const shownLeaf = row(200, [4]);
+    const showable = showableInk(W, 1, [
+      { id: 'open', rule: OPEN_RULE, crops: [shownLeaf] },
+      { id: 'hidden', rule: hiddenRule, crops: [shownLeaf] },
+    ]);
+    expect([...showable.get('open')!]).toEqual([0, 0, 0, 1, 1, 1, 0, 0, 0, 0]);
+    expect([...showable.get('hidden')!]).toEqual(new Array<number>(W).fill(0));
+    // (c) The open leaf's own ink is not in its others; the hidden leaf's others hold it.
+    expect([...othersMask(showable, 'open', W).mask]).toEqual(new Array<number>(W).fill(0));
+    expect([...othersMask(showable, 'hidden', W).mask]).toEqual([0, 0, 0, 1, 1, 1, 0, 0, 0, 0]);
+    expect([...unionMask(showable)]).toEqual([0, 0, 0, 1, 1, 1, 0, 0, 0, 0]);
+  });
+
+  it('(d) still judges a leak where both leaves are hidden, and extra ink sees it', () => {
+    const probe = row(200, [4]);
+    const showable = showableInk(W, 1, [
+      { id: 'clip', rule: hiddenRule, crops: [probe] },
+      { id: 'mask', rule: hiddenRule, crops: [probe] },
+    ]);
+    for (const id of ['clip', 'mask']) {
+      const judgement = judgeCluster({
+        probe,
+        shown: probe,
+        background: blank,
+        rule: hiddenRule,
+        opacity: 1,
+        others: othersMask(showable, id, W),
+      });
+      expect(judgement).toMatchObject({ hidden: 1, hiddenShared: 0, hiddenChanged: 1 });
+    }
+    const changed = packBits([0, 0, 0, 0, 1, 0, 0, 0, 0, 0]);
+    expect(extraInk(changed, unionMask(showable), W).count).toBe(1);
+    // The same leak where the other leaf may show is shared.
+    const open = showableInk(W, 1, [
+      { id: 'clip', rule: hiddenRule, crops: [probe] },
+      { id: 'mask', rule: OPEN_RULE, crops: [probe] },
+    ]);
+    const shared = judgeCluster({
+      probe,
+      shown: probe,
+      background: blank,
+      rule: hiddenRule,
+      opacity: 1,
+      others: othersMask(open, 'clip', W),
+    });
+    expect(shared).toMatchObject({ hidden: 0, hiddenShared: 1, hiddenChanged: 0 });
+  });
+
+  it('(a) judges visible and edge pixels under others as before', () => {
+    const probe = row(200, [4]);
+    const others = { mask: new Uint8Array(W).fill(1), width: W };
+    const visible = judgeCluster({
+      probe,
+      shown: blank,
+      background: blank,
+      rule: OPEN_RULE,
+      opacity: 1,
+      others,
+    });
+    expect(visible).toMatchObject({ visible: 1, hiddenShared: 0, strong: 1, strongChanged: 0 });
+    expect(visible.tooLight).toBe(3);
+    const edgeRule: CoverRule = {
+      within: [],
+      occluders: [{ kind: 'rect', x0: 4.9, y0: -10, x1: 100, y1: 10 }],
+    };
+    const edge = judgeCluster({
+      probe,
+      shown: blank,
+      background: blank,
+      rule: edgeRule,
+      opacity: 1,
+      others,
+    });
+    expect(edge).toMatchObject({ edge: 1, hidden: 0, hiddenShared: 0 });
+  });
+
+  it('(b) samples too light, too dark and unchanged strong pixels, at most four of each', () => {
+    const probe = row(200, [0, 1, 2, 3, 4, 5]);
+    const light = judgeCluster({
+      probe,
+      shown: blank,
+      background: blank,
+      rule: OPEN_RULE,
+      opacity: 1,
+    });
+    expect(light).toMatchObject({ strong: 6, strongChanged: 0, tooLight: 18, tooDark: 0 });
+    expect(light.samples.tooLight).toHaveLength(4);
+    expect(light.samples.strongUnchanged).toHaveLength(4);
+    expect(light.samples.tooLight[0]).toEqual([0, 0, 200, 255, 255, 255, 255, 255, 255]);
+    expect(light.samples.strongUnchanged.map((sample) => sample[0])).toEqual([0, 1, 2, 3]);
+    const black = row(0, [], [0, 0, 0]);
+    const dark = judgeCluster({
+      probe,
+      shown: black,
+      background: blank,
+      rule: OPEN_RULE,
+      opacity: 0.5,
+    });
+    expect(dark).toMatchObject({ tooLight: 0, tooDark: 18 });
+    expect(dark.samples.tooDark).toHaveLength(4);
+    expect(dark.samples.tooDark[3]).toEqual([3, 0, 200, 0, 0, 0, 255, 255, 255]);
+    expect(dark.samples.tooLight).toEqual([]);
+    expect(dark.samples.strongUnchanged).toEqual([]);
   });
 });
