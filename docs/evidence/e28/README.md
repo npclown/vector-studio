@@ -12,7 +12,7 @@ E28 is done: every criterion passes. The unit criteria pass in CI, A07's capture
 
 MVP M6c may project text.
 
-The reference-PC run used DESKTOP-DKVUSAV with a GTX 1660 SUPER (NVIDIA Turing, D3D11), headed Chrome 156 and Edge 156. It ran at `9bbee7f`, whose tree is identical to `ae1d7ab` (#370, U4's merge). The report files stay on the PC; the figures are in [u4-main-pc.md](u4-main-pc.md).
+The reference-PC run used the main PC with a GTX 1660 SUPER (NVIDIA Turing, D3D11), headed Chrome 156 and Edge 156. It ran at `9bbee7f`, whose tree is identical to `ae1d7ab` (#370, U4's merge). The report files stay on the PC; the figures are in [u4-main-pc.md](u4-main-pc.md).
 
 Units: U1 #363 (`2250375`), U2 #366 (`54a7336`), U3 #368 (`8785036`), U2 compaction #369 (`cc6083e`), U4 #370 (`ae1d7ab`), budget #378 (`b0571f7`).
 
