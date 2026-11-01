@@ -112,6 +112,7 @@ import type {
   EditorEvent,
   EditorSnapshot,
   Extension,
+  ExtensionSummary,
   IdSource,
   InputEvent,
   KeyBinding,
@@ -774,6 +775,8 @@ class EditorCore implements Editor {
   private extensionDepth = 0;
   private readonly ids: IdSource;
   private readonly extensions: ExtensionRegistry;
+  /** The `extensions` query result, fixed at construction (MVP M8 contract, M8-X1). */
+  private readonly extensionSummaries: readonly ExtensionSummary[];
   /**
    * The editor's one expansion cache (M7 contract, M7-X4), shared by the load and command
    * checks, the projector and hit testing.
@@ -869,6 +872,8 @@ class EditorCore implements Editor {
       throw new Error(`createEditor: ${style.code} at /textStyle${style.path.slice(6)}`);
     this.textStyle = style;
     this.fixedLayers = this.extensionLayers(options.extensions ?? []);
+    // The first fixed layer is the defaults; the rest are the extensions' in registration order.
+    this.extensionSummaries = this.extensions.summaries(this.fixedLayers.slice(1));
     const host = validateLayer(
       options.keymap ?? [],
       platform,
@@ -1546,6 +1551,8 @@ class EditorCore implements Editor {
             ? null
             : textEditOverlay(target, this.textEdit);
         }
+        case 'extensions':
+          return this.extensionSummaries;
       }
     })();
     return value as QueryResult<Q>;

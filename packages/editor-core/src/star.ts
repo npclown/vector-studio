@@ -6,6 +6,21 @@ import type { Extension, ExtensionApi } from './types.js';
 
 type StarData = Readonly<{ points: number; innerRatio: number }>;
 
+/**
+ * The arguments of the `ext.star.create` command of `starExtension` (MVP M8 contract, M8-X2):
+ * the star's frame, its number of points (an integer from 3 to 32, default 5) and the ratio of
+ * its inner to its outer radius (above 0 and below 1, default 0.5). The command validates them at
+ * run time; type them with `extensionCommand<StarCreateArgs>('ext.star.create')`.
+ */
+export type StarCreateArgs = Readonly<{
+  /** The star's frame, as `createCustomNode` takes it. */
+  frame: Frame;
+  /** The number of points, an integer from 3 to 32; 5 when absent. */
+  points?: number;
+  /** The inner to outer radius ratio, above 0 and below 1; 0.5 when absent. */
+  innerRatio?: number;
+}>;
+
 function isStarData(data: JsonValue): data is StarData {
   if (typeof data !== 'object' || data === null || Array.isArray(data)) return false;
   const keys = Object.keys(data).sort();
@@ -43,6 +58,10 @@ function starPath(data: JsonValue, frame: Frame) {
   };
 }
 
+/**
+ * `ext.star`, the sample extension: the custom node type `ext.star` and the command
+ * `ext.star.create`, whose arguments are `StarCreateArgs`.
+ */
 export const starExtension: Extension = Object.freeze({
   id: 'ext.star',
   nodeTypes: Object.freeze([
@@ -56,7 +75,7 @@ export const starExtension: Extension = Object.freeze({
   commands: Object.freeze([
     Object.freeze({
       id: 'ext.star.create',
-      /** `args`: `{ frame, points?, innerRatio? }`. */
+      /** `args`: `StarCreateArgs`, `{ frame, points?, innerRatio? }`. */
       run(args: JsonValue | undefined, api: ExtensionApi) {
         const input = (
           typeof args === 'object' && args !== null && !Array.isArray(args) ? args : {}
