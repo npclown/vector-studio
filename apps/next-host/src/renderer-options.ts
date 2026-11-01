@@ -32,6 +32,9 @@ export type GlyphRasterLogEntry = Readonly<{
   lang: string;
   pixelSize: number;
   phaseX: number;
+  /** M6c-U5 (section 9): `performance.now()` when the call started, and how long it took, in ms. */
+  startMs: number;
+  durationMs: number;
 }>;
 
 export type GlyphRasterLog = Readonly<{
@@ -49,26 +52,40 @@ export type GlyphRasterLog = Readonly<{
  * service rasterized at which layout generation (the port's request carries no generation, so
  * the call takes the newest one the renderer accepted, as the frame it plans draws that scene).
  * Only the host's service gets the wrapped port; the cluster probe keeps the inner one.
+ * M6c-U5 (section 9, the typing observation): each entry also holds the call's start and
+ * duration on `now` (`performance.now()` by default), so the observation spec can sum the
+ * raster time of each keystroke.
  */
-export function createGlyphRasterLog(inner: HostGlyphRaster, cap = 200_000): GlyphRasterLog {
+export function createGlyphRasterLog(
+  inner: HostGlyphRaster,
+  cap = 200_000,
+  now: () => number = () => performance.now(),
+): GlyphRasterLog {
   const entries: GlyphRasterLogEntry[] = [];
   let generation: () => number | null = () => null;
   const port: HostGlyphRaster = Object.freeze({
     portVersion: inner.portVersion,
     operationId: inner.operationId,
     rasterize: (request: Parameters<HostGlyphRaster['rasterize']>[0]) => {
-      if (entries.length >= cap) entries.shift();
-      entries.push(
-        Object.freeze({
-          generation: generation(),
-          text: request.text,
-          fontList: request.fontList,
-          lang: request.lang,
-          pixelSize: request.pixelSize,
-          phaseX: request.phaseX,
-        }),
-      );
-      return inner.rasterize(request);
+      const read = generation();
+      const startMs = now();
+      try {
+        return inner.rasterize(request);
+      } finally {
+        if (entries.length >= cap) entries.shift();
+        entries.push(
+          Object.freeze({
+            generation: read,
+            text: request.text,
+            fontList: request.fontList,
+            lang: request.lang,
+            pixelSize: request.pixelSize,
+            phaseX: request.phaseX,
+            startMs,
+            durationMs: now() - startMs,
+          }),
+        );
+      }
     },
   });
   return {

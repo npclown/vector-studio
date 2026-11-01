@@ -489,7 +489,8 @@ describe('M6c-U4 host raster log (src/renderer-options.ts, review S2)', () => {
         return { status: 'empty' as const };
       },
     });
-    const log = options.createGlyphRasterLog(inner, 2);
+    let clock = 0;
+    const log = options.createGlyphRasterLog(inner, 2, () => (clock += 1.5));
     expect(log.port.operationId).toBe('test/inner');
     const request = { text: 'a', fontList: 'F', lang: 'ko', pixelSize: 10, phaseX: 0.25 } as const;
     expect(log.port.rasterize(request)).toEqual({ status: 'empty' });
@@ -501,8 +502,8 @@ describe('M6c-U4 host raster log (src/renderer-options.ts, review S2)', () => {
     expect(requests).toEqual(['a', 'b', 'c']);
     // Capped at 2: the oldest is dropped.
     expect(log.entries).toEqual([
-      { generation: 7, text: 'b', fontList: 'F', lang: 'ko', pixelSize: 10, phaseX: 0.25 },
-      { generation: 8, text: 'c', fontList: 'F', lang: 'ko', pixelSize: 10, phaseX: 0.25 },
+      { ...request, generation: 7, text: 'b', startMs: 4.5, durationMs: 1.5 },
+      { ...request, generation: 8, text: 'c', startMs: 7.5, durationMs: 1.5 },
     ]);
     log.clear();
     expect(log.entries).toEqual([]);

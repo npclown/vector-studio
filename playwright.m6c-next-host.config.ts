@@ -87,6 +87,8 @@ const smoke: Project[] = [
 
 export default defineConfig({
   testDir: './tests/m6c-next-host',
+  // M6c-U5: the observation spec runs under playwright.m6c-observe.config.ts only.
+  testIgnore: 'm6c-observe.spec.ts',
   outputDir: './test-results/m6c-next-host',
   fullyParallel: false,
   workers: 1,
