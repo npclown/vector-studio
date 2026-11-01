@@ -197,8 +197,8 @@ M8 "closes after M7" (MVP plan section 7); M7 was accepted on 2026-10-30, and th
 | M8-U4 | Merged (#443); independent review r1 READY WITH FOLLOW-UPS, applied as notes below |
 | M8-U5 | Merged (#444); independent review r1 READY WITH FOLLOW-UPS, applied; notes below |
 | M8-U6 | Merged (#445); independent review r1 READY WITH FOLLOW-UPS, applied; laptop pre-run after the merge (M8-U7 notes); notes below |
-| M8-U7 | In review: independent review r1 READY WITH FOLLOW-UPS, applied; headless smoke 18 of 18; laptop pre-run and the main-PC headed sitting pending; notes below |
-| M8-U8 | Not started |
+| M8-U7 | Merged (#446); independent review r1 READY WITH FOLLOW-UPS, applied; laptop pre-run 252 of 252 at `596d747`; main-PC headed sitting at `596d747` passed (M8 spec 36 of 36 and every earlier next-host spec; [exit record](../evidence/m8-exit-2026-11-01.md)); notes below |
+| M8-U8 | In review: [exit record](../evidence/m8-exit-2026-11-01.md), awaiting the user's acceptance |
 
 ### M8-U1 notes
 
