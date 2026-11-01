@@ -716,7 +716,31 @@ export type Query =
   /** Text edit mode, or null (M6b contract, M6b-S1). */
   | Readonly<{ type: 'textEdit' }>
   /** The caret, selection and composition of text edit mode in page space, or null (4.5). */
-  | Readonly<{ type: 'textEditOverlay' }>;
+  | Readonly<{ type: 'textEditOverlay' }>
+  /**
+   * The registered extensions (MVP M8 contract, M8-X1): a frozen list of `ExtensionSummary`
+   * sorted by extension ID. It raises no event and is the same value for the editor's lifetime.
+   */
+  | Readonly<{ type: 'extensions' }>;
+
+/**
+ * What one registered extension contributes (MVP M8 contract, M8-X1), as the `extensions` query
+ * returns it. Each list is sorted by code unit: `nodeTypes` holds custom node types, `commands`
+ * command IDs, `tools` tool IDs and `bindings` the canonical chords of the extension's keymap
+ * layer (as the `keymap` query writes them, `action: null` bindings included). Frozen.
+ */
+export type ExtensionSummary = Readonly<{
+  /** The extension's ID. */
+  id: string;
+  /** The `customType` of each node type the extension registered. */
+  nodeTypes: readonly string[];
+  /** The ID of each command the extension registered. */
+  commands: readonly string[];
+  /** The ID of each tool the extension registered. */
+  tools: readonly string[];
+  /** The canonical chord of each binding in the extension's keymap layer. */
+  bindings: readonly string[];
+}>;
 
 /**
  * The select tool's resize handle box for the selection, in page space (M1 contract, section
@@ -780,7 +804,9 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'commi
                                         ? TextEditState | null
                                         : Q extends { type: 'textEditOverlay' }
                                           ? TextEditOverlay | null
-                                          : number;
+                                          : Q extends { type: 'extensions' }
+                                            ? readonly ExtensionSummary[]
+                                            : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';
