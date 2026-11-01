@@ -1,19 +1,26 @@
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type * as ProbeModule from '../../apps/next-host/src/m6c-text-probe.js';
+import type * as OptionsModule from '../../apps/next-host/src/renderer-options.js';
 import type { Pixels } from '../m6c-next-host/m6c-agreement.js';
 import {
   applyAffine,
+  callKey,
   clusterKeys,
   deviceMap,
   devicePolygon,
   deviceRect,
+  extraInk,
+  inkMask,
   inkOutside,
   invertAffine,
   judgeCluster,
   localInkShare,
   OPEN_RULE,
+  packBits,
   pixelState,
+  rasterCallFailures,
   rasterKeySets,
   signedDistance,
   uniformPixels,
@@ -338,42 +345,185 @@ describe('M6c-U4 raster keys against the probe (renderer-core K1 to K3)', () => 
     },
   );
 
-  it('collects expected, expected ink and required keys by leaf and cluster culling', () => {
+  it('collects the request set: every drawn cluster whose bound meets the target', () => {
     const camera = { position: { x: 0, y: 0 }, zoom: 1 };
     const target = { width: 100, height: 100 };
     const at = (x: number, y: number): Affine => [1, 0, 0, 1, x, y];
-    const entry = (world: Affine, shown: boolean, clipped: boolean) => ({
+    const entry = (world: Affine, shown: boolean) => ({
       world,
       shown,
-      clipped,
       leaf: leaf('t', 10) as unknown as KeyLeaf['leaf'],
     });
     const sets = rasterKeySets(
       [
-        entry(at(10, 10), true, false),
-        // Off the target by more than the guard: culled as a leaf.
-        entry(at(500.6, 10), true, false),
+        entry(at(10, 10), true),
+        // Off the target by more than the guard: nothing.
+        entry(at(500.6, 10), true),
         // Hidden: nothing.
-        entry(at(20.6, 30), false, false),
-        // Clipped: expected, not required.
-        entry(at(10.3, 60), true, true),
+        entry(at(20.6, 30), false),
+        // Across the right edge: the clusters whose own bound misses are not requested.
+        entry(at(95.3, 60), true),
       ],
       camera,
       1,
       target,
     );
-    const first = clusterKeys(entry(at(10, 10), true, false), camera, 1);
-    const clipped = clusterKeys(entry(at(10.3, 60), true, true), camera, 1);
-    const all = [...first, ...clipped].map((value) => value.key);
-    expect([...sets.expected].sort()).toEqual([...new Set(all)].sort());
-    const ink = [...first, ...clipped]
-      .filter((value) => value.text.trim() !== '')
-      .map((value) => value.key);
-    expect([...sets.expectedInk].sort()).toEqual([...new Set(ink)].sort());
-    expect([...sets.required].sort()).toEqual(
+    const first = clusterKeys(entry(at(10, 10), true), camera, 1);
+    const edge = clusterKeys(entry(at(95.3, 60), true), camera, 1);
+    const meets = edge.filter((value) => value.bound.x0 <= 102);
+    expect(meets.length).toBeGreaterThan(0);
+    expect(meets.length).toBeLessThan(edge.length);
+    const all = [...first, ...meets];
+    expect([...sets.exact].sort()).toEqual([...new Set(all.map((value) => value.key))].sort());
+    expect([...sets.exactInk].sort()).toEqual(
       [
-        ...new Set(first.filter((value) => value.text.trim() !== '').map((value) => value.key)),
+        ...new Set(all.filter((value) => value.text.trim() !== '').map((value) => value.key)),
       ].sort(),
+    );
+  });
+});
+
+describe('M6c-U4 raster call log (review S2)', () => {
+  const call = (generation: number | null, text: string, phaseX = 0) => ({
+    generation,
+    text,
+    fontList: 'F',
+    lang: 'ko',
+    pixelSize: 10,
+    phaseX,
+  });
+  const exact = new Set([callKey(call(0, 'a')), callKey(call(0, ' ')), callKey(call(0, 'b'))]);
+
+  it('passes each requested key once at the final generation', () => {
+    expect(rasterCallFailures([call(5, 'a'), call(5, ' '), call(5, 'b')], exact, 4, 5)).toEqual([]);
+    // A load's first bump before the final one: a subset, each key once.
+    expect(
+      rasterCallFailures([call(5, 'a'), call(6, 'b'), call(6, 'a'), call(6, ' ')], exact, 4, 6),
+    ).toEqual([]);
+  });
+
+  it('fails a missing, repeated, stray or older-generation call', () => {
+    expect(rasterCallFailures([call(5, 'a'), call(5, 'b')], exact, 4, 5)).toEqual([
+      `generation 5: ${callKey(call(0, ' '))} not rasterized`,
+    ]);
+    expect(
+      rasterCallFailures([call(5, 'a'), call(5, 'a'), call(5, ' '), call(5, 'b')], exact, 4, 5),
+    ).toEqual([`generation 5: ${callKey(call(0, 'a'))} rasterized twice`]);
+    expect(
+      rasterCallFailures([call(5, 'a'), call(5, ' '), call(5, 'b'), call(5, 'c')], exact, 4, 5),
+    ).toEqual([`generation 5: ${callKey(call(0, 'c'))} not requested`]);
+    const older = rasterCallFailures(
+      [call(4, 'a'), call(null, 'a'), call(5, 'a'), call(5, ' '), call(5, 'b')],
+      exact,
+      4,
+      5,
+    );
+    expect(older).toHaveLength(2);
+  });
+});
+
+describe('M6c-U4 extra ink (review S3)', () => {
+  it('masks probe coverage grown by a pixel and finds changes outside it', () => {
+    const crop = pixels(2, 1, 2, 1, [255, 255, 255], { '0,0': gray(1) });
+    const mask = inkMask(6, 4, [crop]);
+    // Pixel (2, 1) and its 8 neighbours, clamped to the frame.
+    const expected = new Uint8Array(24);
+    for (const [x, y] of [
+      [1, 0],
+      [2, 0],
+      [3, 0],
+      [1, 1],
+      [2, 1],
+      [3, 1],
+      [1, 2],
+      [2, 2],
+      [3, 2],
+    ] as const)
+      expected[y * 6 + x] = 1;
+    expect(mask).toEqual(expected);
+    const flags = new Uint8Array(24);
+    flags[1 * 6 + 3] = 1;
+    flags[3 * 6 + 5] = 1;
+    flags[0] = 1;
+    const bits = packBits(flags);
+    expect(bits).toHaveLength(3);
+    expect(extraInk(bits, mask, 6)).toEqual({
+      count: 2,
+      sample: [
+        [0, 0],
+        [5, 3],
+      ],
+    });
+  });
+});
+
+describe('M6c-U4 host raster log (src/renderer-options.ts, review S2)', () => {
+  it('logs each call with the generation read at the call, and delegates', async () => {
+    const options = (await import(
+      path.join(appDir, 'src/renderer-options.ts')
+    )) as typeof OptionsModule;
+    const requests: string[] = [];
+    const inner = Object.freeze({
+      portVersion: 0 as const,
+      operationId: 'test/inner',
+      rasterize: (request: Parameters<OptionsModule.HostGlyphRaster['rasterize']>[0]) => {
+        requests.push(request.text);
+        return { status: 'empty' as const };
+      },
+    });
+    const log = options.createGlyphRasterLog(inner, 2);
+    expect(log.port.operationId).toBe('test/inner');
+    const request = { text: 'a', fontList: 'F', lang: 'ko', pixelSize: 10, phaseX: 0.25 } as const;
+    expect(log.port.rasterize(request)).toEqual({ status: 'empty' });
+    let generation: number | null = 7;
+    log.setGeneration(() => generation);
+    log.port.rasterize({ ...request, text: 'b' });
+    generation = 8;
+    log.port.rasterize({ ...request, text: 'c' });
+    expect(requests).toEqual(['a', 'b', 'c']);
+    // Capped at 2: the oldest is dropped.
+    expect(log.entries).toEqual([
+      { generation: 7, text: 'b', fontList: 'F', lang: 'ko', pixelSize: 10, phaseX: 0.25 },
+      { generation: 8, text: 'c', fontList: 'F', lang: 'ko', pixelSize: 10, phaseX: 0.25 },
+    ]);
+    log.clear();
+    expect(log.entries).toEqual([]);
+  });
+
+  it("reads the newest accepted text generation from the probe's recorder", () => {
+    const recorder = new probe.SceneRecorder();
+    expect(recorder.newestTextGeneration()).toBeNull();
+    const text = (id: string, generation: number) => ({
+      id,
+      parentId: null,
+      transform: [1, 0, 0, 1, 0, 0] as const,
+      visible: true,
+      opacity: 1,
+      kind: 'text' as const,
+      generation,
+      lang: 'ko',
+      runs: [],
+    });
+    recorder.recordSnapshot({
+      identity: { documentId: 'd', pageId: 'p' },
+      revision: 1,
+      nodes: [text('a', 3), text('b', 5)],
+      rootOrder: ['a', 'b'],
+    });
+    expect(recorder.newestTextGeneration()).toBe(5);
+  });
+
+  it('gives the logged port to the host service only under ?test=1, never to the probe', () => {
+    const source = readFileSync(path.join(appDir, 'src/webgpu-renderer.ts'), 'utf8');
+    expect(source).toMatch(
+      /const rasterLog = testing \? createGlyphRasterLog\(glyphRaster\) : null;/u,
+    );
+    expect(source).toMatch(/\.\.\.hostRendererOptions\(rasterLog\?\.port \?\? glyphRaster\)/u);
+    expect(source).toMatch(
+      /new core\.PrimitiveRendererService\(target, hostRendererOptions\(glyphRaster\)\)/u,
+    );
+    expect(source).toMatch(
+      /rasterLog!\.setGeneration\(\(\) => recorder\.newestTextGeneration\(\)\)/u,
     );
   });
 });

@@ -1,6 +1,6 @@
 import type { RendererFactory, RendererHandle } from '@vector-studio/react';
 import { benchBackendOptions, pageBench } from './e26-bench';
-import { hostRendererOptions } from './renderer-options';
+import { createGlyphRasterLog, hostRendererOptions, type GlyphRasterLog } from './renderer-options';
 
 // P5-U6 (P5 plan, section 6 and P5-Q8): the host's renderer, composed as the V-1 playground page
 // composes it: the P1 primitive and P3 path renderer service on the WebGPU backend, with the
@@ -20,7 +20,9 @@ import { hostRendererOptions } from './renderer-options';
 // raster port (src/renderer-options.ts), so projected text draws. With `?test=1` the service is
 // wrapped by the cluster probe's scene recorder (src/m6c-text-probe.ts, loaded only then), the
 // probe is registered with the host's size, port and options, and `window.__nextHostRenderer`
-// gains the service's `glyphRasterCalls` and `glyphUploads` counters.
+// gains the service's `glyphRasterCalls` and `glyphUploads` counters. M6c-U4: with `?test=1` the
+// host's service calls the glyph raster port through a log (`glyphRasterLog`), each call with the
+// newest text generation the recorder holds; the probe keeps the unlogged port.
 
 const WASM_URL = '/geometry-kernel.wasm';
 
@@ -45,6 +47,8 @@ declare global {
       readonly glyphRasterCalls: number;
       /** M6c-U2: bitmaps uploaded by acknowledged packets (`getGlyphUploadsForTesting`). */
       readonly glyphUploads: number;
+      /** M6c-U4: the host service's glyph raster port calls (src/renderer-options.ts). */
+      readonly glyphRasterLog: GlyphRasterLog;
     }>;
   }
 }
@@ -86,12 +90,14 @@ export const createWebGpuRenderer: RendererFactory = async (canvas, size) => {
     );
     releases.push(() => backend.dispose());
     const glyphRaster = webgpu.createCanvasGlyphRaster();
+    // M6c-U4: under `?test=1` the host's service calls the port through a log (the probe does not).
+    const rasterLog = testing ? createGlyphRasterLog(glyphRaster) : null;
     const service = new core.PrimitiveRendererService(backend, {
       fillMesh: fill,
       fillMeshMemoryBytes: () => fill.linearMemoryBytes(),
       strokeMesh: stroke,
       strokeMeshMemoryBytes: () => stroke.linearMemoryBytes(),
-      ...hostRendererOptions(glyphRaster),
+      ...hostRendererOptions(rasterLog?.port ?? glyphRaster),
     });
     releases.push(() => service.dispose());
     let renderer: RendererHandle['renderer'] = service;
@@ -122,6 +128,8 @@ export const createWebGpuRenderer: RendererFactory = async (canvas, size) => {
         get glyphUploads() {
           return service.getGlyphUploadsForTesting();
         },
+        /** M6c-U4: the host service's raster port calls, with the generation of each. */
+        glyphRasterLog: rasterLog!,
       };
       window.__nextHostRenderer = hook;
       releases.push(() => {
@@ -130,6 +138,7 @@ export const createWebGpuRenderer: RendererFactory = async (canvas, size) => {
       const probe = await import('./m6c-text-probe');
       const recorder = new probe.SceneRecorder();
       renderer = recorder.wrap(service);
+      rasterLog!.setGeneration(() => recorder.newestTextGeneration());
       releases.push(
         probe.attachTextProbe({
           recorder,

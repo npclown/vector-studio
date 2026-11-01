@@ -234,6 +234,17 @@ export class SceneRecorder {
     });
   }
 
+  /** The newest generation of the accepted text leaves; null when none is held. */
+  newestTextGeneration(): number | null {
+    let newest: number | null = null;
+    for (const node of this.#nodes.values()) {
+      if (node.kind === 'text' && (newest === null || node.generation > newest)) {
+        newest = node.generation;
+      }
+    }
+    return newest;
+  }
+
   /** The last accepted camera, null before the first. */
   get camera(): RenderCamera | null {
     return this.#camera;

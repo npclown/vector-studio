@@ -1,8 +1,10 @@
 import { expect, test, type CDPSession, type Page } from '@playwright/test';
 import type { ClusterRead, FrameCrop, TextScene } from '../../apps/next-host/src/m6c-text-probe';
 import type { TextEditTestHook } from '../../apps/next-host/src/m6b-text-edit';
-import { decodeCrop, expectedPlacement, placementFailures } from './m6c-agreement';
+import { decodeCrop, expectedPlacement, placementFailures, type Pixels } from './m6c-agreement';
 import {
+  extraInk,
+  inkMask,
   inkOutside,
   judgeCluster,
   localInkShare,
@@ -24,13 +26,21 @@ import {
 //   recomputed apart from the renderer (the placement term, exact);
 // - each non-space cluster drawn alone by the probe has ink, inside its local box and its port
 //   bitmap rectangle, and the host frame is at least that dark over every probe ink pixel (black
-//   on the white backdrop), so the typed cluster is drawn with ink.
+//   on the white backdrop), so the typed cluster is drawn with ink; inside the leaf's E28-K9
+//   bounds no pixel but the probe's ink grown by 1 px leaves the backdrop's white (review S3).
 // The fixture's text is black and next-host clears to opaque black (M6c-U2 note on the M6a and
 // M6b fixtures), and the fixture is pinned by the M6b spec, so the spec adds a white rectangle
 // under the page's nodes at run time (U4 note 2) rather than recolouring the text: the typed
 // text keeps the committed black style and draws exactly as the probe's black on white.
 // Figures are an annotation (`m6c-a08`). The `chromium-smoke` project skips it when the renderer
 // does not start; it is not M6c-A08 evidence.
+
+declare global {
+  interface Window {
+    /** The host frame this spec keeps after each input settles. */
+    __m6cU4Typed?: Readonly<{ width: number; height: number; rgba: Uint8Array }>;
+  }
+}
 
 /** The hook members this spec uses (page.tsx), declared apart as the U2 and U3 specs do. */
 type Hook = Readonly<{
@@ -73,7 +83,7 @@ function editorSettle(page: Page) {
   );
 }
 
-/** Captures until the raster counters stop changing; returns the captures taken. */
+/** Captures until the raster counters and the port's generation hold; returns the captures. */
 async function settle(page: Page): Promise<number> {
   return page.evaluate(async () => {
     const hook = window.__nextHostRenderer!;
@@ -81,7 +91,9 @@ async function settle(page: Page): Promise<number> {
     let last = '';
     for (let frames = 1; frames <= 64; frames += 1) {
       await hook.capture();
-      const now = `${counters.glyphRasterCalls} ${counters.glyphUploads}`;
+      const generation = (window.__p5Host as unknown as { text: { port: { generation: number } } })
+        .text.port.generation;
+      const now = `${counters.glyphRasterCalls} ${counters.glyphUploads} ${generation}`;
       if (now === last) return frames;
       last = now;
     }
@@ -120,13 +132,22 @@ function state(page: Page) {
   }, NODE);
 }
 
-/** A crop of the host's current frame over one device rectangle. */
+/** Captures the host frame once and keeps it in the page (review N2). */
+async function keepFrame(page: Page): Promise<Readonly<{ width: number; height: number }>> {
+  return page.evaluate(async () => {
+    const frame = await window.__nextHostRenderer!.capture();
+    window.__m6cU4Typed = frame;
+    return { width: frame.width, height: frame.height };
+  });
+}
+
+/** A crop of the kept host frame over one device rectangle. */
 async function hostCrop(
   page: Page,
   rect: Readonly<{ x: number; y: number; width: number; height: number }>,
 ): Promise<FrameCrop> {
-  return page.evaluate(async (box) => {
-    const frame = await window.__nextHostRenderer!.capture();
+  return page.evaluate((box) => {
+    const frame = window.__m6cU4Typed!;
     const bytes = new Uint8Array(box.width * box.height * 4);
     for (let row = 0; row < box.height; row += 1) {
       const start = ((box.y + row) * frame.width + box.x) * 4;
@@ -138,6 +159,39 @@ async function hostCrop(
     }
     return { ...box, rgbaBase64: btoa(binary) };
   }, rect);
+}
+
+/**
+ * Review S3: one bit per pixel of the kept frame, row major: inside `box` (device px) and not
+ * the backdrop's white (a channel below 254).
+ */
+async function inkedBits(
+  page: Page,
+  box: Readonly<{ x0: number; y0: number; x1: number; y1: number }>,
+): Promise<Uint8Array> {
+  const packed = await page.evaluate((bounds) => {
+    const frame = window.__m6cU4Typed!;
+    const bits = new Uint8Array(Math.ceil((frame.width * frame.height) / 8));
+    const x0 = Math.max(0, Math.floor(bounds.x0));
+    const y0 = Math.max(0, Math.floor(bounds.y0));
+    const x1 = Math.min(frame.width, Math.ceil(bounds.x1));
+    const y1 = Math.min(frame.height, Math.ceil(bounds.y1));
+    for (let y = y0; y < y1; y += 1) {
+      for (let x = x0; x < x1; x += 1) {
+        const index = y * frame.width + x;
+        const i = index * 4;
+        if (Math.min(frame.rgba[i]!, frame.rgba[i + 1]!, frame.rgba[i + 2]!) < 254) {
+          bits[index >> 3]! |= 1 << (index & 7);
+        }
+      }
+    }
+    let binary = '';
+    for (let offset = 0; offset < bits.length; offset += 8192) {
+      binary += String.fromCharCode(...bits.subarray(offset, offset + 8192));
+    }
+    return btoa(binary);
+  }, box);
+  return Uint8Array.from(Buffer.from(packed, 'base64'));
 }
 
 type Step = Readonly<{
@@ -245,15 +299,17 @@ test('M6c-A08: a typed word and a composing syllable draw at the port positions 
     expect(typed, `${step.name}: a cluster ends at the caret`).toBeGreaterThanOrEqual(0);
     const map = deviceMap(leaf.world, camera, dpr);
     const reads: Record<string, unknown>[] = [];
+    const size = await keepFrame(page);
+    const crops: Pixels[] = [];
     for (let index = 0; index < clusters.length; index += 1) {
-      const { cluster, size } = clusters[index]!;
+      const { cluster, size: runSize } = clusters[index]!;
       const read = await page.evaluate(
         ([id, at]) => (window.__p5Host as unknown as Hook).text.readCluster(id, at),
         [NODE, index] as const,
       );
       const problems: string[] = [];
       if (read.status !== 'applied') problems.push(`probe status ${read.status}`);
-      const expected = expectedPlacement(leaf.world, camera, dpr, cluster, size);
+      const expected = expectedPlacement(leaf.world, camera, dpr, cluster, runSize);
       for (const failure of placementFailures(read.placement, expected)) {
         problems.push(`placement ${failure}`);
       }
@@ -266,6 +322,7 @@ test('M6c-A08: a typed word and a composing syllable draw at the port positions 
       };
       if (cluster.text.trim().length > 0) {
         const probe = decodeCrop(read.crop);
+        crops.push(probe);
         const shown = decodeCrop(await hostCrop(page, read.crop));
         const judgement = judgeCluster({
           probe,
@@ -274,7 +331,7 @@ test('M6c-A08: a typed word and a composing syllable draw at the port positions 
           rule: OPEN_RULE,
           opacity: 1,
         });
-        const share = localInkShare(probe, map, cluster, size);
+        const share = localInkShare(probe, map, cluster, runSize);
         const outside = read.rect === null ? null : inkOutside(probe, read.rect);
         if (judgement.strong === 0) problems.push('no strong probe ink');
         if (judgement.strongChanged !== judgement.strong) {
@@ -300,7 +357,19 @@ test('M6c-A08: a typed word and a composing syllable draw at the port positions 
         failures.push(`${step.name} ${index} ${cluster.text}: ${problem}`);
       reads.push(row);
     }
+    // Review S3: inside the leaf's bounds, nothing but the probe's ink (grown by 1 px) is drawn.
+    const extra = extraInk(
+      await inkedBits(page, leaf.bounds!),
+      inkMask(size.width, size.height, crops),
+      size.width,
+    );
+    if (extra.count > 0) {
+      failures.push(
+        `${step.name}: ${extra.count} inked pixels no cluster accounts for, e.g. ${JSON.stringify(extra.sample)}`,
+      );
+    }
     rows.push({
+      extraInk: extra,
       step: step.name,
       text: step.text,
       composing: step.composing,

@@ -426,23 +426,21 @@ export function clusterKeys(
   return out;
 }
 
-/** The raster keys one generation of a page needs (A05's generation change). */
+/** The raster keys one generation of a page draws (A05's generation change). */
 export type KeySets = Readonly<{
-  /** Every drawn key of a shown leaf on the target, white space included: at most these. */
-  expected: ReadonlySet<string>;
-  /** The non-space keys among them. */
-  expectedInk: ReadonlySet<string>;
-  /** Non-space keys of unclipped leaves whose own bound meets the target: at least these. */
-  required: ReadonlySet<string>;
+  /** Every key E28 requests: white space included, each once per generation. */
+  exact: ReadonlySet<string>;
+  /** The non-space keys among them: each uploads one bitmap. */
+  exactInk: ReadonlySet<string>;
 }>;
 
 /**
- * E28-K9 culls a leaf by its bound, then each cluster by its own, both against the target with a
- * `guard` of 2 device px. A leaf under a clip or a mask (`clipped`) may lose more clusters to the
- * clip chain, so its keys are expected but not required.
+ * The request set of renderer-core's `planTextFrame`: every drawn cluster (device size ≥ 0.5) of
+ * a shown leaf whose E28-K9 bound meets the target with the 2 device px guard, white space
+ * included; a clip or a mask does not cull a request (it cuts the drawn pixels only).
  */
 export function rasterKeySets(
-  entries: readonly (KeyLeaf & Readonly<{ shown: boolean; clipped: boolean }>)[],
+  entries: readonly (KeyLeaf & Readonly<{ shown: boolean }>)[],
   camera: Camera,
   devicePixelRatio: number,
   target: Readonly<{ width: number; height: number }>,
@@ -455,31 +453,126 @@ export function rasterKeySets(
       b.x0 > target.width + guard ||
       b.y0 > target.height + guard
     );
-  const expected = new Set<string>();
-  const expectedInk = new Set<string>();
-  const required = new Set<string>();
+  const exact = new Set<string>();
+  const exactInk = new Set<string>();
   for (const entry of entries) {
     if (!entry.shown) continue;
-    const keys = clusterKeys(entry, camera, devicePixelRatio).filter(
-      (value) => value.mode !== 'omitted',
-    );
-    if (keys.length === 0) continue;
-    const bound = keys.reduce(
-      (box, value) => ({
-        x0: Math.min(box.x0, value.bound.x0),
-        y0: Math.min(box.y0, value.bound.y0),
-        x1: Math.max(box.x1, value.bound.x1),
-        y1: Math.max(box.y1, value.bound.y1),
-      }),
-      keys[0]!.bound,
-    );
-    if (!meets(bound)) continue;
-    for (const value of keys) {
-      expected.add(value.key);
-      const ink = value.text.trim().length > 0;
-      if (ink) expectedInk.add(value.key);
-      if (ink && !entry.clipped && meets(value.bound)) required.add(value.key);
+    for (const value of clusterKeys(entry, camera, devicePixelRatio)) {
+      if (value.mode === 'omitted' || !meets(value.bound)) continue;
+      exact.add(value.key);
+      if (value.text.trim().length > 0) exactInk.add(value.key);
     }
   }
-  return { expected, expectedInk, required };
+  return { exact, exactInk };
+}
+
+/** A raster port call as the host's log records it (src/renderer-options.ts). */
+export type RasterCall = Readonly<{
+  generation: number | null;
+  text: string;
+  fontList: string;
+  lang: string;
+  pixelSize: number;
+  phaseX: number;
+}>;
+
+/** A logged call's key, in `clusterKeys`' form. */
+export const callKey = (call: RasterCall) =>
+  JSON.stringify([call.lang, call.fontList, call.text, call.pixelSize, call.phaseX]);
+
+/**
+ * Review S2: the calls of one bump against the request set of its final generation. At the final
+ * generation every key of `exact` is rasterized exactly once and nothing else; a generation
+ * between `from` (exclusive) and the final one rasterizes no key twice and none outside `exact`
+ * (the same face, two bumps of one load); no call is at `from` or older, or without a generation.
+ */
+export function rasterCallFailures(
+  calls: readonly RasterCall[],
+  exact: ReadonlySet<string>,
+  from: number,
+  final: number,
+): string[] {
+  const failures: string[] = [];
+  const byGeneration = new Map<number, string[]>();
+  for (const call of calls) {
+    if (call.generation === null || call.generation <= from || call.generation > final) {
+      failures.push(`call at generation ${call.generation}: ${callKey(call)}`);
+      continue;
+    }
+    const list = byGeneration.get(call.generation) ?? [];
+    list.push(callKey(call));
+    byGeneration.set(call.generation, list);
+  }
+  for (const [generation, keys] of byGeneration) {
+    const seen = new Set<string>();
+    for (const key of keys) {
+      if (seen.has(key)) failures.push(`generation ${generation}: ${key} rasterized twice`);
+      seen.add(key);
+      if (!exact.has(key)) failures.push(`generation ${generation}: ${key} not requested`);
+    }
+  }
+  const last = new Set(byGeneration.get(final) ?? []);
+  for (const key of exact) {
+    if (!last.has(key)) failures.push(`generation ${final}: ${key} not rasterized`);
+  }
+  return failures;
+}
+
+/**
+ * Review S3: a device px mask (1 = may hold ink) of every pixel with any probe coverage, grown by
+ * `grow` px, over a `width` × `height` frame.
+ */
+export function inkMask(
+  width: number,
+  height: number,
+  crops: readonly Pixels[],
+  grow = 1,
+): Uint8Array {
+  const mask = new Uint8Array(width * height);
+  for (const crop of crops) {
+    for (let row = 0; row < crop.height; row += 1) {
+      for (let column = 0; column < crop.width; column += 1) {
+        const i = (row * crop.width + column) * 4;
+        if (Math.min(crop.rgba[i]!, crop.rgba[i + 1]!, crop.rgba[i + 2]!) === 255) continue;
+        const x = crop.x + column;
+        const y = crop.y + row;
+        for (let dy = -grow; dy <= grow; dy += 1) {
+          for (let dx = -grow; dx <= grow; dx += 1) {
+            const mx = x + dx;
+            const my = y + dy;
+            if (mx >= 0 && my >= 0 && mx < width && my < height) mask[my * width + mx] = 1;
+          }
+        }
+      }
+    }
+  }
+  return mask;
+}
+
+/** Packs a 0/1 pixel flag array into bits, row major, as the page sends its changed pixels. */
+export function packBits(flags: ArrayLike<number>): Uint8Array {
+  const out = new Uint8Array(Math.ceil(flags.length / 8));
+  for (let index = 0; index < flags.length; index += 1) {
+    if (flags[index] !== 0) out[index >> 3]! |= 1 << (index & 7);
+  }
+  return out;
+}
+
+/**
+ * Review S3: changed pixels (`changedBits`, one bit per pixel, row major) outside the ink mask:
+ * ink no probe cluster accounts for. Returns the count and up to eight `[x, y]` samples.
+ */
+export function extraInk(
+  changedBits: Uint8Array,
+  mask: Uint8Array,
+  width: number,
+): Readonly<{ count: number; sample: readonly (readonly [number, number])[] }> {
+  let count = 0;
+  const sample: [number, number][] = [];
+  for (let index = 0; index < mask.length; index += 1) {
+    if (((changedBits[index >> 3]! >> (index & 7)) & 1) === 0 || mask[index] === 1) continue;
+    count += 1;
+    if (sample.length < 8) sample.push([index % width, Math.floor(index / width)]);
+  }
+  return { count, sample };
 }

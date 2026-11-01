@@ -134,7 +134,10 @@ describe("M6c-U2 next-host renderer options (text: 'atlas')", () => {
     expect(service.requiresLayerPipeline).toBe(true);
     service.dispose();
     // The host's service and the probe's both take them, with the canvas raster port.
-    expect(RENDERER_SOURCE).toMatch(/\.\.\.hostRendererOptions\(glyphRaster\),\n {4}\}\);/u);
+    // M6c-U4: under `?test=1` the host service gets the logged port (glyphRasterLog).
+    expect(RENDERER_SOURCE).toMatch(
+      /\.\.\.hostRendererOptions\(rasterLog\?\.port \?\? glyphRaster\),\n {4}\}\);/u,
+    );
     expect(RENDERER_SOURCE).toMatch(
       /new core\.PrimitiveRendererService\(target, hostRendererOptions\(glyphRaster\)\)/u,
     );

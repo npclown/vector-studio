@@ -2,20 +2,24 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import type { ClusterRead, FrameCrop, TextScene } from '../../apps/next-host/src/m6c-text-probe';
-import { decodeCrop, expectedPlacement, placementFailures } from './m6c-agreement';
+import { decodeCrop, expectedPlacement, placementFailures, type Pixels } from './m6c-agreement';
 import {
   clusterKeys,
   deviceMap,
   devicePolygon,
   deviceRect,
+  extraInk,
+  inkMask,
   inkOutside,
   judgeCluster,
   localInkShare,
   OPEN_RULE,
+  rasterCallFailures,
   rasterKeySets,
   type Camera,
   type ClusterJudgement,
   type CoverRule,
+  type RasterCall,
 } from './m6c-scene';
 
 // M6c-U4 (MVP M6c contract, section 10, M6c-A05): M6-A10 through the editor. On
@@ -36,14 +40,19 @@ import {
 // - Instances: the override's text and the non-overridden instance's source text are projected
 //   and drawn (they are judged as every other leaf).
 // - A generation change: every text node of the page is restyled to a family registered later
-//   with the test font's bytes, held, then released. Across each bump the host's raster calls and
-//   uploads lie between the non-space keys required on the target and the keys it may draw
-//   (recomputed apart from the renderer), so every drawn key is rasterized again (E28-K10; bump 1
-//   changes no face, so a reused older bitmap would make no call); every leaf ends at the port's
-//   generation; the converged frame after the load equals the frame before the restyle, since the
-//   face is the same font, and differs from the fallback's frame. Frames while a generation
-//   converges are not judged: a deferred cluster may legally draw a same-generation bitmap of
-//   another bucket or phase (E28 fallback), which no per-pixel rule tells from an older one.
+//   with the test font's bytes, held, then released (the load bumps twice: the face's `load()`
+//   and `document.fonts`' `loadingdone`; each bump waits until the generation holds and every
+//   leaf is at it). The host service's raster port calls are logged with the generation each
+//   was made at (`glyphRasterLog`, src/renderer-options.ts): at the new generation every key
+//   E28 requests on the target (white space included, recomputed apart from the renderer) is
+//   rasterized exactly once and nothing else, and no call is at an older generation (E28-K10;
+//   bump 1 changes no face, so a reused older bitmap would make no call); the uploads cover
+//   every non-space key. Every leaf ends at the port's generation; the converged frame after
+//   the load equals the frame before the restyle, since the face is the same font, and differs
+//   from the fallback's. Frames while a generation converges are not judged: a deferred cluster
+//   may legally draw a same-generation bitmap of another bucket or phase (E28 fallback).
+// - Extra ink (review S3): at each zoom no changed pixel lies outside the union of every judged
+//   cluster's probe ink grown by 1 px.
 // Figures are annotations (`m6c-a05` per zoom, `m6c-a05-generation`). The `chromium-smoke`
 // project runs the structural test and skips the rest when the renderer does not start; it is
 // not M6c-A05 evidence.
@@ -68,13 +77,15 @@ type Hook = Readonly<{
   }>;
 }>;
 type CounterHook = Readonly<{ glyphRasterCalls: number; glyphUploads: number }>;
+/** The renderer hook's raster log (src/webgpu-renderer.ts, review S2). */
+type LogHook = Readonly<{
+  glyphRasterLog: Readonly<{ entries: readonly RasterCall[]; clear(): void }>;
+}>;
 
 /** The scene ID of an instance's expanded copy of a source node (editor-core `expandedId`). */
 const expandedId = (instance: string, node: string) => `${instance}\u0000@${node}`;
 const OVERRIDE_LEAF = expandedId('instance-override', 'symbol-text');
 const SOURCE_LEAF = expandedId('instance-source', 'symbol-text');
-/** Leaves under a clip chain: their keys may be culled by the clip, so they are not required. */
-const CLIPPED = new Set(['clip-text', 'mask-text']);
 
 type Feature = 'order' | 'clip' | 'mask' | 'fade' | 'rotated' | 'instances';
 const ALL: readonly Feature[] = ['order', 'clip', 'mask', 'fade', 'rotated', 'instances'];
@@ -127,15 +138,20 @@ async function open(page: Page) {
   return { errors, ready };
 }
 
-/** Captures until the raster counters stop changing; returns the captures taken. */
+/**
+ * Captures until the raster counters and the port's generation stop changing between two
+ * captures; returns the captures taken.
+ */
 async function settle(page: Page): Promise<number> {
   return page.evaluate(async () => {
     const hook = window.__nextHostRenderer!;
     const counters = hook as unknown as CounterHook;
+    const port = (window.__p5Host as unknown as Hook).text.port;
     let last = '';
     for (let frames = 1; frames <= 64; frames += 1) {
       await hook.capture();
-      const now = `${counters.glyphRasterCalls} ${counters.glyphUploads}`;
+      // Review S1: a layout generation change also restarts the settle.
+      const now = `${counters.glyphRasterCalls} ${counters.glyphUploads} ${port.generation}`;
       if (now === last) return frames;
       last = now;
     }
@@ -232,18 +248,24 @@ function coverRules(geo: Geometry, camera: Camera, dpr: number): Record<string, 
 }
 
 /**
- * A leaf's group opacity: its own times its document ancestors' (for an expanded leaf, the
- * instance's and its ancestors'; the fixture's symbol and its text are opaque).
+ * A leaf's group opacity: its own times its document ancestors' (for an expanded leaf, its
+ * source's ancestors with the symbol, then the instance and its ancestors). The symbol of the
+ * fixture is a page child, so the source chain stops at it.
  */
 function groupOpacity(geo: Geometry, sceneId: string, own: number): number {
-  const cut = sceneId.indexOf('\u0000');
-  let id: string | undefined = cut < 0 ? geo[sceneId]?.parent : sceneId.slice(0, cut);
-  let opacity = own;
-  while (id !== undefined && geo[id] !== undefined) {
-    opacity *= geo[id]!.opacity;
-    id = geo[id]!.parent;
-  }
-  return opacity;
+  const chain = (start: string | undefined) => {
+    let opacity = 1;
+    for (let id = start; id !== undefined && geo[id] !== undefined; id = geo[id]!.parent) {
+      opacity *= geo[id]!.opacity;
+    }
+    return opacity;
+  };
+  const cut = sceneId.indexOf('\u0000@');
+  if (cut < 0) return own * chain(geo[sceneId]?.parent);
+  // An expanded copy (review N1): the source's containers up to and with the symbol (projector:
+  // instance × source opacity, M4-P6), then the instance and its ancestors.
+  const source = sceneId.slice(cut + 2);
+  return own * chain(geo[source]?.parent) * chain(sceneId.slice(0, cut));
 }
 
 /**
@@ -318,6 +340,30 @@ async function keptCrops(
   );
 }
 
+/** One bit per pixel, row major: the kept `shown` and `hidden` frames differ by more than one level. */
+async function changedBits(page: Page): Promise<Uint8Array> {
+  const packed = await page.evaluate(() => {
+    const shown = window.__m6cU4Frames!.shown!;
+    const hidden = window.__m6cU4Frames!.hidden!;
+    const bits = new Uint8Array(Math.ceil((shown.width * shown.height) / 8));
+    for (let index = 0; index < shown.width * shown.height; index += 1) {
+      const i = index * 4;
+      for (let c = 0; c < 3; c += 1) {
+        if (Math.abs(shown.rgba[i + c]! - hidden.rgba[i + c]!) > 1) {
+          bits[index >> 3]! |= 1 << (index & 7);
+          break;
+        }
+      }
+    }
+    let binary = '';
+    for (let offset = 0; offset < bits.length; offset += 8192) {
+      binary += String.fromCharCode(...bits.subarray(offset, offset + 8192));
+    }
+    return btoa(binary);
+  });
+  return Uint8Array.from(Buffer.from(packed, 'base64'));
+}
+
 /** Pixels that differ between the kept `shown` and `hidden` frames outside every leaf's bounds. */
 async function changedOutside(page: Page, scene: TextScene) {
   return page.evaluate(
@@ -384,6 +430,7 @@ async function judgeScene(page: Page, camera: Camera) {
   const outside = await changedOutside(page, scene);
   const canvas = { width: frames.width, height: frames.height };
   const rows: Row[] = [];
+  const crops: Pixels[] = [];
   for (const leaf of scene.leaves) {
     if (!leaf.shown) continue;
     const opacity = groupOpacity(geo, leaf.id, leaf.leaf.opacity);
@@ -418,6 +465,7 @@ async function judgeScene(page: Page, camera: Camera) {
       }
       if (read.crop.width === 0 || read.crop.height === 0) continue;
       const probe = decodeCrop(read.crop);
+      crops.push(probe);
       const [shown, background] = (await keptCrops(page, ['shown', 'hidden'], read.crop)).map(
         decodeCrop,
       );
@@ -467,7 +515,10 @@ async function judgeScene(page: Page, camera: Camera) {
       });
     }
   }
-  return { scene, rows, outside, frames };
+  // Review S3: no changed pixel that no probe cluster's ink (grown by 1 px) accounts for.
+  const changed = await changedBits(page);
+  const extra = extraInk(changed, inkMask(canvas.width, canvas.height, crops), canvas.width);
+  return { scene, rows, outside, extra, frames };
 }
 
 /** Sums of a judgement field over the rows of one leaf. */
@@ -563,7 +614,7 @@ for (const zoom of ZOOMS) {
     );
     expect(moved).toBe(true);
     const frames = await settle(page);
-    const { scene, rows, outside } = await judgeScene(page, zoom.camera);
+    const { scene, rows, outside, extra } = await judgeScene(page, zoom.camera);
     const texts = Object.fromEntries(
       scene.leaves.map((leaf) => [
         leaf.id,
@@ -586,6 +637,7 @@ for (const zoom of ZOOMS) {
         judged: rows.length,
         counts,
         changedOutside: outside,
+        extraInk: extra,
         rows,
       }),
     });
@@ -609,6 +661,10 @@ for (const zoom of ZOOMS) {
     expect(
       outside.count,
       `pixels changed outside every leaf's bounds, e.g. ${JSON.stringify(outside.sample)}`,
+    ).toBe(0);
+    expect(
+      extra.count,
+      `changed pixels no cluster's probe ink accounts for, e.g. ${JSON.stringify(extra.sample)}`,
     ).toBe(0);
     expect(
       await page.evaluate(() => window.__p5Host!.events.filter((e) => e.type === 'diagnostic')),
@@ -700,51 +756,87 @@ test('M6c-A05: a generation change rasterizes every drawn key again and never dr
       },
       [a, b] as const,
     );
-  const leafGenerations = async () =>
-    (await textScene(page)).leaves.map((leaf) => leaf.leaf.generation);
-  const keySets = (scene: TextScene) => {
-    const frame = { width: first.width, height: first.height };
-    const sets = rasterKeySets(
-      scene.leaves.map((leaf) => ({ ...leaf, clipped: CLIPPED.has(leaf.id) })),
-      scene.camera!,
-      scene.devicePixelRatio,
-      frame,
-    );
+  const clearLog = () =>
+    page.evaluate(() => (window.__nextHostRenderer as unknown as LogHook).glyphRasterLog.clear());
+  const readLog = () =>
+    page.evaluate(() => [
+      ...(window.__nextHostRenderer as unknown as LogHook).glyphRasterLog.entries,
+    ]);
+  /**
+   * Review S1: a load bumps twice (the face's `load()` and `document.fonts`' `loadingdone`, a
+   * separate task), so wait until the generation rose past `above`, holds for two reads 500 ms
+   * apart and every leaf is at it.
+   */
+  const stableGeneration = async (above: number) => {
+    let previous = -1;
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const now = await page.evaluate(async () => {
+        const text = (window.__p5Host as unknown as Hook).text;
+        const scene = await text.scene();
+        return {
+          generation: text.port.generation,
+          leaves: [...new Set(scene?.leaves.map((leaf) => leaf.leaf.generation) ?? [])],
+        };
+      });
+      const atIt = now.leaves.length === 1 && now.leaves[0] === now.generation;
+      if (now.generation > above && atIt && now.generation === previous) return now.generation;
+      previous = atIt ? now.generation : -1;
+      await page.waitForTimeout(500);
+    }
+    throw new Error(`the generation did not settle above ${above}`);
+  };
+  /** One bump, from `before` (settled counters) to its settled generation. */
+  const bump = async (n: number, before: typeof c0, act: () => Promise<void>) => {
+    await clearLog();
+    await act();
+    const generation = await stableGeneration(before.generation);
+    const settleFrames = await settle(page);
+    const after = await counters(page);
+    expect(after.generation, `bump ${n}: settled`).toBe(generation);
+    const calls = await readLog();
+    const scene = await textScene(page);
+    const sets = rasterKeySets(scene.leaves, scene.camera!, scene.devicePixelRatio, {
+      width: first.width,
+      height: first.height,
+    });
+    const failures = rasterCallFailures(calls, sets.exact, before.generation, generation);
+    const generations = new Set(calls.map((call) => call.generation));
     return {
-      expected: sets.expected.size,
-      expectedInk: sets.expectedInk.size,
-      required: sets.required.size,
+      bump: n,
+      generations: [before.generation, generation],
+      seen: [...generations],
+      settleFrames,
+      counters: [before, after],
+      calls: after.calls - before.calls,
+      logged: calls.length,
+      uploads: after.uploads - before.uploads,
+      exact: sets.exact.size,
+      exactInk: sets.exactInk.size,
+      generationSteps: generations.size,
+      failures,
+      after,
     };
   };
 
   // Bump 1: registering the face while its bytes are held (the fallback is laid out again).
-  await page.evaluate(
-    ({ family, url }) => {
-      const port = (window.__p5Host as unknown as Hook).text.port;
-      window.__m6cU4Font = port.registerFont({ family, source: { url } });
-    },
-    { family: GEN_FAMILY, url: GEN_URL },
-  );
-  await expect.poll(() => requests, { timeout: 30_000 }).toBeGreaterThan(0);
-  await settle(page);
-  const c1 = await counters(page);
-  expect(c1.generation).toBeGreaterThan(c0.generation);
-  expect(new Set(await leafGenerations())).toEqual(new Set([c1.generation]));
-  const scene1 = await textScene(page);
-  const keys1 = keySets(scene1);
+  const step1 = await bump(1, c0, async () => {
+    await page.evaluate(
+      ({ family, url }) => {
+        const port = (window.__p5Host as unknown as Hook).text.port;
+        window.__m6cU4Font = port.registerFont({ family, source: { url } });
+      },
+      { family: GEN_FAMILY, url: GEN_URL },
+    );
+    await expect.poll(() => requests, { timeout: 30_000 }).toBeGreaterThan(0);
+  });
   await page.evaluate(async () => {
     window.__m6cU4Frames!.B = await window.__nextHostRenderer!.capture();
   });
-
   // Bump 2: the face loads; it is the test font's, so the page draws as it did before restyling.
-  release();
-  expect(await page.evaluate(() => window.__m6cU4Font!)).toBe('loaded');
-  await settle(page);
-  const c2 = await counters(page);
-  expect(c2.generation).toBeGreaterThan(c1.generation);
-  expect(new Set(await leafGenerations())).toEqual(new Set([c2.generation]));
-  const scene2 = await textScene(page);
-  const keys2 = keySets(scene2);
+  const step2 = await bump(2, step1.after, async () => {
+    release();
+    expect(await page.evaluate(() => window.__m6cU4Font!)).toBe('loaded');
+  });
   await page.evaluate(async () => {
     window.__m6cU4Frames!.C = await window.__nextHostRenderer!.capture();
   });
@@ -752,23 +844,15 @@ test('M6c-A05: a generation change rasterizes every drawn key again and never dr
   const loadedVsFallback = await diff('C', 'B');
   const loadedVsCommitted = await diff('C', 'A');
   const events = await page.evaluate((from) => window.__p5Host!.events.slice(from), fromEvents);
-  const steps = [
-    { bump: 1, generations: [c0.generation, c1.generation], counters: [c0, c1], keys: keys1 },
-    { bump: 2, generations: [c1.generation, c2.generation], counters: [c1, c2], keys: keys2 },
-  ].map((step) => {
-    const generations = step.generations[1]! - step.generations[0]!;
-    return {
-      ...step,
-      calls: step.counters[1]!.calls - step.counters[0]!.calls,
-      uploads: step.counters[1]!.uploads - step.counters[0]!.uploads,
-      steps: generations,
-    };
+  const steps = [step1, step2].map((step) => {
+    const { after, ...record } = step;
+    return { ...record, generation: after.generation };
   });
   info.annotations.push({
     type: 'm6c-a05-generation',
     description: JSON.stringify({
       project: info.project.name,
-      devicePixelRatio: scene2.devicePixelRatio,
+      devicePixelRatio: await page.evaluate(() => window.devicePixelRatio),
       restyled,
       steps,
       fallbackVsCommitted,
@@ -777,17 +861,14 @@ test('M6c-A05: a generation change rasterizes every drawn key again and never dr
     }),
   });
   for (const step of steps) {
-    expect(step.keys.required, `bump ${step.bump}: required keys`).toBeGreaterThan(20);
-    // Every non-space key on the target is rasterized and uploaded again, and nothing else.
-    expect(step.calls, `bump ${step.bump}: raster calls`).toBeGreaterThanOrEqual(
-      step.keys.required,
-    );
-    expect(step.calls, `bump ${step.bump}: raster calls`).toBeLessThanOrEqual(
-      step.keys.expected * step.steps,
-    );
-    expect(step.uploads, `bump ${step.bump}: uploads`).toBeGreaterThanOrEqual(step.keys.required);
+    expect(step.exactInk, `bump ${step.bump}: non-space keys on the target`).toBeGreaterThan(20);
+    // Review S2: at the new generation every requested key, white space included, is rasterized
+    // exactly once and nothing else; a bump between (the load's second) adds no stray call.
+    expect(step.failures, `bump ${step.bump}: raster calls`).toEqual([]);
+    expect(step.logged, `bump ${step.bump}: the log holds every counted call`).toBe(step.calls);
+    expect(step.uploads, `bump ${step.bump}: uploads`).toBeGreaterThanOrEqual(step.exactInk);
     expect(step.uploads, `bump ${step.bump}: uploads`).toBeLessThanOrEqual(
-      step.keys.expectedInk * step.steps,
+      step.exactInk * step.generationSteps,
     );
   }
   // The fallback face drew differently; the loaded face draws the committed frame again.
