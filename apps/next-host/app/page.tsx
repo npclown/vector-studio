@@ -536,8 +536,12 @@ function Surface({
     setFixture('loading');
     void (async () => {
       try {
-        // M9-U1: the v2 document lays out with the registered test font from its first layout.
-        if (doc === 'm9-v2' && testFont !== null) await testFont;
+        // M9-U1: the v2 document lays out with the registered test font from its first layout;
+        // a failed registration fails the load rather than laying out in system fallbacks.
+        if (doc === 'm9-v2') {
+          const font = testFont === null ? 'none' : await testFont;
+          if (font !== 'loaded') throw new Error(`m9-v2: the test font did not load (${font})`);
+        }
         if (!live) return;
         const url = `/e26-bench-doc.json?doc=${doc}`;
         const response = await fetch(url, { cache: 'no-store' });
@@ -735,10 +739,14 @@ function Host({ state, textFont }: { state: HostCompositionState; textFont: Test
     bench.setEditor(editor);
     // M9-U1: the font-load change registers the committed test font on this page's port.
     const { textDom } = state.composition;
-    bench.setFontRegistrar((family) => registerTestFont(textDom, family));
+    bench.setFontPort({
+      register: (family) => registerTestFont(textDom, family),
+      generation: () => textDom.generation,
+      subscribe: (listener) => textDom.subscribe(listener),
+    });
     return () => {
       bench.setEditor(null);
-      bench.setFontRegistrar(null);
+      bench.setFontPort(null);
     };
   }, [editor, state]);
   useEffect(() => {

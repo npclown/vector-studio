@@ -8,7 +8,6 @@
 // draw bounds, widened by its 2-physical-pixel cull guard, with clips ignored. Clip culling is
 // counted separately (section 3.3: the edit drag moves the selection out of its frame's clip).
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import type { RenderNodeSnapshot, SceneAffine } from '@vector-studio/contracts';
 import { parseDocument } from '@vector-studio/model';
 import { projectPage, type PageProjection } from '../../packages/editor-core/src/projector.js';
@@ -32,7 +31,13 @@ import {
   projectM9Page,
   type M9GeneratedDocument,
 } from '../m9/document.js';
-import { m9ReplayLayout, M9_LAYOUT_TABLE, readM9LayoutTable } from '../m9/layouts.js';
+import {
+  m9ReplayLayout,
+  M9_LAYOUT_TABLE,
+  readM9LayoutTable,
+  type CompactLayout,
+  type M9LayoutTable,
+} from '../m9/layouts.js';
 
 /** The CSS viewport of every E26 run (section 3.5); DPR varies per run, not per scenario. */
 export const E26_VIEWPORT = Object.freeze({ width: 1280, height: 720 });
@@ -531,6 +536,18 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
+/**
+ * M9-U1: the layout table's digest. Only the layouts count, with each result's `generation`
+ * zeroed: the generation is the recording page's text port counter and `recordedWith` names the
+ * recording browser, neither of which changes what Node projects.
+ */
+export function m9LayoutTableSha256(table: M9LayoutTable): string {
+  const layouts: Record<string, CompactLayout> = {};
+  for (const [key, layout] of Object.entries(table.layouts))
+    layouts[key] = { ...layout, generation: 0 };
+  return sha256(canonicalJson(layouts));
+}
+
 export function sha256(text: string): string {
   return createHash('sha256').update(text).digest('hex');
 }
@@ -672,7 +689,7 @@ export function m9Configuration(
     m9: {
       layoutTableSha256:
         scenario.document === 'm9-v2'
-          ? sha256(canonicalJson(JSON.parse(readFileSync(M9_LAYOUT_TABLE, 'utf8'))))
+          ? m9LayoutTableSha256(readM9LayoutTable(M9_LAYOUT_TABLE))
           : null,
       expanded: tree.expanded,
       layerRows: tree.rows,

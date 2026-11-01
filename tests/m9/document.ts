@@ -20,8 +20,8 @@
 //     at the rectangle's frame, with one to three runs, alternately `autoHeight` (fixed width) and
 //     `autoWidth`, in the committed test font family (M6a-Q13) and only its subset's code points
 //     (ASCII and the listed Hangul syllables). Every fourth (j = 1 mod 4, 50 nodes) names
-//     `M9_SECOND_FAMILY` instead, which the bench lists before the test family (text-dom's
-//     `fallbackFamilies`), so it falls back to the committed font until the font-load change.
+//     `M9_SECOND_FAMILY` instead; the bench lists the test family after it, as text-dom's
+//     `fallbackFamilies`, so it falls back to the committed font until the font-load change.
 //     Text j = 0, in cluster 1 (the typical view's top row), is the typing target: ASCII only,
 //     exactly 60 clusters.
 //   - Rebalance. Whole page-1 clusters move to page 2, highest index first and never cluster 0

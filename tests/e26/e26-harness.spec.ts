@@ -202,8 +202,15 @@ type PageHook = {
   fontLoads: readonly {
     family: string;
     startMs: number;
+    settledMs: number | null;
     endMs: number | null;
     status: string | null;
+    generationBefore: number;
+    generationAfter: number | null;
+    bumps: number;
+    lastBumpMs: number | null;
+    revisionBefore: number;
+    revisionAfter: number | null;
   }[];
   enterTextEdit(id: string, offset: number): { ok: boolean; code?: string };
 };
@@ -338,6 +345,10 @@ async function open(
   // 17a2b0a had no 1600 x 1000 bench project, so a `ui=1` run checks the column itself.
   if (ui) await expectM9Column(page);
   else await expectLayoutBudget(page, { bench: true });
+  // M9-U1: the v2 document never runs on system fallback fonts (the page also fails its load).
+  if (query.includes('doc=m9-v2')) {
+    await expect(status, 'the committed test font').toHaveAttribute('data-text-font', 'loaded');
+  }
   // The loaded scene reached the GPU: one more submission after both are set, and its work done.
   await page.evaluate(async () => {
     const backend = window.__e26Bench!.backend()!;
@@ -635,7 +646,9 @@ async function typingRun(
   if (layers !== null) expect(layers.rows, 'layer rows shown').toBe(layers.expectedRows);
   expect(result.failed).toBe(0);
   expect(result.unresolved).toBe(0);
-  expect(samples.length + result.noChange, 'every key accounted for').toBe(typing.text.length);
+  // Every key is printable and changes the text, so each produced a revision and a sample.
+  expect(result.noChange, 'keys that produced no revision').toBe(0);
+  expect(samples.length, 'one sample per key').toBe(typing.text.length);
 }
 
 for (const { scenario, variant } of runs) {
@@ -1007,6 +1020,14 @@ for (const { scenario, variant } of runs) {
       if (fontLoad !== null) {
         expect(state.fontLoads, 'one font-load change').toHaveLength(1);
         expect(fontStatus, 'the font-load change loaded').toBe('loaded');
+        // A real change: the port's generation and the scene revision both advanced.
+        const [load] = state.fontLoads;
+        expect(load!.generationAfter!, 'the text port generation advanced').toBeGreaterThan(
+          load!.generationBefore,
+        );
+        expect(load!.revisionAfter!, 'the scene revision advanced').toBeGreaterThan(
+          load!.revisionBefore,
+        );
       }
     });
   }
@@ -1212,6 +1233,8 @@ if (geometryRuns) {
     const column = await read('?bench=1&ui=1');
     const plain = await read('');
     const flags = await read('?ui=1&doc=m9-v2&persist=0');
+    const testing = await read('?test=1');
+    const testingFlags = await read('?test=1&ui=1&doc=m9-v2');
     record(`${testInfo.project.name}--m9-ui-geometry`, {
       scenario: 'm9-ui-geometry',
       variant: 'geometry',
@@ -1223,6 +1246,8 @@ if (geometryRuns) {
       column,
       plain,
       flags,
+      testing,
+      testingFlags,
       errors,
     });
     expect(errors).toEqual([]);
@@ -1245,13 +1270,24 @@ if (geometryRuns) {
     expect(flags.size).toEqual(plain.size);
     expect(flags.rightColumn).toEqual(plain.rightColumn);
     expect(flags.aside).toEqual(plain.aside);
+    // Nor under ?test=1.
+    expect(testingFlags.bench, 'no bench hook with ?test=1 alone').toBe(false);
+    expect(testingFlags.origin).toEqual(testing.origin);
+    expect(testingFlags.size).toEqual(testing.size);
+    expect(testingFlags.rightColumn).toEqual(testing.rightColumn);
+    expect(testingFlags.aside).toEqual(testing.aside);
   });
 }
 
 // M9-U1 (M9-A02): the page-1 text layouts of the v2 document through the page's port, compared
 // with the committed table (or written with M9_RECORD_LAYOUTS=1). Run only on request.
 if (filter.includes('m9-v2-layouts')) {
-  test('m9-v2-layouts', async ({ page, browser }) => {
+  test('m9-v2-layouts', async ({ page, browser }, testInfo) => {
+    // One project records (or checks) the one table.
+    test.skip(
+      testInfo.project.name !== (smoke ? 'chromium-smoke-dpr1-v2' : 'chrome-dpr1-v2'),
+      'the table is recorded in one project only',
+    );
     const parsed = parseDocument(JSON.stringify(generateM9V2Document()));
     if (!parsed.ok) throw new Error(`parse: ${parsed.code}`);
     const requests = m9LayoutRequests(parsed.document);

@@ -36,14 +36,27 @@ type BenchModule = {
     wrapRenderer(renderer: never): unknown;
     attach(backend: unknown, canvas: never): void;
     setEditor(editor: never): void;
-    setFontRegistrar(registrar: ((family: string) => Promise<string>) | null): void;
+    setFontPort(
+      port: {
+        register(family: string): Promise<string>;
+        generation(): number;
+        subscribe(listener: () => void): () => void;
+      } | null,
+    ): void;
     hook(): {
       registerTestFont(family: string): Promise<string>;
       fontLoads: readonly {
         family: string;
         startMs: number;
+        settledMs: number | null;
         endMs: number | null;
         status: string | null;
+        generationBefore: number;
+        generationAfter: number | null;
+        bumps: number;
+        lastBumpMs: number | null;
+        revisionBefore: number;
+        revisionAfter: number | null;
       }[];
       enterTextEdit(id: string, offset: number): { ok: boolean; code?: string };
       keyLatencies: readonly Latency[];
@@ -137,8 +150,11 @@ describe('M9-A03: the M9 bench flags are inert without ?bench=1', () => {
       /textFixture:\s+textFixtureQuery\(window\.location\.search\) \|\| benchTextFont\(window\.location\.search\),/u,
     );
     expect(PAGE).toContain('...benchComposition(window.location.search),');
-    // The bench load waits for the font only for the v2 document.
-    expect(PAGE).toContain("if (doc === 'm9-v2' && testFont !== null) await testFont;");
+    // The bench load waits for the font only for the v2 document, and fails unless it loaded.
+    expect(PAGE).toContain("const font = testFont === null ? 'none' : await testFont;");
+    expect(PAGE).toContain(
+      "if (font !== 'loaded') throw new Error(`m9-v2: the test font did not load (${font})`);",
+    );
   });
 
   it('mounts the Appearance aside under ?bench=1 and the right column under ?bench=1&ui=1', () => {
@@ -202,19 +218,52 @@ describe('M9-U1 bench seams', () => {
     expect(hook.fontLoads).toEqual([]);
     const families: string[] = [];
     let settle: (status: string) => void = () => {};
-    state.setFontRegistrar((family) => {
-      families.push(family);
-      return new Promise((resolve) => (settle = resolve));
+    let generation = 4;
+    const listeners = new Set<() => void>();
+    const bump = (): void => {
+      generation += 1;
+      for (const listener of listeners) listener();
+    };
+    state.setFontPort({
+      register: (family) => {
+        families.push(family);
+        return new Promise((resolve) => (settle = resolve));
+      },
+      generation: () => generation,
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
     });
     const pending = hook.registerTestFont('M9 Font Load');
     expect(families).toEqual(['M9 Font Load']);
     expect(hook.fontLoads).toHaveLength(1);
-    expect(hook.fontLoads[0]).toMatchObject({ family: 'M9 Font Load', endMs: null, status: null });
+    expect(hook.fontLoads[0]).toMatchObject({
+      family: 'M9 Font Load',
+      endMs: null,
+      status: null,
+      generationBefore: 4,
+      generationAfter: null,
+      revisionBefore: 0,
+    });
     expect(performance.getEntriesByName('m9-font-load', 'mark')).toHaveLength(1);
+    // The port bumps after the registration resolves (document.fonts events): the measure waits
+    // for the bumps to stop, so it does not end at the registration.
     settle('loaded');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    bump();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    bump();
+    expect(performance.getEntriesByName('m9-font-load', 'measure')).toHaveLength(0);
     expect(await pending).toBe('loaded');
-    expect(hook.fontLoads[0]!.status).toBe('loaded');
-    expect(hook.fontLoads[0]!.endMs).toBeGreaterThanOrEqual(hook.fontLoads[0]!.startMs);
+    const load = hook.fontLoads[0]!;
+    expect(load.status).toBe('loaded');
+    expect(load.bumps).toBe(2);
+    expect(load.generationAfter).toBe(6);
+    expect(load.revisionAfter).toBe(0);
+    expect(load.settledMs).toBeGreaterThanOrEqual(load.startMs);
+    expect(load.endMs).toBeGreaterThanOrEqual(load.lastBumpMs!);
+    expect(listeners.size).toBe(0);
     expect(performance.getEntriesByName('m9-font-load', 'measure')).toHaveLength(1);
     state.dispose();
   });

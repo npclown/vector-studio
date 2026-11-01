@@ -24,6 +24,7 @@ import {
   M9_TYPING,
   M9_WINDOW,
   m9Configuration,
+  m9LayoutTableSha256,
   panZoomCamera,
   sha256,
   typicalCamera,
@@ -83,12 +84,12 @@ const V1_HASHES = {
   'e26-pointer-busy-10k/v1': 'ede80cbc0f054cb636b78f9c25e92297df852bebbd53824dd589b80ea54cbda5',
 };
 const V2_HASHES = {
-  'e26-mixed-view-edit-10k/v2': '5a526c1cf598f944bde9869cde2e7f68dfcbded9cff582b120694b9f9e4459ac',
-  'e26-mixed-all-edit-10k/v2': '21a793389a530386b7b32090e60151bcfc6a3afce00b343d62b65674e869c2c3',
-  'e26-mixed-all-pan-10k/v2': '7f43c01cca90dc008e982e50e17c11b47619cfd55657dcf086c3a8b762582419',
+  'e26-mixed-view-edit-10k/v2': '661ad12288a866e20f9bac019b487df547febe21337a04e92913dc82182362c1',
+  'e26-mixed-all-edit-10k/v2': 'c9291519aa91563a3b363705ba73bb0949896c6d9c33eeb299d02b7d7aa9485c',
+  'e26-mixed-all-pan-10k/v2': '5c26073e3ccb637e7c9d5d281cc519b653b69ad3dda4872a42f99bb204c22f19',
   'e26-simple-stress-10k/v2': 'ce0fab1e69a868c74efce7c77dbec160f1e2b6c1353f337e2b78c5c8ec62d9d9',
-  'e26-pointer-busy-10k/v2': '1aaaf3e60dd5a4999a17370a0007a36117c06a3dc0c1be7615f6f48fb74780e2',
-  'm9-typing-10k/v1': '5a6e7d03adcb8ccd3d4aa6e5aa13f6ba54ecfbcfcebedb039a2360c53621e755',
+  'e26-pointer-busy-10k/v2': '165aa3840b361554b5fc0e1e108d63229f6de6a60341309b01b5b4cb8d9a1af6',
+  'm9-typing-10k/v1': '024685192c63b560de3a862a85195d899027d768073cad31d2802f2736840399',
 };
 
 /** Generating, projecting and hashing 10,000 nodes takes seconds. */
@@ -292,8 +293,31 @@ describe('M9-A02: the M9 scenarios', () => {
           expect(configuration.m9.expanded).toEqual(['f1', 'g3']);
           expect(configuration.m9.layerRows).toBe(655);
           expect(configuration.m9.layoutTableSha256).toBe(
-            sha256(canonicalJson(JSON.parse(readFileSync(M9_LAYOUT_TABLE, 'utf8')))),
+            sha256(
+              canonicalJson(
+                Object.fromEntries(
+                  Object.entries(readM9LayoutTable(M9_LAYOUT_TABLE).layouts).map(
+                    ([key, layout]) => [key, { ...layout, generation: 0 }],
+                  ),
+                ),
+              ),
+            ),
           );
+          // Neither the recording browser nor the port generation counts.
+          const table = readM9LayoutTable(M9_LAYOUT_TABLE);
+          const [firstKey, first] = Object.entries(table.layouts)[0]!;
+          expect(
+            m9LayoutTableSha256({
+              recordedWith: { url: '/elsewhere', browser: 'other 1' },
+              layouts: { ...table.layouts, [firstKey]: { ...first, generation: 99 } },
+            }),
+          ).toBe(configuration.m9.layoutTableSha256);
+          expect(
+            m9LayoutTableSha256({
+              ...table,
+              layouts: { ...table.layouts, [firstKey]: { ...first, width: first.width + 1 } },
+            }),
+          ).not.toBe(configuration.m9.layoutTableSha256);
         } else {
           expect(configuration.m9).toMatchObject({ expanded: [], layerRows: 10_000 });
         }

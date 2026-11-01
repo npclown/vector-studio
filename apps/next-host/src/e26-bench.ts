@@ -191,13 +191,43 @@ export type BenchLatency = {
 };
 export type BenchLongTask = Readonly<{ startMs: number; durationMs: number }>;
 
-/** M9-U1: one font-load change, from the call to its settled registration. */
+/** M9-U1: one font-load change, from the call to the first submitted work after its last bump. */
 export type BenchFontLoad = {
   family: string;
   startMs: number;
+  /** When the registration settled (`registerFont` resolved). */
+  settledMs: number | null;
+  /** The end of the measure: the first submitted work after the last generation bump. */
   endMs: number | null;
   status: string | null;
+  generationBefore: number;
+  generationAfter: number | null;
+  /** Generation bumps of the port during the load, and the time of the last one. */
+  bumps: number;
+  lastBumpMs: number | null;
+  revisionBefore: number;
+  revisionAfter: number | null;
 };
+
+/** M9-U1: the page's text port, as the font-load change uses it. */
+export type BenchFontPort = Readonly<{
+  /** Registers the committed test font under `family`. */
+  register(family: string): Promise<string>;
+  generation(): number;
+  /** Runs `listener` after each generation increase; returns the unsubscribe function. */
+  subscribe(listener: () => void): () => void;
+}>;
+
+/** The frames the font-load measure waits, at most, for the generation to stop changing. */
+const FONT_SETTLE_MAX_FRAMES = 300;
+
+/** One animation frame, or a 16 ms timer where there is none (Node). */
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resolve());
+    else setTimeout(resolve, 16);
+  });
+}
 
 /** E26-U6b: one `replaceSnapshot` the service handled (not one the injected rejection refused). */
 export type BenchReplace = Readonly<{
@@ -288,7 +318,7 @@ export class Bench {
   readonly keyLatencies: BenchLatency[] = [];
   readonly noChangeKeys: number[] = [];
   readonly fontLoads: BenchFontLoad[] = [];
-  private registrar: ((family: string) => Promise<string>) | null = null;
+  private fontPort: BenchFontPort | null = null;
   private isolationStart: number | null = null;
   readonly noChangeMoves: number[] = [];
   private readonly cleanups: (() => void)[] = [];
@@ -400,24 +430,58 @@ export class Bench {
     this.editorRef = editor;
   }
 
-  /** M9-U1: the page's test-font registration on its text port, or null to drop it. */
-  setFontRegistrar(registrar: ((family: string) => Promise<string>) | null): void {
-    this.registrar = registrar;
+  /** M9-U1: the page's text port for the font-load change, or null to drop it. */
+  setFontPort(port: BenchFontPort | null): void {
+    this.fontPort = port;
   }
 
-  /** M9-U1: the font-load change (`registerTestFont(family)`), marked `m9-font-load`. */
+  /**
+   * M9-U1: the font-load change (`registerTestFont(family)`), marked `m9-font-load`. text-dom
+   * bumps its generation asynchronously (on `document.fonts` events) after the registration
+   * resolves, and the editor re-projects on each bump, so the measure runs from the call to the
+   * first submitted work after the last bump: frames are awaited until two pass with no bump
+   * (at least two after the registration settles, at most `FONT_SETTLE_MAX_FRAMES`), then the
+   * backend's submitted work. It records the generation and the scene revision before and after.
+   */
   private async registerTestFont(family: string): Promise<string> {
-    const registrar = this.registrar;
-    if (registrar === null) return 'unavailable';
-    const load: BenchFontLoad = { family, startMs: performance.now(), endMs: null, status: null };
+    const port = this.fontPort;
+    if (port === null) return 'unavailable';
+    const load: BenchFontLoad = {
+      family,
+      startMs: performance.now(),
+      settledMs: null,
+      endMs: null,
+      status: null,
+      generationBefore: port.generation(),
+      generationAfter: null,
+      bumps: 0,
+      lastBumpMs: null,
+      revisionBefore: this.revision(),
+      revisionAfter: null,
+    };
     this.fontLoads.push(load);
     performance.mark('m9-font-load', { startTime: load.startMs });
+    const unsubscribe = port.subscribe(() => {
+      load.bumps += 1;
+      load.lastBumpMs = performance.now();
+    });
     try {
-      load.status = await registrar(family);
+      load.status = await port.register(family);
+      load.settledMs = performance.now();
+      let quiet = 0;
+      for (let frame = 0; frame < FONT_SETTLE_MAX_FRAMES && quiet < 2; frame += 1) {
+        const bumps = load.bumps;
+        await nextFrame();
+        quiet = load.bumps === bumps ? quiet + 1 : 0;
+      }
+      await this.backendRef?.waitForSubmittedWork().catch(() => undefined);
     } catch (error) {
       load.status = `error: ${String(error)}`;
     } finally {
+      unsubscribe();
       load.endMs = performance.now();
+      load.generationAfter = port.generation();
+      load.revisionAfter = this.revision();
       performance.measure('m9-font-load', { start: load.startMs, end: load.endMs });
     }
     return load.status;

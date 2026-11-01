@@ -230,7 +230,7 @@ M9 comes "after M1..M8" (MVP plan, section 7). M8 was accepted on 2026-11-01 (#4
 
 | Unit | State |
 | --- | --- |
-| M9-U1 | Implemented; in review; notes below |
+| M9-U1 | Independent review r1 READY WITH FOLLOW-UPS, applied; notes below |
 | M9-U2 | Not started |
 | M9-U3 | Conditional on G1 |
 | M9-U4 | Not started |
@@ -246,3 +246,4 @@ M9 comes "after M1..M8" (MVP plan, section 7). M8 was accepted on 2026-11-01 (#4
 - `ui=1`: the harness clicks `layer-toggle-f1` and `layer-toggle-g3` before the warm-up and asserts 655 layer rows (10,000 on stress v2); the column also gets the next-host star panel, as without `?bench=1`. The M8-N3 budget is not applied to the `-v2` projects (no 17a2b0a baseline row at 1600 × 1000); the harness checks the column and the `m9-ui-geometry` test checks that the canvas origin (1, 74) and size 1280 × 720 are equal with and without `ui=1`.
 - pointer-busy v2: the busy variant registers the second family 2.0 s after pointer down; the plain variant has no font-load change. Typing: keys go through `page.keyboard.press` on a 120 ms schedule without awaiting each, and the run asserts the final text.
 - Headless smoke in the container: `m9-ui-geometry` passes; every scenario run, v1 included, stops at `open()` with the renderer in `error` (SwiftShader), so no frame, latency or typing number exists before U2. An ad-hoc headless run checked the 655 rows, `enterTextEdit` at offset 60 with typed keys appended in order, and the font registration with its mark; `keyToWorkDoneMs` endpoints are covered by the unit test only.
+- Review r1 follow-ups: the typing run asserts 40 samples and no `no-change` key; a `doc=m9-v2` load fails unless the test font loaded, and `open()` asserts it; the `m9-font-load` measure ends after the text port's generation stops changing for two frames and the work is submitted, and the run asserts that the generation and the scene revision advanced; the layout recorder runs in one project only; the layout table hash covers the layouts only (generation zeroed), not the recording browser; `m9-ui-geometry` also checks that `?test=1&ui=1&doc=m9-v2` equals `?test=1`.
