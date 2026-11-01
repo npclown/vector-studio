@@ -37,6 +37,7 @@ import {
   type PersistStatus,
 } from '../src/m5-persistence';
 import {
+  registerTestFont,
   runHostEffect,
   textFixtureQuery,
   textTestHook,
@@ -51,7 +52,14 @@ import {
   type TextEditMarkers,
   type TextEditTestHook,
 } from '../src/m6b-text-edit';
-import { BENCH_CANVAS, benchDatabaseName, pageBench } from '../src/e26-bench';
+import {
+  BENCH_CANVAS,
+  benchAside,
+  benchDatabaseName,
+  benchComposition,
+  benchTextFont,
+  pageBench,
+} from '../src/e26-bench';
 import { CanvasSide, hostContributions } from '../src/m8-layout';
 import { faultPanelsQuery, testUiExtension } from '../src/m8-test-panels';
 import { SelectionOverlay } from '../src/overlay';
@@ -118,6 +126,10 @@ import type {
 // `?test=1&faults=1` also registers the `test.ui` fault panels (src/m8-test-panels.tsx); panel
 // errors show in the status under `panel-error`. `?bench=1` keeps the 17a2b0a Appearance aside
 // and mounts none of the M8 sections or panels (M8-N5).
+// M9-U1 (M9 contract, section 4): `?bench=1&ui=1` mounts the right column (with the host's UI
+// extensions) instead, the canvas keeping its size and origin; `?bench=1&doc=m9-v2` registers
+// the test font before the bench load, with the test family as text-dom's fallback family, and
+// hands the bench the registration for the font-load change.
 
 const WIDTH = 960;
 const HEIGHT = 640;
@@ -524,6 +536,13 @@ function Surface({
     setFixture('loading');
     void (async () => {
       try {
+        // M9-U1: the v2 document lays out with the registered test font from its first layout;
+        // a failed registration fails the load rather than laying out in system fallbacks.
+        if (doc === 'm9-v2') {
+          const font = testFont === null ? 'none' : await testFont;
+          if (font !== 'loaded') throw new Error(`m9-v2: the test font did not load (${font})`);
+        }
+        if (!live) return;
         const url = `/e26-bench-doc.json?doc=${doc}`;
         const response = await fetch(url, { cache: 'no-store' });
         if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
@@ -541,7 +560,7 @@ function Surface({
     return () => {
       live = false;
     };
-  }, [bench, execute]);
+  }, [bench, execute, testFont]);
   useEffect(() => {
     if (bench !== null) return;
     // Section 5.3: with `?persist=1` the fixture is ignored, and the status says so.
@@ -645,7 +664,7 @@ function Surface({
             />
           </EditorCanvas>
         </div>
-        <CanvasSide bench={bench !== null} height={height} />
+        <CanvasSide bench={benchAside(bench?.query ?? null)} height={height} />
       </div>
       <Status
         errors={errors}
@@ -718,8 +737,18 @@ function Host({ state, textFont }: { state: HostCompositionState; textFont: Test
     const bench = pageBench();
     if (bench === null) return;
     bench.setEditor(editor);
-    return () => bench.setEditor(null);
-  }, [editor]);
+    // M9-U1: the font-load change registers the committed test font on this page's port.
+    const { textDom } = state.composition;
+    bench.setFontPort({
+      register: (family) => registerTestFont(textDom, family),
+      generation: () => textDom.generation,
+      subscribe: (listener) => textDom.subscribe(listener),
+    });
+    return () => {
+      bench.setEditor(null);
+      bench.setFontPort(null);
+    };
+  }, [editor, state]);
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('test') !== '1') return;
     const events: EditorEvent[] = [];
@@ -740,7 +769,7 @@ function Host({ state, textFont }: { state: HostCompositionState; textFont: Test
   }, [editor, session, state]);
   // M8-P1: the host's UI extensions, fixed for the page's lifetime (none with `?bench=1`).
   const contributions = useMemo(
-    () => hostContributions(window.location.search, pageBench() !== null),
+    () => hostContributions(window.location.search, benchAside(pageBench()?.query ?? null)),
     [],
   );
   return (
@@ -771,7 +800,10 @@ export default function Page() {
         platform: hostPlatform(),
         // M8-N2: the `test.ui` editor extension owns the fault panels of `?test=1&faults=1`.
         extraExtensions: faultPanelsQuery(window.location.search) ? [testUiExtension] : [],
-        textFixture: textFixtureQuery(window.location.search),
+        textFixture:
+          textFixtureQuery(window.location.search) || benchTextFont(window.location.search),
+        // M9-U1: `?bench=1&doc=m9-v2` lists the test family as the fallback family.
+        ...benchComposition(window.location.search),
         publish: (value) => {
           published = value;
           setState(value);

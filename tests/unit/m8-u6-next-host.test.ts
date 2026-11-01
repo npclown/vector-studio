@@ -298,7 +298,8 @@ describe('M8-N2: the ?test=1&faults=1 fault panels', () => {
       /extraExtensions: faultPanelsQuery\(window\.location\.search\) \? \[testUiExtension\] : \[\],/u,
     );
     expect(PAGE).toMatch(
-      /const contributions = useMemo\(\s+\(\) => hostContributions\(window\.location\.search, pageBench\(\) !== null\),\s+\[\],\s+\);/u,
+      // M9-U1: `?bench=1&ui=1` mounts the column with the host's contributions (benchAside).
+      /const contributions = useMemo\(\s+\(\) => hostContributions\(window\.location\.search, benchAside\(pageBench\(\)\?\.query \?\? null\)\),\s+\[\],\s+\);/u,
     );
   });
 
@@ -415,7 +416,10 @@ describe('M8-N3 and M8-N5: the right column and the bench aside', () => {
       expect(html, absent).not.toContain(absent);
     }
     expect(LAYOUT).toMatch(/if \(bench\) return <AppearancePanel \/>;/u);
-    expect(PAGE).toMatch(/<CanvasSide bench=\{bench !== null\} height=\{height\} \/>/u);
+    // M9-U1: `?bench=1&ui=1` mounts the right column instead (benchAside).
+    expect(PAGE).toMatch(
+      /<CanvasSide bench=\{benchAside\(bench\?\.query \?\? null\)\} height=\{height\} \/>/u,
+    );
   });
 });
 
@@ -440,7 +444,8 @@ describe('M8-N3: every next-host config states its viewport and every spec check
     ];
     const expected = (config: string, project: string) =>
       config === 'playwright.e26.config.ts'
-        ? { width: 1400, height: 1000 }
+        ? // M9-U1: the `-v2` twins run the M9 scenarios with ui=1 at 1600 x 1000.
+          { width: project.endsWith('-v2') ? 1600 : 1400, height: 1000 }
         : config === 'playwright.m8-next-host.config.ts'
           ? { width: 1280, height: project.endsWith('-720') ? 720 : 900 }
           : /p5-next-host|m1-next-host/u.test(config)
@@ -579,6 +584,9 @@ describe('M8-N3: the 17a2b0a baselines, per project, channel and mode', () => {
     )
       // A config new since 17a2b0a has no row of its own: it reads its BASELINE_SOURCES rows.
       .filter((row) => row.headless && !Object.hasOwn(budget.BASELINE_SOURCES, row.config))
+      // M9-U1: the e26 `-v2` projects (ui=1, 1600 x 1000) had no 17a2b0a counterpart and do not
+      // read the budget; the harness checks their column itself.
+      .filter((row) => !(row.config === 'playwright.e26.config.ts' && row.project.endsWith('-v2')))
       .map((row) => `${row.config} ${row.project}`);
     expect(fixture.commit).toBe('17a2b0a');
     expect(fixture.results.map((row) => `${row.config} ${row.project}`)).toEqual(projects);

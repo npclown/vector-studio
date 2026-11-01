@@ -11,9 +11,15 @@ import { defineConfig, devices, type Project } from '@playwright/test';
 // scenario IDs or ID prefixes. E26_CHROMIUM names a Chromium executable instead: the spec then
 // runs in one headless SwiftShader project at DPR 1 with one repetition by default, a functional
 // smoke run that is not evidence.
+//
+// M9-U1 (M9 contract, section 4): each project has a `-v2` twin at 1600 x 1000, so the right
+// column of `ui=1` fits beside the 1280 x 720 canvas; the M9 scenarios run only there and the v1
+// ones only in the original projects (the spec skips the others).
 const webGpuArguments = ['--enable-unsafe-webgpu'];
 /** Room for the 1280 x 720 canvas, the toolbar and the status without a scroll. */
 const viewport = { width: 1400, height: 1000 };
+/** M9-U1: the v2 projects' viewport (tests/e26/scenarios.ts, M9_WINDOW). */
+const viewportV2 = { width: 1600, height: 1000 };
 const chromium = process.env.E26_CHROMIUM;
 
 const browsers = [
@@ -34,6 +40,11 @@ const headed: Project[] = browsers.flatMap(({ name, device, channel }) =>
     },
   })),
 );
+const headedV2: Project[] = headed.map((project) => ({
+  ...project,
+  name: `${project.name}-v2`,
+  use: { ...project.use, viewport: viewportV2 },
+}));
 
 const smoke: Project[] = [
   {
@@ -54,6 +65,11 @@ const smoke: Project[] = [
     },
   },
 ];
+const smokeV2: Project[] = smoke.map((project) => ({
+  ...project,
+  name: `${project.name}-v2`,
+  use: { ...project.use, viewport: viewportV2 },
+}));
 
 export default defineConfig({
   testDir: './tests/e26',
@@ -71,7 +87,7 @@ export default defineConfig({
     video: 'off',
     screenshot: 'off',
   },
-  projects: chromium === undefined ? headed : smoke,
+  projects: chromium === undefined ? [...headed, ...headedV2] : [...smoke, ...smokeV2],
   webServer: {
     command: 'pnpm --filter @vector-studio/next-host exec next start -H 127.0.0.1 -p 4191',
     url: 'http://127.0.0.1:4191',

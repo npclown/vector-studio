@@ -8,6 +8,14 @@
 // rows (E26-A06) give each run's R, the one- and 16-rejection times against their per-run bounds,
 // the warm-up time and the rejection counts.
 //
+// M9-U1 (M9 contract, sections 3.2 and 5): the M9 records too. A v2 frame or latency row is read
+// as its v1 counterpart and adds the layer rows each run showed (`ui=1`); a v2 latency row adds
+// the font-load change's status and the long tasks over 50 ms that overlap it (counted in the
+// outside-isolation count, never exempt, M9-Q3). A typing row (`m9-typing-10k/v1`) gives each
+// run's `keyToWorkDoneMs` median, p95 and maximum, recorded with no target (M9-Q4). The
+// `m9-ui-geometry` record gives whether the canvas origin and size were equal with and without
+// `ui=1` (M9-A03).
+//
 // It trusts each record's p95 fields, and records carry no validity flag: an invalid run is
 // failed by the harness after its record is written, so check the Playwright result alongside.
 //
@@ -36,6 +44,7 @@ const groups = new Map();
 for (const record of records) {
   // E26-U6b: the A06 isolation records carry no variant.
   record.variant ??= 'isolation';
+  record.repetition ??= 1;
   const key = `${record.scenario}|${record.variant}|${record.project}`;
   if (!groups.has(key)) groups.set(key, []);
   groups.get(key).push(record);
@@ -80,6 +89,41 @@ const rows = [...groups.values()].map((runs) => {
       pass: passes.every((entry) => entry !== null && entry.one && entry.sixteen),
     };
   }
+  if (first.variant === 'geometry') {
+    // M9-A03: the canvas origin and size with and without ui=1.
+    const same = (run) =>
+      JSON.stringify(run.column.origin) === JSON.stringify(run.aside.origin) &&
+      JSON.stringify(run.column.size) === JSON.stringify(run.aside.size);
+    return {
+      ...common,
+      kind: 'geometry',
+      perRunP95Ms: [],
+      maxPerRunP95Ms: null,
+      origin: runs.map((run) => run.aside.origin),
+      size: runs.map((run) => run.aside.size),
+      pass: runs.every(same),
+    };
+  }
+  if (first.variant === 'typing') {
+    // M9-Q4: recorded, no target.
+    const p95 = runs.map((run) => run.keyToWorkDoneMs.p95);
+    return {
+      ...common,
+      kind: 'typing',
+      perRunMedianMs: runs.map((run) => round(run.keyToWorkDoneMs.median)),
+      perRunP95Ms: p95.map(round),
+      perRunMaxMs: runs.map((run) => round(run.keyToWorkDoneMs.max)),
+      maxPerRunP95Ms: round(max(p95)),
+      pass: null,
+      samples: runs.map((run) => run.keyToWorkDoneMs.count),
+      noChange: runs.map((run) => run.noChange),
+      longTasksOver50: runs.map((run) => run.longTasksOver50.length),
+      worstLongTaskMs: runs.map((run) =>
+        round(Math.max(0, ...run.longTasksOver50.map((task) => task.durationMs))),
+      ),
+      layerRows: runs.map((run) => run.layers?.rows ?? null),
+    };
+  }
   if (first.variant === 'frame') {
     const p95 = runs.map((run) => run.rafCallbackIntervalMs.p95);
     const worst = max(p95);
@@ -97,6 +141,7 @@ const rows = [...groups.values()].map((runs) => {
         (run) => run.run.longTasks.filter((task) => task.durationMs > 50).length,
       ),
       frames: runs.map((run) => run.rafCallbackIntervalMs.count),
+      ...(first.layers === undefined ? {} : { layerRows: runs.map((run) => run.layers.rows) }),
     };
   }
   const p95 = runs.map((run) => run.pointerToWorkDoneMs.p95);
@@ -126,6 +171,15 @@ const rows = [...groups.values()].map((runs) => {
     isolationMs: runs.map((run) => run.isolations.map((measure) => round(measure.durationMs))),
     writesDuringPress: runs.map((run) => run.writesDuringPress.length),
     firstWriteAfterUpMs: runs.map((run) => round(run.firstWriteAfterUpMs)),
+    ...(first.fontLoad === undefined
+      ? {}
+      : {
+          layerRows: runs.map((run) => run.layers?.rows ?? null),
+          fontLoadStatus: runs.map((run) => run.fontLoad.status),
+          longTasksOver50DuringFontLoad: runs.map(
+            (run) => run.longTasksOver50.filter((task) => task.fontLoad === true).length,
+          ),
+        }),
   };
 });
 
@@ -136,6 +190,13 @@ const order = [
   'e26-simple-stress-10k/v1',
   'e26-pointer-busy-10k/v1',
   'e26-isolation-m1-a13/v1',
+  'e26-mixed-view-edit-10k/v2',
+  'e26-mixed-all-edit-10k/v2',
+  'e26-mixed-all-pan-10k/v2',
+  'e26-simple-stress-10k/v2',
+  'e26-pointer-busy-10k/v2',
+  'm9-typing-10k/v1',
+  'm9-ui-geometry',
 ];
 rows.sort(
   (a, b) =>
@@ -159,14 +220,24 @@ const lines = [
       row.project,
       row.kind === 'isolation'
         ? row.oneMs.map((one, i) => `${one} / ${row.sixteenMs[i]}`).join(', ')
-        : row.perRunP95Ms.join(', '),
-      row.kind === 'isolation' ? `${max(row.oneMs)} / ${max(row.sixteenMs)}` : row.maxPerRunP95Ms,
+        : row.kind === 'geometry'
+          ? 'origin and size with and without ui=1'
+          : row.perRunP95Ms.join(', '),
+      row.kind === 'isolation'
+        ? `${max(row.oneMs)} / ${max(row.sixteenMs)}`
+        : row.kind === 'geometry'
+          ? ''
+          : row.maxPerRunP95Ms,
       row.kind === 'frame'
         ? `≤ ${row.ceilingMs}`
         : row.kind === 'latency'
           ? `< ${row.boundMs}`
-          : `≤ ${min(row.oneBoundMs)} / ${min(row.sixteenBoundMs)}`,
-      row.pass ? 'pass' : 'miss',
+          : row.kind === 'typing'
+            ? 'recorded'
+            : row.kind === 'geometry'
+              ? 'equal'
+              : `≤ ${min(row.oneBoundMs)} / ${min(row.sixteenBoundMs)}`,
+      row.pass === null ? 'recorded' : row.pass ? 'pass' : 'miss',
       '',
     ]
       .join(' | ')

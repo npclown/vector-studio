@@ -1,6 +1,8 @@
 import type { Editor } from '@vector-studio/editor-core';
 import type { DocumentStore } from '@vector-studio/persistence-idb';
 import type { RendererHandle } from '@vector-studio/react';
+import { createTextDom, type TextDom, type TextDomOptions } from '@vector-studio/text-dom';
+import { TEST_FONT_FAMILY } from './m6a-text-host';
 
 // The scene contract's types, as the host's dependencies carry them (no `contracts` import).
 type RendererSceneSynchronization = RendererHandle['renderer'];
@@ -29,8 +31,21 @@ type SceneApplyResult = ReturnType<RendererSceneSynchronization['applyChanges']>
 //
 // The drivers' formulas restate `tests/e26/scenarios.ts` (the host cannot import `tests/`); a
 // unit test checks that both give the same values.
+//
+// M9-U1 (M9 contract, section 4), with `?bench=1` only:
+//   - `ui=1`: the page mounts the right column (layer tree, property panel, extension panels) in
+//     place of the 17a2b0a Appearance aside; the canvas keeps its size and origin;
+//   - `doc=m9-v2`: the v2 document, which `tests/m9/document.ts` generates and the harness writes
+//     for the bench loader, as it writes the v1 documents; the page registers the committed test
+//     font before the load and lists the test family as text-dom's fallback family
+//     (`benchTextDomOptions`), so `M9_SECOND_FAMILY` text falls back to the committed font;
+//   - the hook's `registerTestFont(family)` is the font-load change (marked `m9-font-load`), its
+//     `enterTextEdit(id, offset)` the typing seam, and `keyLatencies` the `keyToWorkDoneMs`
+//     samples: from the `keydown` `timeStamp` to the submitted work of the first submission at or
+//     after the scene revision the key produced, as `pointerToWorkDoneMs` is.
 
-export type BenchDocument = 'm1-a13' | 'stress';
+export type BenchDocument = 'm1-a13' | 'stress' | 'm9-v2';
+const BENCH_DOCUMENTS: readonly string[] = ['m1-a13', 'stress', 'm9-v2'];
 
 export type BenchQuery = Readonly<{
   /** The scenario document to load, or null. */
@@ -44,6 +59,8 @@ export type BenchQuery = Readonly<{
    * its own targets (`armReject(targets, mode)`) and reads the `replaceSnapshot` times.
    */
   isolation: boolean;
+  /** M9-U1: `ui=1` mounts the right column in place of the Appearance aside. */
+  ui: boolean;
 }>;
 
 /** The bench option of `search`, or null without `?bench=1` (every other flag is then inert). */
@@ -53,12 +70,41 @@ export function benchQuery(search: string): BenchQuery | null {
   const doc = params.get('doc');
   const reject = params.get('reject');
   return {
-    doc: doc === 'm1-a13' || doc === 'stress' ? doc : null,
+    doc: doc !== null && BENCH_DOCUMENTS.includes(doc) ? (doc as BenchDocument) : null,
     persist: params.get('persist') === '1',
     reject: reject === null || reject === '' ? null : reject,
     rejectMode: params.get('reject-mode') === 'persistent' ? 'persistent' : 'once',
     isolation: params.get('isolation') === '1',
+    ui: params.get('ui') === '1',
   };
+}
+
+/** M9-U1: whether the page mounts the bench's Appearance aside (not with `ui=1`). */
+export function benchAside(query: BenchQuery | null): boolean {
+  return query !== null && !query.ui;
+}
+
+/** M9-U1: whether the bench registers the committed test font before its load (`doc=m9-v2`). */
+export function benchTextFont(search: string): boolean {
+  return benchQuery(search)?.doc === 'm9-v2';
+}
+
+/**
+ * M9-U1: the text-dom options the bench adds for `doc=m9-v2`: the test family as the fallback
+ * family, so a run naming the uninstalled second family lays out in the committed font until
+ * the font-load change registers it; none otherwise.
+ */
+export function benchTextDomOptions(search: string): { fallbackFamilies?: readonly string[] } {
+  return benchTextFont(search) ? { fallbackFamilies: [TEST_FONT_FAMILY] } : {};
+}
+
+/** M9-U1: the host composition's text-dom factory with those options, or none (the default). */
+export function benchComposition(search: string): {
+  createTextDom?: (options: TextDomOptions) => TextDom;
+} {
+  if (!benchTextFont(search)) return {};
+  const extra = benchTextDomOptions(search);
+  return { createTextDom: (options) => createTextDom({ ...options, ...extra }) };
 }
 
 /** The CSS size of the canvas: the E26 viewport under `?bench=1` (section 3.5). */
@@ -145,6 +191,44 @@ export type BenchLatency = {
 };
 export type BenchLongTask = Readonly<{ startMs: number; durationMs: number }>;
 
+/** M9-U1: one font-load change, from the call to the first submitted work after its last bump. */
+export type BenchFontLoad = {
+  family: string;
+  startMs: number;
+  /** When the registration settled (`registerFont` resolved). */
+  settledMs: number | null;
+  /** The end of the measure: the first submitted work after the last generation bump. */
+  endMs: number | null;
+  status: string | null;
+  generationBefore: number;
+  generationAfter: number | null;
+  /** Generation bumps of the port during the load, and the time of the last one. */
+  bumps: number;
+  lastBumpMs: number | null;
+  revisionBefore: number;
+  revisionAfter: number | null;
+};
+
+/** M9-U1: the page's text port, as the font-load change uses it. */
+export type BenchFontPort = Readonly<{
+  /** Registers the committed test font under `family`. */
+  register(family: string): Promise<string>;
+  generation(): number;
+  /** Runs `listener` after each generation increase; returns the unsubscribe function. */
+  subscribe(listener: () => void): () => void;
+}>;
+
+/** The frames the font-load measure waits, at most, for the generation to stop changing. */
+const FONT_SETTLE_MAX_FRAMES = 300;
+
+/** One animation frame, or a 16 ms timer where there is none (Node). */
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resolve());
+    else setTimeout(resolve, 16);
+  });
+}
+
 /** E26-U6b: one `replaceSnapshot` the service handled (not one the injected rejection refused). */
 export type BenchReplace = Readonly<{
   startMs: number;
@@ -180,6 +264,19 @@ export type BenchHook = Readonly<{
   isolations: () => readonly BenchLongTask[];
   /** E26-U6b (A06's R): every `replaceSnapshot` the service handled, timed around the call. */
   replaces: readonly BenchReplace[];
+  /** M9-U1: `keyToWorkDoneMs` samples, one per key that produced a scene revision. */
+  keyLatencies: readonly BenchLatency[];
+  /** M9-U1: the `keydown` timestamps of keys that produced no new scene revision. */
+  noChangeKeys: readonly number[];
+  /**
+   * M9-U1: the font-load change: registers the committed test font under `family`, marked
+   * `m9-font-load` (a mark at the call, a measure to the settled registration). Resolves to the
+   * registration status, or `unavailable` before the page gave the bench its text port.
+   */
+  registerTestFont(family: string): Promise<string>;
+  fontLoads: readonly BenchFontLoad[];
+  /** M9-U1: the typing seam, `enterTextEdit` on `id` with anchor and focus at `offset`. */
+  enterTextEdit(id: string, offset: number): Readonly<{ ok: boolean; code?: string }>;
 }>;
 
 declare global {
@@ -217,6 +314,11 @@ export class Bench {
   readonly replaces: BenchReplace[] = [];
   private lastSubmitted = 0;
   private pendingInput: Readonly<{ inputMs: number; revision: number }> | null = null;
+  private pendingKey: Readonly<{ inputMs: number; revision: number }> | null = null;
+  readonly keyLatencies: BenchLatency[] = [];
+  readonly noChangeKeys: number[] = [];
+  readonly fontLoads: BenchFontLoad[] = [];
+  private fontPort: BenchFontPort | null = null;
   private isolationStart: number | null = null;
   readonly noChangeMoves: number[] = [];
   private readonly cleanups: (() => void)[] = [];
@@ -260,9 +362,40 @@ export class Bench {
     };
     window.addEventListener('pointermove', before, { capture: true });
     window.addEventListener('pointermove', after);
+    // M9-U1: a key's revision, as a move's. The textarea applies a typed character on
+    // `beforeinput` and a command key on `keydown`; the bubbling window listeners run after the
+    // page's own, and the first that sees a new revision ends the key. A key still pending at
+    // the next `keydown` produced none (not at its `keyup`, which may follow the next keydown
+    // when keys are sent without waiting).
+    const keyBefore = (event: Event) => {
+      const input = this.pendingKey;
+      if (input !== null) this.noChangeKeys.push(input.inputMs);
+      this.pendingKey = { inputMs: event.timeStamp, revision: this.revision() };
+    };
+    const keyAfter = () => {
+      const input = this.pendingKey;
+      if (input === null || this.rendererRef === null) return;
+      const revision = this.revision();
+      if (revision <= input.revision) return;
+      this.pendingKey = null;
+      this.keyLatencies.push({ inputMs: input.inputMs, revision, doneMs: null });
+    };
+    const keyListeners: [string, (event: Event) => void, boolean][] = [
+      ['keydown', keyBefore, true],
+      ['keydown', keyAfter, false],
+      ['beforeinput', keyAfter, false],
+      ['input', keyAfter, false],
+      ['keyup', keyAfter, true],
+    ];
+    for (const [type, listener, capture] of keyListeners) {
+      window.addEventListener(type, listener, { capture });
+    }
     this.cleanups.push(() => {
       window.removeEventListener('pointermove', before, { capture: true });
       window.removeEventListener('pointermove', after);
+      for (const [type, listener, capture] of keyListeners) {
+        window.removeEventListener(type, listener, { capture });
+      }
     });
   }
 
@@ -295,6 +428,63 @@ export class Bench {
 
   setEditor(editor: Editor | null): void {
     this.editorRef = editor;
+  }
+
+  /** M9-U1: the page's text port for the font-load change, or null to drop it. */
+  setFontPort(port: BenchFontPort | null): void {
+    this.fontPort = port;
+  }
+
+  /**
+   * M9-U1: the font-load change (`registerTestFont(family)`), marked `m9-font-load`. text-dom
+   * bumps its generation asynchronously (on `document.fonts` events) after the registration
+   * resolves, and the editor re-projects on each bump, so the measure runs from the call to the
+   * first submitted work after the last bump: frames are awaited until two pass with no bump
+   * (at least two after the registration settles, at most `FONT_SETTLE_MAX_FRAMES`), then the
+   * backend's submitted work. It records the generation and the scene revision before and after.
+   */
+  private async registerTestFont(family: string): Promise<string> {
+    const port = this.fontPort;
+    if (port === null) return 'unavailable';
+    const load: BenchFontLoad = {
+      family,
+      startMs: performance.now(),
+      settledMs: null,
+      endMs: null,
+      status: null,
+      generationBefore: port.generation(),
+      generationAfter: null,
+      bumps: 0,
+      lastBumpMs: null,
+      revisionBefore: this.revision(),
+      revisionAfter: null,
+    };
+    this.fontLoads.push(load);
+    performance.mark('m9-font-load', { startTime: load.startMs });
+    const unsubscribe = port.subscribe(() => {
+      load.bumps += 1;
+      load.lastBumpMs = performance.now();
+    });
+    try {
+      load.status = await port.register(family);
+      load.settledMs = performance.now();
+      let quiet = 0;
+      for (let frame = 0; frame < FONT_SETTLE_MAX_FRAMES && quiet < 2; frame += 1) {
+        const bumps = load.bumps;
+        await nextFrame();
+        quiet = load.bumps === bumps ? quiet + 1 : 0;
+      }
+      await this.backendRef?.waitForSubmittedWork().catch(() => undefined);
+    } catch (error) {
+      load.status = `error: ${String(error)}`;
+    } finally {
+      unsubscribe();
+      load.endMs = performance.now();
+      load.generationAfter = port.generation();
+      load.revisionAfter = this.revision();
+      performance.measure('m9-font-load', { start: load.startMs, end: load.endMs });
+    }
+    return load.status;
   }
 
   /**
@@ -410,7 +600,7 @@ export class Bench {
     if (count === this.lastSubmitted) return;
     this.lastSubmitted = count;
     const revision = renderer.getSynchronizationState().current?.revision ?? 0;
-    const waiting = this.latencies.filter(
+    const waiting = [...this.latencies, ...this.keyLatencies].filter(
       (entry) => entry.doneMs === null && entry.revision <= revision,
     );
     if (waiting.length === 0) return;
@@ -455,6 +645,16 @@ export class Bench {
           .getEntriesByName('e26-isolation', 'measure')
           .map((entry) => ({ startMs: entry.startTime, durationMs: entry.duration })),
       replaces: this.replaces,
+      keyLatencies: this.keyLatencies,
+      noChangeKeys: this.noChangeKeys,
+      registerTestFont: (family) => this.registerTestFont(family),
+      fontLoads: this.fontLoads,
+      enterTextEdit: (id, offset) => {
+        const editor = this.editorRef;
+        if (editor === null) return { ok: false, code: 'bench.no-editor' };
+        const result = editor.execute({ type: 'enterTextEdit', id, anchor: offset, focus: offset });
+        return result.ok ? { ok: true } : { ok: false, code: result.code };
+      },
     };
   }
 
