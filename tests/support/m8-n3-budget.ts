@@ -19,11 +19,36 @@ import { readLayout, type LayoutReading } from './m8-n3-read.js';
 //    keeps its measured width and no right column exists.
 //
 // The 17a2b0a values come from the JSON file `M8_N3_BASELINE` names, written by the measurement
-// script on the machine that runs the specs (`--json`). Headless smoke projects fall back to the
-// committed container measurement, `tests/fixtures/m8-n3/17a2b0a-headless.json`; a headed project
-// needs `M8_N3_BASELINE`, since its window scrollbars change the widths (contract M8-N3).
+// script on the machine that runs the specs (`--json`; `--headed` for the headed projects, each
+// measured in its own channel). Headless projects read `M8_N3_HEADLESS_BASELINE` (a run without
+// `--headed`) or, by default, the committed container measurement,
+// `tests/fixtures/m8-n3/17a2b0a-headless.json`; a headed project needs
+// `M8_N3_BASELINE`, since its window scrollbars change the widths (contract M8-N3). A row is
+// taken only when it was measured in the reading project's channel and mode, so an Edge project
+// is never compared with a Chrome measurement; a missing file or row fails the spec.
+//
+// A config that 17a2b0a did not have (M8-U7's `tests/m8-next-host/`) reads the row of an existing
+// config at the same viewport, device scale factor, channel and mode, by `BASELINE_SOURCES`.
 
-type BaselineRow = LayoutReading & Readonly<{ config: string; project: string }>;
+type BaselineRow = LayoutReading &
+  Readonly<{
+    config: string;
+    project: string;
+    viewport: { width: number; height: number };
+    deviceScaleFactor: number;
+    channel: string | null;
+    headless: boolean;
+  }>;
+
+/** The project that reads a baseline row. */
+export type BaselineReader = Readonly<{
+  config: string;
+  project: string;
+  viewport: { width: number; height: number };
+  deviceScaleFactor: number;
+  channel: string | null;
+  headless: boolean;
+}>;
 
 const DEFAULT_BASELINE = path.resolve(
   import.meta.dirname,
@@ -32,21 +57,76 @@ const DEFAULT_BASELINE = path.resolve(
 /** A layout float compared with the measured one: equal to a hundredth of a CSS px. */
 const EPSILON = 0.01;
 
-function baselineFor(configFile: string, project: string, headless: boolean): BaselineRow {
-  const named = process.env.M8_N3_BASELINE;
-  if (named === undefined && !headless) {
+/**
+ * Configs new since 17a2b0a and, per viewport (`<width>x<height>`), the 17a2b0a config whose rows
+ * stand in for theirs: the M1 config at 1280 × 720 and the M2 config at 1280 × 900 load the same
+ * `?test=1` page at those viewports, in Chrome, Edge and a headless smoke project.
+ */
+export const BASELINE_SOURCES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  'playwright.m8-next-host.config.ts': {
+    '1280x720': 'playwright.m1-next-host.config.ts',
+    '1280x900': 'playwright.m2-next-host.config.ts',
+  },
+};
+
+/** The row of `rows` that `reader` compares with; throws when none or several match. */
+export function selectBaseline(
+  rows: readonly BaselineRow[],
+  reader: BaselineReader,
+  file: string,
+): BaselineRow {
+  const where = `${reader.config} ${reader.project}`;
+  const sameMode = (row: BaselineRow) =>
+    row.channel === reader.channel && row.headless === reader.headless;
+  const mode = `${reader.channel ?? 'chromium'}${reader.headless ? ' headless' : ' headed'}`;
+  const sources = BASELINE_SOURCES[reader.config];
+  if (sources === undefined) {
+    const row = rows.find(
+      (entry) => entry.config === reader.config && entry.project === reader.project,
+    );
+    if (row === undefined) throw new Error(`M8-N3: ${file} has no row for ${where}`);
+    if (!sameMode(row)) {
+      throw new Error(
+        `M8-N3: ${file} measured ${where} in ${row.channel ?? 'chromium'}` +
+          `${row.headless ? ' headless' : ' headed'}, not in ${mode}`,
+      );
+    }
+    return row;
+  }
+  const key = `${reader.viewport.width}x${reader.viewport.height}`;
+  const source = sources[key];
+  if (source === undefined)
+    throw new Error(`M8-N3: no 17a2b0a config stands in for ${where} at ${key}`);
+  const matches = rows.filter(
+    (row) =>
+      row.config === source &&
+      sameMode(row) &&
+      row.viewport.width === reader.viewport.width &&
+      row.viewport.height === reader.viewport.height &&
+      row.deviceScaleFactor === reader.deviceScaleFactor,
+  );
+  if (matches.length !== 1) {
+    throw new Error(
+      `M8-N3: ${file} has ${matches.length} rows of ${source} in ${mode} at ${key} for ${where}`,
+    );
+  }
+  return matches[0]!;
+}
+
+function baselineFor(reader: BaselineReader): BaselineRow {
+  // Headed projects: the machine's own headed measurement, required. Headless projects: their own
+  // file when named, else the committed container measurement.
+  const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+  if (named === undefined && !reader.headless) {
     throw new Error(
       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
-        '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --channel <chrome|msedge> ' +
-        '--json <file>` wrote on this machine',
+        '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+        'wrote on this machine',
     );
   }
   const file = named ?? DEFAULT_BASELINE;
   const record = JSON.parse(readFileSync(file, 'utf8')) as { results: BaselineRow[] };
-  const config = path.basename(configFile);
-  const row = record.results.find((entry) => entry.config === config && entry.project === project);
-  if (row === undefined) throw new Error(`M8-N3: ${file} has no row for ${config} ${project}`);
-  return row;
+  return selectBaseline(record.results, reader, file);
 }
 
 /** Asserts the M8-N3 budget (or, with `?bench=1`, the M8-N5 aside) on the loaded page. */
@@ -55,8 +135,19 @@ export async function expectLayoutBudget(
   options: Readonly<{ bench?: boolean; rename?: boolean }> = {},
 ): Promise<void> {
   const info = test.info();
-  const headless = info.project.use.headless !== false;
-  const base = baselineFor(info.config.configFile ?? '', info.project.name, headless);
+  const use = info.project.use;
+  const viewport = page.viewportSize();
+  if (viewport === null) throw new Error('M8-N3: the page has no fixed viewport');
+  const base = baselineFor({
+    config: path.basename(info.config.configFile ?? ''),
+    project: info.project.name,
+    viewport,
+    deviceScaleFactor: use.deviceScaleFactor ?? 1,
+    channel: use.channel ?? null,
+    headless: use.headless !== false,
+  });
+  // The page must be at the measured row's viewport, or the comparison would be vacuous.
+  expect(viewport, 'M8-N3: viewport of the measured row').toEqual(base.viewport);
   const live = await page.evaluate(readLayout);
   const where = `${path.basename(info.config.configFile ?? '')} ${info.project.name}`;
   // 1. The canvas origin.

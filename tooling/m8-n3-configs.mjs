@@ -63,6 +63,10 @@ export async function projectsOf(root, file) {
         // As Playwright merges them: the project's `use` (device presets included) wins.
         viewport: use.viewport,
         deviceScaleFactor: use.deviceScaleFactor ?? 1,
+        // The branded browser a headed project runs (`chrome`, `msedge`), null for the bundled
+        // or an `executablePath` Chromium; and whether it runs headless.
+        channel: use.channel ?? null,
+        headless: use.headless !== false,
         bench: file === 'playwright.e26.config.ts',
       });
     }

@@ -25,6 +25,7 @@ import type * as LayoutModule from '../../apps/next-host/src/m8-layout.js';
 import type * as StarModule from '../../apps/next-host/src/m8-star-panel.js';
 import type * as FaultModule from '../../apps/next-host/src/m8-test-panels.js';
 import { createFakeTextLayout } from '../support/fake-text-layout.js';
+import * as budget from '../support/m8-n3-budget.js';
 
 // MVP M8 contract, unit M8-U6, M8-A12 (section 8, M8-N1 to M8-N6): next-host composed from
 // `@vector-studio/ui`. Source checks pin what the page defines and imports, the star panel's
@@ -139,10 +140,16 @@ describe('M8-N1: next-host composes the UI package', () => {
     );
   });
 
-  it('keeps the strut that holds row 1 at its 17a2b0a height hidden, nameless and unfocusable', () => {
+  it('keeps the strut that holds row 1 at its 17a2b0a height hidden, nameless and inert', () => {
+    // A span with a wrapped button's line metrics, not a control (review follow-up 4).
     expect(PAGE).toMatch(
-      /<button\s+type="button"\s+aria-hidden\s+tabIndex=\{-1\}\s+data-testid="row-1-strut"\s+style=\{\{\s+visibility: 'hidden',\s+width: 0,/u,
+      /<span\s+aria-hidden\s+data-testid="row-1-strut"\s+style=\{\{\s+display: 'inline-block',\s+visibility: 'hidden',\s+width: 0,\s+overflow: 'hidden',\s+font: '-webkit-small-control',\s+lineHeight: 'normal',\s+paddingBlock: 1,\s+borderBlock: '2px solid transparent',\s+boxSizing: 'border-box',\s+\}\}\s+>\s+&nbsp;\s+<br \/>\s+&nbsp;\s+<\/span>/u,
     );
+    const strut = PAGE.slice(
+      PAGE.indexOf('function RowHeightStrut()'),
+      PAGE.indexOf('function FileControls('),
+    );
+    expect(strut).not.toMatch(/<button|tabIndex|onClick/u);
   });
 });
 
@@ -512,6 +519,139 @@ describe('M8-N3: every next-host config states its viewport and every spec check
     ]) {
       expect(helper, label).toContain(`: ${label}\``);
     }
+  });
+});
+
+describe('M8-N3: the 17a2b0a baselines, per project, channel and mode', () => {
+  type Row = Parameters<typeof budget.selectBaseline>[0][number];
+  const fixture = JSON.parse(read('tests/fixtures/m8-n3/17a2b0a-headless.json')) as {
+    commit: string;
+    results: Row[];
+  };
+  const reader = (row: Partial<Parameters<typeof budget.selectBaseline>[1]>) => ({
+    config: 'playwright.m2-next-host.config.ts',
+    project: 'chromium-smoke',
+    viewport: { width: 1280, height: 900 },
+    deviceScaleFactor: 1,
+    channel: null,
+    headless: true,
+    ...row,
+  });
+  const headed = (channel: string, config: string, project: string, height: number): Row => ({
+    ...fixture.results.find((row) => row.config === config)!,
+    config,
+    project,
+    channel,
+    headless: false,
+    viewport: { width: 1280, height },
+  });
+
+  it('commits one headless row per headless project, measured headless in the bundled Chromium', async () => {
+    const { stdout } = await run(process.execPath, ['tooling/m8-n3-configs.mjs', '--root', root], {
+      cwd: root,
+    });
+    const projects = (
+      JSON.parse(stdout) as { config: string; project: string; headless: boolean }[]
+    )
+      .filter((row) => row.headless)
+      .map((row) => `${row.config} ${row.project}`);
+    expect(fixture.commit).toBe('17a2b0a');
+    expect(fixture.results.map((row) => `${row.config} ${row.project}`)).toEqual(projects);
+    for (const row of fixture.results) {
+      expect([row.channel, row.headless], row.project).toEqual([null, true]);
+      // One measure for the aside and the column: the border box (review follow-up 3).
+      expect(row.aside, row.config).toBe(row.config === 'playwright.e26.config.ts' ? 112 : 300);
+    }
+  });
+
+  it("takes a row only in the reading project's channel and mode, and fails loudly otherwise", () => {
+    const rows = [
+      ...fixture.results,
+      headed('chrome', 'playwright.m2-next-host.config.ts', 'chrome', 900),
+      headed('msedge', 'playwright.m2-next-host.config.ts', 'edge', 900),
+      headed('chrome', 'playwright.m1-next-host.config.ts', 'chrome', 720),
+    ];
+    expect(budget.selectBaseline(rows, reader({}), 'f').project).toBe('chromium-smoke');
+    expect(
+      budget.selectBaseline(
+        rows,
+        reader({ project: 'edge', channel: 'msedge', headless: false }),
+        'f',
+      ).channel,
+    ).toBe('msedge');
+    // An Edge project never reads a Chrome row, nor a headed project a headless one.
+    const chromeOnly = rows.filter((row) => row.channel !== 'msedge');
+    const edgeAsChrome = chromeOnly.map((row) =>
+      row.project === 'chrome' && row.config === 'playwright.m2-next-host.config.ts'
+        ? { ...row, project: 'edge' }
+        : row,
+    );
+    expect(() =>
+      budget.selectBaseline(
+        edgeAsChrome,
+        reader({ project: 'edge', channel: 'msedge', headless: false }),
+        'f',
+      ),
+    ).toThrow(
+      'M8-N3: f measured playwright.m2-next-host.config.ts edge in chrome headed, not in msedge headed',
+    );
+    expect(() =>
+      budget.selectBaseline(
+        chromeOnly,
+        reader({ project: 'edge', channel: 'msedge', headless: false }),
+        'f',
+      ),
+    ).toThrow('M8-N3: f has no row for playwright.m2-next-host.config.ts edge');
+    expect(() => budget.selectBaseline(rows, reader({ headless: false }), 'f')).toThrow(
+      'not in chromium headed',
+    );
+  });
+
+  it('maps the new M8 config to the 17a2b0a rows of M1 (1280 × 720) and M2 (1280 × 900)', () => {
+    expect(budget.BASELINE_SOURCES).toEqual({
+      'playwright.m8-next-host.config.ts': {
+        '1280x720': 'playwright.m1-next-host.config.ts',
+        '1280x900': 'playwright.m2-next-host.config.ts',
+      },
+    });
+    const rows = [
+      ...fixture.results,
+      headed('chrome', 'playwright.m2-next-host.config.ts', 'chrome', 900),
+      headed('msedge', 'playwright.m2-next-host.config.ts', 'edge', 900),
+      headed('chrome', 'playwright.m1-next-host.config.ts', 'chrome', 720),
+      headed('msedge', 'playwright.m1-next-host.config.ts', 'edge', 720),
+    ];
+    const m8 = (row: Partial<Parameters<typeof budget.selectBaseline>[1]>) =>
+      budget.selectBaseline(
+        rows,
+        reader({ config: 'playwright.m8-next-host.config.ts', ...row }),
+        'f',
+      );
+    const pick = (row: Row) => [row.config, row.project];
+    expect(pick(m8({ project: 'chrome-900', channel: 'chrome', headless: false }))).toEqual([
+      'playwright.m2-next-host.config.ts',
+      'chrome',
+    ]);
+    expect(
+      pick(
+        m8({
+          project: 'edge-720',
+          channel: 'msedge',
+          headless: false,
+          viewport: { width: 1280, height: 720 },
+        }),
+      ),
+    ).toEqual(['playwright.m1-next-host.config.ts', 'edge']);
+    expect(pick(m8({ project: 'smoke-720', viewport: { width: 1280, height: 720 } }))).toEqual([
+      'playwright.m1-next-host.config.ts',
+      'chromium-swiftshader',
+    ]);
+    expect(() => m8({ viewport: { width: 1400, height: 1000 } })).toThrow(
+      'M8-N3: no 17a2b0a config stands in for playwright.m8-next-host.config.ts chromium-smoke at 1400x1000',
+    );
+    expect(() => m8({ deviceScaleFactor: 2 })).toThrow(
+      'has 0 rows of playwright.m2-next-host.config.ts',
+    );
   });
 });
 

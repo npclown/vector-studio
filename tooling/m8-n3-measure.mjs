@@ -6,7 +6,7 @@
 //
 // - `origin`: the canvas content box's origin (`getBoundingClientRect` plus `clientLeft/Top`);
 // - `canvasRow`: the width (right edge of its last child) and height of the canvas row;
-// - `aside`: the computed width of the Appearance aside, `appearance-panel`;
+// - `aside`: the border-box width of the Appearance aside, `appearance-panel`;
 // - `rightColumn`: width and height of the right column (`right-column`), absent before M8-U6;
 // - `row1Width`, `row2Width`: the right edge of each toolbar row's last child, from the row's left;
 // - `row2Height`, and `row2RenameHeight` with a page rename textbox open (null when double-click
@@ -17,12 +17,16 @@
 // script measures 17a2b0a through a separate git worktree:
 //
 //   node tooling/m8-n3-measure.mjs --root <checkout> [--port 4299] [--json out.json]
-//     [--executable /path/to/chromium] [--headed] [--channel chrome|msedge]
+//     [--executable /path/to/chromium] [--headed [--channel chrome|msedge]]
 //
-// Headless Chromium draws no scrollbars, so the widths it reports are those of a window with
-// overlay scrollbars; a headed run on a machine with classic scrollbars (`--headed --channel`)
-// shows the narrower layout the contract measures (M8-N3). The script only observes; it asserts
-// nothing and changes no file of the checkout.
+// Without `--headed` it measures the headless (smoke) projects, in one headless Chromium (the
+// bundled one, or `--executable`). With `--headed` it measures the headed projects instead, each
+// in its own project's channel (`chrome` or `msedge`, one headed browser per channel), so an Edge
+// project's row is never a Chrome measurement; `--channel` limits the run to one channel. Each
+// row records the channel and mode it was measured in, which tests/support/m8-n3-budget.ts
+// checks against the project that reads it. Headless Chromium draws no scrollbars; a headed run
+// on a machine with classic scrollbars shows the narrower layout the contract measures (M8-N3).
+// The script only observes; it asserts nothing and changes no file of the checkout.
 /* global fetch, setTimeout, window */
 import { spawn } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
@@ -147,7 +151,7 @@ function table(rows) {
         ? '–'
         : `${round(row.rightColumn.width)} × ${round(row.rightColumn.height)}`;
     lines.push(
-      `| ${row.config.replace(/^playwright\.|\.config\.ts$/gu, '')} | ${row.project} | ` +
+      `| ${row.config.replace(/^playwright\.|\.config\.ts$/gu, '')} | ${row.project} (${row.channel ?? 'chromium'}${row.headless ? ', headless' : ''}) | ` +
         `${row.viewport.width} × ${row.viewport.height} @${row.deviceScaleFactor} | ` +
         `${round(row.origin.x)}, ${round(row.origin.y)} | ` +
         `${round(row.canvasRow.width)} × ${round(row.canvasRow.height)} | ${round(row.aside)} | ` +
@@ -166,31 +170,49 @@ const { chromium } = createRequire(path.join(options.root, 'package.json'))('@pl
 const rows = [];
 for (const file of await nextHostConfigs(options.root))
   rows.push(...(await projectsOf(options.root, file)));
+const selected = rows.filter((row) =>
+  options.headed
+    ? !row.headless && (options.channel === undefined || row.channel === options.channel)
+    : row.headless,
+);
+if (selected.length === 0) throw new Error('no project to measure');
 const server = await startServer(options.root, options.port);
-const browser = await chromium.launch({
-  headless: !options.headed,
-  ...(options.channel === undefined ? {} : { channel: options.channel }),
-  ...(options.executable === undefined ? {} : { executablePath: options.executable }),
-  args: [
-    '--enable-unsafe-webgpu',
-    '--enable-unsafe-swiftshader',
-    '--use-webgpu-adapter=swiftshader',
-  ],
-});
+const args = [
+  '--enable-unsafe-webgpu',
+  '--enable-unsafe-swiftshader',
+  '--use-webgpu-adapter=swiftshader',
+];
+/** One browser per channel (null: the bundled or `--executable` Chromium), launched on first use. */
+const browsers = new Map();
+async function browserFor(channel) {
+  if (!browsers.has(channel)) {
+    browsers.set(
+      channel,
+      await chromium.launch({
+        headless: !options.headed,
+        args,
+        ...(channel === null ? {} : { channel }),
+        ...(channel === null && options.executable !== undefined
+          ? { executablePath: options.executable }
+          : {}),
+      }),
+    );
+  }
+  return browsers.get(channel);
+}
 const results = [];
 try {
-  for (const row of rows) results.push(await measure(browser, server.base, row));
+  for (const row of selected) {
+    const browser = await browserFor(options.headed ? row.channel : null);
+    const measured = await measure(browser, server.base, row);
+    // The channel and mode this row was measured in, and the browser's version.
+    results.push({ ...measured, browser: browser.version() });
+  }
 } finally {
-  await browser.close();
+  for (const browser of browsers.values()) await browser.close();
   server.stop();
 }
-const record = {
-  root: options.root,
-  headed: options.headed,
-  channel: options.channel ?? null,
-  browser: browser.version(),
-  results,
-};
+const record = { root: options.root, headed: options.headed, results };
 if (options.json !== undefined)
   await writeFile(options.json, `${JSON.stringify(record, null, 2)}\n`);
 process.stdout.write(`${table(results)}\n`);

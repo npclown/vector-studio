@@ -114,7 +114,13 @@ async function atScale(
 
 /** The port's layouts of `CASES` at DPR 1 (layout zoom 1), checking the host carries zoom 1. */
 async function dprOneReference(browser: Browser): Promise<TextLayoutResult[]> {
-  const page = await (await browser.newContext({ deviceScaleFactor: 1 })).newPage();
+  // The project's 1280 × 900 viewport, stated: `newContext` would otherwise give 1280 × 720, and
+  // the M8-N3 budget compares with the 17a2b0a row of this 1280 × 900 project.
+  const context = await browser.newContext({
+    deviceScaleFactor: 1,
+    viewport: { width: 1280, height: 900 },
+  });
+  const page = await context.newPage();
   await open(page, true);
   const results = await layoutAll(
     page,

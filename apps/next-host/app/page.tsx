@@ -320,29 +320,32 @@ function StarButton() {
  * M8-N3 rule 1 (M8-U6): keeps toolbar row 1 at its 17a2b0a height, so the canvas origin is
  * unchanged. At 17a2b0a row 1 was wider than the viewport, so its flex items shrank and the
  * two-word labels ("toggle closed", "Save file", "Open file") wrapped onto two lines; the row now
- * fits, its labels stay on one line, and this hidden two-line button holds the row's height at
- * that of a wrapped button in the browser's own control font, on any machine. It has no width,
- * no name and takes no focus or pointer.
+ * fits, its labels stay on one line, and this hidden, zero-width element holds the row's height
+ * at that of a wrapped button: two lines in the browser's control font (`-webkit-small-control`,
+ * the user-agent font of a button) with a button's 1 px padding and 2 px border above and below.
+ * It is not interactive and has no name.
  */
 function RowHeightStrut() {
   return (
-    <button
-      type="button"
+    <span
       aria-hidden
-      tabIndex={-1}
       data-testid="row-1-strut"
       style={{
+        display: 'inline-block',
         visibility: 'hidden',
         width: 0,
-        paddingInline: 0,
-        borderInlineWidth: 0,
-        pointerEvents: 'none',
+        overflow: 'hidden',
+        font: '-webkit-small-control',
+        lineHeight: 'normal',
+        paddingBlock: 1,
+        borderBlock: '2px solid transparent',
+        boxSizing: 'border-box',
       }}
     >
       &nbsp;
       <br />
       &nbsp;
-    </button>
+    </span>
   );
 }
 

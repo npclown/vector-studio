@@ -10,9 +10,9 @@ export type LayoutReading = {
   origin: { x: number; y: number };
   /** The canvas row: its height, and its width up to the right edge of its last child. */
   canvasRow: { width: number | null; height: number | null };
-  /** The computed width of the Appearance aside or section (`appearance-panel`). */
+  /** The border-box width of the Appearance aside or section (`appearance-panel`). */
   aside: number | null;
-  /** The right column (`right-column`, since M8-U6), or null. */
+  /** The right column's border box (`right-column`, since M8-U6), or null. */
   rightColumn: { width: number; height: number | null; overflowY: string } | null;
   /** Each toolbar row's width up to the right edge of its last child. */
   row1Width: number | null;
@@ -57,7 +57,7 @@ export function readLayout(): LayoutReading {
   return {
     origin: { x: rect.left + canvas.clientLeft, y: rect.top + canvas.clientTop },
     canvasRow: { width: extent(canvasRow), height: height(canvasRow) },
-    aside: aside === null ? null : Number.parseFloat(getComputedStyle(aside).width),
+    aside: aside === null ? null : aside.getBoundingClientRect().width,
     rightColumn:
       column === null
         ? null
