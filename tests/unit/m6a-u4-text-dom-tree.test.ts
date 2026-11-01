@@ -126,6 +126,7 @@ function apply(
     fakeDocument,
     request(runs),
     runs.map(() => '"F"'),
+    'ko',
   );
   const root = block(tree);
   const measured = graphemes(runs, rowOf);
@@ -164,6 +165,7 @@ describe('M6a-U4 run tree (review r1 S2, review r2)', () => {
         { text: 'c\n', family: 'B', size: 10 },
       ]),
       ['"A"', '"B"'],
+      'ko',
     );
     expect(contents(block(tree))).toBe('{"a"} ["\\n"] ["\\n"] {"b"} {"c"} ["\\n"] ["​"]');
     const style = {
@@ -185,9 +187,12 @@ describe('M6a-U4 run tree (review r1 S2, review r2)', () => {
   });
 
   it('gives an empty text only the sentinel', () => {
-    const tree = buildRunTree(fakeDocument, request([{ text: '', family: 'A', size: 10 }]), [
-      '"A"',
-    ]);
+    const tree = buildRunTree(
+      fakeDocument,
+      request([{ text: '', family: 'A', size: 10 }]),
+      ['"A"'],
+      'ko',
+    );
     expect(contents(block(tree))).toBe('["​"]');
   });
 });
