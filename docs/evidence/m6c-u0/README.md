@@ -1,6 +1,6 @@
 # M6c-U0: the zoom-125 % position difference (cause and text-dom fix)
 
-**Date: 2026-10-31 (review r1 follow-ups applied the same day). Status: cause found, rule (a) fix in text-dom, container checks PASS; main-PC re-runs (automated) at `9ea2c34` and `83822bf` PASS on the position bound and the bump rule; hand-run rows NOT RUN; final review r2 commit container-verified only, its main-PC run owed before M6c-U3.**
+**Date: 2026-10-31 (review r1 follow-ups applied the same day). Status: cause found, rule (a) fix in text-dom, container checks PASS; main-PC re-runs (automated) at `9ea2c34` and `83822bf` PASS on the position bound and the bump rule; hand-run rows NOT RUN; final review r2 commit container-verified only, its main-PC run owed before M6c-U3; since M6c-U3 changed text-dom's measurement (span `lang`, no override for Common-only nodes, 2026-10-31), that run is owed at or after the final M6c-U3 commit.**
 
 This note follows [the M6c contract, section 3](../../plans/mvp-m6c-gpu-text-contract.md#3-zoom-125--investigation-u0-first) (M6c-A01, unit M6c-U0). It explains the FAIL in [m6a-a12-dpr-manual.md](../m6a-a12-dpr-manual.md): at browser zoom 125 % every row was off by up to 1/32 px.
 
@@ -178,4 +178,4 @@ Results:
 
 Unit tests: 65 passed. `pnpm test:m6c-u0-zoom`: 2 passed.
 
-**Owed.** This commit is container-verified only. A main-PC run at the final code is owed before M6c-U3 and the M6c exit, not before U0 merges: `probe.mjs` in Edge, `pnpm test:m6c-u0-zoom` and headed `pnpm test:m6a-next-host`.
+**Owed.** This commit is container-verified only. A main-PC run at the final code is owed before M6c-U3 and the M6c exit, not before U0 merges: `probe.mjs` in Edge, `pnpm test:m6c-u0-zoom` and headed `pnpm test:m6a-next-host`. **Amended 2026-10-31 (M6c-U3 review r1):** M6c-U3 changed text-dom's measured layout (M6a section 4, M6c-U3 amendments), so this run is owed at or after the final M6c-U3 commit, not before it.

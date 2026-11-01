@@ -34,7 +34,7 @@ export type GlyphRasterResult =
 
 export interface GlyphRasterPort {
   readonly portVersion: 0;
-  /** Names the implementation, for example 'canvas-2d/raster-v0'. */
+  /** Names the implementation, for example 'canvas-2d/raster-v1'. */
   readonly operationId: string;
   /** Synchronous; a throw is caught by the renderer and reported (E28-D3). */
   rasterize(request: GlyphRasterRequest): GlyphRasterResult;

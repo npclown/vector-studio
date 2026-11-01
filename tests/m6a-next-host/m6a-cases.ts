@@ -76,6 +76,10 @@ export const A11_CASES: readonly Case[] = [
   c('right aligned', [run('ab cd ef')], { width: 50, align: 'right' }),
   c('centred', [run('ab cd ef')], { width: 50, align: 'center' }),
   c('negative letter spacing', [run('abc')], { letterSpacing: -0.8 }),
+  // M6c-U3 review r2: a node of Common characters only is measured without the bidi override
+  // (M6a-L1 amendment, 2026-10-31), so runs may shape across their boundary; A11 checks it.
+  c('Common only, mixed sizes', [run('3.14 ', 20), run('100%', 40)]),
+  c('Common only, letter spacing', [run('3.14 ', 20), run('100%', 20)], { letterSpacing: 0.3 }),
 ];
 
 /** The M6a-U4 review r3 carry list, (a) to (e) and (g); (f) and (h) are tests of their own. */

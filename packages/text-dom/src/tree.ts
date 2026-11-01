@@ -1,5 +1,6 @@
 import type { TextLayoutRequest } from '@vector-studio/contracts';
 import type { Grapheme, LineSlot } from './assemble.js';
+import { needsBidiOverride, runDeclarations, TEXT_DECLARATIONS } from './style.js';
 
 // The measurement block's content (docs/plans/mvp-m6a-text-model-contract.md, section 4, with
 // the M6a-U4 amendments of section 16) and the pass-2 insertions, kept apart from the reading so
@@ -8,8 +9,9 @@ import type { Grapheme, LineSlot } from './assemble.js';
 
 /**
  * Each run is a sequence of sibling spans, each with the run's font, size, letter spacing and
- * line height: its text between LFs in spans that also set `direction: ltr; unicode-bidi:
- * bidi-override`, and each LF in a span of its own without the override. An LF inside a
+ * line height and the layout's `lang` (see `runSpan`): its text between LFs in spans that also
+ * set `direction: ltr; unicode-bidi: bidi-override` (unless the node needs no override,
+ * `needsBidiOverride`), and each LF in a span of its own without the override. An LF inside a
  * `bidi-override` span carried that run's line height onto the next line in Chromium (review r1
  * S2); an override span nested in a run span put an extra edge at run boundaries, which made an
  * emergency break there (width 0) add a line height (review r2, `ab` at 10 then `CD` at 40).
@@ -78,19 +80,30 @@ export class RunText {
   }
 }
 
-/** A span in run `index`'s style: font list, size, letter spacing and line height. */
+/**
+ * A span in run `index`'s style: font list, size, letter spacing and line height (style.ts), and
+ * the layout's `lang` as its own attribute. The block's `all: initial` resets the locale the
+ * block's `lang` attribute sets (Chromium's `-webkit-locale`), so without a span's own attribute
+ * the text shaped with no locale and the font's default forms, while the glyph raster port draws
+ * with the context's `lang` and so the locale's `locl` forms (M6c-U3 follow-up, contract U3 notes).
+ */
 export function runSpan(
   document: Document,
   request: TextLayoutRequest,
   fontLists: readonly string[],
   index: number,
+  lang: string,
 ): HTMLElement {
   const run = request.runs[index]!;
   const span = document.createElement('span');
-  span.style.setProperty('font-family', fontLists[index]!);
-  span.style.setProperty('font-size', `${run.size}px`);
-  span.style.setProperty('letter-spacing', `${request.letterSpacing}em`);
-  span.style.setProperty('line-height', String(request.lineHeight));
+  span.lang = lang;
+  const declarations = runDeclarations({
+    fontList: fontLists[index]!,
+    size: run.size,
+    letterSpacing: request.letterSpacing,
+    lineHeight: request.lineHeight,
+  });
+  for (const [property, value] of declarations) span.style.setProperty(property, value);
   return span;
 }
 
@@ -121,13 +134,15 @@ export function buildRunTree(
   document: Document,
   request: TextLayoutRequest,
   fontLists: readonly string[],
+  lang: string,
 ): RunTree {
-  const styled = (index: number): HTMLElement => runSpan(document, request, fontLists, index);
+  const styled = (index: number): HTMLElement => runSpan(document, request, fontLists, index, lang);
   const elements: HTMLElement[] = [];
   const runLast: (HTMLElement | null)[] = [];
   const texts: RunText[] = [];
   const runStarts: number[] = [];
   let textLength = 0;
+  const override = needsBidiOverride(request.runs);
   request.runs.forEach((run, index) => {
     const text = new RunText();
     let last: HTMLElement | null = null;
@@ -135,9 +150,8 @@ export function buildRunTree(
     for (const piece of run.text.split(/(\n)/u)) {
       if (piece.length === 0) continue;
       const span = styled(index);
-      if (piece !== '\n') {
-        span.style.setProperty('direction', 'ltr');
-        span.style.setProperty('unicode-bidi', 'bidi-override');
+      if (piece !== '\n' && override) {
+        for (const [property, value] of TEXT_DECLARATIONS) span.style.setProperty(property, value);
       }
       const node = document.createTextNode(piece);
       span.append(node);

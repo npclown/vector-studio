@@ -9,7 +9,8 @@ import type { TextLayoutRequest, TextLayoutResult } from '@vector-studio/contrac
 // measurement scale (M6-Q3 (b), contract section 3.2: sizes and width times the scale, every
 // reference length divided by it, the scale passed in by the spec from text-dom's constants): the block
 // styles of section 4 (zero-size strut, `keep-all`, `overflow-wrap: anywhere`, no ligatures,
-// `text-spacing-trim: space-all`, `text-autospace: no-autospace`, `lang`), one span per run with
+// `text-spacing-trim: space-all`, `text-autospace: no-autospace`, `lang`), one span per run (with
+// the `lang` too, since the block's `all: initial` resets the locale its own `lang` sets) with
 // the result's font list, size, letter spacing in em and unitless line height, no bidi override,
 // no `<br>` and no probe, plus text-dom's U+200B sentinel when the text is empty or ends in LF.
 //
@@ -162,6 +163,7 @@ export function installProbe({
       const text = run.text.slice(0, Math.max(0, cut - start));
       start += run.text.length;
       const span = document.createElement('span');
+      span.lang = lang;
       span.style.cssText = spanStyle(fontLists[index]!, run.size, request);
       span.textContent = text;
       spans.push(span);
@@ -170,6 +172,7 @@ export function installProbe({
     if (sentinel) {
       const last = request.runs.length - 1;
       const span = document.createElement('span');
+      span.lang = lang;
       span.style.cssText = spanStyle(fontLists[last]!, request.runs[last]!.size, request);
       span.textContent = '\u200b';
       block.append(span);
@@ -199,6 +202,7 @@ export function installProbe({
     block.lang = lang;
     block.style.cssText = blockStyle('max-content');
     const span = document.createElement('span');
+    span.lang = lang;
     span.style.cssText = spanStyle(fontList, size, request);
     span.textContent = text;
     const marker = document.createElement('span');

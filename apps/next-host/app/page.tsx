@@ -50,6 +50,13 @@ import { BENCH_CANVAS, benchDatabaseName, pageBench } from '../src/e26-bench';
 import { AppearancePanel } from '../src/m4-appearance-panel';
 import { SelectionOverlay } from '../src/overlay';
 import { createWebGpuRenderer } from '../src/webgpu-renderer';
+import type { ClusterRead, ClusterRect, FrameCrop, TextScene } from '../src/m6c-text-probe';
+import type {
+  FlowedReference,
+  MinimumFontSize,
+  PlacedReference,
+  PlacedReferenceOptions,
+} from '../src/m6c-text-reference';
 
 // P5-U6 (P5 plan, section 6): the P5 editor page. Its static module graph is React and the
 // editor packages only; the renderer is created in the canvas effect (see webgpu-renderer.ts).
@@ -87,6 +94,15 @@ import { createWebGpuRenderer } from '../src/webgpu-renderer';
 // `textLayout` session event; `?fixture=text-edit` registers the test font, loads the M6b edit
 // fixture at zoom 2 and sets the text tool style to the test font (M6b-Q7 (a)); the test hook's
 // `textEdit` member logs DOM focus, prevention, key, input, composition and clipboard events.
+// M6c-U2 (M6c contract, section 5): the renderer draws text (`text: 'atlas'`), so `?fixture=text`
+// and `?fixture=text-edit` show their text; `?fixture=text-gpu` registers the test font and loads
+// the M6c GPU text fixture at zoom 1 (page `agreement`, then `scene`); the test hook's `text`
+// member gains `scene()`, `readCluster(id, index)` and `clusterRects(id)` from the cluster probe
+// (src/m6c-text-probe.ts), which is imported only under `?test=1`.
+// M6c-U3 (M6c contract, sections 5 and 6.1, U2 note 3): the hook's `text` member gains
+// `reference(id)` (the flowed DOM block), `reference(id, index)` (the placed DOM cluster, read back
+// by `readReference` from the spec's screenshot), `clearReference()` and `minimumFontSize()`, with
+// text-dom's reference styles (src/m6c-text-reference.ts), also imported only under `?test=1`.
 
 const WIDTH = 960;
 const HEIGHT = 640;
@@ -124,6 +140,11 @@ const FIXTURES: Readonly<
     textStyle: TEXT_EDIT_TOOL_STYLE,
   },
   appearance: { url: '/m4-appearance.json', camera: { position: { x: 0, y: 0 }, zoom: 1 } },
+  'text-gpu': {
+    url: '/m6c-text-gpu.json',
+    camera: { position: { x: 0, y: 0 }, zoom: 1 },
+    font: true,
+  },
 };
 /** A rotate cursor (a circular arrow) with a standard fallback; the hotspot is its centre. */
 const ROTATE_CURSOR =
@@ -152,12 +173,66 @@ declare global {
       events: readonly EditorEvent[];
       /** M5 contract, section 5.3; resolves at once without `?persist=1` or autosave. */
       persistence: Readonly<{ flush(): Promise<void> }>;
-      /** M6a contract, section 5: the editor's text-dom port and the test font. */
-      text: TextTestHook;
+      /**
+       * M6a contract, section 5: the editor's text-dom port and the test font; M6c contract,
+       * section 5: the probe's members (null and a rejection while no renderer exists).
+       */
+      text: TextTestHook & TextProbeHook & TextReferenceHook;
       /** M6b-U9: the DOM event log of text edit mode. */
       textEdit: TextEditTestHook;
     }>;
   }
+}
+
+/** M6c-U2: the cluster probe's hook members; the module loads on first use. */
+type TextProbeHook = Readonly<{
+  scene(): Promise<TextScene | null>;
+  readCluster(id: string, index: number): Promise<ClusterRead>;
+  /** Test support for M6c-A04's per-cluster ink check: each cluster's port bitmap rectangle. */
+  clusterRects(id: string): Promise<readonly ClusterRect[]>;
+}>;
+
+const textProbeHook: TextProbeHook = {
+  scene: async () => (await import('../src/m6c-text-probe')).textScene(),
+  readCluster: async (id, index) => (await import('../src/m6c-text-probe')).readCluster(id, index),
+  clusterRects: async (id) => (await import('../src/m6c-text-probe')).clusterRects(id),
+};
+
+/** M6c-U3: the DOM reference's hook members; the module loads on first use. */
+type TextReferenceHook = Readonly<{
+  /** The flowed DOM block of a projected leaf (the layout term, recorded). */
+  reference: {
+    (id: string): Promise<FlowedReference>;
+    /** Shows the placed DOM cluster `index`; screenshot its `clip`, then `readReference`. */
+    (id: string, index: number, options?: PlacedReferenceOptions): Promise<PlacedReference>;
+  };
+  /** The shown placed cluster's screenshot (PNG, base64) as a device px crop; removes it. */
+  readReference(pngBase64: string): Promise<FrameCrop>;
+  clearReference(): Promise<void>;
+  /** M6-S0's minimum-font-size probe in a font list and `lang`, with text-dom's styles. */
+  minimumFontSize(fontList: string, lang: string): Promise<MinimumFontSize>;
+}>;
+
+function textReferenceHook(editor: Editor): TextReferenceHook {
+  const load = () => import('../src/m6c-text-reference');
+  async function reference(id: string): Promise<FlowedReference>;
+  async function reference(
+    id: string,
+    index: number,
+    options?: PlacedReferenceOptions,
+  ): Promise<PlacedReference>;
+  async function reference(id: string, index?: number, options?: PlacedReferenceOptions) {
+    const loaded = await load();
+    return index === undefined
+      ? loaded.flowedReference(editor, id)
+      : loaded.placeReference(editor, id, index, options);
+  }
+  return {
+    reference,
+    readReference: async (png) => (await load()).readReference(png),
+    clearReference: async () => (await load()).clearReference(),
+    minimumFontSize: async (fontList, lang) => (await load()).minimumFontSize(fontList, lang),
+  };
 }
 
 /** The page's persistence state for the toolbar and status (section 5.3). */
@@ -791,7 +866,7 @@ function Host({ state, textFont }: { state: HostCompositionState; textFont: Test
       editor,
       events,
       persistence: { flush: () => session.current?.flush() ?? Promise.resolve() },
-      text: textTestHook(state),
+      text: { ...textTestHook(state), ...textProbeHook, ...textReferenceHook(editor) },
       textEdit: textEdit.hook,
     };
     return () => {
