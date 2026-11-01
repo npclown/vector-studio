@@ -194,7 +194,7 @@ M8 "closes after M7" (MVP plan section 7); M7 was accepted on 2026-10-30, and th
 | M8-U2 | In review: independent review r1 NOT READY (shared-memo owner), fixed; r2 READY; notes below |
 | M8-U3 | In review: independent review r1 READY WITH FOLLOW-UPS, applied; r2 READY, minor follow-ups applied; notes below |
 | M8-U4 | In review: independent review r1 READY WITH FOLLOW-UPS, applied as notes below |
-| M8-U5 | Not started |
+| M8-U5 | In review: independent review r1 READY WITH FOLLOW-UPS, applied; notes below |
 | M8-U6 | Not started |
 | M8-U7 | Not started |
 | M8-U8 | Not started |
@@ -235,3 +235,11 @@ M8 "closes after M7" (MVP plan section 7); M7 was accepted on 2026-10-30, and th
 - `LayerTree` is `<section data-testid="layers">`, 240 px high, with an `arrange` toolbar (`reorder-forward`, `reorder-backward`, `reorder-front`, `reorder-back`, enabled whenever something is selected; a move that changes nothing records no step), a `layers-refusal` output and a scrolling list. Rows are `layer-<id>` with `layer-toggle-<id>`, `layer-name-<id>` (`aria-pressed` = selected) and `layer-visible-<id>`; they form a plain list of buttons, not an ARIA tree, collapsed by default, front first. Mod in Shift or Mod toggle means Ctrl or Meta on any platform, as the canvas select tool reads it.
 - `layerRows` walks the whole active page on each document change; its cost is unmeasured (risk "Panel cost"; `?bench=1` does not mount it).
 - Browser-only behavior (click, double-click, Enter then blur, Escape, Shift and Mod click, expand) is left to M8-A14, which includes a rename by Enter then blur. M8-U6 checks the M8-N3 row 2 height with the rename textbox open against real metrics.
+
+### M8-U5 notes
+
+- The M4 appearance module and panel moved into `ui` (`appearance-model.ts`, `appearance-panel.tsx`, shared fields in `fields.tsx`); the M4 unit test imports `ui`'s copy with unchanged expectations. Until M8-U6 removes next-host's copies, an agreement block in `tests/unit/m8-u5-ui-property.test.ts` pins `ui`'s module text and markup to next-host's; M8-U6 deletes that block.
+- `AppearancePanel` takes `layout`: `'aside'` (default) is the 17a2b0a style (300 px wide, max height 640, its own scroller) for `?bench=1` (M8-N5); `'section'` drops size and scroller so the right column is the only scroller (M8-N3). `PropertyPanel` is `<section aria-label="Properties" data-testid="property-panel">` with `AppearancePanel layout="section"` and `PropertySections`; `PropertySections` is also exported.
+- Fields are editable with exactly one node selected; with several they are disabled and show the common value or "mixed". A section shows when any selected node has its fields. Transform edits send one `setFrames` with the stored parent-local frame and rotation in degrees (normalized to (-180, 180]); constraints show only for children of a frame or symbol; the symbol section shows only for exactly one source or instance.
+- At a collapsed caret the run fields show the caret's run and are disabled (M8-Q9 (a)). Local parsing rejects only text that cannot be a value (W and H at least 0, letter spacing -1 to 10, line height 0.1 to 10, font size above 0 and up to 4096, non-empty family); the editor refuses the rest, and a refusal shows in `property-refusal` only while its selection stays selected. A field's invalid draft resets when the selected node IDs change; the moved M4 panel keeps its M4 behavior (its `appearance-error` persists across selection changes).
+- New labels outside the Appearance landmark: X, Y, W, H, Rotation, Name, Visible ("Name and visibility" fieldset), Start arrow, End arrow, Horizontal constraint, Vertical constraint, Text sizing, Text align, Letter spacing, Line height, Font family, Font size, Text colour. Each override's "Reset text" button sits in a `role="group"` named by the source text node, so M8-A14 narrows by group and matches the button with `exact: true`; R5 buttons carry no test ID.
