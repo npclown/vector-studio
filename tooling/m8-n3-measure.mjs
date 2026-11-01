@@ -28,7 +28,7 @@
 // on a machine with classic scrollbars shows the narrower layout the contract measures (M8-N3).
 // The script only observes; it asserts nothing and changes no file of the checkout.
 /* global fetch, setTimeout, window */
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
@@ -57,6 +57,8 @@ function parseArguments(argv) {
   return options;
 }
 
+const windows = process.platform === 'win32';
+
 async function startServer(root, port) {
   // A server already on the port would be measured instead of this checkout's.
   const answered = await fetch(`http://127.0.0.1:${port}`).then(
@@ -77,12 +79,23 @@ async function startServer(root, port) {
       '-p',
       `${port}`,
     ],
-    // Its own process group, so stopping it also stops the server pnpm starts.
-    { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], detached: true },
+    // Its own process group, so stopping it also stops the server pnpm starts. On Windows
+    // `pnpm` is a `.cmd` shim, which only a shell resolves, and a process group cannot be
+    // signalled, so `taskkill /T` stops the tree instead.
+    {
+      cwd: root,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: !windows,
+      shell: windows,
+    },
   );
   const stop = () => {
     try {
-      process.kill(-child.pid, 'SIGTERM');
+      if (windows) {
+        execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+      } else {
+        process.kill(-child.pid, 'SIGTERM');
+      }
     } catch {
       // Already gone.
     }

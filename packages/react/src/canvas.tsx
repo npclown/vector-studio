@@ -105,6 +105,15 @@ function keyOf(event: KeyboardEvent): KeyLike {
   };
 }
 
+/**
+ * MVP M8 contract, M8-R4: an element inside `[data-text-edit-focus]` (the canvas, its textarea
+ * and the property panel's text run fields, `@vector-studio/ui`) keeps text edit mode when focus
+ * moves to it from the canvas.
+ */
+function keepsTextEdit(node: unknown): boolean {
+  const element = node as { closest?: (selector: string) => unknown };
+  return typeof element.closest === 'function' && element.closest('[data-text-edit-focus]') != null;
+}
 export function EditorCanvas({
   width,
   height,
@@ -167,6 +176,7 @@ export function EditorCanvas({
       input,
       (node) => node === canvas || node === textarea,
       textarea,
+      keepsTextEdit,
     );
     const scheduler = createMessageScheduler();
     const detachText = text.attach(scheduler.post);
@@ -221,6 +231,7 @@ export function EditorCanvas({
         width={width}
         height={height}
         tabIndex={0}
+        data-text-edit-focus=""
         className={className}
         style={{ display: 'block', width, height, touchAction: 'none', ...style }}
         onPointerDown={(event) => input.pointerDown(event)}
@@ -237,6 +248,7 @@ export function EditorCanvas({
       <textarea
         ref={textareaRef}
         aria-label="Text input"
+        data-text-edit-focus=""
         tabIndex={-1}
         spellCheck={false}
         autoComplete="off"

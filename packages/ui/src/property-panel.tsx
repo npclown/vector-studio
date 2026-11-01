@@ -197,12 +197,15 @@ function TextSection({
   editable,
   textEdit,
   run,
+  exitTextEdit,
 }: {
   texts: readonly TextNode[];
   /** One node is selected, and it is this text node. */
   editable: boolean;
   textEdit: TextEditState | null;
   run: Run;
+  /** Ends text edit mode when focus leaves a run field for outside the canvas (M8-R4). */
+  exitTextEdit: () => void;
 }) {
   const only = editable ? texts[0]! : null;
   // The run fields edit the text edit selection, the whole text without one, and are disabled
@@ -264,6 +267,7 @@ function TextSection({
           label="Font family"
           value={family.state === 'one' ? family.value : null}
           disabled={runsDisabled}
+          onLeaveTextEdit={exitTextEdit}
           commit={(text) => {
             const value = parseFamily(text);
             return value !== null && setStyle({ family: value });
@@ -274,6 +278,7 @@ function TextSection({
           label="Font size"
           value={commonText(size)}
           disabled={runsDisabled}
+          onLeaveTextEdit={exitTextEdit}
           commit={(text) => {
             const value = parseFontSize(text);
             return value !== null && setStyle({ size: value });
@@ -284,6 +289,7 @@ function TextSection({
           label="Text colour"
           value={color.state === 'one' ? colorHex(color.value) : null}
           disabled={runsDisabled}
+          onLeaveTextEdit={exitTextEdit}
           commit={(text) => {
             const alpha = color.state === 'one' ? color.value.a : 1;
             const value = parseHex(text, alpha);
@@ -362,6 +368,13 @@ export function PropertySections() {
     setStatus(refusalText(result));
     return result.ok;
   };
+  // M8-R4: a run field keeps the text edit selection while focused; leaving it for anything but
+  // the canvas, another run field or the window (Alt+Tab keeps edit mode, as M6b-H2) exits.
+  const exitTextEdit = () => {
+    if (textEdit !== null && globalThis.document?.hasFocus() === true) {
+      execute({ type: 'exitTextEdit' });
+    }
+  };
   const constrained = constrainedNodes(document, nodes);
   const texts = textNodes(nodes);
   return (
@@ -373,7 +386,13 @@ export function PropertySections() {
         <ConstraintSection nodes={constrained} editable={nodes.length === 1} run={run} />
       )}
       {texts.length > 0 && (
-        <TextSection texts={texts} editable={nodes.length === 1} textEdit={textEdit} run={run} />
+        <TextSection
+          texts={texts}
+          editable={nodes.length === 1}
+          textEdit={textEdit}
+          run={run}
+          exitTextEdit={exitTextEdit}
+        />
       )}
       <SymbolSection
         document={document}

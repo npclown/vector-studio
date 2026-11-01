@@ -415,18 +415,23 @@ export function attachCanvasListeners(
   input: CanvasInput,
   isFocusTarget: (node: unknown) => boolean,
   textarea: ListenerTarget | null = null,
+  keepsTextEdit: (node: unknown) => boolean = () => false,
 ): () => void {
   const onWheel = (event: Event) => input.wheel(event as WheelEvent);
   // M6b-H2: the canvas and the textarea are one focus target; M6b-H5's own blur is neither a
   // reset nor an exit. A blur that leaves the target ends the host's composition (before the
   // reset, whose pointercancel would otherwise end it as the editor's own forced end), resets
-  // input, then exits edit mode when it is an element blur (text-input.ts).
+  // input, then exits edit mode when it is an element blur (text-input.ts). MVP M8 contract,
+  // M8-R4: focus moving to a control that `keepsTextEdit` names (the property panel's text run
+  // fields) ends the composition and resets input but keeps edit mode, so the control edits the
+  // text edit selection; that control exits edit mode when focus leaves it for anything else.
   const onBlur = (event: Event) => {
     if (input.text?.hostBlurring === true) return;
     const next = (event as FocusEvent).relatedTarget;
     if (next !== null && next !== undefined && isFocusTarget(next)) return;
     input.text?.endForBlur();
     input.reset();
+    if (next !== null && next !== undefined && keepsTextEdit(next)) return;
     input.text?.exitForBlur();
   };
   const onWindowBlur = () => {

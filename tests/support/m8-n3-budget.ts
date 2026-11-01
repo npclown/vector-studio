@@ -129,10 +129,14 @@ function baselineFor(reader: BaselineReader): BaselineRow {
   return selectBaseline(record.results, reader, file);
 }
 
-/** Asserts the M8-N3 budget (or, with `?bench=1`, the M8-N5 aside) on the loaded page. */
+/**
+ * Asserts the M8-N3 budget (or, with `?bench=1`, the M8-N5 aside) on the loaded page.
+ * `statusLines`: the height in CSS px of status lines 17a2b0a had no counterpart for (the M8
+ * spec's `?test=1&faults=1` `panel-error` lines, M8-N2), which may add to the document height.
+ */
 export async function expectLayoutBudget(
   page: Page,
-  options: Readonly<{ bench?: boolean; rename?: boolean }> = {},
+  options: Readonly<{ bench?: boolean; rename?: boolean; statusLines?: number }> = {},
 ): Promise<void> {
   const info = test.info();
   const use = info.project.use;
@@ -157,7 +161,7 @@ export async function expectLayoutBudget(
     base.scroll.scrollWidth,
   );
   expect(live.scroll.scrollHeight, `${where}: scrollHeight`).toBeLessThanOrEqual(
-    base.scroll.scrollHeight,
+    base.scroll.scrollHeight + (options.statusLines ?? 0),
   );
   const overflowed = (base.canvasRow.width ?? 0) > base.scroll.clientWidth;
   if (overflowed) {
