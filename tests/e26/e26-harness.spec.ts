@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
@@ -14,6 +14,9 @@ import {
   isolationBoundsMs,
   isolationTargets,
   loadScenarioDocument,
+  M9_SCENARIOS,
+  M9_WINDOW,
+  m9Configuration,
   sha256,
   visibility,
   type E26Camera,
@@ -21,6 +24,16 @@ import {
   type E26Scenario,
 } from './scenarios';
 import { m1A13MoveSelection } from '../m1-a13/document';
+import { generateM9V2Document } from '../m9/document';
+import {
+  compactLayout,
+  M9_LAYOUT_TABLE,
+  m9LayoutRequests,
+  requestKey,
+  type M9LayoutTable,
+} from '../m9/layouts';
+import { parseDocument } from '@vector-studio/model';
+import type { TextLayoutRequest, TextLayoutResult } from '@vector-studio/contracts';
 import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
 // E26-U1c (E26 contract, sections 3 and 6): the headed harness. Each test is one repetition of
@@ -55,6 +68,26 @@ import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 // The harness checks that each run completed and recorded its metrics; it does not assert the
 // targets, because a baseline records misses. U6b's exit record reads the targets from the run
 // records (maximum per-run p95, no rounding allowance).
+//
+// M9-U1 (M9 contract, sections 3.2 and 4): the M9 scenarios (`M9_SCENARIOS`) run only in the
+// `-v2` projects (1600 x 1000) and the v1 ones only in the others, so each sitting runs both.
+// An M9 run opens with `ui=1` (and `doc=m9-v2` for the v2 document), checks the right column
+// beside the unchanged canvas, and before the warm-up clicks `layer-toggle-<id>` down the move
+// selection's ancestry, recording the expanded IDs and the row count shown. Its configuration is
+// `m9Configuration`'s (the E26 configuration with an `m9` record).
+//   - `e26-pointer-busy-10k/v2` (busy): as v1, plus the font-load change 2.0 s after pointer
+//     down, the test font registered under the second family through the bench hook, marked
+//     `m9-font-load`; the long tasks it overlaps are flagged, not exempt (M9-Q3). The plain
+//     variant drops it with the fill and the rejection.
+//   - `m9-typing-10k/v1`: `persist=1`, the load's write awaited, the typical view, the bench's
+//     typing seam (`enterTextEdit` on the 60-cluster node with the caret at 60), then 40 ASCII
+//     characters through `page.keyboard`, each sent on a 120 ms cadence without waiting for the
+//     page, as the latency drag's moves are; `keyToWorkDoneMs` per key from the bench hook.
+//   - `m9-v2-layouts` (only when `E26_SCENARIOS` names it): lays out every page-1 text request
+//     of the v2 document through the page's port (`?test=1`) and compares the answers with the
+//     committed table tests/m9/m9-v2-layouts.json, or writes it with `M9_RECORD_LAYOUTS=1`.
+//   - `m9-ui-geometry`: the canvas size and origin are equal with and without `ui=1`, and no
+//     bench flag does anything without `?bench=1` (M9-A03).
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const resultsDirectory = process.env.E26_RESULTS_DIR ?? path.join(root, 'test-results/e26-runs');
@@ -74,17 +107,23 @@ const git = (command: string): string | null => {
 const commit = git('git rev-parse HEAD') ?? 'unknown';
 const dirty = (git('git status --porcelain --untracked-files=no') ?? 'unknown') !== '';
 
-type Variant = 'frame' | 'busy' | 'plain';
-const runs: { scenario: E26Scenario; variant: Variant }[] = E26_SCENARIOS.filter(
-  (scenario) => filter.length === 0 || filter.some((entry) => scenario.id.startsWith(entry)),
-).flatMap((scenario): { scenario: E26Scenario; variant: Variant }[] =>
-  scenario.interaction === 'latency-drag'
-    ? [
-        { scenario, variant: 'busy' },
-        { scenario, variant: 'plain' },
-      ]
-    : [{ scenario, variant: 'frame' }],
-);
+type Variant = 'frame' | 'busy' | 'plain' | 'typing';
+const runs: { scenario: E26Scenario; variant: Variant }[] = [...E26_SCENARIOS, ...M9_SCENARIOS]
+  .filter(
+    (scenario) => filter.length === 0 || filter.some((entry) => scenario.id.startsWith(entry)),
+  )
+  .flatMap((scenario): { scenario: E26Scenario; variant: Variant }[] =>
+    scenario.interaction === 'latency-drag'
+      ? [
+          { scenario, variant: 'busy' },
+          { scenario, variant: 'plain' },
+        ]
+      : scenario.interaction === 'typing'
+        ? [{ scenario, variant: 'typing' }]
+        : [{ scenario, variant: 'frame' }],
+  );
+/** M9-U1: the `-v2` projects run the M9 scenarios, the others the v1 ones. */
+const v2Project = (name: string) => name.endsWith('-v2');
 
 const loadedDocuments = new Map<E26Scenario['document'], E26Loaded>();
 function loaded(document: E26Scenario['document']): E26Loaded {
@@ -152,6 +191,21 @@ type PageHook = {
   longTasks: readonly { startMs: number; durationMs: number }[];
   longTasksAvailable: boolean;
   isolations(): readonly { startMs: number; durationMs: number }[];
+  keyLatencies: readonly {
+    inputMs: number;
+    revision: number;
+    doneMs: number | null;
+    failed?: true;
+  }[];
+  noChangeKeys: readonly number[];
+  registerTestFont(family: string): Promise<string>;
+  fontLoads: readonly {
+    family: string;
+    startMs: number;
+    endMs: number | null;
+    status: string | null;
+  }[];
+  enterTextEdit(id: string, offset: number): { ok: boolean; code?: string };
 };
 /** Installed before the page loads (`installProbe`): press and release times, focus, visibility. */
 type Probe = {
@@ -269,14 +323,21 @@ async function presence(page: Page) {
   }));
 }
 
-async function open(page: Page, query: string, errors: readonly string[]): Promise<void> {
-  await page.goto(`/?bench=1&${query}`);
+async function open(
+  page: Page,
+  query: string,
+  errors: readonly string[],
+  ui = false,
+): Promise<void> {
+  await page.goto(`/?bench=1&${query}${ui ? '&ui=1' : ''}`);
   const status = page.getByTestId('status');
   await expect(status).toHaveAttribute('data-fixture', 'bench-loaded', { timeout: 90_000 });
   await expect(status).toHaveAttribute('data-renderer', 'ready', { timeout: 90_000 });
   expect(errors).toEqual([]);
-  // M8-N3 (M8-U6): the layout budget against the 17a2b0a measurement of this project.
-  await expectLayoutBudget(page, { bench: true });
+  // M8-N3 (M8-U6): the layout budget against the 17a2b0a measurement of this project. M9-U1:
+  // 17a2b0a had no 1600 x 1000 bench project, so a `ui=1` run checks the column itself.
+  if (ui) await expectM9Column(page);
+  else await expectLayoutBudget(page, { bench: true });
   // The loaded scene reached the GPU: one more submission after both are set, and its work done.
   await page.evaluate(async () => {
     const backend = window.__e26Bench!.backend()!;
@@ -288,6 +349,67 @@ async function open(page: Page, query: string, errors: readonly string[]): Promi
     // A lost device rejects here; the run goes on so its record shows it (expectValidRun).
     await backend.waitForSubmittedWork().catch(() => undefined);
   });
+}
+
+/** The canvas content box (CSS px) and its backing size, and the side column's box. */
+async function canvasGeometry(page: Page) {
+  return page.evaluate(() => {
+    const canvas = document.querySelector('canvas')!;
+    const rect = canvas.getBoundingClientRect();
+    const box = (testId: string) => {
+      const element = document.querySelector(`[data-testid="${testId}"]`);
+      if (element === null) return null;
+      const value = element.getBoundingClientRect();
+      return { left: value.left, top: value.top, width: value.width, height: value.height };
+    };
+    return {
+      origin: { x: rect.left + canvas.clientLeft, y: rect.top + canvas.clientTop },
+      size: { width: canvas.clientWidth, height: canvas.clientHeight },
+      rightColumn: box('right-column'),
+      // The bench's own aside: an Appearance panel outside the right column.
+      aside:
+        document
+          .querySelector('[data-testid="appearance-panel"]')
+          ?.closest('[data-testid="right-column"]') === null
+          ? box('appearance-panel')
+          : null,
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+      bench: window.__e26Bench !== undefined,
+    };
+  });
+}
+
+/** M9-U1 (section 4): with `ui=1`, the right column beside the 1280 x 720 canvas, all in view. */
+async function expectM9Column(page: Page): Promise<void> {
+  expect(page.viewportSize(), 'the v2 viewport').toEqual(M9_WINDOW);
+  const live = await canvasGeometry(page);
+  expect(live.size, 'canvas CSS size').toEqual({ width: 1280, height: 720 });
+  expect(live.aside, 'no bench aside with ui=1').toBeNull();
+  const column = live.rightColumn;
+  expect(column, 'the right column').not.toBeNull();
+  expect(column!.left + column!.width, 'the column fits the window').toBeLessThanOrEqual(
+    live.innerWidth,
+  );
+  expect(column!.top + column!.height, 'the column fits the window').toBeLessThanOrEqual(
+    live.innerHeight,
+  );
+  expect(live.scrollWidth, 'no horizontal scroll').toBeLessThanOrEqual(live.clientWidth);
+}
+
+/**
+ * M9-U1 (section 4): clicks `layer-toggle-<id>` for each ID, page down, and returns the rows the
+ * layer tree then shows.
+ */
+async function expandLayers(page: Page, ids: readonly string[]): Promise<number> {
+  for (const id of ids) {
+    const toggle = page.getByTestId(`layer-toggle-${id}`);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  }
+  return page.getByTestId('layers').locator('li').count();
 }
 
 /** Runs editor commands in the page and checks each result. */
@@ -365,18 +487,191 @@ function record(name: string, value: unknown): void {
   writeFileSync(path.join(resultsDirectory, `${name}.json`), `${JSON.stringify(value, null, 2)}\n`);
 }
 
+/** The text of a text node in the page's document. */
+function nodeText(page: Page, id: string): Promise<string | null> {
+  return page.evaluate((nodeId) => {
+    const node = window.__e26Bench!.editor()!.query({ type: 'node', id: nodeId }) as {
+      runs?: readonly { text: string }[];
+    } | null;
+    return node?.runs?.map((run) => run.text).join('') ?? null;
+  }, id);
+}
+
+/**
+ * M9-U1: `m9-typing-10k/v1` (M9 contract, section 3.2). `keyToWorkDoneMs` per key: from the
+ * `keydown` `timeStamp` to the submitted work of the first submission at or after the revision
+ * the key produced (the bench hook's `keyLatencies`); a key that produced none is `no-change`.
+ */
+async function typingRun(
+  page: Page,
+  o: Readonly<{
+    scenario: E26Scenario;
+    base: Record<string, unknown>;
+    slug: string;
+    errors: string[];
+    consoleErrors: string[];
+    dpr: number;
+    camera: E26Camera;
+    expandTree: () => Promise<{
+      expanded: readonly string[];
+      rows: number;
+      expectedRows: number;
+    } | null>;
+    typingTarget: string;
+  }>,
+): Promise<void> {
+  const { scenario, errors, camera } = o;
+  const typing = scenario.m9!.typing!;
+  await open(page, `doc=${scenario.document}&persist=1`, errors, true);
+  await page.waitForFunction(
+    () => {
+      const write = window.__e26Bench!.writes[0];
+      return write !== undefined && write.endMs !== null;
+    },
+    undefined,
+    { timeout: 30_000 },
+  );
+  const loadWriteOk = await page.evaluate(() => window.__e26Bench!.writes[0]!.ok);
+  await execute(page, [
+    { type: 'setViewport', camera },
+    { type: 'setSnapping', enabled: false },
+  ]);
+  const layers = await o.expandTree();
+  const env = await environment(page);
+  const before = await nodeText(page, o.typingTarget);
+  const entered = await page.evaluate(
+    ({ id, offset }) => window.__e26Bench!.enterTextEdit(id, offset),
+    { id: o.typingTarget, offset: typing.offset },
+  );
+  // The seam focuses the edit textarea (M6b-H1); then the entry's frame settles.
+  await page
+    .waitForFunction(() => document.activeElement?.tagName === 'TEXTAREA', undefined, {
+      timeout: 10_000,
+    })
+    .catch(() => undefined);
+  const focused = await page.evaluate(() => document.activeElement?.tagName ?? null);
+  await page.evaluate(async () => {
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await window
+      .__e26Bench!.backend()!
+      .waitForSubmittedWork()
+      .catch(() => undefined);
+  });
+  const presenceStart = await presence(page);
+  const startMs = await page.evaluate(() => performance.now());
+  const started = Date.now();
+  const sent: Promise<void>[] = [];
+  const sentAtMs: number[] = [];
+  // Each key is sent on the cadence without waiting for the page (as the latency drag's moves).
+  for (const [index, character] of [...typing.text].entries()) {
+    const wait = index * typing.intervalMs - (Date.now() - started);
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    sentAtMs.push(Date.now() - started);
+    sent.push(page.keyboard.press(character));
+  }
+  await Promise.all(sent);
+  // The last keys' submitted work and the autosave trailing write settle; then the run is read.
+  await page.waitForTimeout(1_500);
+  const after = await nodeText(page, o.typingTarget);
+  const state = await page.evaluate((from) => {
+    const hook = window.__e26Bench!;
+    const stats = hook.backend()!.getStatistics();
+    return {
+      keyLatencies: hook.keyLatencies,
+      noChangeKeys: hook.noChangeKeys,
+      writes: hook.writes,
+      longTasksAvailable: hook.longTasksAvailable,
+      longTasks: hook.longTasks.filter((task) => task.startMs >= from),
+      mode: stats.mode,
+      lifecycle: stats.lifecycle,
+      recoveryAttempts: stats.recoveryAttempts,
+    };
+  }, startMs);
+  const presenceEnd = await presence(page);
+  const samples = state.keyLatencies
+    .filter((entry) => entry.doneMs !== null && Number.isFinite(entry.doneMs))
+    .map((entry) => entry.doneMs! - entry.inputMs);
+  const open_ = (entry: (typeof state.keyLatencies)[number]) =>
+    entry.failed !== true && (entry.doneMs === null || Number.isNaN(entry.doneMs));
+  const result = {
+    ...o.base,
+    environment: env,
+    presence: { start: presenceStart, end: presenceEnd },
+    errors,
+    consoleErrors: o.consoleErrors,
+    loadWriteOk,
+    layers,
+    typingTarget: o.typingTarget,
+    entered,
+    focused,
+    textBefore: before,
+    textAfter: after,
+    keys: typing.text.length,
+    sentAtMs,
+    keyToWorkDoneMs: summary(samples),
+    keyToWorkDoneSamplesMs: samples,
+    unresolved: state.keyLatencies.filter(open_).length,
+    failed: state.keyLatencies.filter((entry) => entry.failed === true).length,
+    noChange: state.noChangeKeys.length,
+    longTasksAvailable: state.longTasksAvailable,
+    longTasksOver50: state.longTasks.filter((task) => task.durationMs > 50),
+    writes: state.writes,
+    state,
+  };
+  record(o.slug, result);
+  expectValidRun(state, {
+    errors,
+    expectedDpr: o.dpr,
+    pageDpr: env.devicePixelRatio,
+    start: presenceStart,
+    end: presenceEnd,
+  });
+  expect(loadWriteOk, 'the load write succeeded').toBe(true);
+  expect(entered.ok, `enterTextEdit: ${entered.code ?? ''}`).toBe(true);
+  expect(focused, 'the edit textarea has focus').toBe('TEXTAREA');
+  expect(before?.length, 'the target has 60 offset units').toBe(typing.offset);
+  expect(after, 'the typed text, at the caret').toBe(`${before}${typing.text}`);
+  if (layers !== null) expect(layers.rows, 'layer rows shown').toBe(layers.expectedRows);
+  expect(result.failed).toBe(0);
+  expect(result.unresolved).toBe(0);
+  expect(samples.length + result.noChange, 'every key accounted for').toBe(typing.text.length);
+}
+
 for (const { scenario, variant } of runs) {
   for (let repetition = 1; repetition <= repetitions; repetition += 1) {
     const title = `${scenario.id}${variant === 'plain' ? ' (plain)' : ''} r${repetition}`;
     test(title, async ({ page, browser }, testInfo) => {
+      const m9 = scenario.m9;
+      test.skip(
+        v2Project(testInfo.project.name) !== (m9 !== undefined),
+        'v1 scenarios run in the v1 projects, M9 scenarios in the -v2 projects',
+      );
       if (!smoke)
         expect(dirty, 'a clean working tree, so the recorded commit is what ran').toBe(false);
       const dpr = testInfo.project.use.deviceScaleFactor ?? 1;
       const document = loaded(scenario.document);
-      // The plain variant has no fill and no rejection, so its configuration (and hash) says so.
+      // The plain variant has no fill and no rejection (and no font-load change), so its
+      // configuration (and hash) says so.
       const configured =
-        variant === 'plain' ? { ...scenario, reject: null, setFillBeforeDownMs: null } : scenario;
-      const configuration = e26Configuration(configured, dpr, repetitions, document);
+        variant === 'plain'
+          ? {
+              ...scenario,
+              reject: null,
+              setFillBeforeDownMs: null,
+              ...(m9 === undefined ? {} : { m9: { ...m9, fontLoad: null } }),
+            }
+          : scenario;
+      const m9Config =
+        m9 === undefined ? null : m9Configuration(configured, dpr, repetitions, document);
+      const configuration = m9Config ?? e26Configuration(configured, dpr, repetitions, document);
+      const ui = m9 !== undefined;
+      /** M9-U1: the layer toggles before the warm-up, and the rows the tree then shows. */
+      const expandTree = async () => {
+        if (m9Config === null) return null;
+        const rows = await expandLayers(page, m9Config.m9.expanded);
+        return { expanded: m9Config.m9.expanded, rows, expectedRows: m9Config.m9.layerRows };
+      };
       const camera = configuration.camera;
       const base = {
         scenario: scenario.id,
@@ -396,9 +691,25 @@ for (const { scenario, variant } of runs) {
       }--r${repetition}`;
       const { errors, consoleErrors } = await installProbe(page);
 
+      if (variant === 'typing') {
+        await typingRun(page, {
+          scenario,
+          base,
+          slug,
+          errors,
+          consoleErrors,
+          dpr,
+          camera,
+          expandTree,
+          typingTarget: m9Config!.m9.typingTarget!,
+        });
+        return;
+      }
+
       if (variant === 'frame') {
-        await open(page, `doc=${scenario.document}`, errors);
+        await open(page, `doc=${scenario.document}`, errors, ui);
         await execute(page, [{ type: 'setViewport', camera }]);
+        const layers = await expandTree();
         const env = await environment(page);
         let driver: unknown;
         if (scenario.interaction === 'edit-drag') {
@@ -465,6 +776,7 @@ for (const { scenario, variant } of runs) {
           presence: { start, end },
           errors,
           consoleErrors,
+          ...(layers === null ? {} : { layers }),
           rafCallbackIntervalMs: summary(intervals),
           encodeAndSubmitMs: summary(run.measurements.encodeAndSubmitMs),
           ceilingMs: scenario.frameCeilingMs,
@@ -480,6 +792,7 @@ for (const { scenario, variant } of runs) {
           end,
         });
         expect(run.measurements.droppedSamples.frameIntervalsMs).toBe(0);
+        if (layers !== null) expect(layers.rows, 'layer rows shown').toBe(layers.expectedRows);
         if (!smoke) {
           expect(intervals.length).toBeGreaterThan(0);
           if (scenario.interaction === 'edit-drag') expect(run.revisedMoves).toBeGreaterThan(0);
@@ -494,6 +807,7 @@ for (const { scenario, variant } of runs) {
         page,
         `doc=${scenario.document}&persist=1${busy ? `&reject=${target.selection.ids[0]}` : ''}`,
         errors,
+        ui,
       );
       // The load's own autosave write has completed (section 3.1).
       await page.waitForFunction(
@@ -511,6 +825,8 @@ for (const { scenario, variant } of runs) {
         { type: 'setSnapping', enabled: false },
         { type: 'setSelection', ids: target.selection.ids },
       ]);
+      const layers = await expandTree();
+      const fontLoad = busy ? (m9?.fontLoad ?? null) : null;
       const env = await environment(page);
       const start = await clientPoint(page, camera, target.press);
       // Input goes through CDP without awaiting each move, so moves queue behind a busy main
@@ -539,12 +855,22 @@ for (const { scenario, variant } of runs) {
       const sent: Promise<unknown>[] = [];
       const sentAtMs: number[] = [];
       let arming: Promise<void> | null = null;
+      // M9-U1: the font-load change, not awaited, as the arming is not.
+      let fontArmed = fontLoad === null;
+      let fontLoading: Promise<string> | null = null;
       for (;;) {
         const elapsed = Date.now() - started;
         if (elapsed >= E26_DRIVERS.latencyDurationMs) break;
         if (!armed && elapsed >= (scenario.reject?.armedAtMs ?? 0)) {
           arming = page.evaluate(() => window.__e26Bench!.armReject());
           armed = true;
+        }
+        if (!fontArmed && elapsed >= fontLoad!.armedAtMs) {
+          fontLoading = page.evaluate(
+            (family) => window.__e26Bench!.registerTestFont(family),
+            fontLoad!.family,
+          );
+          fontArmed = true;
         }
         const offset = editDragOffset(elapsed);
         sent.push(mouse('mouseMoved', start.x + offset.x, start.y + offset.y));
@@ -556,6 +882,7 @@ for (const { scenario, variant } of runs) {
       await mouse('mouseReleased', start.x + last.x, start.y + last.y);
       await Promise.all(sent);
       await arming;
+      const fontStatus = fontLoading === null ? null : await fontLoading;
       const moves = sent.length;
       const probe = await page.evaluate(() => window.__e26Probe!);
       // Latency samples are windowed by the events' own timestamps (the clock of `inputMs`): the
@@ -584,6 +911,10 @@ for (const { scenario, variant } of runs) {
             ),
             isolations: hook.isolations(),
             rejections: hook.rejections(),
+            fontLoads: hook.fontLoads,
+            fontLoadMeasures: performance
+              .getEntriesByName('m9-font-load', 'measure')
+              .map((entry) => ({ startMs: entry.startTime, durationMs: entry.duration })),
             undoDepth: history.undoDepth,
             mode: hook.backend()!.getStatistics().mode,
             lifecycle: hook.backend()!.getStatistics().lifecycle,
@@ -597,6 +928,13 @@ for (const { scenario, variant } of runs) {
         .map((entry) => entry.doneMs! - entry.inputMs);
       const overlaps = (task: { startMs: number; durationMs: number }) =>
         state.isolations.some(
+          (measure) =>
+            task.startMs < measure.startMs + measure.durationMs &&
+            measure.startMs < task.startMs + task.durationMs,
+        );
+      // M9-Q3: a long task overlapping the font-load change is flagged, never exempt.
+      const overlapsFontLoad = (task: { startMs: number; durationMs: number }) =>
+        state.fontLoadMeasures.some(
           (measure) =>
             task.startMs < measure.startMs + measure.durationMs &&
             measure.startMs < task.startMs + task.durationMs,
@@ -631,7 +969,14 @@ for (const { scenario, variant } of runs) {
         failed: state.latencies.filter((entry) => entry.failed === true).length,
         noChange: state.noChangeMoves.length,
         longTasksAvailable: state.longTasksAvailable,
-        longTasksOver50: longOver50.map((task) => ({ ...task, isolation: overlaps(task) })),
+        longTasksOver50: longOver50.map((task) => ({
+          ...task,
+          isolation: overlaps(task),
+          ...(m9 === undefined ? {} : { fontLoad: overlapsFontLoad(task) }),
+        })),
+        ...(m9 === undefined
+          ? {}
+          : { layers, fontLoad: { armed: fontLoad, status: fontStatus, loads: state.fontLoads } }),
         isolations: state.isolations,
         rejections: state.rejections,
         writesDuringPress,
@@ -658,6 +1003,11 @@ for (const { scenario, variant } of runs) {
       expect(samples.length, 'moves that produced a revision').toBeGreaterThan(0);
       expect(result.undoDepth, 'the release was applied').toBe(result.expectedUndoDepth);
       if (busy) expect(result.rejections).toBe(1);
+      if (layers !== null) expect(layers.rows, 'layer rows shown').toBe(layers.expectedRows);
+      if (fontLoad !== null) {
+        expect(state.fontLoads, 'one font-load change').toHaveLength(1);
+        expect(fontStatus, 'the font-load change loaded').toBe('loaded');
+      }
     });
   }
 }
@@ -667,6 +1017,7 @@ const isolationRuns =
   filter.length === 0 || filter.some((entry) => E26_ISOLATION.id.startsWith(entry));
 for (let repetition = 1; isolationRuns && repetition <= repetitions; repetition += 1) {
   test(`${E26_ISOLATION.id} r${repetition}`, async ({ page, browser }, testInfo) => {
+    test.skip(v2Project(testInfo.project.name), 'a v1 scenario: v1 projects only');
     if (!smoke)
       expect(dirty, 'a clean working tree, so the recorded commit is what ran').toBe(false);
     const dpr = testInfo.project.use.deviceScaleFactor ?? 1;
@@ -839,5 +1190,119 @@ for (let repetition = 1; isolationRuns && repetition <= repetitions; repetition 
       // Exactly the targets were left out: no resync fallback, no wider exclusion.
       expect(isolation.rejected, 'the rejected scene nodes').toEqual([...ids].sort());
     }
+  });
+}
+
+// M9-U1 (M9-A03): the canvas size and origin are equal with and without `ui=1`, `ui=1` mounts the
+// right column only under `?bench=1`, and without `?bench=1` no bench flag does anything.
+const geometryRuns =
+  filter.length === 0 || filter.some((entry) => 'm9-ui-geometry'.startsWith(entry));
+if (geometryRuns) {
+  test('m9-ui-geometry', async ({ page }, testInfo) => {
+    test.skip(!v2Project(testInfo.project.name), 'the 1600 x 1000 projects only');
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(String(error)));
+    const read = async (query: string) => {
+      await page.goto(`/${query}`);
+      await expect(page.getByTestId('status')).toBeVisible({ timeout: 90_000 });
+      await expect(page.locator('canvas')).toHaveCount(1);
+      return canvasGeometry(page);
+    };
+    const aside = await read('?bench=1');
+    const column = await read('?bench=1&ui=1');
+    const plain = await read('');
+    const flags = await read('?ui=1&doc=m9-v2&persist=0');
+    record(`${testInfo.project.name}--m9-ui-geometry`, {
+      scenario: 'm9-ui-geometry',
+      variant: 'geometry',
+      repetition: 1,
+      project: testInfo.project.name,
+      commit,
+      dirty,
+      aside,
+      column,
+      plain,
+      flags,
+      errors,
+    });
+    expect(errors).toEqual([]);
+    expect(column.origin, 'canvas origin with and without ui=1').toEqual(aside.origin);
+    expect(column.size, 'canvas size with and without ui=1').toEqual(aside.size);
+    expect(aside.size).toEqual({ width: 1280, height: 720 });
+    expect(aside.rightColumn, '?bench=1 keeps the aside').toBeNull();
+    expect(aside.aside).not.toBeNull();
+    expect(column.rightColumn, '?bench=1&ui=1 mounts the right column').not.toBeNull();
+    expect(column.aside).toBeNull();
+    for (const [name, value] of [
+      ['?bench=1', aside],
+      ['?bench=1&ui=1', column],
+    ] as const) {
+      expect(value.bench, `${name}: the bench hook`).toBe(true);
+    }
+    // Without ?bench=1, ui= and doc= change nothing.
+    expect(flags.bench, 'no bench hook without ?bench=1').toBe(false);
+    expect(flags.origin).toEqual(plain.origin);
+    expect(flags.size).toEqual(plain.size);
+    expect(flags.rightColumn).toEqual(plain.rightColumn);
+    expect(flags.aside).toEqual(plain.aside);
+  });
+}
+
+// M9-U1 (M9-A02): the page-1 text layouts of the v2 document through the page's port, compared
+// with the committed table (or written with M9_RECORD_LAYOUTS=1). Run only on request.
+if (filter.includes('m9-v2-layouts')) {
+  test('m9-v2-layouts', async ({ page, browser }) => {
+    const parsed = parseDocument(JSON.stringify(generateM9V2Document()));
+    if (!parsed.ok) throw new Error(`parse: ${parsed.code}`);
+    const requests = m9LayoutRequests(parsed.document);
+    const url = '/?bench=1&doc=m9-v2&ui=1&test=1';
+    await page.goto(url);
+    const status = page.getByTestId('status');
+    await expect(status).toHaveAttribute('data-fixture', 'bench-loaded', { timeout: 90_000 });
+    const answers = await page.evaluate(async (list: readonly TextLayoutRequest[]) => {
+      const text = (
+        window as unknown as {
+          __p5Host: {
+            text: {
+              port: { generation: number; layout(request: unknown): TextLayoutResult };
+              testFont: Promise<string> | null;
+            };
+          };
+        }
+      ).__p5Host.text;
+      const font = text.testFont === null ? 'none' : await text.testFont;
+      return {
+        font,
+        generation: text.port.generation,
+        results: list.map((r) => text.port.layout(r)),
+      };
+    }, requests);
+    expect(answers.font, 'the test font registered').toBe('loaded');
+    const table: M9LayoutTable = {
+      recordedWith: { url, browser: `${browser.browserType().name()} ${browser.version()}` },
+      layouts: Object.fromEntries(
+        requests.map((request, index) => [
+          requestKey(request),
+          compactLayout(answers.results[index]!),
+        ]),
+      ),
+    };
+    if (process.env.M9_RECORD_LAYOUTS === '1') {
+      // Formatted as the repository's `format:check` wants it.
+      const prettier = await import('prettier');
+      const options = (await prettier.resolveConfig(M9_LAYOUT_TABLE)) ?? {};
+      writeFileSync(
+        M9_LAYOUT_TABLE,
+        await prettier.format(JSON.stringify(table), { ...options, filepath: M9_LAYOUT_TABLE }),
+      );
+      return;
+    }
+    const committed = JSON.parse(readFileSync(M9_LAYOUT_TABLE, 'utf8')) as M9LayoutTable;
+    // Generations differ between pages; the layouts must not.
+    const strip = (value: M9LayoutTable) =>
+      Object.fromEntries(
+        Object.entries(value.layouts).map(([key, layout]) => [key, { ...layout, generation: 0 }]),
+      );
+    expect(strip(table)).toEqual(strip(committed));
   });
 }

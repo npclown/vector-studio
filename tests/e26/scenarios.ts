@@ -8,6 +8,7 @@
 // draw bounds, widened by its 2-physical-pixel cull guard, with clips ignored. Clip culling is
 // counted separately (section 3.3: the edit drag moves the selection out of its frame's clip).
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import type { RenderNodeSnapshot, SceneAffine } from '@vector-studio/contracts';
 import { parseDocument } from '@vector-studio/model';
 import { projectPage, type PageProjection } from '../../packages/editor-core/src/projector.js';
@@ -20,7 +21,18 @@ import {
   transformSceneBounds,
   type SceneBounds,
 } from '../../packages/renderer-core/src/scene-numeric.js';
-import { generateM1A13Document, M1_A13_SEED } from '../m1-a13/document.js';
+import { generateM1A13Document, M1_A13_SEED, m1A13MoveSelection } from '../m1-a13/document.js';
+import { layerRows } from '../../packages/ui/src/layer-model.js';
+import {
+  generateM9V2Document,
+  M9_SECOND_FAMILY,
+  M9_V2_PAGE,
+  M9_V2_SEED,
+  m9TypingTarget,
+  projectM9Page,
+  type M9GeneratedDocument,
+} from '../m9/document.js';
+import { m9ReplayLayout, M9_LAYOUT_TABLE, readM9LayoutTable } from '../m9/layouts.js';
 
 /** The CSS viewport of every E26 run (section 3.5); DPR varies per run, not per scenario. */
 export const E26_VIEWPORT = Object.freeze({ width: 1280, height: 720 });
@@ -69,14 +81,24 @@ export type E26ScenarioId =
   | 'e26-mixed-all-edit-10k/v1'
   | 'e26-mixed-all-pan-10k/v1'
   | 'e26-simple-stress-10k/v1'
-  | 'e26-pointer-busy-10k/v1';
+  | 'e26-pointer-busy-10k/v1'
+  | M9ScenarioId;
+
+/** The M9 scenarios (M9 contract, section 3.2). */
+export type M9ScenarioId =
+  | 'e26-mixed-view-edit-10k/v2'
+  | 'e26-mixed-all-edit-10k/v2'
+  | 'e26-mixed-all-pan-10k/v2'
+  | 'e26-simple-stress-10k/v2'
+  | 'e26-pointer-busy-10k/v2'
+  | 'm9-typing-10k/v1';
 
 export type E26Scenario = Readonly<{
   id: E26ScenarioId;
-  document: 'm1-a13' | 'stress';
+  document: 'm1-a13' | 'stress' | 'm9-v2';
   seed: number;
   camera: 'typical' | 'fitted';
-  interaction: 'edit-drag' | 'pan-zoom' | 'latency-drag';
+  interaction: 'edit-drag' | 'pan-zoom' | 'latency-drag' | 'typing';
   /** `rafCallbackIntervalMs` ceiling, or null for the latency scenario (section 3.2). */
   frameCeilingMs: number | null;
   /** `pointerToWorkDoneMs` bound (exclusive), or null. */
@@ -87,7 +109,24 @@ export type E26Scenario = Readonly<{
   reject: Readonly<{ mode: 'once'; armedAtMs: number; target: 'moved-leaf' }> | null;
   /** The `setFill` before pointer down, in ms before it, or null. */
   setFillBeforeDownMs: number | null;
+  /** M9 only (absent from every v1 scenario, so v1 configurations and hashes are unchanged). */
+  m9?: M9Extras;
 }>;
+
+/** What an M9 scenario adds to its v1 counterpart (M9 contract, sections 3.2 and 4). */
+export type M9Extras = Readonly<{
+  /** `ui=1`: the right column instead of the bench's Appearance aside. */
+  ui: true;
+  /** The page viewport of the v2 projects, wider than v1's 1400 x 1000 for the column. */
+  window: Readonly<{ width: number; height: number }>;
+  /** The font-load change: the test font registered under `family` at `armedAtMs`. */
+  fontLoad: Readonly<{ armedAtMs: number; family: string; mark: 'm9-font-load' }> | null;
+  /** The typing driver: `keys` characters of `text` at `intervalMs`, caret at `offset`. */
+  typing: Readonly<{ offset: number; text: string; intervalMs: number }> | null;
+}>;
+
+const seedOf = (document: E26Scenario['document']) =>
+  document === 'm1-a13' ? M1_A13_SEED : document === 'm9-v2' ? M9_V2_SEED : E26_STRESS.seed;
 
 const frame = (
   id: E26ScenarioId,
@@ -99,7 +138,7 @@ const frame = (
   Object.freeze({
     id,
     document,
-    seed: document === 'm1-a13' ? M1_A13_SEED : E26_STRESS.seed,
+    seed: seedOf(document),
     camera,
     interaction,
     frameCeilingMs,
@@ -129,6 +168,69 @@ export const E26_SCENARIOS: readonly E26Scenario[] = Object.freeze([
     reject: Object.freeze({ mode: 'once', armedAtMs: 1_000, target: 'moved-leaf' }),
     setFillBeforeDownMs: 100,
   } satisfies E26Scenario),
+]);
+
+// ---------------------------------------------------------------------------------------------
+// M9-U1 (M9 contract, section 3.2): the v2 scenarios and the typing observation. Each is its v1
+// counterpart with `m9` (ui=1, the 1600 x 1000 window) and, for the M9 rows, the v2 document.
+
+/** The v2 projects' page viewport (M9 contract, section 4). */
+export const M9_WINDOW = Object.freeze({ width: 1600, height: 1000 });
+/** The font-load change of `e26-pointer-busy-10k/v2`, armed after pointer down (section 4). */
+export const M9_FONT_LOAD = Object.freeze({
+  armedAtMs: 2_000,
+  family: M9_SECOND_FAMILY,
+  mark: 'm9-font-load' as const,
+});
+/** The typing driver (section 3.2): 40 ASCII characters at 120 ms, caret at offset 60. */
+export const M9_TYPING = Object.freeze({
+  offset: 60,
+  text: 'abcdefghij'.repeat(4),
+  intervalMs: 120,
+});
+
+const m9 = (
+  scenario: E26Scenario,
+  id: M9ScenarioId,
+  document: E26Scenario['document'],
+  extras: Partial<Pick<M9Extras, 'fontLoad' | 'typing'>> = {},
+): E26Scenario =>
+  Object.freeze({
+    ...scenario,
+    id,
+    document,
+    seed: seedOf(document),
+    m9: Object.freeze({
+      ui: true as const,
+      window: M9_WINDOW,
+      fontLoad: extras.fontLoad ?? null,
+      typing: extras.typing ?? null,
+    }),
+  });
+
+const [viewEdit, allEdit, allPan, stressPan, busy] = E26_SCENARIOS as [
+  E26Scenario,
+  E26Scenario,
+  E26Scenario,
+  E26Scenario,
+  E26Scenario,
+];
+
+/** The six M9 scenarios of section 3.2, in its order. */
+export const M9_SCENARIOS: readonly E26Scenario[] = Object.freeze([
+  m9(viewEdit, 'e26-mixed-view-edit-10k/v2', 'm9-v2'),
+  m9(allEdit, 'e26-mixed-all-edit-10k/v2', 'm9-v2'),
+  m9(allPan, 'e26-mixed-all-pan-10k/v2', 'm9-v2'),
+  m9(stressPan, 'e26-simple-stress-10k/v2', 'stress'),
+  m9(busy, 'e26-pointer-busy-10k/v2', 'm9-v2', { fontLoad: M9_FONT_LOAD }),
+  Object.freeze({
+    ...m9(busy, 'm9-typing-10k/v1', 'm9-v2', { typing: M9_TYPING }),
+    interaction: 'typing' as const,
+    // Recorded only (M9-Q4): no bound, no rejection, no background fill.
+    latencyBoundMs: null,
+    reject: null,
+    setFillBeforeDownMs: null,
+  }),
 ]);
 
 // ---------------------------------------------------------------------------------------------
@@ -447,11 +549,21 @@ export type E26Loaded = Readonly<{
 
 /** Generates, parses (migrating to the current version) and projects a scenario document. */
 export function loadScenarioDocument(document: E26Scenario['document']): E26Loaded {
-  const generated = document === 'm1-a13' ? generateM1A13Document() : generateStressDocument();
+  const generated =
+    document === 'm1-a13'
+      ? generateM1A13Document()
+      : document === 'm9-v2'
+        ? generateM9V2Document()
+        : generateStressDocument();
   const parsed = parseDocument(JSON.stringify(generated));
   if (!parsed.ok) throw new Error(`parse: ${parsed.code} ${parsed.path}`);
-  const pageId = document === 'm1-a13' ? 'page-1' : 'stress-page';
-  const projection = projectPage(parsed.document, pageId, () => null);
+  const pageId =
+    document === 'm1-a13' ? 'page-1' : document === 'm9-v2' ? M9_V2_PAGE : 'stress-page';
+  // M9-U1: the v2 page's text projects through the committed font's recorded layouts.
+  const projection =
+    document === 'm9-v2'
+      ? projectM9Page(parsed.document, pageId, m9ReplayLayout(readM9LayoutTable()))
+      : projectPage(parsed.document, pageId, () => null);
   return {
     generated,
     document: parsed.document,
@@ -505,6 +617,70 @@ export function e26Configuration(
     sceneNodes: loaded.projection.nodes.size,
     drawnLeaves: [...loaded.bounds.values()].filter((box) => box !== null).length,
     repetitions,
+  };
+}
+
+/** M9-U1: what an M9 scenario's configuration adds (M9 contract, sections 3.2 and 4). */
+export type M9Configuration = E26Configuration &
+  Readonly<{
+    m9: Readonly<{
+      /** The SHA-256 of the canonical JSON of the layout table the text bounds come from. */
+      layoutTableSha256: string | null;
+      /** The layer-tree toggles clicked before the warm-up (the move selection's ancestry). */
+      expanded: readonly string[];
+      /** The layer rows shown after them, with the move selection selected. */
+      layerRows: number;
+      /** The typing target, for `m9-typing-10k/v1`. */
+      typingTarget: string | null;
+    }>;
+  }>;
+
+/**
+ * The layer-tree state of an M9 run: the move selection's containers from the page down (the
+ * cluster frame, then group G), each expanded by its `layer-toggle-<id>`, and the row count the
+ * tree then shows with the selection selected (ui `layerRows`).
+ */
+export function m9LayerTree(loaded: E26Loaded): { expanded: string[]; rows: number } {
+  const generated = loaded.generated as Parameters<typeof m1A13MoveSelection>[0];
+  const selection = m1A13MoveSelection(generated);
+  const expanded: string[] = [];
+  let cursor = loaded.document.nodes[selection.group]!;
+  for (;;) {
+    expanded.unshift(cursor.id);
+    if (cursor.parent === loaded.pageId) break;
+    cursor = loaded.document.nodes[cursor.parent]!;
+  }
+  const rows = layerRows(loaded.document, loaded.pageId, new Set(expanded), selection.ids);
+  return { expanded, rows: rows.length };
+}
+
+/** The configuration of an M9 scenario: its E26 configuration and the `m9` record. */
+export function m9Configuration(
+  scenario: E26Scenario,
+  devicePixelRatio: number,
+  repetitions: number,
+  loaded: E26Loaded = loadScenarioDocument(scenario.document),
+): M9Configuration {
+  if (scenario.m9 === undefined) throw new Error(`${scenario.id} is not an M9 scenario`);
+  // The stress page has no containers: nothing to expand, every node one row.
+  const tree =
+    scenario.document === 'stress'
+      ? { expanded: [], rows: layerRows(loaded.document, loaded.pageId, new Set(), []).length }
+      : m9LayerTree(loaded);
+  return {
+    ...e26Configuration(scenario, devicePixelRatio, repetitions, loaded),
+    m9: {
+      layoutTableSha256:
+        scenario.document === 'm9-v2'
+          ? sha256(canonicalJson(JSON.parse(readFileSync(M9_LAYOUT_TABLE, 'utf8'))))
+          : null,
+      expanded: tree.expanded,
+      layerRows: tree.rows,
+      typingTarget:
+        scenario.m9.typing === null
+          ? null
+          : m9TypingTarget(loaded.generated as M9GeneratedDocument),
+    },
   };
 }
 

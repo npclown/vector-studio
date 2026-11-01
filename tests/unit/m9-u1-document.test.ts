@@ -1,0 +1,392 @@
+// MVP M9-U1 (M9 contract, sections 3.1 and 3.2, M9-A01 and M9-A02): the v2 document generates
+// deterministically with the section 3.1 counts and its pinned digest, `parseDocument` accepts
+// it, its text uses only the committed subset; every M9 scenario has a configuration, a
+// configuration hash and a stable ID; the v2 typical view holds 900 to 1,100 drawn leaves (text
+// bounds from the committed font's recorded layouts) and every drawn leaf is inside the viewport
+// at F; and the v1 scenarios and their hashes are unchanged.
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { parseDocument, type TextNode } from '@vector-studio/model';
+import { describe, expect, it } from 'vitest';
+import {
+  canonicalJson,
+  configurationHash,
+  contains,
+  contentBounds,
+  e26Configuration,
+  E26_SCENARIOS,
+  E26_TYPICAL_VISIBLE,
+  editDragOffset,
+  fittedCamera,
+  loadScenarioDocument,
+  M9_FONT_LOAD,
+  M9_SCENARIOS,
+  M9_TYPING,
+  M9_WINDOW,
+  m9Configuration,
+  panZoomCamera,
+  sha256,
+  typicalCamera,
+  visibility,
+  worldViewport,
+} from '../e26/scenarios.js';
+import { m1A13MoveSelection } from '../m1-a13/document.js';
+import {
+  generateM9V2Document,
+  graphemeCount,
+  inSubset,
+  M9_SECOND_FAMILY,
+  M9_SUBSET_HANGUL,
+  M9_TEST_FAMILY,
+  M9_V2_PROJECTED,
+  M9_V2_SEED,
+  m9DocumentSha256,
+  m9TypingTarget,
+  m9V2Counts,
+} from '../m9/document.js';
+import { M9_LAYOUT_TABLE, m9LayoutRequests, readM9LayoutTable, requestKey } from '../m9/layouts.js';
+
+const root = path.resolve(import.meta.dirname, '../..');
+const generated = generateM9V2Document();
+const loaded = loadScenarioDocument('m9-v2');
+
+/** Pinned digest of the canonical generated v2 document (U1); a change is a new version. */
+const M9_V2_SHA256 = '6104db997b25fb7efab896b8638d738135fd0109bc0fbb2693e786defb1f0407';
+/** The section 3.1 counts, pinned. */
+const COUNTS = {
+  documentNodes: 10_000,
+  page1Nodes: 8_480,
+  page2Nodes: 1_520,
+  page1Projected: 10_985,
+  fromExpansion: 1_008,
+  instanceSceneNodes: 1_344,
+  instances: 112,
+  scaledInstances: 56,
+  overriddenInstances: 6,
+  textNodes: 200,
+  textClusters: 6_975,
+  secondFamilyTextNodes: 50,
+  sourceTextNodes: 1,
+  clustersMoved: 55,
+};
+/** The v2 typical view (U1, by v1's rule over the recorded layouts), pinned. */
+const TYPICAL_ZOOM = 0.5159188439084609;
+const TYPICAL_VISIBLE = 999;
+const TYPICAL_VISIBLE_DPR2 = 997;
+const DRAWN_LEAVES = 6_809;
+/** The configuration hashes at DPR 1, five repetitions: the v1 ones as at 75be15b. */
+const V1_HASHES = {
+  'e26-mixed-view-edit-10k/v1': 'fbacd41cb86ccb66be4dbae73c827cd57934963b741761db21d7e317d777d4a6',
+  'e26-mixed-all-edit-10k/v1': '115ac4873a673cbc3dfce752f09fdbe3647e2b612518884be9bdebaff58e73d4',
+  'e26-mixed-all-pan-10k/v1': 'ed884b4faf2246f02946a3ce40f1113941a448521fd315561bde47eb08a77345',
+  'e26-simple-stress-10k/v1': '76665ddc402ad3c6f4e365d499444a0d9a5e869f3110545f52cb610a1bfe7cd1',
+  'e26-pointer-busy-10k/v1': 'ede80cbc0f054cb636b78f9c25e92297df852bebbd53824dd589b80ea54cbda5',
+};
+const V2_HASHES = {
+  'e26-mixed-view-edit-10k/v2': '5a526c1cf598f944bde9869cde2e7f68dfcbded9cff582b120694b9f9e4459ac',
+  'e26-mixed-all-edit-10k/v2': '21a793389a530386b7b32090e60151bcfc6a3afce00b343d62b65674e869c2c3',
+  'e26-mixed-all-pan-10k/v2': '7f43c01cca90dc008e982e50e17c11b47619cfd55657dcf086c3a8b762582419',
+  'e26-simple-stress-10k/v2': 'ce0fab1e69a868c74efce7c77dbec160f1e2b6c1353f337e2b78c5c8ec62d9d9',
+  'e26-pointer-busy-10k/v2': '1aaaf3e60dd5a4999a17370a0007a36117c06a3dc0c1be7615f6f48fb74780e2',
+  'm9-typing-10k/v1': '5a6e7d03adcb8ccd3d4aa6e5aa13f6ba54ecfbcfcebedb039a2360c53621e755',
+};
+
+/** Generating, projecting and hashing 10,000 nodes takes seconds. */
+const SLOW = 60_000;
+
+describe('M9-A01: the v2 document', () => {
+  it(
+    'generates deterministically, matching its pinned digest, and parseDocument accepts it',
+    () => {
+      expect(m9DocumentSha256(generated)).toBe(M9_V2_SHA256);
+      expect(m9DocumentSha256(generateM9V2Document(M9_V2_SEED))).toBe(M9_V2_SHA256);
+      // The digest is the configuration's: sha256 of the canonical JSON.
+      expect(sha256(canonicalJson(generated))).toBe(M9_V2_SHA256);
+      expect(m9DocumentSha256(generateM9V2Document(M9_V2_SEED + 1))).not.toBe(M9_V2_SHA256);
+      const parsed = parseDocument(JSON.stringify(generated));
+      expect(parsed.ok).toBe(true);
+      expect(generated.schemaVersion).toBe(6);
+      // Built at the current version: parsing changes nothing.
+      if (parsed.ok) expect(JSON.parse(JSON.stringify(parsed.document))).toEqual(generated);
+    },
+    SLOW,
+  );
+
+  it(
+    'has the section 3.1 counts',
+    () => {
+      const counts = m9V2Counts(generated);
+      expect(counts).toEqual(COUNTS);
+      expect(counts.documentNodes).toBe(10_000);
+      expect(counts.page1Projected).toBeGreaterThanOrEqual(M9_V2_PROJECTED.min);
+      expect(counts.page1Projected).toBeLessThanOrEqual(M9_V2_PROJECTED.max);
+      expect(counts.fromExpansion).toBeGreaterThanOrEqual(1_000);
+      expect(counts.textNodes).toBe(200);
+      expect(counts.textClusters).toBeGreaterThanOrEqual(6_000);
+      expect(counts.scaledInstances * 2).toBe(counts.instances);
+      // The editor's projection with the recorded layouts counts the same scene nodes.
+      expect(loaded.projection.nodes.size).toBe(COUNTS.page1Projected);
+    },
+    SLOW,
+  );
+
+  it(
+    'has ten 10-node sources on page 2, one with a text node, and keeps the move selection',
+    () => {
+      const symbols = Object.values(generated.nodes).filter((node) => node.type === 'symbol');
+      expect(symbols).toHaveLength(10);
+      for (const symbol of symbols) {
+        expect(symbol.parent).toBe('page-2');
+        let count = 0;
+        const visit = (id: string) => {
+          count += 1;
+          const children = generated.nodes[id]!.children as string[] | undefined;
+          for (const child of children ?? []) visit(child);
+        };
+        visit(symbol.id);
+        expect(count).toBe(10);
+      }
+      // Cluster 0 (the move selection's) is M1-A13's, unchanged.
+      const { group, ids } = m1A13MoveSelection(generated as never);
+      expect(generated.nodes[ids[0]]!.type).toBe('rectangle');
+      expect(generated.nodes[ids[1]]!.type).toBe('ellipse');
+      expect(generated.pages[0]!.children[0]).toBe(generated.nodes[group]!.parent);
+      // No instance or text inside a mask group or in cluster 0.
+      for (const node of Object.values(generated.nodes)) {
+        if (node.type !== 'instance' && node.type !== 'text') continue;
+        if (node.parent.startsWith('m9-s')) continue;
+        expect(generated.nodes[node.parent]!.type, node.id).toBe('group');
+        expect(node.parent, node.id).not.toBe(group);
+      }
+    },
+    SLOW,
+  );
+
+  it(
+    'writes text only in the subset of the committed font, the 50 second-family nodes included',
+    () => {
+      // The subset's Hangul list is the README's.
+      const readme = readFileSync(
+        path.join(root, 'tests/fixtures/m6-text/fonts/README.md'),
+        'utf8',
+      );
+      const listed = [...readme.matchAll(/U\+([0-9A-F]{4})(?=[,"])/gu)]
+        .map((match) => Number.parseInt(match[1]!, 16))
+        .filter((code) => code >= 0xac00 && code <= 0xd7a3);
+      expect(listed).toEqual([...M9_SUBSET_HANGUL]);
+      const texts = Object.values(generated.nodes).filter(
+        (node): node is typeof node & TextNode => node.type === 'text',
+      );
+      for (const node of texts) {
+        expect(node.runs.length).toBeGreaterThanOrEqual(1);
+        expect(node.runs.length).toBeLessThanOrEqual(3);
+        for (const run of node.runs) {
+          expect(inSubset(run.text), run.text).toBe(true);
+          expect([M9_TEST_FAMILY, M9_SECOND_FAMILY]).toContain(run.family);
+        }
+      }
+      const instances = Object.values(generated.nodes).filter((node) => node.type === 'instance');
+      for (const instance of instances) {
+        for (const override of Object.values(instance.textOverrides as Record<string, TextNode>)) {
+          for (const run of override.runs) expect(inSubset(run.text)).toBe(true);
+        }
+      }
+      const sizing = texts.filter((node) => !node.id.startsWith('m9-s')).map((node) => node.sizing);
+      expect(sizing.filter((mode) => mode === 'autoWidth')).toHaveLength(100);
+      expect(sizing.filter((mode) => mode === 'autoHeight')).toHaveLength(100);
+    },
+    SLOW,
+  );
+
+  it(
+    'has the 60-cluster ASCII typing target in the typical view',
+    () => {
+      const id = m9TypingTarget(generated);
+      const node = generated.nodes[id] as unknown as TextNode;
+      const text = node.runs.map((run) => run.text).join('');
+      expect(text).toHaveLength(60);
+      expect(graphemeCount(text)).toBe(60);
+      expect(/^[\x20-\x7e]+$/u.test(text)).toBe(true);
+      expect(node.visible).toBe(true);
+      const box = loaded.bounds.get(id);
+      expect(box).toBeTruthy();
+      expect(contains(worldViewport(typicalCamera(loaded.bounds)), box!)).toBe(true);
+    },
+    SLOW,
+  );
+});
+
+describe('M9-A02: the M9 scenarios', () => {
+  it(
+    'lists the six section 3.2 scenarios with stable IDs, targets and ui=1',
+    () => {
+      expect(
+        M9_SCENARIOS.map((scenario) => [
+          scenario.id,
+          scenario.document,
+          scenario.camera,
+          scenario.interaction,
+          scenario.frameCeilingMs,
+          scenario.latencyBoundMs,
+        ]),
+      ).toEqual([
+        ['e26-mixed-view-edit-10k/v2', 'm9-v2', 'typical', 'edit-drag', 16.7, null],
+        ['e26-mixed-all-edit-10k/v2', 'm9-v2', 'fitted', 'edit-drag', 33.3, null],
+        ['e26-mixed-all-pan-10k/v2', 'm9-v2', 'fitted', 'pan-zoom', 33.3, null],
+        ['e26-simple-stress-10k/v2', 'stress', 'fitted', 'pan-zoom', 33.3, null],
+        ['e26-pointer-busy-10k/v2', 'm9-v2', 'typical', 'latency-drag', null, 50],
+        ['m9-typing-10k/v1', 'm9-v2', 'typical', 'typing', null, null],
+      ]);
+      for (const scenario of M9_SCENARIOS) {
+        expect(scenario.m9).toMatchObject({ ui: true, window: M9_WINDOW });
+        expect(scenario.seed).toBe(scenario.document === 'stress' ? 0x5031_0001 : M9_V2_SEED);
+      }
+      expect(M9_WINDOW).toEqual({ width: 1600, height: 1000 });
+      expect(M9_SCENARIOS[4]).toMatchObject({
+        persist: true,
+        renderMode: 'on-demand',
+        reject: { mode: 'once', armedAtMs: 1_000, target: 'moved-leaf' },
+        setFillBeforeDownMs: 100,
+        m9: { fontLoad: { armedAtMs: 2_000, family: M9_SECOND_FAMILY, mark: 'm9-font-load' } },
+      });
+      expect(M9_FONT_LOAD.family).toBe(M9_SECOND_FAMILY);
+      expect(M9_SCENARIOS[5]).toMatchObject({
+        persist: true,
+        renderMode: 'on-demand',
+        reject: null,
+        setFillBeforeDownMs: null,
+        m9: { fontLoad: null, typing: { offset: 60, intervalMs: 120 } },
+      });
+      expect(M9_TYPING.text).toHaveLength(40);
+      expect(/^[\x21-\x7e]+$/u.test(M9_TYPING.text)).toBe(true);
+      // v1 is unchanged: five scenarios, none with m9.
+      expect(E26_SCENARIOS).toHaveLength(5);
+      for (const scenario of E26_SCENARIOS) expect('m9' in scenario).toBe(false);
+    },
+    SLOW,
+  );
+
+  it(
+    'pins every configuration hash, v1 unchanged, and records the layer tree',
+    () => {
+      for (const scenario of E26_SCENARIOS) {
+        const hash = configurationHash(e26Configuration(scenario, 1, 5));
+        expect(hash, scenario.id).toBe(V1_HASHES[scenario.id as keyof typeof V1_HASHES]);
+      }
+      for (const scenario of M9_SCENARIOS) {
+        const configuration = m9Configuration(
+          scenario,
+          1,
+          5,
+          scenario.document === 'm9-v2' ? loaded : undefined,
+        );
+        const hash = configurationHash(configuration);
+        expect(hash, scenario.id).toBe(V2_HASHES[scenario.id as keyof typeof V2_HASHES]);
+        expect(configuration.documentSha256).toBe(
+          scenario.document === 'm9-v2'
+            ? M9_V2_SHA256
+            : 'dc5cf1a75b00e460fa638ec2197024287671beced964522a03d093ded541fae1',
+        );
+        expect(configuration.schemaVersion).toBe(6);
+        if (scenario.document === 'm9-v2') {
+          expect(configuration.m9.expanded).toEqual(['f1', 'g3']);
+          expect(configuration.m9.layerRows).toBe(655);
+          expect(configuration.m9.layoutTableSha256).toBe(
+            sha256(canonicalJson(JSON.parse(readFileSync(M9_LAYOUT_TABLE, 'utf8')))),
+          );
+        } else {
+          expect(configuration.m9).toMatchObject({ expanded: [], layerRows: 10_000 });
+        }
+        expect(configuration.m9.typingTarget).toBe(scenario.m9?.typing ? 'r18' : null);
+        // Sensitive to the m9 record.
+        const changed = { ...configuration, m9: { ...configuration.m9, layerRows: 1 } };
+        expect(configurationHash(changed)).not.toBe(hash);
+      }
+    },
+    SLOW,
+  );
+
+  it(
+    'holds every page-1 text request in the recorded layout table',
+    () => {
+      const parsed = parseDocument(JSON.stringify(generated));
+      if (!parsed.ok) throw new Error(parsed.code);
+      const requests = m9LayoutRequests(parsed.document);
+      const table = readM9LayoutTable();
+      expect(Object.keys(table.layouts).sort()).toEqual(requests.map(requestKey));
+      expect(requests).toHaveLength(207);
+      // Every text leaf of page 1 has draw bounds from its layout.
+      const textLeaves = [...loaded.projection.nodes.values()].filter(
+        (node) => node.kind === 'text',
+      );
+      expect(textLeaves.length).toBeGreaterThan(200);
+      for (const leaf of textLeaves) {
+        if (loaded.bounds.has(leaf.id)) expect(loaded.bounds.get(leaf.id), leaf.id).not.toBeNull();
+      }
+    },
+    SLOW,
+  );
+
+  it(
+    'chooses a typical view with 900 to 1,100 drawn leaves at DPR 1 and 2',
+    () => {
+      const camera = typicalCamera(loaded.bounds);
+      expect(camera.zoom).toBeCloseTo(TYPICAL_ZOOM, 9);
+      expect(loaded.bounds.size).toBe(DRAWN_LEAVES);
+      for (const dpr of [1, 2]) {
+        const { visible, leaves } = visibility(loaded.bounds, camera, dpr);
+        expect(visible).toBeGreaterThanOrEqual(E26_TYPICAL_VISIBLE.min);
+        expect(visible).toBeLessThanOrEqual(E26_TYPICAL_VISIBLE.max);
+        expect(visible).toBeLessThan(leaves);
+      }
+      expect(visibility(loaded.bounds, camera).visible).toBe(TYPICAL_VISIBLE);
+      expect(visibility(loaded.bounds, camera, 2).visible).toBe(TYPICAL_VISIBLE_DPR2);
+      expect(m9Configuration(M9_SCENARIOS[0]!, 1, 5, loaded).camera).toEqual(camera);
+    },
+    SLOW,
+  );
+
+  it(
+    'fits every drawn leaf at F and along the whole pan and zoom path',
+    () => {
+      const fitted = fittedCamera(contentBounds(loaded.bounds));
+      const all = (camera: typeof fitted) => {
+        const { inside, leaves } = visibility(loaded.bounds, camera);
+        return inside === leaves;
+      };
+      expect(all(fitted)).toBe(true);
+      for (let t = 0; t < 10_000; t += 1) expect(all(panZoomCamera(fitted, t))).toBe(true);
+    },
+    SLOW,
+  );
+
+  it(
+    'keeps the moved selection in the viewport through the edit drag at both cameras',
+    () => {
+      const { ids } = m1A13MoveSelection(generated as never);
+      for (const camera of [
+        fittedCamera(contentBounds(loaded.bounds)),
+        typicalCamera(loaded.bounds),
+      ]) {
+        const view = worldViewport(camera);
+        for (let t = 0; t < 10_000; t += 10) {
+          const offset = editDragOffset(t);
+          for (const id of ids) {
+            const box = loaded.bounds.get(id)!;
+            const dx = offset.x / camera.zoom;
+            const dy = offset.y / camera.zoom;
+            expect(
+              contains(view, {
+                minX: box.minX + dx,
+                minY: box.minY + dy,
+                maxX: box.maxX + dx,
+                maxY: box.maxY + dy,
+              }),
+            ).toBe(true);
+          }
+        }
+      }
+    },
+    SLOW,
+  );
+});

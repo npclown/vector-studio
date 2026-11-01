@@ -22,6 +22,7 @@ type Query = Readonly<{
   reject: string | null;
   rejectMode: string;
   isolation: boolean;
+  ui: boolean;
 }>;
 type Write = { startMs: number; endMs: number | null; ok: boolean | null };
 type BenchInstance = {
@@ -156,6 +157,7 @@ describe('E26-U1b next-host bench option', () => {
       reject: null,
       rejectMode: 'once',
       isolation: false,
+      ui: false,
     });
     expect(bench.benchQuery('?isolation=1')).toBeNull();
     expect(bench.benchQuery('?bench=1&isolation=1')).toMatchObject({ isolation: true });
@@ -167,6 +169,7 @@ describe('E26-U1b next-host bench option', () => {
       reject: 'n7',
       rejectMode: 'persistent',
       isolation: false,
+      ui: false,
     });
     expect(bench.benchQuery('?bench=1&doc=other&reject=')).toMatchObject({
       doc: null,
