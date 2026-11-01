@@ -24,9 +24,11 @@ const run = promisify(execFile);
 const UI = 'packages/ui';
 const REACT = 'packages/react';
 
-/** The runtime exports of `ui` beyond `react`'s: sections 6 and 7.1. */
+/** The runtime exports of `ui` beyond `react`'s: sections 6, 7.1 and 7.2. */
 const OWN_VALUES = [
   'EditorPanels',
+  'LayerTree',
+  'PageList',
   'PanelBoundary',
   'PanelProvider',
   'ToolbarPrimaryRow',

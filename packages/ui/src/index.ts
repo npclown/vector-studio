@@ -200,3 +200,6 @@ export {
 
 // Section 7.1: the toolbar's two rows.
 export { ToolbarPrimaryRow, ToolbarSecondaryRow, type ToolbarRowProps } from './toolbar.js';
+
+// Section 7.2: the layer panel's page list and layer tree.
+export { LayerTree, PageList } from './layers.js';

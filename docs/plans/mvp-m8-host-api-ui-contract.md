@@ -193,7 +193,7 @@ M8 "closes after M7" (MVP plan section 7); M7 was accepted on 2026-10-30, and th
 | M8-U1 | In review: PR (see below); independent review READY WITH FOLLOW-UPS, applied as these notes |
 | M8-U2 | In review: independent review r1 NOT READY (shared-memo owner), fixed; r2 READY; notes below |
 | M8-U3 | In review: independent review r1 READY WITH FOLLOW-UPS, applied; r2 READY, minor follow-ups applied; notes below |
-| M8-U4 | Not started |
+| M8-U4 | In review: independent review r1 READY WITH FOLLOW-UPS, applied as notes below |
 | M8-U5 | Not started |
 | M8-U6 | Not started |
 | M8-U7 | Not started |
@@ -226,3 +226,12 @@ M8 "closes after M7" (MVP plan section 7); M7 was accepted on 2026-10-30, and th
 - The M8-B3 public-import check lives in `tooling/boundary-policy.mjs` and runs in `pnpm check:boundaries`; next-host's allowed set includes `ui`, its manifest changes in M8-U6.
 - The refusal `output` sits inline in its row, so M8-U6's M8-N3 width and row 2 height budget includes it while a refusal shows (review r1).
 - Effects, a real error-boundary catch, panel collapse, the refusal output and click wiring run only in a browser; M8-A14 covers them.
+
+### M8-U4 notes
+
+- `PageList` keeps next-host's `<nav data-testid="pages">` holding only the page buttons `page-<id>` (`aria-pressed` on the active page); add and remove buttons (`add-page`, `remove-page`) and the refusal output `pages-refusal` sit outside the nav in a `role="group"` named "pages" that carries the old `0 8px` padding. Double-click on a page button replaces it with a `page name` textbox (8em wide).
+- Add page sends `addPage`, then, on success, `setActivePage` to the new page (a session command, so the add stays one undo step). Remove page targets the active page and is disabled on the last page instead of sending a command `editor.last-page` would refuse.
+- Names: a blank or whitespace-only name is invalid in the UI (`aria-invalid`, nothing sent), although editor-core accepts it; an unchanged name sends nothing. Enter or blur commits once; Escape cancels. An invalid name on blur leaves the textbox open and marked until Escape or a new rename.
+- `LayerTree` is `<section data-testid="layers">`, 240 px high, with an `arrange` toolbar (`reorder-forward`, `reorder-backward`, `reorder-front`, `reorder-back`, enabled whenever something is selected; a move that changes nothing records no step), a `layers-refusal` output and a scrolling list. Rows are `layer-<id>` with `layer-toggle-<id>`, `layer-name-<id>` (`aria-pressed` = selected) and `layer-visible-<id>`; they form a plain list of buttons, not an ARIA tree, collapsed by default, front first. Mod in Shift or Mod toggle means Ctrl or Meta on any platform, as the canvas select tool reads it.
+- `layerRows` walks the whole active page on each document change; its cost is unmeasured (risk "Panel cost"; `?bench=1` does not mount it).
+- Browser-only behavior (click, double-click, Enter then blur, Escape, Shift and Mod click, expand) is left to M8-A14, which includes a rename by Enter then blur. M8-U6 checks the M8-N3 row 2 height with the rename textbox open against real metrics.
