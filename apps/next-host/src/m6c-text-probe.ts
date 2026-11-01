@@ -234,6 +234,17 @@ export class SceneRecorder {
     });
   }
 
+  /** The newest generation of the accepted text leaves; null when none is held. */
+  newestTextGeneration(): number | null {
+    let newest: number | null = null;
+    for (const node of this.#nodes.values()) {
+      if (node.kind === 'text' && (newest === null || node.generation > newest)) {
+        newest = node.generation;
+      }
+    }
+    return newest;
+  }
+
   /** The last accepted camera, null before the first. */
   get camera(): RenderCamera | null {
     return this.#camera;
@@ -360,12 +371,20 @@ export function bitmapRect(
 }
 
 export const PROBE_BACKDROP_ID = 'm6c-probe-backdrop';
+/**
+ * CSS px the white backdrop reaches past each canvas edge (M6c-U4, laptop pre-run of 0f8eb08):
+ * with its corners exactly on the canvas corners, a pre-run read about three dark pixels (value
+ * near 191) at the canvas's bottom-right corner in every probe crop clamped there; off the
+ * canvas, the backdrop's corner antialiasing cannot reach a crop.
+ */
+export const PROBE_BACKDROP_OVERHANG = 8;
 export const PROBE_CLUSTER_ID = 'm6c-probe-cluster';
 
 /**
  * Section 6.1's GPU side: a scene of one cluster of `entry` (its world transform, generation,
  * `lang`, run `fontList` and `size`, the cluster's `x`, `y` and `advance`, black, opacity 1) over
- * an opaque white rectangle that covers the canvas at `camera`.
+ * an opaque white rectangle that covers the canvas at `camera`, overhanging each edge by
+ * `PROBE_BACKDROP_OVERHANG` CSS px.
  */
 export function clusterScene(
   entry: Readonly<{ world: SceneAffine; leaf: TextLeaf }>,
@@ -384,14 +403,21 @@ export function clusterScene(
       {
         id: PROBE_BACKDROP_ID,
         parentId: null,
-        transform: [1, 0, 0, 1, position.x, position.y],
+        transform: [
+          1,
+          0,
+          0,
+          1,
+          position.x - PROBE_BACKDROP_OVERHANG / zoom,
+          position.y - PROBE_BACKDROP_OVERHANG / zoom,
+        ],
         visible: true,
         opacity: 1,
         kind: 'primitive',
         geometry: {
           kind: 'rectangle',
-          width: cssSize.width / zoom,
-          height: cssSize.height / zoom,
+          width: (cssSize.width + 2 * PROBE_BACKDROP_OVERHANG) / zoom,
+          height: (cssSize.height + 2 * PROBE_BACKDROP_OVERHANG) / zoom,
           cornerRadii: [0, 0, 0, 0],
         },
         style: { fill: { r: 1, g: 1, b: 1, a: 1 }, stroke: null },

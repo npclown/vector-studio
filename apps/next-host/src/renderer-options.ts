@@ -22,3 +22,63 @@ export type HostRendererOptions = Readonly<
 export function hostRendererOptions(glyphRaster: HostGlyphRaster): HostRendererOptions {
   return { clips: 'all', paints: 'gradient', groups: 'isolated', text: 'atlas', glyphRaster };
 }
+
+/** One call the host's service made to its glyph raster port (M6c-U4, `?test=1` only). */
+export type GlyphRasterLogEntry = Readonly<{
+  /** The newest text leaf generation the host's renderer had accepted at the call; null for none. */
+  generation: number | null;
+  text: string;
+  fontList: string;
+  lang: string;
+  pixelSize: number;
+  phaseX: number;
+}>;
+
+export type GlyphRasterLog = Readonly<{
+  /** The port to give the host's service: `inner` with every call logged. */
+  port: HostGlyphRaster;
+  /** The calls in order; at most `cap`, the oldest dropped first. */
+  entries: readonly GlyphRasterLogEntry[];
+  /** Sets how a call reads the accepted generation (the scene recorder, once it exists). */
+  setGeneration(read: () => number | null): void;
+  clear(): void;
+}>;
+
+/**
+ * M6c-U4 review S2: wraps the host's glyph raster port so the A05 spec can tell which keys the
+ * service rasterized at which layout generation (the port's request carries no generation, so
+ * the call takes the newest one the renderer accepted, as the frame it plans draws that scene).
+ * Only the host's service gets the wrapped port; the cluster probe keeps the inner one.
+ */
+export function createGlyphRasterLog(inner: HostGlyphRaster, cap = 200_000): GlyphRasterLog {
+  const entries: GlyphRasterLogEntry[] = [];
+  let generation: () => number | null = () => null;
+  const port: HostGlyphRaster = Object.freeze({
+    portVersion: inner.portVersion,
+    operationId: inner.operationId,
+    rasterize: (request: Parameters<HostGlyphRaster['rasterize']>[0]) => {
+      if (entries.length >= cap) entries.shift();
+      entries.push(
+        Object.freeze({
+          generation: generation(),
+          text: request.text,
+          fontList: request.fontList,
+          lang: request.lang,
+          pixelSize: request.pixelSize,
+          phaseX: request.phaseX,
+        }),
+      );
+      return inner.rasterize(request);
+    },
+  });
+  return {
+    port,
+    entries,
+    setGeneration(read) {
+      generation = read;
+    },
+    clear() {
+      entries.length = 0;
+    },
+  };
+}

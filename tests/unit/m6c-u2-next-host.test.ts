@@ -134,7 +134,10 @@ describe("M6c-U2 next-host renderer options (text: 'atlas')", () => {
     expect(service.requiresLayerPipeline).toBe(true);
     service.dispose();
     // The host's service and the probe's both take them, with the canvas raster port.
-    expect(RENDERER_SOURCE).toMatch(/\.\.\.hostRendererOptions\(glyphRaster\),\n {4}\}\);/u);
+    // M6c-U4: under `?test=1` the host service gets the logged port (glyphRasterLog).
+    expect(RENDERER_SOURCE).toMatch(
+      /\.\.\.hostRendererOptions\(rasterLog\?\.port \?\? glyphRaster\),\n {4}\}\);/u,
+    );
     expect(RENDERER_SOURCE).toMatch(
       /new core\.PrimitiveRendererService\(target, hostRendererOptions\(glyphRaster\)\)/u,
     );
@@ -503,8 +506,9 @@ describe('M6c-U2 cluster probe: the one-cluster scene and its crop', () => {
           const [backdrop, node] = snapshot.nodes;
           expect(backdrop).toMatchObject({
             id: probe.PROBE_BACKDROP_ID,
-            transform: [1, 0, 0, 1, -3.25, 7.5],
-            geometry: { kind: 'rectangle', width: 640, height: 640 / 1.5 },
+            // M6c-U4: the backdrop overhangs each canvas edge by 8 CSS px.
+            transform: [1, 0, 0, 1, -3.25 - 8 / 1.5, 7.5 - 8 / 1.5],
+            geometry: { kind: 'rectangle', width: 976 / 1.5, height: 656 / 1.5 },
             style: { fill: { r: 1, g: 1, b: 1, a: 1 }, stroke: null },
           });
           const run = leaf.leaf.runs[placement.run]!;
