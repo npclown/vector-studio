@@ -213,6 +213,9 @@ function TextSection({
   const range = only === null ? null : textRange(only, textEdit);
   const { family, size, color } = textRunStyle(texts, textEdit);
   const runsDisabled = only === null || range === null;
+  // The run fields' draft also resets when the text edit selection moves, since a canvas press
+  // that commits a typed value can leave the caret on a run showing the old value (M8-R4).
+  const runIdentity = `${fieldIdentity(texts)} ${textEdit?.anchor ?? ''}-${textEdit?.focus ?? ''}`;
   const setStyle = (style: Parameters<typeof textStyleCommand>[2]) =>
     only !== null && range !== null && run(textStyleCommand(only, range, style));
   return (
@@ -263,7 +266,7 @@ function TextSection({
       </Row>
       <Row>
         <TextField
-          identity={fieldIdentity(texts)}
+          identity={runIdentity}
           label="Font family"
           value={family.state === 'one' ? family.value : null}
           disabled={runsDisabled}
@@ -274,7 +277,7 @@ function TextSection({
           }}
         />
         <TextField
-          identity={fieldIdentity(texts)}
+          identity={runIdentity}
           label="Font size"
           value={commonText(size)}
           disabled={runsDisabled}
@@ -285,7 +288,7 @@ function TextSection({
           }}
         />
         <TextField
-          identity={fieldIdentity(texts)}
+          identity={runIdentity}
           label="Text colour"
           value={color.state === 'one' ? colorHex(color.value) : null}
           disabled={runsDisabled}

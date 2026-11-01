@@ -521,7 +521,9 @@ test('M8-A14: a text style over a text edit selection', async ({ page }) => {
     page,
     'font size over the selection',
     async () => {
-      await size.focus();
+      // Entering edit mode focused the textarea, so the click below blurs it (M6b-H2).
+      await expect(page.getByRole('textbox', { name: 'Text input', exact: true })).toBeFocused();
+      await size.click();
       // The selection must survive the focus move for the style to cover it alone.
       const textEdit = await page.evaluate(() =>
         JSON.stringify(window.__p5Host!.editor.getSnapshot().textEdit),
@@ -542,6 +544,10 @@ test('M8-A14: a text style over a text edit selection', async ({ page }) => {
   const textEditOf = () =>
     page.evaluate(() => JSON.stringify(window.__p5Host!.editor.getSnapshot().textEdit));
   expect(await textEditOf(), 'text edit state after the commit').not.toBe('null');
+  // Moving between run fields keeps edit mode.
+  await size.press('Tab');
+  await expect(textbox(panel, 'Text colour')).toBeFocused();
+  expect(await textEditOf(), 'text edit state after a Tab to another run field').not.toBe('null');
   // Leaving the run field for a field outside the text edit focus target exits edit mode.
   await textbox(panel, 'Letter spacing').focus();
   expect(await textEditOf(), 'text edit state after leaving the run fields').toBe('null');
