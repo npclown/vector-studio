@@ -1,0 +1,279 @@
+{
+  "scenario": "e26-isolation-m1-a13/v1",
+  "repetition": 5,
+  "project": "chrome-dpr2",
+  "browser": "chromium 156.0.8078.74",
+  "devicePixelRatio": 2,
+  "commit": "8629d300b5d0ebd5bc00ec4986b187e7210ba46a",
+  "dirty": false,
+  "configurationHash": "30e42bac4151e0c199af74238f477ae9cb957b6444fee1306547124475a1073b",
+  "configuration": {
+    "isolation": {
+      "id": "e26-isolation-m1-a13/v1",
+      "document": "m1-a13",
+      "replaceRuns": 5,
+      "scattered": 16,
+      "one": {
+        "factor": 3,
+        "constantMs": 50,
+        "capMs": 500
+      },
+      "sixteen": {
+        "factor": 6,
+        "constantMs": 100,
+        "capMs": 1000
+      }
+    },
+    "documentSha256": "d8658b14694ca1e6bbcff734e35575222511df96281720068fa4efe2cb9ef974",
+    "schemaVersion": 6,
+    "sceneNodes": 10634,
+    "targets": {
+      "one": "l4634",
+      "sixteen": [
+        "e289",
+        "l876",
+        "l1456",
+        "e2043",
+        "e2623",
+        "r3204",
+        "e3775",
+        "r4344",
+        "p4920",
+        "r5506",
+        "l6084",
+        "p6656",
+        "e7229",
+        "e7817",
+        "r8388",
+        "r8962"
+      ]
+    },
+    "devicePixelRatio": 2,
+    "repetitions": 5
+  },
+  "environment": {
+    "devicePixelRatio": 2,
+    "canvas": {
+      "width": 2560,
+      "height": 1440
+    },
+    "screen": {
+      "width": 1400,
+      "height": 1000
+    },
+    "idleRafMedianMs": 16.699999999999818,
+    "adapter": {
+      "vendor": "nvidia",
+      "architecture": "turing",
+      "device": "",
+      "description": ""
+    },
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Safari/537.36"
+  },
+  "presence": {
+    "start": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    },
+    "end": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    }
+  },
+  "errors": [],
+  "consoleErrors": [],
+  "replaceSnapshotMs": {
+    "samples": [
+      78.30000001192093,
+      83.40000000596046,
+      88.90000000596046,
+      92.80000001192093,
+      97
+    ],
+    "median": 88.90000000596046
+  },
+  "cleanLoadTailMs": {
+    "samples": [
+      77,
+      85.49999997019768,
+      94.5,
+      99.30000001192093,
+      135
+    ],
+    "median": 94.5
+  },
+  "boundsMs": {
+    "one": 316.7000000178814,
+    "sixteen": 633.4000000357628
+  },
+  "oneMs": 106.09999999403954,
+  "sixteenMs": 129.59999999403954,
+  "pass": {
+    "one": true,
+    "sixteen": true
+  },
+  "run": {
+    "loadErrors": [],
+    "settleErrors": [],
+    "replaces": [
+      {
+        "durationMs": 97,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 196.30000001192093
+      },
+      {
+        "durationMs": 78.30000001192093,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 163.7999999821186
+      },
+      {
+        "durationMs": 92.80000001192093,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 227.80000001192093
+      },
+      {
+        "durationMs": 88.90000000596046,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 183.40000000596046
+      },
+      {
+        "durationMs": 83.40000000596046,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 160.40000000596046
+      }
+    ],
+    "warmUp": {
+      "error": null,
+      "commandMs": 212.5,
+      "rejected": [
+        "l4634"
+      ],
+      "rejections": 15,
+      "measures": [
+        {
+          "startMs": 6897.199999988079,
+          "durationMs": 134.60000002384186
+        }
+      ],
+      "durationMs": 134.60000002384186
+    },
+    "single": {
+      "error": null,
+      "commandMs": 188.69999998807907,
+      "rejected": [
+        "l4634"
+      ],
+      "rejections": 15,
+      "measures": [
+        {
+          "startMs": 8088.4000000059605,
+          "durationMs": 106.09999999403954
+        }
+      ],
+      "durationMs": 106.09999999403954
+    },
+    "scattered": {
+      "error": null,
+      "commandMs": 223,
+      "rejected": [
+        "e2043",
+        "e2623",
+        "e289",
+        "e3775",
+        "e7229",
+        "e7817",
+        "l1456",
+        "l6084",
+        "l876",
+        "p4920",
+        "p6656",
+        "r3204",
+        "r4344",
+        "r5506",
+        "r8388",
+        "r8962"
+      ],
+      "rejections": 181,
+      "measures": [
+        {
+          "startMs": 9123.59999999404,
+          "durationMs": 129.59999999403954
+        }
+      ],
+      "durationMs": 129.59999999403954
+    },
+    "longTasks": [
+      {
+        "startMs": 5671.300000011921,
+        "durationMs": 70
+      },
+      {
+        "startMs": 5754.5999999940395,
+        "durationMs": 164
+      },
+      {
+        "startMs": 5919.5,
+        "durationMs": 65
+      },
+      {
+        "startMs": 5999.0999999940395,
+        "durationMs": 228
+      },
+      {
+        "startMs": 6228.800000011921,
+        "durationMs": 74
+      },
+      {
+        "startMs": 6317.0999999940395,
+        "durationMs": 184
+      },
+      {
+        "startMs": 6501.4000000059605,
+        "durationMs": 56
+      },
+      {
+        "startMs": 6572.800000011921,
+        "durationMs": 161
+      },
+      {
+        "startMs": 6734.300000011921,
+        "durationMs": 59
+      },
+      {
+        "startMs": 6819,
+        "durationMs": 213
+      },
+      {
+        "startMs": 7032.699999988079,
+        "durationMs": 875
+      },
+      {
+        "startMs": 8005.5999999940395,
+        "durationMs": 189
+      },
+      {
+        "startMs": 8195.09999999404,
+        "durationMs": 810
+      },
+      {
+        "startMs": 9030.199999988079,
+        "durationMs": 223
+      },
+      {
+        "startMs": 9253.90000000596,
+        "durationMs": 836
+      }
+    ],
+    "lifecycle": "ready",
+    "recoveryAttempts": 0
+  }
+}
