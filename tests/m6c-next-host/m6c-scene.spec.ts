@@ -429,13 +429,20 @@ async function judgeScene(page: Page, camera: Camera) {
   expect(frames.restored, 'the undos restore the document').toBe(true);
   const outside = await changedOutside(page, scene);
   const canvas = { width: frames.width, height: frames.height };
-  const rows: Row[] = [];
-  const crops: Pixels[] = [];
+  // Pass 1: every non-space cluster on the canvas, drawn alone by the probe.
+  type Read = Readonly<{
+    leaf: TextScene['leaves'][number];
+    index: number;
+    cluster: Readonly<{ text: string; x: number; y: number; advance: number }>;
+    size: number;
+    mode: string;
+    bound: Readonly<{ x0: number; y0: number; x1: number; y1: number }>;
+    read: ClusterRead;
+    probe: Pixels | null;
+  }>;
+  const reads: Read[] = [];
   for (const leaf of scene.leaves) {
     if (!leaf.shown) continue;
-    const opacity = groupOpacity(geo, leaf.id, leaf.leaf.opacity);
-    const rule = rules[leaf.id] ?? OPEN_RULE;
-    const map = deviceMap(leaf.world, camera, dpr);
     const keys = clusterKeys(leaf, camera, dpr);
     const clusters = leaf.leaf.runs.flatMap((run) =>
       run.clusters.map((cluster) => ({ cluster, size: run.size })),
@@ -452,78 +459,120 @@ async function judgeScene(page: Page, camera: Camera) {
         ([id, at]) => (window.__p5Host as unknown as Hook).text.readCluster(id, at),
         [leaf.id, index] as const,
       );
-      const failures: string[] = [];
-      if (read.status !== 'applied') failures.push(`probe status ${read.status}`);
-      if (read.placement.mode !== key.mode) {
-        failures.push(`mode ${read.placement.mode}, recomputed ${key.mode}`);
-      }
-      if (read.placement.mode === 'snapped') {
-        const expected = expectedPlacement(leaf.world, camera, dpr, cluster, size);
-        for (const failure of placementFailures(read.placement, expected)) {
-          failures.push(`placement ${failure}`);
-        }
-      }
-      if (read.crop.width === 0 || read.crop.height === 0) continue;
-      const probe = decodeCrop(read.crop);
-      crops.push(probe);
-      const [shown, background] = (await keptCrops(page, ['shown', 'hidden'], read.crop)).map(
-        decodeCrop,
-      );
-      const judgement = judgeCluster({
-        probe,
-        shown: shown!,
-        background: background!,
-        rule,
-        opacity,
-      });
-      const share = localInkShare(probe, map, cluster, size);
-      const outsideRect = read.rect === null ? null : inkOutside(probe, read.rect);
-      const whole =
-        bound.x0 >= 0 && bound.y0 >= 0 && bound.x1 <= canvas.width && bound.y1 <= canvas.height;
-      if (share === null && whole) failures.push('the probe drew no ink');
-      if (share !== null && share < LOCAL_SHARE) failures.push(`local ink share ${share}`);
-      if (outsideRect !== null && outsideRect > 0) {
-        failures.push(`${outsideRect} ink pixels outside the bitmap rectangle`);
-      }
-      if (judgement.hiddenChanged > 0) {
-        failures.push(`${judgement.hiddenChanged} hidden pixels changed (clip, mask or order)`);
-      }
-      if (judgement.tooLight > 0) {
-        failures.push(
-          `${judgement.tooLight} channels lighter than the composite, by ${judgement.worstLight}`,
-        );
-      }
-      if (judgement.tooDark > 0) {
-        failures.push(
-          `${judgement.tooDark} channels darker than the opacity allows, by ${judgement.worstDark}`,
-        );
-      }
-      if (judgement.strongChanged !== judgement.strong) {
-        failures.push(`${judgement.strong - judgement.strongChanged} strong ink pixels unchanged`);
-      }
-      rows.push({
-        id: leaf.id,
+      const empty = read.crop.width === 0 || read.crop.height === 0;
+      reads.push({
+        leaf,
         index,
-        text: cluster.text,
-        mode: read.placement.mode,
-        share: share === null ? null : round(share),
-        outsideRect,
-        failures,
-        ...judgement,
-        worstLight: round(judgement.worstLight),
-        worstDark: round(judgement.worstDark),
+        cluster,
+        size,
+        mode: key.mode,
+        bound,
+        read,
+        probe: empty ? null : decodeCrop(read.crop),
       });
     }
   }
+  // Each leaf's probe ink, grown by 1 px: a hidden pixel of one leaf under another's is shared.
+  const masks = new Map<string, Uint8Array>();
+  for (const id of new Set(reads.map((value) => value.leaf.id))) {
+    masks.set(
+      id,
+      inkMask(
+        canvas.width,
+        canvas.height,
+        reads.flatMap((value) =>
+          value.leaf.id === id && value.probe !== null ? [value.probe] : [],
+        ),
+      ),
+    );
+  }
+  const othersOf = (id: string) => {
+    const mask = new Uint8Array(canvas.width * canvas.height);
+    for (const [other, ink] of masks) {
+      if (other === id) continue;
+      for (let i = 0; i < ink.length; i += 1) if (ink[i] === 1) mask[i] = 1;
+    }
+    return { mask, width: canvas.width };
+  };
+  // Pass 2: the judgement.
+  const rows: Row[] = [];
+  const others = new Map<string, ReturnType<typeof othersOf>>();
+  for (const { leaf, index, cluster, size, mode, bound, read, probe } of reads) {
+    const failures: string[] = [];
+    if (read.status !== 'applied') failures.push(`probe status ${read.status}`);
+    if (read.placement.mode !== mode) {
+      failures.push(`mode ${read.placement.mode}, recomputed ${mode}`);
+    }
+    if (read.placement.mode === 'snapped') {
+      const expected = expectedPlacement(leaf.world, camera, dpr, cluster, size);
+      for (const failure of placementFailures(read.placement, expected)) {
+        failures.push(`placement ${failure}`);
+      }
+    }
+    if (probe === null) continue;
+    const [shown, background] = (await keptCrops(page, ['shown', 'hidden'], read.crop)).map(
+      decodeCrop,
+    );
+    if (!others.has(leaf.id)) others.set(leaf.id, othersOf(leaf.id));
+    const judgement = judgeCluster({
+      probe,
+      shown: shown!,
+      background: background!,
+      rule: rules[leaf.id] ?? OPEN_RULE,
+      opacity: groupOpacity(geo, leaf.id, leaf.leaf.opacity),
+      others: others.get(leaf.id)!,
+    });
+    const share = localInkShare(probe, deviceMap(leaf.world, camera, dpr), cluster, size);
+    const outsideRect = read.rect === null ? null : inkOutside(probe, read.rect);
+    const whole =
+      bound.x0 >= 0 && bound.y0 >= 0 && bound.x1 <= canvas.width && bound.y1 <= canvas.height;
+    if (share === null && whole) failures.push('the probe drew no ink');
+    if (share !== null && share < LOCAL_SHARE) failures.push(`local ink share ${share}`);
+    if (outsideRect !== null && outsideRect > 0) {
+      failures.push(`${outsideRect} ink pixels outside the bitmap rectangle`);
+    }
+    if (judgement.hiddenChanged > 0) {
+      failures.push(`${judgement.hiddenChanged} hidden pixels changed (clip, mask or order)`);
+    }
+    if (judgement.tooLight > 0) {
+      failures.push(
+        `${judgement.tooLight} channels lighter than the composite, by ${judgement.worstLight}`,
+      );
+    }
+    if (judgement.tooDark > 0) {
+      failures.push(
+        `${judgement.tooDark} channels darker than the opacity allows, by ${judgement.worstDark}`,
+      );
+    }
+    if (judgement.strongChanged !== judgement.strong) {
+      failures.push(`${judgement.strong - judgement.strongChanged} strong ink pixels unchanged`);
+    }
+    rows.push({
+      id: leaf.id,
+      index,
+      text: cluster.text,
+      mode: read.placement.mode,
+      share: share === null ? null : round(share),
+      outsideRect,
+      failures,
+      ...judgement,
+      worstLight: round(judgement.worstLight),
+      worstDark: round(judgement.worstDark),
+    });
+  }
   // Review S3: no changed pixel that no probe cluster's ink (grown by 1 px) accounts for.
   const changed = await changedBits(page);
+  const crops = reads.flatMap((value) => (value.probe === null ? [] : [value.probe]));
   const extra = extraInk(changed, inkMask(canvas.width, canvas.height, crops), canvas.width);
   return { scene, rows, outside, extra, frames };
 }
 
 /** Sums of a judgement field over the rows of one leaf. */
-const total = (rows: readonly Row[], id: string, field: keyof ClusterJudgement) =>
-  rows.filter((row) => row.id === id).reduce((sum, row) => sum + row[field], 0);
+const total = (
+  rows: readonly Row[],
+  id: string,
+  field: Exclude<keyof ClusterJudgement, 'samples'>,
+) => rows.filter((row) => row.id === id).reduce((sum, row) => sum + row[field], 0);
 
 /** The features a zoom must see, each with its own count above zero. */
 function featureCounts(rows: readonly Row[]): Record<Feature, Record<string, number>> {

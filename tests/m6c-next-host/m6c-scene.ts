@@ -177,6 +177,10 @@ export type ClusterJudgement = {
   solid: number;
   /** Hidden pixels whose shown frame differs from the background by more than one level. */
   hiddenChanged: number;
+  /** Hidden pixels under another leaf's ink (`others`), not judged. */
+  hiddenShared: number;
+  /** Up to four `[x, y, probe ink, shown R, G, B, background R, G, B]` per failing kind. */
+  samples: Record<'hiddenChanged' | 'tooLight' | 'tooDark' | 'strongUnchanged', number[][]>;
   /** Visible channel values above (lighter) or below (darker) the composite bounds. */
   tooLight: number;
   tooDark: number;
@@ -197,6 +201,13 @@ export function judgeCluster(
     opacity: number;
     margin?: number;
     tolerance?: number;
+    /**
+     * Pixels another leaf's probe ink covers (a device px mask of `width` columns, as
+     * `inkMask`): a hidden pixel there may change by that leaf's ink, so it is counted as
+     * `hiddenShared` and not judged (pre-run of 0f8eb08: `clip-text`'s tail beyond its frame lies
+     * on `mask-text`).
+     */
+    others?: Readonly<{ mask: Uint8Array; width: number }>;
   }>,
 ): ClusterJudgement {
   const { probe, shown, background, rule, opacity } = input;
@@ -214,6 +225,8 @@ export function judgeCluster(
     strongOnColour: 0,
     solid: 0,
     hiddenChanged: 0,
+    hiddenShared: 0,
+    samples: { hiddenChanged: [], tooLight: [], tooDark: [], strongUnchanged: [] },
     tooLight: 0,
     tooDark: 0,
     worstLight: 0,
@@ -233,9 +246,32 @@ export function judgeCluster(
         out.edge += 1;
         continue;
       }
+      const x = probe.x + column;
+      const y = probe.y + row;
+      const sample = (kind: keyof ClusterJudgement['samples']) => {
+        if (out.samples[kind].length >= 4) return;
+        out.samples[kind].push([
+          x,
+          y,
+          ink,
+          shown.rgba[i]!,
+          shown.rgba[i + 1]!,
+          shown.rgba[i + 2]!,
+          background.rgba[i]!,
+          background.rgba[i + 1]!,
+          background.rgba[i + 2]!,
+        ]);
+      };
       if (state === 'hidden') {
+        if (input.others !== undefined && input.others.mask[y * input.others.width + x] === 1) {
+          out.hiddenShared += 1;
+          continue;
+        }
         out.hidden += 1;
-        if (changed) out.hiddenChanged += 1;
+        if (changed) {
+          out.hiddenChanged += 1;
+          sample('hiddenChanged');
+        }
         continue;
       }
       out.visible += 1;
@@ -243,10 +279,13 @@ export function judgeCluster(
       if (ink >= STRONG_INK) {
         out.strong += 1;
         if (changed) out.strongChanged += 1;
+        else sample('strongUnchanged');
         const white = [0, 1, 2].every((channel) => background.rgba[i + channel]! >= 250);
         if (!white) out.strongOnColour += 1;
       }
       if (ink >= SOLID_INK) out.solid += 1;
+      let light = false;
+      let dark = false;
       for (let channel = 0; channel < 3; channel += 1) {
         const bg = background.rgba[i + channel]!;
         const value = shown.rgba[i + channel]!;
@@ -255,12 +294,16 @@ export function judgeCluster(
         if (value > upper) {
           out.tooLight += 1;
           out.worstLight = Math.max(out.worstLight, value - upper);
+          light = true;
         }
         if (value < lower) {
           out.tooDark += 1;
           out.worstDark = Math.max(out.worstDark, lower - value);
+          dark = true;
         }
       }
+      if (light) sample('tooLight');
+      if (dark) sample('tooDark');
     }
   }
   return out;

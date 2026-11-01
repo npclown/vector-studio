@@ -218,6 +218,20 @@ describe('M6c-U4 cluster judgement', () => {
       opacity: 1,
     });
     expect(leaked.hiddenChanged).toBe(1);
+    expect(leaked.samples.hiddenChanged).toEqual([[6, 6, 64, 190, 190, 190, 255, 255, 255]]);
+    // The same leak under another leaf's ink is counted as shared, not judged.
+    const othersMask = new Uint8Array(10 * 8);
+    othersMask[6 * 10 + 6] = 1;
+    const shared = judgeCluster({
+      probe: probeCrop,
+      shown: pixels(4, 6, 3, 1, white, { '2,0': [190, 190, 190] }),
+      background,
+      rule,
+      opacity: 1,
+      others: { mask: othersMask, width: 10 },
+    });
+    expect(shared).toMatchObject({ hidden: 0, hiddenShared: 1, hiddenChanged: 0 });
+    expect(shared.samples.hiddenChanged).toEqual([]);
     expect(() =>
       judgeCluster({
         probe: probeCrop,
