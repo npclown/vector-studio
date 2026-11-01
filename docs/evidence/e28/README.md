@@ -2,12 +2,12 @@
 
 This is the index of E28-A01 to A08 for the [E28 contract](../../plans/d9-e28-text-glyph-atlas-contract.md), unit U5.
 
-E28 is done: every criterion passes. The unit criteria pass in CI, A07's captures on SwiftShader, and the headed spec and the full `pnpm test:gpu` on the reference PC at the tree of #370, before #378 lowered the budget. The budget of 64 is checked by unit tests and a SwiftShader re-run only. Two decisions came out of the evidence, and both are recorded in the contract:
+E28 is done: every criterion passes. The unit criteria pass in CI, A07's captures on SwiftShader, and the headed spec and the full `pnpm test:gpu` on the reference PC at the tree of #370, before #378 lowered the budget. The budget of 64 is checked by unit tests and a SwiftShader re-run; its hardware frame time was recorded later, in the M6c-U5 addition below. Two decisions came out of the evidence, and both are recorded in the contract:
 
 - **Raster budget.** A frame of 256 distinct raster calls took 19.4 to 27.9 ms on the reference PC, which is longer than a 60 Hz frame. So `E28_RASTER_PER_FRAME` was lowered from 256 to 64 before this index (#378, `b0571f7`).
-  - The hardware run used 256. The figure of about 7 ms for 64 calls is extrapolated from it, at 0.11 ms per call.
+  - The hardware run used 256. The figure of about 7 ms for 64 calls is extrapolated from it, at 0.11 ms per call. The M6c-U5 addition below measured 5.7 to 8 ms.
   - New or regenerated text past the budget is blank until its frame comes. For example, 1,000 visible clusters take 16 frames after a font-load generation bump.
-  - U5 did not time a 64-call frame on hardware (the reference PC was unavailable). That timing passes to M9, or to the next reference-PC run of the E28 spec: its raster-cost tests already time one budget-sized frame.
+  - U5 did not time a 64-call frame on hardware (the reference PC was unavailable). That timing passed to M9, or to the next reference-PC run of the E28 spec. **Closed 2026-11-01:** M6c-U5's main-PC run timed it ([addition below](#m6c-u5-addition-2026-11-01-64-call-raster-frame-on-the-main-pc)), so it is no longer owed to M9.
 - **Compaction.** U4's T8 spec found a fragmentation lock in the atlas plan. Section 4's compaction rule fixed it before U4 merged (#369).
 
 MVP M6c may project text.
@@ -40,3 +40,16 @@ Evidence files in this folder:
 - **Raster cost.** On the reference PC, a cold call averages 0.13 to 0.16 ms and a warm call 0.024 to 0.028 ms, at T1's sizes. The budget counts calls, not pixels.
 - **M6c hand-off.** The `placements` and `readCluster` hooks returned four clusters with worst difference 0 at DPR 1 and 2. M6c owns the measurement against the DOM.
 - **SwiftShader general tolerance.** General text needs `E28_GENERAL_TOLERANCE=16` on SwiftShader, because its bilinear filtering is coarser. The mean signed difference is about 0, so the error is not a placement bias. The spec refuses the override on a hardware adapter.
+
+## M6c-U5 addition (2026-11-01): 64-call raster frame on the main PC
+
+M6c-U5 ran this spec's "per-cluster readback and raster cost" tests through `pnpm test:m6c-observe` (projects `raster-chrome` and `raster-edge`, M6c-Q10 (a)), on the main PC with the GTX 1660 SUPER (driver 32.0.16.1088), headed Chrome 156.0.8078.74 and Edge 156.0.4314.50, at head `bd99196` (based on main `5c17b46`). The test times one frame of `E28_RASTER_PER_FRAME` (64) distinct calls. All four runs passed with no spec failure.
+
+| Project | DPR | Calls | Distinct | Frame ms | Within 16.7 ms | Cold mean ms | Warm mean ms | Spec failures |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| raster-chrome | 1 | 64 | 64 | 6.5 | yes | 0.125 | 0.02 | 0 |
+| raster-chrome | 2 | 64 | 64 | 8 | yes | 0.159 | 0.025 | 0 |
+| raster-edge | 1 | 64 | 64 | 5.7 | yes | 0.136 | 0.021 | 0 |
+| raster-edge | 2 | 64 | 64 | 7.1 | yes | 0.137 | 0.03 | 0 |
+
+A 64-call frame takes 5.7 to 8 ms, inside a 60 Hz frame (16.7 ms), which agrees with the extrapolated figure of about 7 ms. The machine was not idle during the run (the user's own Chrome and Edge were open, CPU about 27 % before it), so the figures are recorded, not judged. The report files stay on the main PC; their SHA-256 list, the typing figures and the caveat are in [the M6c-U5 record](../m6c-u5/README.md#m6c-a10-main-pc-record-2026-11-01).
