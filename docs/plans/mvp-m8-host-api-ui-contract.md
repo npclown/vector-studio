@@ -190,7 +190,7 @@ M8 "closes after M7" (MVP plan section 7); M7 was accepted on 2026-10-30, and th
 
 | Unit | State |
 | --- | --- |
-| M8-U1 | Not started |
+| M8-U1 | In review: PR (see below); independent review READY WITH FOLLOW-UPS, applied as these notes |
 | M8-U2 | Not started |
 | M8-U3 | Not started |
 | M8-U4 | Not started |
@@ -198,3 +198,11 @@ M8 "closes after M7" (MVP plan section 7); M7 was accepted on 2026-10-30, and th
 | M8-U6 | Not started |
 | M8-U7 | Not started |
 | M8-U8 | Not started |
+
+### M8-U1 notes
+
+- Reach (M8-T1) at the U1 change: 155 named declarations in the reach of `editor-core`'s built entry, 87 of them from `model` or `contracts`: 86 types (44 `model`, 42 `contracts`, `PageV6` included), all re-exported type only, and one `typeof`-only value, `DOCUMENT_ERROR_CODES`, not re-exported. The section 2 "about 84" was the 17a2b0a probe.
+- Two public names the contract does not list: `ExtensionSummary` (the element type of the `extensions` query result) and `ExtensionCommandBuilder<Args>` (the return type of `extensionCommand`). Both reach `react` and `ui` through M8-T2, so the M8-U2 fixtures include them.
+- M8-X1 `bindings` are the canonical chords the `keymap` query uses: `Mod` resolved for the editor's platform (`Ctrl` or `Meta`), `action: null` unbinds included, sorted by code unit. They stay constant for the editor's lifetime.
+- M8-A01's "model and contracts are unchanged" is shown by the U1 diff, which touches neither package; no test asserts it.
+- The A01 test reads the built `dist`; `pnpm check` builds through `typecheck` before `test:unit`. `tests/support/m8-type-reach.ts` is shared with M8-U2 and U3, which keep an owner-export check so a reached internal type fails clearly.

@@ -1,10 +1,12 @@
 import type { DocumentV6, JsonValue, NodeV6, PathData } from '@vector-studio/model';
-import { TOOL_NAMES } from './keymap.js';
+import { deepFreeze } from './freeze.js';
+import { TOOL_NAMES, type CanonicalBinding } from './keymap.js';
 import type {
   CustomNodeType,
   Extension,
   ExtensionApi,
   ExtensionCommand,
+  ExtensionSummary,
   ExtensionTool,
   PagePoint,
   PathAnchor,
@@ -51,6 +53,8 @@ function hasPathGrammar(verbs: readonly string[]): boolean {
   return true;
 }
 
+const byCodeUnit = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
 export function owned(extension: string, id: unknown): boolean {
   return typeof id === 'string' && (id === extension || id.startsWith(`${extension}.`));
 }
@@ -89,6 +93,13 @@ export class ExtensionRegistry {
   private readonly commands = new Map<string, ExtensionCommand>();
   /** In registration order. */
   private readonly toolMap = new Map<string, RegisteredTool>();
+  /** Each extension's ID with its node types, commands and tools, in registration order. */
+  private readonly owners: {
+    id: string;
+    nodeTypes: string[];
+    commands: string[];
+    tools: string[];
+  }[] = [];
 
   /**
    * Throws on a malformed or conflicting registration: that is a host programming error. The
@@ -109,6 +120,13 @@ export class ExtensionRegistry {
         reject(`extension id ${id} overlaps another extension`);
       }
       ids.push(id);
+      const contributions = {
+        id,
+        nodeTypes: [] as string[],
+        commands: [] as string[],
+        tools: [] as string[],
+      };
+      this.owners.push(contributions);
       if (!Array.isArray(nodeTypes) || !Array.isArray(commands) || !Array.isArray(tools)) {
         reject(`${id} has malformed nodeTypes, commands or tools`);
       }
@@ -127,6 +145,7 @@ export class ExtensionRegistry {
         }
         // Methods stay bound to the host's object, so a class-based type keeps its `this`.
         const own = entry as CustomNodeType;
+        contributions.nodeTypes.push(own.customType);
         this.types.set(
           own.customType,
           Object.freeze({
@@ -149,6 +168,7 @@ export class ExtensionRegistry {
           reject(`${id} cannot register command ${String(entry?.id)}`);
         }
         const own = entry as ExtensionCommand;
+        contributions.commands.push(own.id);
         this.commands.set(own.id, Object.freeze({ id: own.id, run: own.run.bind(own) }));
       }
       // Tool IDs follow the command rule (owned, unique) and never shadow a built-in tool.
@@ -167,6 +187,7 @@ export class ExtensionRegistry {
           reject(`${id} cannot register tool ${String(entry?.id)}`);
         }
         const own = entry as ExtensionTool;
+        contributions.tools.push(own.id);
         this.toolMap.set(
           own.id,
           Object.freeze({
@@ -179,6 +200,22 @@ export class ExtensionRegistry {
         );
       }
     }
+  }
+
+  /**
+   * The `extensions` query result (MVP M8 contract, M8-X1): one frozen summary per extension,
+   * sorted by ID, each list sorted by code unit. `layers` holds each extension's validated
+   * keymap layer in registration order.
+   */
+  summaries(layers: readonly (readonly CanonicalBinding[])[]): readonly ExtensionSummary[] {
+    const summaries = this.owners.map((owner, index) => ({
+      id: owner.id,
+      nodeTypes: [...owner.nodeTypes].sort(byCodeUnit),
+      commands: [...owner.commands].sort(byCodeUnit),
+      tools: [...owner.tools].sort(byCodeUnit),
+      bindings: (layers[index] ?? []).map((binding) => binding.chord).sort(byCodeUnit),
+    }));
+    return deepFreeze(summaries.sort((a, b) => byCodeUnit(a.id, b.id)));
   }
 
   /** The registered extension tools in registration order. */
