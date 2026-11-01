@@ -100,6 +100,7 @@ Each milestone is one visualization-track item with its own contract of 300 line
 - Completes the headless API: selectors and hooks for selection, active page, tool, history state, snapping, panels; command typing for extensions; a minimal UI package (`@vector-studio/ui`, new, imports `react` only, as ARCHITECTURE allows) with toolbar, layer panel and property panel that use only the public API (requirements, SDK model). Because the UI needs node and command types, `editor-core` re-exports the `model` types its public API uses and `react` re-exports them from `editor-core`, keeping `react -> editor-core, contracts`; the package enters `tooling/boundary-policy.mjs` in its creating unit. Extensions contribute panels through the UI package.
 - Panels grow in each milestone as needed for its headed specs; M8 closes the gaps and documents the API.
 - Exit gate: a type-level test that the UI package imports nothing but public exports; an extension panel renders through public API only; the next-host app uses the UI package; the boundary checker covers it.
+- Contract: [mvp-m8-host-api-ui-contract.md](mvp-m8-host-api-ui-contract.md) (V-18, approved 2026-11-01, #437); units U1 to U8, only U7 headed on the main PC.
 
 ### M9: Performance and MVP exit
 
