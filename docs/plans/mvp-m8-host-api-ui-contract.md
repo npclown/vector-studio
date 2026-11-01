@@ -34,6 +34,7 @@ Out of scope: drag and drop in the layer panel (M8-Q7); adopting nodes into a fr
 ### 1.3 Changes to earlier rules
 
 - M4 section 8: the panel and its helpers move from next-host to `@vector-studio/ui`; every M4 panel rule (one `setStyle` per commit, Enter and blur commit, mixed values, no live preview) is kept, and `tests/unit/m4-u4-next-host.test.ts` follows the moved helpers unchanged in its expectations.
+- M6b-H2 (amended in M8-U7, for M8-R4): the canvas, its textarea and the property panel's text run fields carry `data-text-edit-focus`. A canvas blur to such an element ends the composition and resets input but keeps edit mode, so a run field edits the text edit selection; a run field's blur to anything outside that set exits edit mode, except a window blur. Every other M6b-H2 rule holds. The marker is page-wide, so it assumes one editor per page (as next-host); a page with two editors is out of scope (M8-U7 notes).
 - P5, M1 to M7 headed specs: the next-host layout keeps the canvas origin (M8-N3); a spec changes only where a measured control position moved, each change listed in the U6 notes (M8-Q11).
 
 ## 2. Public type surface
@@ -190,13 +191,13 @@ M8 "closes after M7" (MVP plan section 7); M7 was accepted on 2026-10-30, and th
 
 | Unit | State |
 | --- | --- |
-| M8-U1 | In review: PR (see below); independent review READY WITH FOLLOW-UPS, applied as these notes |
-| M8-U2 | In review: independent review r1 NOT READY (shared-memo owner), fixed; r2 READY; notes below |
-| M8-U3 | In review: independent review r1 READY WITH FOLLOW-UPS, applied; r2 READY, minor follow-ups applied; notes below |
-| M8-U4 | In review: independent review r1 READY WITH FOLLOW-UPS, applied as notes below |
-| M8-U5 | In review: independent review r1 READY WITH FOLLOW-UPS, applied; notes below |
-| M8-U6 | In review: independent review r1 READY WITH FOLLOW-UPS, applied; laptop pre-run pending; notes below |
-| M8-U7 | Not started |
+| M8-U1 | Merged (#439); independent review READY WITH FOLLOW-UPS, applied as these notes |
+| M8-U2 | Merged (#441); independent review r1 NOT READY (shared-memo owner), fixed; r2 READY; notes below |
+| M8-U3 | Merged (#442); independent review r1 READY WITH FOLLOW-UPS, applied; r2 READY, minor follow-ups applied; notes below |
+| M8-U4 | Merged (#443); independent review r1 READY WITH FOLLOW-UPS, applied as notes below |
+| M8-U5 | Merged (#444); independent review r1 READY WITH FOLLOW-UPS, applied; notes below |
+| M8-U6 | Merged (#445); independent review r1 READY WITH FOLLOW-UPS, applied; laptop pre-run after the merge (M8-U7 notes); notes below |
+| M8-U7 | In review: independent review r1 READY WITH FOLLOW-UPS, applied; headless smoke 18 of 18; laptop pre-run and the main-PC headed sitting pending; notes below |
 | M8-U8 | Not started |
 
 ### M8-U1 notes
@@ -255,3 +256,13 @@ M8 "closes after M7" (MVP plan section 7); M7 was accepted on 2026-10-30, and th
 - M8-A13 scope (amendment): the TSDoc check covers every declaration M8 added to `editor-core`, `react` and `ui` and react's `extensionCommand` re-export. The type re-exports of `model` and `contracts` names (M8-T1, T2) keep their owners' declarations and are not checked, since documenting them would change `model`, which M8-A01 forbids.
 - The `ui` rename textbox no longer sets `font: inherit` (row 2 stayed 21 px with a rename open). A Server Component importing `@vector-studio/ui` was built with `next build` in a scratch app outside the repo; next-host's page itself is a client module.
 - Headless smoke in the container (spec checks, not evidence): P5, M1 to M7, M6a, M6b, `m6c-u0-zoom` and `m6c-observe` pass; `m6c-next-host` (23 of 27 fail on "CaptureError: the backend is failed") and `e26` (GPU timeouts) fail identically at 17a2b0a in the container, so they wait for the laptop and main-PC runs.
+
+### M8-U7 notes
+
+- Spec: `tests/m8-next-host/m8-next-host.spec.ts` (9 tests), `playwright.m8-next-host.config.ts` (headed `chrome-720`, `chrome-900`, `edge-720`, `edge-900` with each viewport stated per project; `M8_NEXT_HOST_CHROMIUM` switches to headless `smoke-720` and `smoke-900`), `pnpm test:m8-next-host`. Every document edit is checked as one undo step with exact document values; role names use `exact: true`. The `m8-u6-next-host` unit test lists the new config, its six projects and their viewports.
+- Finding and fix (M8-R4 with M6b-H2): focusing a text run field blurred the canvas textarea, and M6b-H2's element blur exited edit mode, so a style always covered the whole text. The canvas, its textarea and the run fields (family, size, colour) now carry `data-text-edit-focus`. A canvas blur to such an element still ends the composition and resets input, but keeps edit mode, so the field edits the text edit selection; a run field's blur to anything outside that set (after its commit) runs `exitTextEdit`, except for a window blur, as M6b-H2. `attachCanvasListeners` gains an optional `keepsTextEdit` predicate (package-internal); `TextField` gains `onLeaveTextEdit`. Unit test `m8-u7-text-run-focus`; the spec checks that the textarea had focus before the click on the field, the three runs, edit mode after the commit and after a Tab to "Text colour", and the exit on leaving for "Letter spacing". The run fields' draft identity includes the text edit anchor and focus, so a typed but uncommitted value does not stay shown after a canvas press moves the caret. Section 1.3 lists the amendment, and the M6b contract points to it. Disclosure: `data-text-edit-focus` is a page-wide marker between `react` and `ui`, not a public API (docs/host-api.md says so); with two editors on one page, a blur from one editor's canvas to the other's canvas or run field would keep the first in edit mode until a press on it.
+- M8-N3 under `?test=1&faults=1` (amendment): M8-N2 puts each panel error on its own status line under the canvas row, so at 1280 × 720, where the page already reaches below the viewport, the document is one line taller than at 17a2b0a (smoke-720: 861 against 841). `expectLayoutBudget` takes `statusLines`, the measured height of those `panel-error` lines, as an allowance on the document height only; the fault test checks the budget on open and again after the throw. Every other rule, and plain `?test=1`, is unchanged.
+- M8-N3 rule (2) with scrollbars (found by the laptop pre-run): a document's scroll size never drops below its client size, which a scrollbar shrinks. At 1280 × 900 the 17a2b0a row 1 overflowed (`scrollWidth` 1299), so its horizontal scrollbar made both `clientHeight` and `scrollHeight` 885, while the M8 page has no horizontal overflow and fills the 900 px viewport (`scrollHeight` 900) with less content. The check now bounds each scroll size by the larger of the 17a2b0a value and the live client size: a page that does not overflow the viewport passes, and one that does must stay within the 17a2b0a size as before.
+- `tooling/m8-n3-measure.mjs` on Windows: `pnpm` is a `.cmd` shim and a process group cannot be signalled, so the server is spawned through the shell and stopped with `taskkill /T` there (the laptop pre-run found both).
+- Not covered headless (headed sitting): the `M8_N3_BASELINE` comparison per channel, Windows classic scrollbars, renderer readiness with an `error` count of 0, and Edge. The Appearance focus test first checks that its target field starts below the column, so different font metrics fail it as a precondition rather than pass it vacuously.
+

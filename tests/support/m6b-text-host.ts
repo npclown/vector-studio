@@ -203,6 +203,8 @@ export function textHost(document: DocumentV6 = textHostDocument(), writer?: Cli
   const canvas = new FakeCanvas('canvas', doc, log);
   const textarea = new FakeTextarea('textarea', doc, log);
   const panel = new FakeElement('panel', doc, log);
+  // MVP M8 contract, M8-R4: a property panel text run field, which keeps text edit mode.
+  const runField = new FakeElement('run-field', doc, log);
   const view = new FakeTarget();
   const commands: Command[] = [];
   const execute = editor.execute.bind(editor);
@@ -231,6 +233,7 @@ export function textHost(document: DocumentV6 = textHostDocument(), writer?: Cli
     input,
     (node) => node === canvas || node === textarea,
     textarea,
+    (node) => node === runField,
   );
   const tasks: (() => void)[] = [];
   const detachHost = host.attach((task) => tasks.push(task));
@@ -310,6 +313,7 @@ export function textHost(document: DocumentV6 = textHostDocument(), writer?: Cli
     canvas,
     textarea,
     panel,
+    runField,
     view,
     doc,
     log,

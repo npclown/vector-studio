@@ -22,6 +22,8 @@ Create the editor on the client, outside render: next-host does it in a client e
 
 Wrap the editor UI in `EditorProvider` with the editor; every hook and UI component reads the nearest provider ([`context.tsx`](../packages/react/src/context.tsx)). `EditorCanvas` draws the editor through a renderer the host creates in `createRenderer` and forwards pointer, keyboard, clipboard and text input to the editor ([`canvas.tsx`](../packages/react/src/canvas.tsx)). The host owns the renderer choice; next-host's WebGPU factory is [`webgpu-renderer.ts`](../apps/next-host/src/webgpu-renderer.ts).
 
+Focus leaving the canvas ends text edit mode, except for focus moving to the property panel's text run fields, which edit the text edit selection. The canvas and those fields recognize each other through a `data-text-edit-focus` attribute: an internal marker between `react` and `ui`, not an API for host controls. It is page-wide, so a page holds one editor.
+
 ## Hooks
 
 The hooks are in [`context.tsx`](../packages/react/src/context.tsx) and [`hooks.ts`](../packages/react/src/hooks.ts):

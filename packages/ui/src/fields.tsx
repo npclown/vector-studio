@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from 'react';
 
 // MVP M8 contract, section 7 (M8-U5): the field controls of the property panel, moved with the M4
 // appearance panel (M4 contract, section 8) and shared by its sections. A text field commits on
@@ -12,6 +12,7 @@ export function TextField({
   disabled = false,
   identity,
   commit,
+  onLeaveTextEdit,
 }: {
   label: string;
   /**
@@ -24,6 +25,13 @@ export function TextField({
   value: string | null;
   disabled?: boolean;
   commit: (text: string) => boolean;
+  /**
+   * MVP M8 contract, M8-R4: given for the text run fields, which then belong to the canvas's
+   * text edit focus target (`data-text-edit-focus`, `@vector-studio/react`'s `EditorCanvas`), so
+   * focusing one from the canvas keeps the text edit selection. Called after the blur's commit
+   * when focus leaves for an element outside that target.
+   */
+  onLeaveTextEdit?: () => void;
 }) {
   const shown = value ?? '';
   const [draft, setDraft] = useState(shown);
@@ -44,6 +52,10 @@ export function TextField({
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') send();
   };
+  const onBlur = (event: FocusEvent<HTMLInputElement>) => {
+    send();
+    if (onLeaveTextEdit !== undefined && !inTextEditFocus(event.relatedTarget)) onLeaveTextEdit();
+  };
   return (
     <input
       type="text"
@@ -56,8 +68,19 @@ export function TextField({
       size={8}
       onChange={(event) => setDraft(event.currentTarget.value)}
       onKeyDown={onKeyDown}
-      onBlur={send}
+      onBlur={onBlur}
+      data-text-edit-focus={onLeaveTextEdit === undefined ? undefined : ''}
     />
+  );
+}
+
+/** Whether focus moved to an element of the canvas's text edit focus target (M8-R4). */
+function inTextEditFocus(node: EventTarget | null): boolean {
+  const element = node as { closest?: (selector: string) => unknown } | null;
+  return (
+    element !== null &&
+    typeof element.closest === 'function' &&
+    element.closest('[data-text-edit-focus]') != null
   );
 }
 

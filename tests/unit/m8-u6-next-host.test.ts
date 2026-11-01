@@ -429,12 +429,23 @@ describe('M8-N3: every next-host config states its viewport and every spec check
       project: string;
       viewport: { width: number; height: number };
     }[];
-    const expected = (config: string) =>
+    // M8-U7: the M8 config runs each browser at both viewports, named by height.
+    const m8Projects = [
+      'chrome-720',
+      'chrome-900',
+      'edge-720',
+      'edge-900',
+      'smoke-720',
+      'smoke-900',
+    ];
+    const expected = (config: string, project: string) =>
       config === 'playwright.e26.config.ts'
         ? { width: 1400, height: 1000 }
-        : /p5-next-host|m1-next-host/u.test(config)
-          ? { width: 1280, height: 720 }
-          : { width: 1280, height: 900 };
+        : config === 'playwright.m8-next-host.config.ts'
+          ? { width: 1280, height: project.endsWith('-720') ? 720 : 900 }
+          : /p5-next-host|m1-next-host/u.test(config)
+            ? { width: 1280, height: 720 }
+            : { width: 1280, height: 900 };
     const configs = new Set(rows.map((row) => row.config));
     expect([...configs]).toEqual([
       'playwright.e26.config.ts',
@@ -449,10 +460,22 @@ describe('M8-N3: every next-host config states its viewport and every spec check
       'playwright.m6c-observe.config.ts',
       'playwright.m6c-u0-zoom.config.ts',
       'playwright.m7-next-host.config.ts',
+      'playwright.m8-next-host.config.ts',
       'playwright.p5-next-host.config.ts',
     ]);
     for (const row of rows)
-      expect(row.viewport, `${row.config} ${row.project}`).toEqual(expected(row.config));
+      expect(row.viewport, `${row.config} ${row.project}`).toEqual(
+        expected(row.config, row.project),
+      );
+    expect(
+      rows
+        .filter((row) => row.config === 'playwright.m8-next-host.config.ts')
+        .map((row) => row.project),
+    ).toEqual(m8Projects);
+    // Each M8 project states its viewport.
+    const m8 = read('playwright.m8-next-host.config.ts');
+    expect(m8.match(/^\s+viewport: small,$/gmu)).toHaveLength(3);
+    expect(m8.match(/^\s+viewport: large,$/gmu)).toHaveLength(3);
     // P5 and M1 state the 1280 × 720 the device presets gave them, in each project.
     for (const file of ['playwright.p5-next-host.config.ts', 'playwright.m1-next-host.config.ts']) {
       const text = read(file);
@@ -474,6 +497,7 @@ describe('M8-N3: every next-host config states its viewport and every spec check
       'm6b-next-host',
       'm6c-next-host',
       'm7-next-host',
+      'm8-next-host',
       'm6c-u0-zoom',
       'e26',
     ];
@@ -496,7 +520,7 @@ describe('M8-N3: every next-host config states its viewport and every spec check
         );
       }
     }
-    expect(specs).toBe(16);
+    expect(specs).toBe(17);
     // The helper checks the origin, the document size, both rows, row 2's height, the right
     // column's width, height and fit, and the horizontal scroll.
     const helper = read('tests/support/m8-n3-budget.ts');
@@ -553,7 +577,8 @@ describe('M8-N3: the 17a2b0a baselines, per project, channel and mode', () => {
     const projects = (
       JSON.parse(stdout) as { config: string; project: string; headless: boolean }[]
     )
-      .filter((row) => row.headless)
+      // A config new since 17a2b0a has no row of its own: it reads its BASELINE_SOURCES rows.
+      .filter((row) => row.headless && !Object.hasOwn(budget.BASELINE_SOURCES, row.config))
       .map((row) => `${row.config} ${row.project}`);
     expect(fixture.commit).toBe('17a2b0a');
     expect(fixture.results.map((row) => `${row.config} ${row.project}`)).toEqual(projects);

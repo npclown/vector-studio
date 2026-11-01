@@ -129,10 +129,14 @@ function baselineFor(reader: BaselineReader): BaselineRow {
   return selectBaseline(record.results, reader, file);
 }
 
-/** Asserts the M8-N3 budget (or, with `?bench=1`, the M8-N5 aside) on the loaded page. */
+/**
+ * Asserts the M8-N3 budget (or, with `?bench=1`, the M8-N5 aside) on the loaded page.
+ * `statusLines`: the height in CSS px of status lines 17a2b0a had no counterpart for (the M8
+ * spec's `?test=1&faults=1` `panel-error` lines, M8-N2), which may add to the document height.
+ */
 export async function expectLayoutBudget(
   page: Page,
-  options: Readonly<{ bench?: boolean; rename?: boolean }> = {},
+  options: Readonly<{ bench?: boolean; rename?: boolean; statusLines?: number }> = {},
 ): Promise<void> {
   const info = test.info();
   const use = info.project.use;
@@ -152,12 +156,16 @@ export async function expectLayoutBudget(
   const where = `${path.basename(info.config.configFile ?? '')} ${info.project.name}`;
   // 1. The canvas origin.
   expect(live.origin, `${where}: canvas origin`).toEqual(base.origin);
-  // 2. No wider and no taller document; no horizontal scroll unless 17a2b0a overflowed.
+  // 2. No wider and no taller document; no horizontal scroll unless 17a2b0a overflowed. The
+  // scroll sizes never drop below the client sizes, which a scrollbar shrinks: at 1280 x 900 the
+  // 17a2b0a row 1 overflowed, its horizontal scrollbar made both its clientHeight and its
+  // scrollHeight 885, and a page without that overflow fills the whole 900 px viewport. A size
+  // within the live client size is no overflow at all, so the bound is the larger of the two.
   expect(live.scroll.scrollWidth, `${where}: scrollWidth`).toBeLessThanOrEqual(
-    base.scroll.scrollWidth,
+    Math.max(base.scroll.scrollWidth, live.scroll.clientWidth),
   );
   expect(live.scroll.scrollHeight, `${where}: scrollHeight`).toBeLessThanOrEqual(
-    base.scroll.scrollHeight,
+    Math.max(base.scroll.scrollHeight + (options.statusLines ?? 0), live.scroll.clientHeight),
   );
   const overflowed = (base.canvasRow.width ?? 0) > base.scroll.clientWidth;
   if (overflowed) {
