@@ -203,3 +203,7 @@ export { ToolbarPrimaryRow, ToolbarSecondaryRow, type ToolbarRowProps } from './
 
 // Section 7.2: the layer panel's page list and layer tree.
 export { LayerTree, PageList } from './layers.js';
+
+// Section 7.3: the property panel, with the M4 appearance panel moved here (M8-U5).
+export { AppearancePanel, type AppearancePanelProps } from './appearance-panel.js';
+export { PropertyPanel, PropertySections } from './property-panel.js';

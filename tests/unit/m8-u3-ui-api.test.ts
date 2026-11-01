@@ -24,13 +24,16 @@ const run = promisify(execFile);
 const UI = 'packages/ui';
 const REACT = 'packages/react';
 
-/** The runtime exports of `ui` beyond `react`'s: sections 6, 7.1 and 7.2. */
+/** The runtime exports of `ui` beyond `react`'s: sections 6, 7.1, 7.2 (M8-U4) and 7.3 (M8-U5). */
 const OWN_VALUES = [
+  'AppearancePanel',
   'EditorPanels',
   'LayerTree',
   'PageList',
   'PanelBoundary',
   'PanelProvider',
+  'PropertyPanel',
+  'PropertySections',
   'ToolbarPrimaryRow',
   'ToolbarSecondaryRow',
   'resolvePanels',
@@ -38,6 +41,7 @@ const OWN_VALUES = [
 ];
 /** The type exports of `ui` beyond `react`'s. */
 const OWN_TYPES = [
+  'AppearancePanelProps',
   'PanelBoundaryProps',
   'PanelBoundaryState',
   'PanelContribution',

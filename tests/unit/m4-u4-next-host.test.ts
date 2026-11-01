@@ -24,9 +24,10 @@ import { expectedLayeredAt, isolationDepth } from '../support/e25-layer-oracle.j
 import { sceneLayerTree, sceneToWorld } from '../support/m4-scene-oracle.js';
 
 // MVP M4-U4 (M4 contract, sections 3 M4-P7, 8 and 12 M4-Q17): the next-host side of M4. The
-// panel's pure helpers (src/m4-appearance.ts) give the literal values of section 8 (the linear
-// angle transform, the radial preset, the solid-to-gradient stops, the dash text) and the keys
-// each node type takes, checked against the editor's `setStyle`; the host fixture
+// panel's pure helpers (packages/ui/src/appearance-model.ts since M8-U5, moved from next-host's
+// src/m4-appearance.ts, M8 contract, section 1.3) give the literal values of section 8 (the
+// linear angle transform, the radial preset, the solid-to-gradient stops, the dash text) and the
+// keys each node type takes, checked against the editor's `setStyle`; the host fixture
 // `tests/fixtures/m4-appearance/host.v6.json` (`?fixture=appearance`, M4-A12's H1 to H9) loads,
 // projects to the expected scene kinds and is accepted by a mirror with next-host's M4-P7
 // feature set; the scene-to-oracle adapter of M4-A12 (tests/support/m4-scene-oracle.ts) gives
@@ -38,7 +39,7 @@ const root = path.resolve(import.meta.dirname, '../..');
 const read = (file: string) => readFileSync(path.join(root, 'tests/fixtures', file), 'utf8');
 const HOST_TEXT = read('m4-appearance/host.v6.json');
 
-const panel = (await import(path.join(root, 'apps/next-host/src/m4-appearance.ts'))) as {
+const panel = (await import(path.join(root, 'packages/ui/src/appearance-model.ts'))) as {
   RADIAL_TRANSFORM: Gradient['transform'];
   styleKeys: (type: NodeV6['type']) => readonly (keyof StyleProps)[];
   linearTransform: (theta: number) => Gradient['transform'];

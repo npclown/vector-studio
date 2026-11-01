@@ -1,0 +1,102 @@
+import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
+
+// MVP M8 contract, section 7 (M8-U5): the field controls of the property panel, moved with the M4
+// appearance panel (M4 contract, section 8) and shared by its sections. A text field commits on
+// Enter and on blur; when `commit` returns false (input that cannot be a value, or a refused
+// command) the field is marked `aria-invalid`. A mixed value shows as "mixed".
+
+/** A text field that commits its text on Enter and on blur; `commit` returns false when invalid. */
+export function TextField({
+  label,
+  value,
+  disabled = false,
+  identity,
+  commit,
+}: {
+  label: string;
+  /**
+   * What the field edits (the property panel passes the node IDs): a change resets the draft
+   * and its invalid mark even when the shown value stays the same. The appearance panel passes
+   * none, as at M4.
+   */
+  identity?: string;
+  /** The shown text, or null when mixed. */
+  value: string | null;
+  disabled?: boolean;
+  commit: (text: string) => boolean;
+}) {
+  const shown = value ?? '';
+  const [draft, setDraft] = useState(shown);
+  const [invalid, setInvalid] = useState(false);
+  // A new document value replaces the draft (after a commit, an undo or a selection change).
+  useEffect(() => {
+    setDraft(shown);
+    setInvalid(false);
+  }, [shown, identity]);
+  const send = () => {
+    if (draft === shown) {
+      setInvalid(false);
+      return;
+    }
+    const ok = commit(draft);
+    setInvalid(!ok);
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') send();
+  };
+  return (
+    <input
+      type="text"
+      aria-label={label}
+      aria-invalid={invalid}
+      data-mixed={value === null ? 'true' : undefined}
+      placeholder={value === null ? 'mixed' : undefined}
+      value={draft}
+      disabled={disabled}
+      size={8}
+      onChange={(event) => setDraft(event.currentTarget.value)}
+      onKeyDown={onKeyDown}
+      onBlur={send}
+    />
+  );
+}
+
+/** A select; a mixed value shows a disabled "mixed" option. */
+export function Choice<T extends string>({
+  label,
+  value,
+  options,
+  disabled = false,
+  onChange,
+}: {
+  label: string;
+  value: T | null;
+  options: readonly T[];
+  disabled?: boolean;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <select
+      aria-label={label}
+      data-mixed={value === null ? 'true' : undefined}
+      value={value ?? ''}
+      disabled={disabled}
+      onChange={(event) => onChange(event.currentTarget.value as T)}
+    >
+      {value === null && (
+        <option value="" disabled>
+          mixed
+        </option>
+      )}
+      {options.map((option) => (
+        <option key={option} value={option}>
+          {option}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+export const Row = ({ children }: { children: ReactNode }) => (
+  <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>{children}</div>
+);
