@@ -4,7 +4,9 @@
 // each repetition's `rafCallbackIntervalMs` p95 and the maximum per-run p95 against the ceiling,
 // with no rounding allowance; latency rows give the maximum per-run p95 of `pointerToWorkDoneMs`
 // against its exclusive bound and A05's inputs (long tasks over 50 ms outside the isolation
-// measure, autosave writes started during the press, the first write after the release).
+// measure, autosave writes started during the press, the first write after the release). Isolation
+// rows (E26-A06) give each run's R, the one- and 16-rejection times against their per-run bounds,
+// the warm-up time and the rejection counts.
 //
 // It trusts each record's p95 fields, and records carry no validity flag: an invalid run is
 // failed by the harness after its record is written, so check the Playwright result alongside.
@@ -42,6 +44,7 @@ for (const record of records) {
 const round = (value) =>
   value === null || value === undefined ? null : Math.round(value * 100) / 100;
 const max = (values) => (values.some((value) => value === null) ? null : Math.max(...values));
+const min = (values) => (values.some((value) => value === null) ? null : Math.min(...values));
 
 const rows = [...groups.values()].map((runs) => {
   runs.sort((a, b) => a.repetition - b.repetition);
@@ -146,7 +149,7 @@ if (json !== null)
   writeFileSync(json, `${JSON.stringify({ records: records.length, rows }, null, 2)}\n`);
 
 const lines = [
-  '| Scenario | Variant | Project | Per-run p95 (ms) | Max p95 | Target | Result |',
+  '| Scenario | Variant | Project | Per-run p95 (ms; isolation: one / 16 rejections) | Max | Target | Result |',
   '| --- | --- | --- | --- | --- | --- | --- |',
   ...rows.map((row) =>
     [
@@ -157,14 +160,12 @@ const lines = [
       row.kind === 'isolation'
         ? row.oneMs.map((one, i) => `${one} / ${row.sixteenMs[i]}`).join(', ')
         : row.perRunP95Ms.join(', '),
-      row.kind === 'isolation'
-        ? `${Math.max(...row.oneMs)} / ${Math.max(...row.sixteenMs)}`
-        : row.maxPerRunP95Ms,
+      row.kind === 'isolation' ? `${max(row.oneMs)} / ${max(row.sixteenMs)}` : row.maxPerRunP95Ms,
       row.kind === 'frame'
         ? `≤ ${row.ceilingMs}`
         : row.kind === 'latency'
           ? `< ${row.boundMs}`
-          : `≤ ${Math.min(...row.oneBoundMs)} / ${Math.min(...row.sixteenBoundMs)}`,
+          : `≤ ${min(row.oneBoundMs)} / ${min(row.sixteenBoundMs)}`,
       row.pass ? 'pass' : 'miss',
       '',
     ]
