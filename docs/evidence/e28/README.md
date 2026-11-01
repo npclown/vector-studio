@@ -53,3 +53,7 @@ M6c-U5 ran this spec's "per-cluster readback and raster cost" tests through `pnp
 | raster-edge | 2 | 64 | 64 | 7.1 | yes | 0.137 | 0.03 | 0 |
 
 A 64-call frame takes 5.7 to 8 ms, inside a 60 Hz frame (16.7 ms), which agrees with the extrapolated figure of about 7 ms. The machine was not idle during the run (the user's own Chrome and Edge were open, CPU about 27 % before it), so the figures are recorded, not judged. The report files stay on the main PC; their SHA-256 list, the typing figures and the caveat are in [the M6c-U5 record](../m6c-u5/README.md#m6c-a10-main-pc-record-2026-11-01).
+
+## Raster-port v1 (2026-11-01)
+
+M6c-U3 (#432, `77f96ba`) moved the canvas raster port to a black fill, operation ID `canvas-2d/raster-v1` ([contract section 7](../../plans/d9-e28-text-glyph-atlas-contract.md#7-units)). The evidence on record here (`u3-swiftshader`, `u4-main-pc`) was captured with `canvas-2d/raster-v0`; its PASS still holds because the oracle places the port's own bitmaps (the rendering-track review re-ran the E28 spec on SwiftShader with v1: 14 passed, hand-off worst difference 0 at DPR 1 and 2). The next reference-PC run of the E28 spec covers v1.
