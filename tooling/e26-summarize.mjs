@@ -4,7 +4,9 @@
 // each repetition's `rafCallbackIntervalMs` p95 and the maximum per-run p95 against the ceiling,
 // with no rounding allowance; latency rows give the maximum per-run p95 of `pointerToWorkDoneMs`
 // against its exclusive bound and A05's inputs (long tasks over 50 ms outside the isolation
-// measure, autosave writes started during the press, the first write after the release).
+// measure, autosave writes started during the press, the first write after the release). Isolation
+// rows (E26-A06) give each run's R, the one- and 16-rejection times against their per-run bounds,
+// the warm-up time and the rejection counts.
 //
 // It trusts each record's p95 fields, and records carry no validity flag: an invalid run is
 // failed by the harness after its record is written, so check the Playwright result alongside.
@@ -32,6 +34,8 @@ const records = readdirSync(directory)
 
 const groups = new Map();
 for (const record of records) {
+  // E26-U6b: the A06 isolation records carry no variant.
+  record.variant ??= 'isolation';
   const key = `${record.scenario}|${record.variant}|${record.project}`;
   if (!groups.has(key)) groups.set(key, []);
   groups.get(key).push(record);
@@ -40,6 +44,7 @@ for (const record of records) {
 const round = (value) =>
   value === null || value === undefined ? null : Math.round(value * 100) / 100;
 const max = (values) => (values.some((value) => value === null) ? null : Math.max(...values));
+const min = (values) => (values.some((value) => value === null) ? null : Math.min(...values));
 
 const rows = [...groups.values()].map((runs) => {
   runs.sort((a, b) => a.repetition - b.repetition);
@@ -56,6 +61,25 @@ const rows = [...groups.values()].map((runs) => {
     adapter: first.environment?.adapter ?? null,
     idleRafMedianMs: runs.map((run) => round(run.environment?.idleRafMedianMs)),
   };
+  if (first.variant === 'isolation') {
+    // E26-A06: one and 16 persistent rejections against min(3R + 50, 500) and min(6R + 100, 1000).
+    const passes = runs.map((run) => run.pass);
+    return {
+      ...common,
+      kind: 'isolation',
+      rMs: runs.map((run) => round(run.replaceSnapshotMs.median)),
+      cleanLoadTailMs: runs.map((run) => round(run.cleanLoadTailMs.median)),
+      oneMs: runs.map((run) => round(run.oneMs)),
+      oneBoundMs: runs.map((run) => round(run.boundsMs?.one)),
+      sixteenMs: runs.map((run) => round(run.sixteenMs)),
+      sixteenBoundMs: runs.map((run) => round(run.boundsMs?.sixteen)),
+      warmUpMs: runs.map((run) => round(run.run.warmUp.durationMs)),
+      rejections: runs.map((run) => [run.run.single.rejections, run.run.scattered.rejections]),
+      perRunP95Ms: [],
+      maxPerRunP95Ms: null,
+      pass: passes.every((entry) => entry !== null && entry.one && entry.sixteen),
+    };
+  }
   if (first.variant === 'frame') {
     const p95 = runs.map((run) => run.rafCallbackIntervalMs.p95);
     const worst = max(p95);
@@ -111,6 +135,7 @@ const order = [
   'e26-mixed-all-pan-10k/v1',
   'e26-simple-stress-10k/v1',
   'e26-pointer-busy-10k/v1',
+  'e26-isolation-m1-a13/v1',
 ];
 rows.sort(
   (a, b) =>
@@ -124,7 +149,7 @@ if (json !== null)
   writeFileSync(json, `${JSON.stringify({ records: records.length, rows }, null, 2)}\n`);
 
 const lines = [
-  '| Scenario | Variant | Project | Per-run p95 (ms) | Max p95 | Target | Result |',
+  '| Scenario | Variant | Project | Per-run p95 (ms; isolation: one / 16 rejections) | Max | Target | Result |',
   '| --- | --- | --- | --- | --- | --- | --- |',
   ...rows.map((row) =>
     [
@@ -132,9 +157,15 @@ const lines = [
       `\`${row.scenario}\``,
       row.variant,
       row.project,
-      row.perRunP95Ms.join(', '),
-      row.maxPerRunP95Ms,
-      row.kind === 'frame' ? `≤ ${row.ceilingMs}` : `< ${row.boundMs}`,
+      row.kind === 'isolation'
+        ? row.oneMs.map((one, i) => `${one} / ${row.sixteenMs[i]}`).join(', ')
+        : row.perRunP95Ms.join(', '),
+      row.kind === 'isolation' ? `${max(row.oneMs)} / ${max(row.sixteenMs)}` : row.maxPerRunP95Ms,
+      row.kind === 'frame'
+        ? `≤ ${row.ceilingMs}`
+        : row.kind === 'latency'
+          ? `< ${row.boundMs}`
+          : `≤ ${min(row.oneBoundMs)} / ${min(row.sixteenBoundMs)}`,
       row.pass ? 'pass' : 'miss',
       '',
     ]

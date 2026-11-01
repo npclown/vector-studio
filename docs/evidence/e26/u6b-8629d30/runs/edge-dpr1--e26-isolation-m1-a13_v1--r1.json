@@ -1,0 +1,283 @@
+{
+  "scenario": "e26-isolation-m1-a13/v1",
+  "repetition": 1,
+  "project": "edge-dpr1",
+  "browser": "chromium 156.0.4314.50",
+  "devicePixelRatio": 1,
+  "commit": "8629d300b5d0ebd5bc00ec4986b187e7210ba46a",
+  "dirty": false,
+  "configurationHash": "7c0ce2db463d0ad1f6a8a8a49ae6ac477738166368900e7cea46d3c123b9ff1f",
+  "configuration": {
+    "isolation": {
+      "id": "e26-isolation-m1-a13/v1",
+      "document": "m1-a13",
+      "replaceRuns": 5,
+      "scattered": 16,
+      "one": {
+        "factor": 3,
+        "constantMs": 50,
+        "capMs": 500
+      },
+      "sixteen": {
+        "factor": 6,
+        "constantMs": 100,
+        "capMs": 1000
+      }
+    },
+    "documentSha256": "d8658b14694ca1e6bbcff734e35575222511df96281720068fa4efe2cb9ef974",
+    "schemaVersion": 6,
+    "sceneNodes": 10634,
+    "targets": {
+      "one": "l4634",
+      "sixteen": [
+        "e289",
+        "l876",
+        "l1456",
+        "e2043",
+        "e2623",
+        "r3204",
+        "e3775",
+        "r4344",
+        "p4920",
+        "r5506",
+        "l6084",
+        "p6656",
+        "e7229",
+        "e7817",
+        "r8388",
+        "r8962"
+      ]
+    },
+    "devicePixelRatio": 1,
+    "repetitions": 5
+  },
+  "environment": {
+    "devicePixelRatio": 1,
+    "canvas": {
+      "width": 1280,
+      "height": 720
+    },
+    "screen": {
+      "width": 1400,
+      "height": 1000
+    },
+    "idleRafMedianMs": 16.699999999999818,
+    "adapter": {
+      "vendor": "nvidia",
+      "architecture": "turing",
+      "device": "",
+      "description": ""
+    },
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Safari/537.36 Edg/151.0.7922.34"
+  },
+  "presence": {
+    "start": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    },
+    "end": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    }
+  },
+  "errors": [],
+  "consoleErrors": [],
+  "replaceSnapshotMs": {
+    "samples": [
+      82.7999999821186,
+      89.40000000596046,
+      95.80000001192093,
+      100.30000001192093,
+      104.90000000596046
+    ],
+    "median": 95.80000001192093
+  },
+  "cleanLoadTailMs": {
+    "samples": [
+      73.30000001192093,
+      77.60000002384186,
+      88.40000000596046,
+      97.7999999821186,
+      121.2999999821186
+    ],
+    "median": 88.40000000596046
+  },
+  "boundsMs": {
+    "one": 337.4000000357628,
+    "sixteen": 674.8000000715256
+  },
+  "oneMs": 117.59999999403954,
+  "sixteenMs": 121.19999998807907,
+  "pass": {
+    "one": true,
+    "sixteen": true
+  },
+  "run": {
+    "loadErrors": [],
+    "settleErrors": [],
+    "replaces": [
+      {
+        "durationMs": 100.30000001192093,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 198.09999999403954
+      },
+      {
+        "durationMs": 82.7999999821186,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 160.40000000596046
+      },
+      {
+        "durationMs": 89.40000000596046,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 177.80000001192093
+      },
+      {
+        "durationMs": 95.80000001192093,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 217.09999999403954
+      },
+      {
+        "durationMs": 104.90000000596046,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 178.2000000178814
+      }
+    ],
+    "warmUp": {
+      "error": null,
+      "commandMs": 219.90000000596046,
+      "rejected": [
+        "l4634"
+      ],
+      "rejections": 15,
+      "measures": [
+        {
+          "startMs": 7349.300000011921,
+          "durationMs": 130.90000000596046
+        }
+      ],
+      "durationMs": 130.90000000596046
+    },
+    "single": {
+      "error": null,
+      "commandMs": 205.7000000178814,
+      "rejected": [
+        "l4634"
+      ],
+      "rejections": 15,
+      "measures": [
+        {
+          "startMs": 8397.600000023842,
+          "durationMs": 117.59999999403954
+        }
+      ],
+      "durationMs": 117.59999999403954
+    },
+    "scattered": {
+      "error": null,
+      "commandMs": 198.59999999403954,
+      "rejected": [
+        "e2043",
+        "e2623",
+        "e289",
+        "e3775",
+        "e7229",
+        "e7817",
+        "l1456",
+        "l6084",
+        "l876",
+        "p4920",
+        "p6656",
+        "r3204",
+        "r4344",
+        "r5506",
+        "r8388",
+        "r8962"
+      ],
+      "rejections": 181,
+      "measures": [
+        {
+          "startMs": 9389.700000017881,
+          "durationMs": 121.19999998807907
+        }
+      ],
+      "durationMs": 121.19999998807907
+    },
+    "longTasks": [
+      {
+        "startMs": 5921.300000011921,
+        "durationMs": 199
+      },
+      {
+        "startMs": 6120.4000000059605,
+        "durationMs": 66
+      },
+      {
+        "startMs": 6194.600000023842,
+        "durationMs": 161
+      },
+      {
+        "startMs": 6355.9000000059605,
+        "durationMs": 65
+      },
+      {
+        "startMs": 6428.9000000059605,
+        "durationMs": 178
+      },
+      {
+        "startMs": 6607.4000000059605,
+        "durationMs": 64
+      },
+      {
+        "startMs": 6679.600000023842,
+        "durationMs": 218
+      },
+      {
+        "startMs": 6897.600000023842,
+        "durationMs": 76
+      },
+      {
+        "startMs": 6982.9000000059605,
+        "durationMs": 179
+      },
+      {
+        "startMs": 7162.4000000059605,
+        "durationMs": 80
+      },
+      {
+        "startMs": 7260,
+        "durationMs": 221
+      },
+      {
+        "startMs": 7481.200000017881,
+        "durationMs": 817
+      },
+      {
+        "startMs": 8309.300000011921,
+        "durationMs": 206
+      },
+      {
+        "startMs": 8515.700000017881,
+        "durationMs": 760
+      },
+      {
+        "startMs": 9312.200000017881,
+        "durationMs": 199
+      },
+      {
+        "startMs": 9511.700000017881,
+        "durationMs": 741
+      }
+    ],
+    "lifecycle": "ready",
+    "recoveryAttempts": 0
+  }
+}
