@@ -219,6 +219,7 @@ describe('M6c-U5 observation helpers', () => {
       expect(saved).toContain('| typing-edge | 156.1 | 1 | yes | 99 | 3 |');
       expect(saved).toContain('| raster-edge | 1 | 64 | 64 | 9 | yes | 0.2 | 0.03 | 0 |');
       expect(log).toHaveBeenCalledOnce();
+      expect(log.mock.calls[0]![0]).toContain('| raster-edge |');
     });
 
     it('does nothing without a run directory', () => {

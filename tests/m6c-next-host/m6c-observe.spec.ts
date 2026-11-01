@@ -331,6 +331,7 @@ test('M6c-A10 typing observation: 30 keystrokes into a 16,384-unit node (recorde
       lines: layout?.lines.length ?? 0,
       devicePixelRatio: window.devicePixelRatio,
       userAgent: navigator.userAgent,
+      keydowns: window.__m6cU5!.keydowns.length,
     };
   }, id);
   const report: TypingReport = {
@@ -365,6 +366,8 @@ test('M6c-A10 typing observation: 30 keystrokes into a 16,384-unit node (recorde
   );
   expect(end.text).toBe(OBSERVE_KEYS + fillerText(START_LENGTH));
   expect(end.text.length).toBe(OBSERVE_TEXT_LENGTH);
+  // Review N4: one keydown per key, so each window starts at its own key.
+  expect(end.keydowns).toBe(OBSERVE_KEYS.length);
   expect(failures).toEqual([]);
   expect(errors).toEqual([]);
 });

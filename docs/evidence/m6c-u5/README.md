@@ -20,7 +20,7 @@ pnpm test:geometry
 pnpm test:m6c-observe
 ```
 
-`pnpm test:geometry` is needed only if the geometry kernel WASM is not built yet (or set `VECTOR_STUDIO_GEOMETRY_WASM`). The run takes a few minutes. It prints the summary tables at the end and saves them, with the raw reports, under `artifacts/m6c-u5-observe/<time>/`, which is not committed: `summary.md`, `typing/<project>.json`, and `e28/<run>/<project>/handoff-dpr-<n>/report.json`.
+`pnpm test:geometry` is needed only if the geometry kernel WASM is not built yet (or set `VECTOR_STUDIO_GEOMETRY_WASM`). It is the slow step, because it builds the Rust kernel. `pnpm test:m6c-observe` itself takes a few minutes. It prints the summary tables at the end and saves them, with the raw reports, under `artifacts/m6c-u5-observe/<time>/`, which is not committed: `summary.md`, `typing/<project>.json`, and `e28/<run>/<project>/handoff-dpr-<n>/report.json`. Each run makes a new folder. If you set `M6C_OBSERVE_DIR` by hand to an older run's folder, the teardown also reads that run's reports and merges them into the summary. `E28_OUTPUT_DIR` is always set to the run's `e28/` folder.
 
 - **Typing (M6b-Q15 (a)).** `tests/m6c-next-host/m6c-observe.spec.ts` runs in projects `typing-chrome` and `typing-edge` (headed, DPR 1). On `?fixture=text-edit` at camera zoom 1 over a white backdrop, it creates an `autoHeight` node of 16,354 units in the committed test font (14 px, 1200 px wide), and types 30 keys at offset 0 with Playwright's keyboard, so the node ends at 16,384 units. For each keystroke it records:
   - every animation-frame interval from the frame before the keydown up to the first quiet frame;
@@ -29,7 +29,7 @@ pnpm test:m6c-observe
   - when the last call ended after the keydown;
   - `long-animation-frame` entries, where the browser reports them.
 
-  A keystroke ends at the first of 10 frames with no new call and unchanged raster counters. The spec fails only when the typing did not reach the document or the leaf.
+  A keystroke ends at the first of 10 frames with no new call and unchanged raster counters. The spec's own per-frame settle check runs inside the measured window: it reads the editor snapshot and joins the node's runs (16,384 units) each frame. So its cost is included in the frame figures, though not in the layout or raster figures. The spec fails only when the typing did not reach the document or the leaf, or when the keydown count is not 30.
 - **Raster frame (E28, M6c-Q10 (a)).** Projects `raster-chrome` and `raster-edge` run the existing E28 spec's "per-cluster readback and raster cost" tests at DPR 1 and 2. They time one frame of `E28_RASTER_PER_FRAME` (64) distinct calls. The figures go to [`docs/evidence/e28/`](../e28/README.md) as a dated addition. If they are not run, the timing stays owed to M9.
 
 **Container smoke run** (not evidence; headless Chromium 1243 on Linux, `M6C_NEXT_HOST_CHROMIUM`, no renderer): the typing spec passed: 30 keystrokes, node 16,384 units and 100 lines, one `layout` call per keystroke. The raster figures are empty without a renderer. The E28 projects were not run in the container, because the playground page needs the geometry WASM, and the pinned Rust toolchain that builds it is not installed here.

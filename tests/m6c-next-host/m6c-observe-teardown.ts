@@ -37,6 +37,7 @@ export default function teardown(): void {
     return rasterFrameRow(project, JSON.parse(readFileSync(file, 'utf8')));
   });
   const markdown = summaryMarkdown(typing, raster);
+  if (raster.length === 0) console.log(`No E28 hand-off report under ${path.join(root, 'e28')}.`);
   writeFileSync(path.join(root, 'summary.md'), markdown);
   console.log(`\n${markdown}\nSaved in ${path.join(root, 'summary.md')}`);
 }

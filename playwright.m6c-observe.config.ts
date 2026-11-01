@@ -20,12 +20,14 @@ import { defineConfig, devices, type Project } from '@playwright/test';
 // renderer may not start, so raster figures are empty); it is not M6c-A10 evidence.
 
 // Set once in the runner; workers inherit the runner's environment, so they keep its values.
+// E28_OUTPUT_DIR is always this run's, so an E28_OUTPUT_DIR set in the shell does not send the
+// E28 reports where the teardown does not look (review N1).
 process.env.M6C_OBSERVE_DIR ??= path.resolve(
   'artifacts',
   'm6c-u5-observe',
   new Date().toISOString().replaceAll(/[:.]/gu, '-'),
 );
-process.env.E28_OUTPUT_DIR ??= path.join(process.env.M6C_OBSERVE_DIR, 'e28');
+process.env.E28_OUTPUT_DIR = path.join(process.env.M6C_OBSERVE_DIR, 'e28');
 
 const webGpuArguments = ['--enable-unsafe-webgpu'];
 const chromium = process.env.M6C_NEXT_HOST_CHROMIUM;
