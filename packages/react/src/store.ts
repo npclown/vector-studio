@@ -29,13 +29,15 @@ export type EditorStore<T> = Readonly<{
 /**
  * The last value a hook returned, shared by the stores a hook builds across renders (a new
  * inline selector or query object builds a new store), so equality is judged against the value
- * the component last saw.
+ * the component last saw. `owner` is the store that wrote `value`: a store takes its no-reread
+ * fast path only for a value it wrote itself, since another store's value (a different selector
+ * or query, for example from a discarded render) is not its result.
  */
-export type StoreMemo<T> = { has: boolean; value: T | undefined };
+export type StoreMemo<T> = { has: boolean; value: T | undefined; owner: object | null };
 
 /** A memo that holds no value yet. */
 export function createStoreMemo<T>(): StoreMemo<T> {
-  return { has: false, value: undefined };
+  return { has: false, value: undefined, owner: null };
 }
 
 /**
@@ -70,18 +72,23 @@ function channelOf(editor: Editor): EditorChannel {
   return channel;
 }
 
-/** Keeps `memo`'s value when `isEqual` holds, else stores `next`; returns the kept value. */
-function keep<T>(memo: StoreMemo<T>, next: T, isEqual: IsEqual<T>): T {
+/**
+ * Keeps `memo`'s value when `isEqual` holds, else stores `next`; either way `owner` becomes the
+ * memo's owner. Returns the kept value.
+ */
+function keep<T>(memo: StoreMemo<T>, next: T, isEqual: IsEqual<T>, owner: object): T {
   if (!memo.has || !isEqual(memo.value as T, next)) {
     memo.value = next;
     memo.has = true;
   }
+  memo.owner = owner;
   return memo.value as T;
 }
 
 /**
  * A store of `selector(editor.getSnapshot())` (M8-H2). The selector runs only when the snapshot
- * object differs from the one it last ran on; while `isEqual(previous, next)` holds (default
+ * object differs from the one it last ran on, or when another store sharing `memo` wrote it
+ * since; while `isEqual(previous, next)` holds (default
  * `Object.is`) the previous result is kept.
  */
 export function createSelectorStore<T>(
@@ -91,15 +98,16 @@ export function createSelectorStore<T>(
   memo: StoreMemo<T> = createStoreMemo<T>(),
 ): EditorStore<T> {
   const channel = channelOf(editor);
+  const token = {};
   let seen: EditorSnapshot | null = null;
   return {
     subscribe: channel.subscribe,
     getSnapshot: () => {
       const snapshot = editor.getSnapshot();
-      if (seen === snapshot && memo.has) return memo.value as T;
+      if (seen === snapshot && memo.has && memo.owner === token) return memo.value as T;
       const next = selector(snapshot);
       seen = snapshot;
-      return keep(memo, next, isEqual);
+      return keep(memo, next, isEqual, token);
     },
   };
 }
@@ -156,14 +164,17 @@ export function createQueryStore<Q extends Query>(
   memo: StoreMemo<QueryResult<Q>> = createStoreMemo<QueryResult<Q>>(),
 ): EditorStore<QueryResult<Q>> {
   const channel = channelOf(editor);
+  const token = {};
   let read = -1;
   return {
     subscribe: channel.subscribe,
     getSnapshot: () => {
-      if (read === channel.version && memo.has) return memo.value as QueryResult<Q>;
+      if (read === channel.version && memo.has && memo.owner === token) {
+        return memo.value as QueryResult<Q>;
+      }
       const next = editor.query(query);
       read = channel.version;
-      return keep(memo, next, isEqual);
+      return keep(memo, next, isEqual, token);
     },
   };
 }

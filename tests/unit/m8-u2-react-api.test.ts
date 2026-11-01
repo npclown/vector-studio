@@ -30,7 +30,7 @@ import {
   useViewport,
   type StarCreateArgs,
 } from '@vector-studio/react';
-import { createElement, type ReactNode } from 'react';
+import { createElement, useState, type ReactNode } from 'react';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
@@ -649,6 +649,78 @@ describe('M8-A04 the equality option of useEditorSelector (M8-H2)', () => {
     // A new inline selector on the next render builds a new store over the same memo.
     const rebuilt = createSelectorStore(target, (snapshot) => nodeTypes(snapshot), sameTypes, memo);
     expect(rebuilt.getSnapshot()).toBe(first);
+  });
+
+  it('never returns a value another store wrote into a shared memo', () => {
+    const target = editor();
+    run(target, { type: 'createRectangle', frame });
+    run(target, { type: 'createEllipse', frame });
+    const nodes = target.getSnapshot().document.nodes;
+    const memo = createStoreMemo<unknown>();
+    // A committed useNode('n1') store and a discarded render's useNode('n2') store, interleaved
+    // on one snapshot, as React may read them when it drops an interrupted render.
+    const a = createSelectorStore<unknown>(target, nodeSelector('n1'), undefined, memo);
+    const b = createSelectorStore<unknown>(target, nodeSelector('n2'), undefined, memo);
+    expect(a.getSnapshot()).toBe(nodes['n1']);
+    expect(b.getSnapshot()).toBe(nodes['n2']);
+    expect(a.getSnapshot()).toBe(nodes['n1']);
+    expect(b.getSnapshot()).toBe(nodes['n2']);
+    expect(a.getSnapshot()).toBe(nodes['n1']);
+    // A store rebuilt for a changed ID returns the new node, and the fast path still holds.
+    const c = createSelectorStore<unknown>(target, nodeSelector('n2'), undefined, memo);
+    expect(c.getSnapshot()).toBe(nodes['n2']);
+    expect(c.getSnapshot()).toBe(nodes['n2']);
+    // Equality against the last value seen still keeps an equal result of another store.
+    const types = createStoreMemo<readonly string[]>();
+    const typesOf = (snapshot: EditorSnapshot) =>
+      Object.values(snapshot.document.nodes).map((node) => node.type);
+    const same = (x: readonly string[], y: readonly string[]) => x.join() === y.join();
+    const first = createSelectorStore(target, typesOf, same, types).getSnapshot();
+    expect(createSelectorStore(target, (s) => typesOf(s), same, types).getSnapshot()).toBe(first);
+  });
+
+  it('never returns a value another query store wrote into a shared memo', () => {
+    const target = editor();
+    run(target, { type: 'createRectangle', frame });
+    run(target, { type: 'createEllipse', frame });
+    const nodes = target.getSnapshot().document.nodes;
+    const memo = createStoreMemo<QueryResult<{ type: 'node'; id: string }>>();
+    // The query key changed from n1 to n2 and back, with no event in between.
+    const a = createQueryStore(target, { type: 'node', id: 'n1' }, undefined, memo);
+    const b = createQueryStore(target, { type: 'node', id: 'n2' }, undefined, memo);
+    expect(a.getSnapshot()).toBe(nodes['n1']);
+    expect(b.getSnapshot()).toBe(nodes['n2']);
+    expect(a.getSnapshot()).toBe(nodes['n1']);
+    expect(b.getSnapshot()).toBe(nodes['n2']);
+    const kinds = createStoreMemo<QueryResult<Query>>();
+    const tool = createQueryStore<Query>(target, { type: 'tool' }, undefined, kinds);
+    const pages = createQueryStore<Query>(target, { type: 'activePage' }, undefined, kinds);
+    expect(tool.getSnapshot()).toBe('select');
+    expect(pages.getSnapshot()).toBe('p1');
+    expect(tool.getSnapshot()).toBe('select');
+  });
+
+  it('follows a changed useNode ID and query across re-renders of one component', () => {
+    const target = editor();
+    run(target, { type: 'createRectangle', frame, name: 'A' });
+    run(target, { type: 'createEllipse', frame, name: 'B' });
+    const seen: string[] = [];
+    // Render-phase updates re-run the component with its hook state kept (refs and memos), so
+    // one renderToString pass renders the IDs n1, n2 and n1 again over the same hook memos.
+    function Switching(): ReactNode {
+      const [ids, setIds] = useState(['n1', 'n2', 'n1']);
+      const id = ids[0]!;
+      const node = useNode(id);
+      const queried = useEditorQuery({ type: 'node', id });
+      seen.push(`${id}:${node?.name ?? '-'}:${queried?.name ?? '-'}`);
+      if (ids.length > 1) setIds(ids.slice(1));
+      return createElement('span', null, node?.name ?? '-');
+    }
+    const html = renderToString(
+      createElement(EditorProvider, { editor: target }, createElement(Switching)),
+    );
+    expect(seen).toEqual(['n1:A:A', 'n2:B:B', 'n1:A:A']);
+    expect(html).toBe('<span>A</span>');
   });
 
   it('renders a fresh-array selector with isEqual through the hook', () => {

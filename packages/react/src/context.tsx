@@ -44,7 +44,11 @@ export function useEditor(): Editor {
  * pass a structural `isEqual` and stay stable between changes. `isEqual` defaults to
  * `Object.is`: a selector that returns a part of the snapshot or a primitive is stable as is.
  *
- * @param selector Derives the value from the snapshot; it should be pure.
+ * The selector must be pure, a function of the snapshot alone: it runs once per snapshot
+ * object, so a selector that reads `editor.query` (or any other state) goes stale on events that
+ * keep the snapshot, such as a `textLayout` session event. Use `useEditorQuery` for queries.
+ *
+ * @param selector Derives the value from the snapshot alone; it must be pure.
  * @param isEqual Whether the previous and the next result are equal; true keeps the previous.
  */
 export function useEditorSelector<T>(

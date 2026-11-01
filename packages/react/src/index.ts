@@ -32,7 +32,15 @@ export {
 
 // MVP M8 contract, M8-T2: the one value re-export of `editor-core`, a pure builder with no state,
 // so an extension's UI types its commands without importing `editor-core`.
-export { extensionCommand } from '@vector-studio/editor-core';
+export {
+  /**
+   * `editor-core`'s typed builder of an extension command (MVP M8 contract, M8-X2), re-exported
+   * for extension UIs. Because this entry is a `'use client'` module, in a Next.js Server
+   * Component it is a client reference and cannot be called there; a server module that needs
+   * it imports `@vector-studio/editor-core` instead.
+   */
+  extensionCommand,
+} from '@vector-studio/editor-core';
 
 // MVP M8 contract, M8-T2 and M8-T3: every type export of `editor-core`, type only and with its
 // name unchanged, so a consumer of this package alone can name every type of the public API.
