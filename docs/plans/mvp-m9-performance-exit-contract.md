@@ -1,6 +1,6 @@
 # MVP M9 contract: performance and MVP exit
 
-Status: DRAFT 2026-11-01, for independent review. Standard tier: benchmark workloads, bench-host flags and evidence. No public API, schema, renderer or `contracts` change. A remedy that changes product code is out of this contract; gate G1 (section 9) decides whether one is written, as its own amendment. Visualization-track item V-19 in the [track status index](d9-visualization-track.md#status-index), milestone M9 of the [MVP editor plan](mvp-editor-plan.md#m9-performance-and-mvp-exit). The user accepted the M8 exit on 2026-11-01 at 20:49Z, recorded by status PR #448 (`d21df69`). Open questions M9-Q1 to M9-Q8 are in section 11.
+Status: DRAFT 2026-11-01; independent review r1 NOT READY (B1, B2, S1 to S12, nits), applied. Standard tier: benchmark workloads, bench-host flags and evidence. No public API, schema, renderer or `contracts` change. A remedy that changes product code is out of this contract; gate G1 (section 9) decides whether one is written, as its own amendment. Visualization-track item V-19 in the [track status index](d9-visualization-track.md#status-index), milestone M9 of the [MVP editor plan](mvp-editor-plan.md#m9-performance-and-mvp-exit). The user accepted the M8 exit on 2026-11-01 at 20:49Z, recorded by status PR #448 (`d21df69`). Open questions M9-Q1 to M9-Q8 are in section 11.
 
 Owners: this file owns M9 scope, the M9 workloads and their scenario IDs (section 3), the bench-host flags they add (section 4), the reference sitting (section 5), the identity sitting (section 6), the form of the MVP exit record (section 7), acceptance criteria M9-A01 to M9-A08 and the units. Product behavior stays in [`requirements.md`](../requirements.md) (Platform and performance), which this contract does not change. Methodology stays in the [benchmarks README](../benchmarks/README.md). The E26 measurement rules ([E26 contract](d9-e26-pointer-priority-contract.md), section 3) are reused unchanged, except where section 1.3 says otherwise.
 
@@ -27,7 +27,7 @@ Out of scope:
 
 - **Harness.** `pnpm test:e26` (`playwright.e26.config.ts`) runs `tests/e26/e26-harness.spec.ts`.
   - Projects: headed `chrome-dpr1`, `chrome-dpr2`, `edge-dpr1`, `edge-dpr2` in a 1400 × 1000 viewport. `E26_CHROMIUM` selects the smoke project `chromium-smoke-dpr1`. `E26_REPETITIONS` and `E26_SCENARIOS` narrow a run.
-  - Scenario definitions are in `tests/e26/scenarios.ts`. The bench host is `apps/next-host/src/e26-bench.ts` (`?bench=1`, with `doc=`, `persist=1`, `reject=`, `isolation=1`), and its canvas is 1280 × 720.
+  - Scenario definitions are in `tests/e26/scenarios.ts`. The bench host is `apps/next-host/src/e26-bench.ts` (`?bench=1`, with `doc=`, `persist=1`, `reject=`, `reject-mode=`, `isolation=1`), and its canvas is 1280 × 720.
   - `node tooling/e26-summarize.mjs` writes the summary.
 - **Latest reference run.** [E26-U6b at `8629d30`](../evidence/e26/u6b-8629d30.md): 140 of 140 runs valid. Maximum per-run p95 by scenario:
 
@@ -54,13 +54,14 @@ Out of scope:
 | --- | --- | --- |
 | E26 section 3.1; [M6 exit](../evidence/m6-exit-2026-11-01.md), follow-up 9 | `e26-mixed-view-edit-10k/v2` (instances, text) and `e26-pointer-busy-10k/v2` (text, a font-load generation change under load) | M9-U1 (M9-A01, A02) |
 | M8 exit; M8 contract, risk "Panel cost" | Layer tree and property panel at 10k nodes | `ui=1` variant, M9-U1 and U2 (A02, A04) |
-| M6 exit; M6c contract, section 12 | Typing cost on the main thread | `m9-typing-10k/v1`, recorded (M9-Q4) |
+| M6 exit, follow-up 1; M6c contract, section 12 | Typing cost on the main thread (about 330 to 350 ms per key at 16,384 units) | `m9-typing-10k/v1` on a 60-cluster node, recorded (M9-Q4); the 16,384-unit cost stays a known limit in the exit record with the M6c-A10 numbers |
 | M6 exit, follow-up 7 | The full headed E28 spec on the reference PC at `canvas-2d/raster-v1` | M9-U4 (A06) |
 | M8 exit, M8-A14 | E26 smoke clause met only in part (SwiftShader latency `unresolved`) | Smoke stays functional only; M9 claims rest on the main PC (M9-Q8) |
 | M4 exit; M5 exit; M6a and M6c contracts; M7 exit | Path projection cost, miter first frame, whole-document autosave serialization, text layout per node, font-load blank frames, instance expansion cost | Measured where the section 3 workloads exercise them (the write-start hook times autosave); the rest listed in the exit record as known limits |
 | E30 | E26 misses | Re-measured in M9-U2; G1 decides |
 | P1 A09, A10; P2 A08; D10 phase R2 | Open performance debt | M9-Q5 |
 | M6-S0; M6c-Q12 | Eight raw JSON reports, a user action | Listed as owed in the exit record (M9-Q7) |
+| M6 exit, follow-ups 2 to 6 and 8; M4 exit, follow-up 1 | Open M6 items (E31, E32, the `locl` residual, a real-IME record, the decision cards) and the M4 miter first frame | Carried into the exit record by name (section 7) |
 
 ### 1.3 Changes to earlier rules
 
@@ -72,22 +73,24 @@ Out of scope:
 | Requirement (Platform and performance) | Judged by |
 | --- | --- |
 | Current desktop Chrome and Edge are the prototype target | Every M9 sitting runs headed Chrome and Edge, versions recorded |
-| A document may contain 10,000 nodes | The v2 document (section 3.1): 10,000 document nodes, with projected scene nodes counted as M7-Q13 (a) |
+| A document may contain 10,000 nodes | The v2 document (section 3.1): 10,000 document nodes in the document, and at least 10,000 projected scene nodes on the measured page (M7-Q13 (a)) |
 | In a worst-case scene, all 10,000 nodes may be visible | `e26-mixed-all-*-10k/v2` at camera F: maximum per-run p95 ≤ 33.3 ms (the E26 reading of the worst case) |
 | Typical editing targets 60 frames per second | `e26-mixed-view-edit-10k/v2`: maximum per-run p95 ≤ 16.7 ms (M9-Q2) |
 | A 10,000-simple-node stress scene targets at least 30 frames per second | `e26-simple-stress-10k/v2`: maximum per-run p95 ≤ 33.3 ms |
-| Pointer responsiveness has priority over background or nonessential work | `e26-pointer-busy-10k/v2`: `pointerToWorkDoneMs` p95 < 50 ms, and no long task over 50 ms other than the marked isolation (E26-A04, A05 rules; M9-Q3) |
+| Pointer responsiveness has priority over background or nonessential work | `e26-pointer-busy-10k/v2`, busy and plain variants: maximum per-run p95 of `pointerToWorkDoneMs` < 50 ms (E26-A04); and every E26-A05 clause, judged: no autosave write starts while the pointer is pressed, the held write starts within one frame after pointer up, and no long task over 50 ms other than the marked isolation (M9-Q3) |
 
-Each row reports PASS, FAIL or UNVERIFIED by the E26 rules (section 3.2 of that contract: maximum per-run p95, nearest rank, no rounding allowance; every repetition kept).
+Each row reports PASS, FAIL or UNVERIFIED by the E26 rules (section 3.2 of that contract: maximum per-run p95, nearest rank, no rounding allowance; every repetition kept). The 16.7, 33.3 and 50 ms numbers are owned by the P1 exit gate of [`prototype-plan.md`](../prototype-plan.md), as E26 takes them; the requirement text holds the frame rates.
 
 ## 3. Workloads
 
 ### 3.1 The v2 document
 
-The v2 document is generated by `tests/m9/document.ts` from indices and one seed (`0x6d39`), as the M1-A13 and M7-A10 generators are. It is built at the current schema version, and the configuration records a SHA-256 of the generated document. It is the M1-A13 document with two changes on page 1. The total stays at 10,000 document nodes, and projected scene nodes on page 1 stay between 9,500 and 11,000:
+The v2 document is generated by `tests/m9/document.ts` from indices and one seed (`0x6d39`), as the M1-A13 and M7-A10 generators are. It is built at the current schema version, and the configuration records a SHA-256 of the generated document. It starts from the M1-A13 layout (`tests/m1-a13/document.ts`: page 1 holds 650 clusters of 14 nodes, the two chains and 50 loose leaves, about 9,250 nodes projecting 10,634 scene nodes; page 2 holds 50 clusters and 50 loose leaves) and changes it as follows:
 
-- **Instances.** About 10 % of the leaves become instances of 10 symbol sources, each source a group of about 10 nodes, so at least 1,000 projected scene nodes come from expansion. Half the instances keep the source size, the other half are scaled. A few carry a text override once text exists in the source.
-- **Text.** 200 text nodes replace leaves of the same frames. Each has one to three runs in Noto Sans KR, the family the M6c specs use, 10 to 60 grapheme clusters each, and at least 6,000 clusters in total. Fixed width and auto width alternate.
+- **Sources.** Ten symbol sources live on page 2, each a frame of 10 nodes; one of them holds a text node. Their 100 nodes replace page-2 nodes (the loose leaves first, then whole clusters), so the document stays at 10,000 nodes.
+- **Instances.** About 100 leaves of page-1 clusters (rectangles and ellipses inside group G, never a mask source, the move selection or cluster 0) become instances of those sources, so at least 1,000 projected scene nodes on page 1 come from expansion. Half keep the source size and half are scaled; instances of the text source alternate between no override and a text override.
+- **Text.** 200 leaves of the same kind become text nodes with one to three runs in the committed test font family (M6a-Q13), using only code points of its subset (ASCII and the listed Hangul syllables), at least 6,000 grapheme clusters in total. Fixed width (the leaf's width, height from the layout) and auto width alternate. Fifty of them use a second family name, registered only by the font-load change (section 4). One node in the typical view has exactly 60 clusters, the typing target.
+- **Rebalance.** Whole page-1 clusters, never cluster 0 or the move selection's cluster, move to page 2 until page 1 projects between 10,000 and 11,000 scene nodes; page-2 clusters are removed to keep the total at 10,000. U1 records the counts.
 
 The M1-A13 move selection keeps its definition, so the edit drag is comparable with v1. CI checks the counts, the hash and that `parseDocument` accepts the document (M9-A01).
 
@@ -97,24 +100,26 @@ New IDs follow the [scenario identity rule](../benchmarks/README.md#scenario-ide
 
 | ID | Document | Interaction | Target |
 | --- | --- | --- | --- |
-| `e26-mixed-view-edit-10k/v2` | v2, the typical view: U1 chooses the camera by v1's rule, 900 to 1,100 drawn leaves visible | The edit drag | ≤ 16.7 ms |
+| `e26-mixed-view-edit-10k/v2` | v2, the typical view: U1 chooses the camera by v1's rule, 900 to 1,100 drawn leaves visible, counted over the projected scene (expanded leaves included) with text bounds from the committed font's layout (E28-K9), so the camera is the same on every machine | The edit drag | ≤ 16.7 ms |
 | `e26-mixed-all-edit-10k/v2` | v2, camera F | The edit drag | ≤ 33.3 ms |
 | `e26-mixed-all-pan-10k/v2` | v2, camera F | The pan and zoom path | ≤ 33.3 ms |
-| `e26-simple-stress-10k/v2` | v1's stress document, unchanged | The pan and zoom path | ≤ 33.3 ms |
-| `e26-pointer-busy-10k/v2` | v2, typical view, autosave on | The v1 latency drag and background work, plus one font-load generation change through the layout port, armed at 2.0 s, which re-lays out every text node on the page | `pointerToWorkDoneMs` p95 < 50 ms; no long task over 50 ms other than the marked isolation |
-| `m9-typing-10k/v1` | v2, typical view, autosave on | One click into a 60-cluster text node in the view, then 40 typed characters at 120 ms intervals through `page.keyboard` | Recorded: `keyToWorkDoneMs` per key, from the `keydown` `timeStamp` to the first submitted work done at a scene revision at or after the edit's, as `pointerToWorkDoneMs` is (M9-Q4) |
+| `e26-simple-stress-10k/v2` | v1's stress document, unchanged; the version changes only for `ui=1` and the viewport | The pan and zoom path | ≤ 33.3 ms |
+| `e26-pointer-busy-10k/v2` | v2, typical view, autosave on | The v1 latency drag and background work, plus the font-load change (section 4) armed at 2.0 s, which re-lays out the 50 nodes of the second family | `pointerToWorkDoneMs` p95 < 50 ms; no long task over 50 ms other than the marked isolation |
+| `m9-typing-10k/v1` | v2, typical view, autosave on | The bench seam enters text edit on the 60-cluster node with the caret at its end (`enterTextEdit` with anchor and focus at the length), then 40 typed ASCII characters at 120 ms intervals through `page.keyboard` | Recorded: `keyToWorkDoneMs` per key, from the `keydown` `timeStamp` to the first submitted work done at a scene revision at or after the edit's, as `pointerToWorkDoneMs` is (M9-Q4) |
 
-The v1 scenarios run unchanged in the same sitting, for comparison with U6b. A v1 result is not an MVP verdict (M9-Q1).
+Every v2 frame scenario keeps E26's per-frame check that no drawn leaf is culled by the viewport at F (E26-A01, U1b). The v1 scenarios run unchanged in the same sitting, for comparison with U6b. A v1 result is not an MVP verdict (M9-Q1).
 
 ## 4. Bench-host flags
 
 - **`ui=1`, with `?bench=1` only.** `CanvasSide` renders the next-host right column (`LayerTree`, `PropertyPanel`, `EditorPanels`, as without `?bench=1`) in place of the bench's Appearance aside.
   - The canvas keeps its size (1280 × 720 CSS px) and its origin.
   - v2 projects use a 1600 × 1000 viewport, so the 300 px column fits beside the canvas. The window must fit unobscured on the main PC's display, and the sitting records the display mode.
-  - The column is as M8 ships it: the layer tree expanded at the move selection's frame, and the property panel showing the selection, so the drag re-renders both.
+  - The column is as M8 ships it. Before the warm-up the harness clicks `layer-toggle-<id>` down the move selection's ancestry, so the layer tree shows its frame's rows, and the property panel shows the selection, so the drag re-renders both. The configuration records the expanded IDs and the row count.
 - **`doc=m9-v2`.** Loads the section 3.1 document through the existing bench loader. `doc=` stays inert without `?bench=1`.
-- **The font-load change** for `e26-pointer-busy-10k/v2`. A bench-only seam bumps the layout port's generation once, as a real font load does (M6c). It is marked `m9-font-load` with `performance.mark`. The long task it causes is reported, and is not exempt like isolation (M9-Q3).
-- No flag changes `?test=1` or a page without `?bench=1`. CI checks that, and that the canvas origin and size are equal with and without `ui=1` (M9-A03).
+- **Fonts.** With `doc=m9-v2` the bench registers the committed test font (`registerTestFont`, `apps/next-host/src/m6a-text-host.ts`) before the load, as the `?fixture=` text documents do.
+- **The font-load change** for `e26-pointer-busy-10k/v2` is a real load: the harness registers the test font under the second family (`registerTestFont(family)`, the M6a font-load case), so the layout port changes generation and the 50 nodes re-lay out. It is marked `m9-font-load` with `performance.mark`. The long task it causes is reported, and is not exempt like isolation (M9-Q3).
+- **Typing seam.** `m9-typing-10k/v1` enters text edit through a bench-only hook that runs `enterTextEdit` on the target node.
+- No flag or seam changes `?test=1` or a page without `?bench=1`. CI checks that, and that the canvas origin and size are equal with and without `ui=1` (M9-A03).
 
 ## 5. Reference sitting (M9-U2)
 
@@ -126,8 +131,9 @@ The v1 scenarios run unchanged in the same sitting, for comparison with U6b. A v
 - **Commit.** The sitting runs at the merge commit of M9-U1 (M9-Q8), with a clean tree.
 - **Output.**
   - Raw records and the summary go to `docs/evidence/m9/u2-<commit>/` (runs, `files.txt`, `summary.json`).
-  - One result file per scenario and browser goes to `docs/benchmarks/results/` under the README's naming, with the machine named "main PC" and a run-ID suffix. Writers refuse to overwrite.
+  - One result file per scenario and browser goes to `docs/benchmarks/results/` under the README's naming, with the machine token `reference` and a run-ID suffix, as the existing result files have. Writers refuse to overwrite.
   - A record `docs/evidence/m9/u2-<commit>.md` holds the results table: section 2's verdict per row, the v1 rows beside U6b, the frame CPU split, long tasks, autosave write timings and typing.
+  - Regression rule ([benchmarks README](../benchmarks/README.md#regression-comparison)): a v1 row whose maximum per-run p95 is more than 10 % above U6b's is investigated in the record before G1, even under its ceiling.
 
 ## 6. Identity sitting (M9-U4)
 
@@ -137,16 +143,18 @@ At the exit head (M9-U1's merge, or later if a remedy lands), on the main PC:
 - every next-host headed spec (P5, M1 to M8, M6c);
 - the full headed E28 spec at `canvas-2d/raster-v1`.
 
-Every failure is kept and disclosed. A test that passes when repeated alone is disclosed as such, as E26-A08's was.
+No committed capture or golden file changes. Every failure is kept and disclosed. A test that passes when repeated alone is disclosed as such, as E26-A08's was.
 
 ## 7. MVP exit record (M9-U5)
 
 The record is `docs/evidence/mvp-exit-<date>.md`.
 
 - **Requirements.** One row for every bullet of `requirements.md`, with its section, the evidence (milestone exit record and criterion, or an M9 result) and one verdict: PASS, PASS with disclosure, FAIL, UNVERIFIED, or deferred by the requirements text.
+- **Coverage.** The MVP plan's section 3 coverage table, each row with its milestone's exit acceptance (the plan's definition of MVP done).
 - **Milestones.** A table of M1 to M9 with the exit record, the acceptance date and the disclosures carried.
 - **Disclosed defects.** The rendering defects carried from the P3 exit (A01 FAIL on crack width; A02 and A08 INCONCLUSIVE; A04 UNVERIFIED with five classes disclosed) and the P4 exit limitations, each with its backlog item.
-- **Backlog.** The open backlog (E4 to E7, E12 to E15, E18, E19, E27, E29 to E32, and the visualization items left open by M1 to M8), one line each.
+- **Backlog.** Every rendering-track item not Done at U5, from the [status index](d9-rendering-track.md#status-index), and every open visualization-track item, one line each.
+- **Known limits.** The M6 exit follow-ups 2 to 6 and 8, the M4 miter first frame, the 16,384-unit typing cost, and the other section 1.2 limits, by name.
 - **Performance.** Section 2's verdicts, the G1 decision, and the open debt (M9-Q5).
 - **Owed user actions.** M6-S0's raw reports, and any other (M9-Q7).
 
@@ -156,24 +164,24 @@ The record makes no claim beyond its evidence. Its status is PROPOSED until the 
 
 | ID | Criterion | Validation |
 | --- | --- | --- |
-| M9-A01 | The v2 document generator is deterministic. Each of these matches section 3.1: document nodes, projected scene nodes, instance-expanded nodes, text nodes and clusters, and the hash. `parseDocument` accepts the document. | Unit test, CI |
+| M9-A01 | The v2 document generator is deterministic. Each of these matches section 3.1: 10,000 document nodes, page-1 projected scene nodes in [10,000, 11,000], at least 1,000 of them from expansion, 200 text nodes with at least 6,000 clusters in the subset's code points, the 60-cluster target, and the hash. `parseDocument` accepts the document. | Unit test, CI |
 | M9-A02 | Every section 3.2 scenario has a configuration, a configuration hash and a stable ID. The typical-view camera of v2 holds 900 to 1,100 drawn leaves. Every drawn leaf is inside the viewport at F. | Unit and check tests, CI; headed check in U2 |
-| M9-A03 | `ui=1`, `doc=m9-v2` and the font-load seam are inert without `?bench=1`. The canvas size and origin are equal with and without `ui=1`. | Unit test; headless smoke |
+| M9-A03 | `ui=1`, `doc=m9-v2`, the font registration and the typing seam are inert without `?bench=1`. The canvas size and origin are equal with and without `ui=1`. | Unit test; headless smoke |
 | M9-A04 | The reference sitting is complete: every scenario, browser, DPR and repetition, with records and metadata as section 5 says. | Record review in U2 |
 | M9-A05 | Section 2's six rows each carry a measured PASS, FAIL or UNVERIFIED with the evidence path. | The U2 record |
 | M9-A06 | The identity sitting ran as section 6 says, with every failure disclosed. | The U4 record |
-| M9-A07 | The MVP exit record holds every section 7 part, with one row for every bullet of `requirements.md`. | Independent review of the U5 record |
+| M9-A07 | The MVP exit record holds every section 7 part, with one row for every bullet of `requirements.md` and every row of the plan's coverage table. | Independent review of the U5 record |
 | M9-A08 | The user accepts the MVP exit record. | Decision card |
 
 M9-A05 asks for a measured verdict, not for PASS. Whether a FAIL blocks the MVP exit is the G1 decision.
 
 ## 9. Gate G1 (after M9-U2)
 
-With the U2 results, the user gets one decision card. Its recommendation is made from the measured numbers. The options are:
+With the U2 results, the user gets one decision card. Its recommendation is made from the measured numbers, and it names M9-Q1's choice of the judged workload. The options are:
 
 - **(a) Exit with the misses disclosed.** Every FAIL row goes to the exit record and to backlog (E30, plus a new item for any panel or text cost U2 finds), and M9 goes on to U4 and U5.
 - **(b) Remedy within M9.** A contract amendment names the levers (E30's: the mesh per-path pass, mask planning, clip-state assignment, the GPU share; and any panel or text cost U2 finds), their tier and their units, then U3 implements them and U2's scenarios re-run. The amendment needs independent review, and a rendering-track review for renderer changes.
-- **(c) Change a target.** This is a requirement change, M9-Q2 or M9-Q4. Only the user can make it, and it is recorded in `requirements.md` by its own PR.
+- **(c) Change a target.** This is a requirement change, M9-Q2 or M9-Q4. Only the user can make it, and it is recorded in the owning document (`requirements.md`, or the P1 exit gate of `prototype-plan.md` for the ms numbers) by its own PR.
 
 ## 10. Units
 
@@ -195,12 +203,12 @@ U1 is the only unit that touches code, and it touches only bench and test code. 
 | M9-Q2 | Is the 16.7 ms ceiling read with a rounding allowance? U6b missed it on Edge by 0.1 ms of vsync jitter. | (a) Keep E26's no-rounding verdict, and report a second line: the share of intervals over 1.5 refresh intervals. The user may choose a different reading at G1 (c). |
 | M9-Q3 | Latency metric | (a) Keep `pointerToWorkDoneMs`, the named proxy (E26-Q3), so P1 A10's physical presentation stays open. The font-load long task is reported, not exempt. |
 | M9-Q4 | Typing target | (a) Recorded only, because the requirements set no typing target. (b) A target such as 50 ms per key would be a requirement change (G1 (c)). |
-| M9-Q5 | P1 A09 and A10, P2 A08 | (a) Not MVP criteria. They are listed in the exit record as open debt for a pre-alpha gate, D10 phase R2's "defer to a pre-alpha gate", and the exit card asks the user to confirm that. |
+| M9-Q5 | P1 A09 and A10, P2 A08 (D10 phase R2: "One user decision") | (a) Not MVP criteria: open debt for a pre-alpha gate, R2's "defer to a pre-alpha gate". The user's call, asked on the exit card; not auto-adopted. (b) Re-measure them in M9. |
 | M9-Q6 | Owner of the E26 v2 scenarios | (a) M9, on the visualization track, while the rendering track is paused; bench and test code only. |
 | M9-Q7 | M6-S0's raw JSON reports | (a) Owed by the user, listed in the exit record, not blocking. |
 | M9-Q8 | Commit of the reference sitting | (a) M9-U1's merge commit; the identity sitting at the exit head. Laptop and container smoke stay functional only. |
 
-No recommended option needs a new dependency or changes a requirement. They may be adopted as recommended under the user's standing rule of 2026-10-24 once the contract is approved. The G1 card is the user's own decision and is not auto-adopted, because it decides whether the MVP exits with performance misses.
+No recommended option needs a new dependency or changes a requirement. M9-Q1 to Q4 and Q6 to Q8 may be adopted as recommended under the user's standing rule of 2026-10-24 once the contract is approved; M9-Q5 goes to the user on the exit card. The G1 card is the user's own decision and is not auto-adopted, because it decides whether the MVP exits with performance misses.
 
 ## 12. Risks
 
