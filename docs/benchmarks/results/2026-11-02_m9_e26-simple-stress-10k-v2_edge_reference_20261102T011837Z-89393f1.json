@@ -1,0 +1,270 @@
+{
+  "schema": "m9-u2-result/1",
+  "scenario": "e26-simple-stress-10k/v2",
+  "browser": "edge",
+  "machine": "reference",
+  "runId": "20261102T011837Z-89393f1",
+  "commits": [
+    "89393f13eeb465063d0b24f5c3137d88adf9f6d5"
+  ],
+  "rows": [
+    {
+      "scenario": "e26-simple-stress-10k/v2",
+      "variant": "frame",
+      "project": "edge-dpr1-v2",
+      "repetitions": 5,
+      "commits": [
+        "89393f13eeb465063d0b24f5c3137d88adf9f6d5"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "ce0fab1e69a868c74efce7c77dbec160f1e2b6c1353f337e2b78c5c8ec62d9d9"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        66.6,
+        66.6,
+        66.6,
+        66.6,
+        66.6
+      ],
+      "perRunP95Ms": [
+        66.8,
+        66.8,
+        83.4,
+        66.8,
+        83.3
+      ],
+      "perRunP99Ms": [
+        116.6,
+        100.2,
+        116.6,
+        100.1,
+        116.6
+      ],
+      "maxPerRunP95Ms": 83.4,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        14.5,
+        14.2,
+        15.7,
+        14.6,
+        14.8
+      ],
+      "longTasksOver50": [
+        159,
+        158,
+        155,
+        161,
+        158
+      ],
+      "frames": [
+        161,
+        160,
+        157,
+        163,
+        159
+      ],
+      "layerRows": [
+        10000,
+        10000,
+        10000,
+        10000,
+        10000
+      ]
+    },
+    {
+      "scenario": "e26-simple-stress-10k/v2",
+      "variant": "frame",
+      "project": "edge-dpr2-v2",
+      "repetitions": 5,
+      "commits": [
+        "89393f13eeb465063d0b24f5c3137d88adf9f6d5"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "025d863ef6c8d21bdcefb2d3605e4f4dc193a796a636f1a98c87138685ff9565"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        66.6,
+        66.6,
+        66.6,
+        66.6,
+        66.6
+      ],
+      "perRunP95Ms": [
+        66.8,
+        66.8,
+        66.8,
+        66.8,
+        83.2
+      ],
+      "perRunP99Ms": [
+        116.6,
+        116.6,
+        116.6,
+        116.7,
+        116.7
+      ],
+      "maxPerRunP95Ms": 83.2,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        13.8,
+        15.4,
+        14.2,
+        14.8,
+        14.2
+      ],
+      "longTasksOver50": [
+        161,
+        158,
+        161,
+        158,
+        156
+      ],
+      "frames": [
+        161,
+        158,
+        162,
+        159,
+        157
+      ],
+      "layerRows": [
+        10000,
+        10000,
+        10000,
+        10000,
+        10000
+      ]
+    }
+  ],
+  "intervalsOverOneAndHalfRefresh": {
+    "edge-dpr1-v2": [
+      {
+        "over": 161,
+        "intervals": 161,
+        "share": 1
+      },
+      {
+        "over": 160,
+        "intervals": 160,
+        "share": 1
+      },
+      {
+        "over": 157,
+        "intervals": 157,
+        "share": 1
+      },
+      {
+        "over": 163,
+        "intervals": 163,
+        "share": 1
+      },
+      {
+        "over": 159,
+        "intervals": 159,
+        "share": 1
+      }
+    ],
+    "edge-dpr2-v2": [
+      {
+        "over": 161,
+        "intervals": 161,
+        "share": 1
+      },
+      {
+        "over": 158,
+        "intervals": 158,
+        "share": 1
+      },
+      {
+        "over": 162,
+        "intervals": 162,
+        "share": 1
+      },
+      {
+        "over": 159,
+        "intervals": 159,
+        "share": 1
+      },
+      {
+        "over": 157,
+        "intervals": 157,
+        "share": 1
+      }
+    ]
+  },
+  "records": [
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr1-v2--e26-simple-stress-10k_v2--r1.json",
+      "sha256": "bad8b43a2541e3dd31083715a483863bb3850b3ef5f04f0b755e0ffcc1fd3297"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr1-v2--e26-simple-stress-10k_v2--r2.json",
+      "sha256": "8a411455e3bd35a21ce93784e4a07d045d74216589199dc468535bf309f78712"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr1-v2--e26-simple-stress-10k_v2--r3.json",
+      "sha256": "0bfa3db6ecac7f21a7650ab9b3aa5a3fae06541a06ffec4efc43cbb635c855f7"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr1-v2--e26-simple-stress-10k_v2--r4.json",
+      "sha256": "aa340a665f95bdd6cc88e7aa0aee137c3372972365c664163960745c87c39e61"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr1-v2--e26-simple-stress-10k_v2--r5.json",
+      "sha256": "37d21fba066568fcd0f44a5af1bfe4af02bd870128e0f4610517170faf1512aa"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr2-v2--e26-simple-stress-10k_v2--r1.json",
+      "sha256": "6a9b59c2b39c2f60da51cd4dc62528f1bd4a81cebc7f5636edb1c28211c208b9"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr2-v2--e26-simple-stress-10k_v2--r2.json",
+      "sha256": "afac149e18a3c57d05bcc3f17a21fd06c6277636b7e73f6f307e271cd992ac5f"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr2-v2--e26-simple-stress-10k_v2--r3.json",
+      "sha256": "1f24bdca3b4cece0a833e53945f5a386f38fe24e6415e65e1fe3fc719b279556"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr2-v2--e26-simple-stress-10k_v2--r4.json",
+      "sha256": "ce4ad4ee5d451a77bf3a2e237c3381bcacaa802d4f8b403eca755080e95f1f20"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr2-v2--e26-simple-stress-10k_v2--r5.json",
+      "sha256": "6ed8e4fac7f036b7557cc97a2dabc2944b144f4519e4f4fc2683fdc150c224b6"
+    }
+  ]
+}

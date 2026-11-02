@@ -1,0 +1,259 @@
+{
+  "schema": "m9-u2-result/1",
+  "scenario": "e26-isolation-m1-a13/v1",
+  "browser": "edge",
+  "machine": "reference",
+  "runId": "20261102T011837Z-89393f1",
+  "commits": [
+    "89393f13eeb465063d0b24f5c3137d88adf9f6d5"
+  ],
+  "rows": [
+    {
+      "scenario": "e26-isolation-m1-a13/v1",
+      "variant": "isolation",
+      "project": "edge-dpr1",
+      "repetitions": 5,
+      "commits": [
+        "89393f13eeb465063d0b24f5c3137d88adf9f6d5"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "7c0ce2db463d0ad1f6a8a8a49ae6ac477738166368900e7cea46d3c123b9ff1f"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "isolation",
+      "rMs": [
+        87.9,
+        89.4,
+        86,
+        90,
+        94.5
+      ],
+      "cleanLoadTailMs": [
+        92.9,
+        92.1,
+        92.1,
+        89.7,
+        90.9
+      ],
+      "oneMs": [
+        101.1,
+        116.2,
+        115,
+        100.2,
+        105.6
+      ],
+      "oneBoundMs": [
+        313.7,
+        318.2,
+        308,
+        320,
+        333.5
+      ],
+      "sixteenMs": [
+        145.5,
+        131.1,
+        136,
+        147.4,
+        149
+      ],
+      "sixteenBoundMs": [
+        627.4,
+        636.4,
+        616,
+        640,
+        667
+      ],
+      "warmUpMs": [
+        128.6,
+        132.3,
+        133.1,
+        132.2,
+        137.7
+      ],
+      "rejections": [
+        [
+          15,
+          181
+        ],
+        [
+          15,
+          181
+        ],
+        [
+          15,
+          181
+        ],
+        [
+          15,
+          181
+        ],
+        [
+          15,
+          181
+        ]
+      ],
+      "perRunP95Ms": [],
+      "maxPerRunP95Ms": null,
+      "pass": true
+    },
+    {
+      "scenario": "e26-isolation-m1-a13/v1",
+      "variant": "isolation",
+      "project": "edge-dpr2",
+      "repetitions": 5,
+      "commits": [
+        "89393f13eeb465063d0b24f5c3137d88adf9f6d5"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "30e42bac4151e0c199af74238f477ae9cb957b6444fee1306547124475a1073b"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "isolation",
+      "rMs": [
+        80.8,
+        81.1,
+        80.9,
+        80.1,
+        81.6
+      ],
+      "cleanLoadTailMs": [
+        82.5,
+        81.1,
+        75.3,
+        80.9,
+        76.9
+      ],
+      "oneMs": [
+        93.3,
+        91.6,
+        89.2,
+        93.8,
+        92.2
+      ],
+      "oneBoundMs": [
+        292.4,
+        293.3,
+        292.7,
+        290.3,
+        294.8
+      ],
+      "sixteenMs": [
+        122.8,
+        117.9,
+        120.7,
+        111.9,
+        132.7
+      ],
+      "sixteenBoundMs": [
+        584.8,
+        586.6,
+        585.4,
+        580.6,
+        589.6
+      ],
+      "warmUpMs": [
+        113.9,
+        111.3,
+        113.2,
+        110.1,
+        109.6
+      ],
+      "rejections": [
+        [
+          15,
+          181
+        ],
+        [
+          15,
+          181
+        ],
+        [
+          15,
+          181
+        ],
+        [
+          15,
+          181
+        ],
+        [
+          15,
+          181
+        ]
+      ],
+      "perRunP95Ms": [],
+      "maxPerRunP95Ms": null,
+      "pass": true
+    }
+  ],
+  "intervalsOverOneAndHalfRefresh": null,
+  "records": [
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr1--e26-isolation-m1-a13_v1--r1.json",
+      "sha256": "99e8078ebfe76eab0da0fdafa53a44c472d435b6b8e871bd26247b24436ede2c"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr1--e26-isolation-m1-a13_v1--r2.json",
+      "sha256": "a4b987a1e532b882af86da995382ef611b69256b1374047debed9cc5fb2f2846"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr1--e26-isolation-m1-a13_v1--r3.json",
+      "sha256": "da6ff0cb8177b17bed5ded1b9712e7fb54379426751b372d7a6c13edc472ab50"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr1--e26-isolation-m1-a13_v1--r4.json",
+      "sha256": "e5cde87b05b88653334e9d3809a7516f64b86793e7c50dcd08c40c890dc88974"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr1--e26-isolation-m1-a13_v1--r5.json",
+      "sha256": "9434b763d118e8593e394347ad979c829acf301a12102379574da817d1d3b868"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr2--e26-isolation-m1-a13_v1--r1.json",
+      "sha256": "18d4c9f829704fce6ab86f768d03cd5fdcf7fd8c5dd1ec5ba455834ac0f9edc8"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr2--e26-isolation-m1-a13_v1--r2.json",
+      "sha256": "d2384814f029b1804d8ac5b95a7fce85edb02bc9206b3011eab0a4550a73fa8d"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr2--e26-isolation-m1-a13_v1--r3.json",
+      "sha256": "e6b199100617719679ccdc9bf2c2fd6c8ea46818d8c87a413b3a167497357f9e"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr2--e26-isolation-m1-a13_v1--r4.json",
+      "sha256": "6396a74636f8abb6acc15d8221b83167736789a75c07d5650279a5c42e5d2940"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/edge-dpr2--e26-isolation-m1-a13_v1--r5.json",
+      "sha256": "4ac070075ce829e3c3ee00777cb603916fe89a1477804fc7bc55a574e0ec12c3"
+    }
+  ]
+}

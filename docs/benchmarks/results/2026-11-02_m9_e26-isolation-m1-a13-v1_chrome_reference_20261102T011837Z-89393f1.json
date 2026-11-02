@@ -1,0 +1,259 @@
+{
+  "schema": "m9-u2-result/1",
+  "scenario": "e26-isolation-m1-a13/v1",
+  "browser": "chrome",
+  "machine": "reference",
+  "runId": "20261102T011837Z-89393f1",
+  "commits": [
+    "89393f13eeb465063d0b24f5c3137d88adf9f6d5"
+  ],
+  "rows": [
+    {
+      "scenario": "e26-isolation-m1-a13/v1",
+      "variant": "isolation",
+      "project": "chrome-dpr1",
+      "repetitions": 5,
+      "commits": [
+        "89393f13eeb465063d0b24f5c3137d88adf9f6d5"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "7c0ce2db463d0ad1f6a8a8a49ae6ac477738166368900e7cea46d3c123b9ff1f"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "isolation",
+      "rMs": [
+        87.9,
+        85,
+        88.8,
+        87.9,
+        82.1
+      ],
+      "cleanLoadTailMs": [
+        89.4,
+        89.2,
+        81.6,
+        102.5,
+        85.8
+      ],
+      "oneMs": [
+        111,
+        115,
+        102.8,
+        115.1,
+        103.5
+      ],
+      "oneBoundMs": [
+        313.7,
+        305,
+        316.4,
+        313.7,
+        296.3
+      ],
+      "sixteenMs": [
+        137.9,
+        130,
+        144.9,
+        126.1,
+        128.3
+      ],
+      "sixteenBoundMs": [
+        627.4,
+        610,
+        632.8,
+        627.4,
+        592.6
+      ],
+      "warmUpMs": [
+        124.9,
+        136.3,
+        133.7,
+        129.3,
+        131
+      ],
+      "rejections": [
+        [
+          15,
+          181
+        ],
+        [
+          15,
+          181
+        ],
+        [
+          15,
+          181
+        ],
+        [
+          15,
+          181
+        ],
+        [
+          15,
+          181
+        ]
+      ],
+      "perRunP95Ms": [],
+      "maxPerRunP95Ms": null,
+      "pass": true
+    },
+    {
+      "scenario": "e26-isolation-m1-a13/v1",
+      "variant": "isolation",
+      "project": "chrome-dpr2",
+      "repetitions": 5,
+      "commits": [
+        "89393f13eeb465063d0b24f5c3137d88adf9f6d5"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "30e42bac4151e0c199af74238f477ae9cb957b6444fee1306547124475a1073b"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "isolation",
+      "rMs": [
+        78.4,
+        80.3,
+        80.7,
+        83.5,
+        79.6
+      ],
+      "cleanLoadTailMs": [
+        75,
+        76.2,
+        80.1,
+        77.8,
+        75.4
+      ],
+      "oneMs": [
+        90.2,
+        84.3,
+        104.3,
+        97.6,
+        91.9
+      ],
+      "oneBoundMs": [
+        285.2,
+        290.9,
+        292.1,
+        300.5,
+        288.8
+      ],
+      "sixteenMs": [
+        120.3,
+        116.1,
+        131.7,
+        128.4,
+        112.6
+      ],
+      "sixteenBoundMs": [
+        570.4,
+        581.8,
+        584.2,
+        601,
+        577.6
+      ],
+      "warmUpMs": [
+        115.6,
+        112.9,
+        110.3,
+        124.1,
+        112.5
+      ],
+      "rejections": [
+        [
+          15,
+          181
+        ],
+        [
+          15,
+          181
+        ],
+        [
+          15,
+          181
+        ],
+        [
+          15,
+          181
+        ],
+        [
+          15,
+          181
+        ]
+      ],
+      "perRunP95Ms": [],
+      "maxPerRunP95Ms": null,
+      "pass": true
+    }
+  ],
+  "intervalsOverOneAndHalfRefresh": null,
+  "records": [
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr1--e26-isolation-m1-a13_v1--r1.json",
+      "sha256": "74db9f1b4b36d757cbd30a493a70449963c11a525160abd4fe3b11ef88c96b19"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr1--e26-isolation-m1-a13_v1--r2.json",
+      "sha256": "3dbde4f068f0001b5a9be855736b53514a5423dbb656c2c727ee4722c58f1817"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr1--e26-isolation-m1-a13_v1--r3.json",
+      "sha256": "b1e91809a55542f0c7cdaa9722e7a260be38965f91e638432a5880333532a397"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr1--e26-isolation-m1-a13_v1--r4.json",
+      "sha256": "bab66aff828a1a2438377d255be2772683cd305cb4bd99fa28f9e2544882c163"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr1--e26-isolation-m1-a13_v1--r5.json",
+      "sha256": "4b18f652ba5350077a2797780d81ac77e7ad9047b13a81c6fc5886d3dad605d8"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr2--e26-isolation-m1-a13_v1--r1.json",
+      "sha256": "53128c0f51c646e732143cf8a49f8275cdc6318437e88118c7bec6868c2ea9d0"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr2--e26-isolation-m1-a13_v1--r2.json",
+      "sha256": "9ce4122b3a7ef6288045393ca7e512598e3e01c1c844f955a9c675702e8cdd6d"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr2--e26-isolation-m1-a13_v1--r3.json",
+      "sha256": "c091df56b0f2af7dcece16cb9fb9fac35beee59c26b08cf1ed7a0db358db89cf"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr2--e26-isolation-m1-a13_v1--r4.json",
+      "sha256": "b00abaec99725697b6594d886ea1a1736fc7d4e9cf0bc4e13e452c97718ac53a"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr2--e26-isolation-m1-a13_v1--r5.json",
+      "sha256": "d207ddd5e174a425d3bdacccc50ed33212267fdafc2e60775445b75e0e2d1c5c"
+    }
+  ]
+}

@@ -97,3 +97,6 @@ tests/visual/viz-v4/a08-expected-status.json
 docs/evidence/m6-s0/**/*.json
 # Preserve E26 PC baseline run records byte-for-byte.
 docs/evidence/e26/**/*.json
+# Preserve the M9-U2 reference sitting records and result files byte-for-byte.
+docs/evidence/m9/**/*.json
+docs/benchmarks/results/*_m9_*.json

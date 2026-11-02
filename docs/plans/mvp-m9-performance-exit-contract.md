@@ -232,7 +232,7 @@ M9 comes "after M1..M8" (MVP plan, section 7). M8 was accepted on 2026-11-01 (#4
 | --- | --- |
 | M9-U1 | Independent review r1 READY WITH FOLLOW-UPS, applied; notes below |
 | M9-U1b | Harness fixes and one product fix found by the U2 laptop pre-run; notes below |
-| M9-U2 | Not started |
+| M9-U2 | Main-PC sitting at `89393f1` done 2026-11-02 (284 passed); record [u2-89393f1.md](../evidence/m9/u2-89393f1.md); gate G1 next |
 | M9-U3 | Conditional on G1 |
 | M9-U4 | Not started |
 | M9-U5 | Not started |
