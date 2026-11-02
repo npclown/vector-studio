@@ -1,4 +1,5 @@
 import { defineConfig, devices, type Project } from '@playwright/test';
+import { headedReporter, headedWorkers } from './tooling/headed-run.mjs';
 
 // M1-U5 (MVP M1 contract, M1-A12): the next-host page renders and edits the M1 containers
 // fixture in headed Chrome and Edge. Needs `pnpm build` (the next-host production build) and the
@@ -60,9 +61,9 @@ export default defineConfig({
   testDir: './tests/m1-next-host',
   outputDir: './test-results/m1-next-host',
   fullyParallel: false,
-  workers: 1,
+  workers: headedWorkers(),
   retries: 0,
-  reporter: 'line',
+  reporter: headedReporter,
   timeout: 90_000,
   use: {
     baseURL: 'http://127.0.0.1:4177',

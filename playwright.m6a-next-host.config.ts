@@ -1,4 +1,5 @@
 import { defineConfig, devices, type Project } from '@playwright/test';
+import { headedReporter, headedWorkers } from './tooling/headed-run.mjs';
 
 // M6a-U6 (MVP M6a contract, M6a-A11 and A12): text-dom on the next-host page with
 // `?fixture=text` (the committed test font, the layout fixtures against unprobed reference
@@ -61,9 +62,9 @@ export default defineConfig({
   testDir: './tests/m6a-next-host',
   outputDir: './test-results/m6a-next-host',
   fullyParallel: false,
-  workers: 1,
+  workers: headedWorkers(),
   retries: 0,
-  reporter: 'line',
+  reporter: headedReporter,
   timeout: 120_000,
   use: {
     baseURL: 'http://127.0.0.1:4186',

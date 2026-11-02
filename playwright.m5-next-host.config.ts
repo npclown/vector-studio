@@ -1,4 +1,5 @@
 import { defineConfig, devices, type Project } from '@playwright/test';
+import { headedReporter, headedWorkers } from './tooling/headed-run.mjs';
 
 // M5-U5 (MVP M5 contract, M5-A10): the next-host page's `?persist=1` composition with the
 // browser's own IndexedDB (reload restore, Save file and Open file, corrupt entries, the fixture
@@ -61,9 +62,9 @@ export default defineConfig({
   testDir: './tests/m5-next-host',
   outputDir: './test-results/m5-next-host',
   fullyParallel: false,
-  workers: 1,
+  workers: headedWorkers(),
   retries: 0,
-  reporter: 'line',
+  reporter: headedReporter,
   timeout: 90_000,
   use: {
     baseURL: 'http://127.0.0.1:4184',

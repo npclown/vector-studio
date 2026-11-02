@@ -1,4 +1,5 @@
 import { defineConfig, devices, type Project } from '@playwright/test';
+import { headedReporter, headedWorkers } from './tooling/headed-run.mjs';
 
 // M6c-U2 (MVP M6c contract, M6c-A04): the next-host page draws text with `text: 'atlas'`: ink
 // inside each text leaf's cluster bounds on `?fixture=text`, `?fixture=text-edit` and
@@ -91,9 +92,9 @@ export default defineConfig({
   testIgnore: 'm6c-observe.spec.ts',
   outputDir: './test-results/m6c-next-host',
   fullyParallel: false,
-  workers: 1,
+  workers: headedWorkers(),
   retries: 0,
-  reporter: 'line',
+  reporter: headedReporter,
   timeout: 180_000,
   use: {
     baseURL: 'http://127.0.0.1:4192',

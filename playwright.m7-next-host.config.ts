@@ -1,4 +1,5 @@
 import { defineConfig, devices, type Project } from '@playwright/test';
+import { headedReporter, headedWorkers } from './tooling/headed-run.mjs';
 
 // M7-U6 (MVP M7 contract, M7-A11): the next-host page on the `?fixture=symbols` document (source
 // edits reaching instances by pixel probes, an instance resize, detach, the source's delete and
@@ -63,9 +64,9 @@ export default defineConfig({
   testDir: './tests/m7-next-host',
   outputDir: './test-results/m7-next-host',
   fullyParallel: false,
-  workers: 1,
+  workers: headedWorkers(),
   retries: 0,
-  reporter: 'line',
+  reporter: headedReporter,
   timeout: 90_000,
   use: {
     baseURL: 'http://127.0.0.1:4185',
