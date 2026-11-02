@@ -1,4 +1,4 @@
-import { useEffect, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useState, type FocusEvent, type KeyboardEvent, type ReactNode } from 'react';
 
 // MVP M8 contract, section 7 (M8-U5): the field controls of the property panel, moved with the M4
 // appearance panel (M4 contract, section 8) and shared by its sections. A text field commits on
@@ -36,11 +36,17 @@ export function TextField({
   const shown = value ?? '';
   const [draft, setDraft] = useState(shown);
   const [invalid, setInvalid] = useState(false);
-  // A new document value replaces the draft (after a commit, an undo or a selection change).
-  useEffect(() => {
+  // A new document value replaces the draft (after a commit, an undo or a selection change). It
+  // is adjusted during render (React's "previous render" state pattern), not in an effect: an
+  // effect's update is a further commit per change, and a drag changes the transform fields on
+  // every move, so with moves queued behind a busy main thread each input-driven commit left that
+  // update pending and React stopped the chain with error #185 (M9-U1 pre-run).
+  const [source, setSource] = useState({ shown, identity });
+  if (source.shown !== shown || source.identity !== identity) {
+    setSource({ shown, identity });
     setDraft(shown);
     setInvalid(false);
-  }, [shown, identity]);
+  }
   const send = () => {
     if (draft === shown) {
       setInvalid(false);

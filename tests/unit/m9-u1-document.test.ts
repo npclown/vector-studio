@@ -23,6 +23,8 @@ import {
   M9_SCENARIOS,
   M9_TYPING,
   M9_WINDOW,
+  m9CameraClaims,
+  m9Cameras,
   m9Configuration,
   m9LayoutTableSha256,
   panZoomCamera,
@@ -45,14 +47,25 @@ import {
   m9TypingTarget,
   m9V2Counts,
 } from '../m9/document.js';
-import { M9_LAYOUT_TABLE, m9LayoutRequests, readM9LayoutTable, requestKey } from '../m9/layouts.js';
+import {
+  M9_LAYOUT_TABLE,
+  m9LayoutDiff,
+  m9LayoutRequests,
+  readM9LayoutTable,
+  requestKey,
+  type CompactLayout,
+  type M9LayoutTable,
+} from '../m9/layouts.js';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const generated = generateM9V2Document();
 const loaded = loadScenarioDocument('m9-v2');
 
-/** Pinned digest of the canonical generated v2 document (U1); a change is a new version. */
-const M9_V2_SHA256 = '6104db997b25fb7efab896b8638d738135fd0109bc0fbb2693e786defb1f0407';
+/**
+ * Pinned digest of the canonical generated v2 document (U1); a change is a new version. The
+ * M9-U1 pre-run fix (run boundaries at word starts) changed it from 6104db99…0407.
+ */
+const M9_V2_SHA256 = 'cae673836f01b38f0849bfbb282a2d69fb309bf51f0c4366f9bd0fa71560895c';
 /** The section 3.1 counts, pinned. */
 const COUNTS = {
   documentNodes: 10_000,
@@ -84,12 +97,12 @@ const V1_HASHES = {
   'e26-pointer-busy-10k/v1': 'ede80cbc0f054cb636b78f9c25e92297df852bebbd53824dd589b80ea54cbda5',
 };
 const V2_HASHES = {
-  'e26-mixed-view-edit-10k/v2': '661ad12288a866e20f9bac019b487df547febe21337a04e92913dc82182362c1',
-  'e26-mixed-all-edit-10k/v2': 'c9291519aa91563a3b363705ba73bb0949896c6d9c33eeb299d02b7d7aa9485c',
-  'e26-mixed-all-pan-10k/v2': '5c26073e3ccb637e7c9d5d281cc519b653b69ad3dda4872a42f99bb204c22f19',
+  'e26-mixed-view-edit-10k/v2': 'ab08fe2a7c9253b22612b24013e7fe3d3eb548f63a80ad27b233734f58fe508b',
+  'e26-mixed-all-edit-10k/v2': '3ef51975b4f90d5b952eccaa69a251477c88a858a1c6dfb95015ba659f344da3',
+  'e26-mixed-all-pan-10k/v2': '166c6e3e17ef00044c4cbf2f98eddc86c806f72497f6009c79ccbba0cc41ba1a',
   'e26-simple-stress-10k/v2': 'ce0fab1e69a868c74efce7c77dbec160f1e2b6c1353f337e2b78c5c8ec62d9d9',
-  'e26-pointer-busy-10k/v2': '165aa3840b361554b5fc0e1e108d63229f6de6a60341309b01b5b4cb8d9a1af6',
-  'm9-typing-10k/v1': '024685192c63b560de3a862a85195d899027d768073cad31d2802f2736840399',
+  'e26-pointer-busy-10k/v2': '4244e7ba542e6ad4013b10c4d76971766fba2752ca855a2de35e5e332507c59c',
+  'm9-typing-10k/v1': '17fd41d6ada536186561927df91bde7fc2c4dfd3c7746bd05ee2cd27188a60ec',
 };
 
 /** Generating, projecting and hashing 10,000 nodes takes seconds. */
@@ -195,6 +208,25 @@ describe('M9-A01: the v2 document', () => {
       const sizing = texts.filter((node) => !node.id.startsWith('m9-s')).map((node) => node.sizing);
       expect(sizing.filter((mode) => mode === 'autoWidth')).toHaveLength(100);
       expect(sizing.filter((mode) => mode === 'autoHeight')).toHaveLength(100);
+    },
+    SLOW,
+  );
+
+  it(
+    'starts every run after the first at a word start (no run boundary inside a word)',
+    () => {
+      let boundaries = 0;
+      for (const node of Object.values(generated.nodes)) {
+        if (node.type !== 'text') continue;
+        const runs = (node as unknown as TextNode).runs;
+        for (let r = 1; r < runs.length; r += 1) {
+          boundaries += 1;
+          expect(runs[r - 1]!.text.endsWith(' '), `${node.id} run ${r}`).toBe(true);
+          expect(runs[r]!.text.startsWith(' '), `${node.id} run ${r}`).toBe(false);
+        }
+      }
+      // 200 nodes with 1 + (j mod 3) runs, the 60-cluster target with one: 199 boundaries.
+      expect(boundaries).toBe(199);
     },
     SLOW,
   );
@@ -382,6 +414,78 @@ describe('M9-A02: the M9 scenarios', () => {
       for (let t = 0; t < 10_000; t += 1) expect(all(panZoomCamera(fitted, t))).toBe(true);
     },
     SLOW,
+  );
+
+  it(
+    'judges the camera claims over a table: the committed one holds, a broken one does not',
+    () => {
+      const cameras = m9Cameras(loaded);
+      const committed = readM9LayoutTable();
+      const claims = m9CameraClaims(loaded, cameras);
+      expect(claims.holds).toBe(true);
+      expect(claims.typical.atDpr.map((entry) => entry.visible)).toEqual([
+        TYPICAL_VISIBLE,
+        TYPICAL_VISIBLE_DPR2,
+      ]);
+      expect(claims.fitted).toMatchObject({ insideAtF: DRAWN_LEAVES, panFirstMissMs: null });
+      expect(claims.moveSelection.holds).toBe(true);
+      const perturb = (
+        change: (layout: CompactLayout) => CompactLayout,
+        pick = (key: string) => key === Object.keys(committed.layouts)[0],
+      ): M9LayoutTable => ({
+        recordedWith: { url: '/', browser: 'other 1' },
+        layouts: Object.fromEntries(
+          Object.entries(committed.layouts).map(([key, layout]) => [
+            key,
+            pick(key) ? change(layout) : layout,
+          ]),
+        ),
+      });
+      // Every number a hair off: reported, the claims still hold.
+      const nudged = perturb(
+        (layout) => ({
+          ...layout,
+          clusters: layout.clusters.map(
+            ([start, end, line, run, x, y, advance]) =>
+              [start, end, line, run, x + 0.0005, y, advance] as (typeof layout.clusters)[number],
+          ),
+        }),
+        () => true,
+      );
+      const nudgedDiff = m9LayoutDiff(nudged, committed);
+      expect(nudgedDiff.differing).toBe(207);
+      expect(nudgedDiff.maxNumericDelta).toBeCloseTo(0.0005, 9);
+      expect(nudgedDiff.lineBreaks).toEqual([]);
+      expect(nudgedDiff.missing).toEqual([]);
+      expect(m9CameraClaims(loadScenarioDocument('m9-v2', nudged), cameras).holds).toBe(true);
+      // Other line breaks are listed by key.
+      const [firstKey] = Object.keys(committed.layouts);
+      const rebroken = perturb((layout) => ({
+        ...layout,
+        lines: layout.lines.map((line, index) =>
+          index === 0 ? ([line[0], line[1] + 1, ...line.slice(2)] as typeof line) : line,
+        ),
+      }));
+      const rebrokenDiff = m9LayoutDiff(rebroken, committed);
+      expect(rebrokenDiff.differing).toBe(1);
+      expect(rebrokenDiff.lineBreaks.map((entry) => entry.key)).toEqual([firstKey]);
+      // A text leaf pushed far out of the content: F no longer holds every drawn leaf.
+      const far = perturb(
+        (layout) => ({
+          ...layout,
+          clusters: layout.clusters.map(
+            ([start, end, line, run, x, y, advance]) =>
+              [start, end, line, run, x + 1e5, y, advance] as (typeof layout.clusters)[number],
+          ),
+        }),
+        () => true,
+      );
+      const broken = m9CameraClaims(loadScenarioDocument('m9-v2', far), cameras);
+      expect(broken.fitted.holds).toBe(false);
+      expect(broken.holds).toBe(false);
+      expect(m9LayoutDiff({ ...committed, layouts: {} }, committed).missing).toHaveLength(207);
+    },
+    SLOW * 2,
   );
 
   it(
