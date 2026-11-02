@@ -384,6 +384,24 @@ describe('PA-U4b per-run verdict (contract section 1)', () => {
     expect(block.categories.M5.bytes).toBe(100 * 4 * 3 + GLYPH_RASTER_BOUND_BYTES);
     expect(block.exactSumBytes).toBe(65536 + 1000 + 1200 + GLYPH_RASTER_BOUND_BYTES + 10);
     expect(block.observedSumBytes).toBe(block.exactSumBytes + 8 + 4 + 3);
+    expect(block.floorSumBytes).toBe(block.exactSumBytes + 8);
+  });
+
+  it('is FAIL when the exact sum plus M1 floor exceeds the bound (A09-Q4)', () => {
+    const below = memoryBlock(ledger(), trace, {
+      ...end,
+      totalSize: MEMORY_BOUND_BYTES - memoryBlock(ledger(), trace, end).exactSumBytes,
+    });
+    expect([below.verdict, below.floorSumBytes]).toEqual(['UNVERIFIED', MEMORY_BOUND_BYTES]);
+    const above = memoryBlock(ledger(), trace, { ...end, totalSize: MEMORY_BOUND_BYTES });
+    expect(above.verdict).toBe('FAIL');
+    // M2's and M7's readings never enter the floor.
+    const large = memoryBlock(ledger(), trace, {
+      ...end,
+      backingStorageSize: MEMORY_BOUND_BYTES,
+      embedderHeapUsedSize: MEMORY_BOUND_BYTES,
+    });
+    expect(large.verdict).toBe('UNVERIFIED');
   });
 
   it('is FAIL once the exact categories alone exceed the bound', () => {
