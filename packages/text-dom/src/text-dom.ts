@@ -75,6 +75,22 @@ function faceSource(source: unknown): string | ArrayBuffer {
   throw new TypeError('text-dom: the font source is neither { url } nor { bytes }');
 }
 
+/** V21-U1: which event bumped the generation, as the bench's text probe records it. */
+type BumpSource = 'add' | 'settle' | 'settle-error' | 'loadingdone' | 'loadingerror' | 'resolution';
+
+/**
+ * V21-U1: one generation bump and its synchronous dispatch, reported to the bench's
+ * `globalThis.__vsTextProbe` (`?bench=1` only). The editor's own record for the same dispatch
+ * is reported inside `dispatchMs`, so it comes first.
+ */
+type PortBumpRecord = {
+  kind: 'port-bump';
+  atMs: number;
+  source: BumpSource;
+  generation: number;
+  dispatchMs: number;
+};
+
 export function createTextDom(options: TextDomOptions): TextDom {
   if (typeof options !== 'object' || options === null) {
     throw new TypeError('text-dom: options are not an object');
@@ -102,20 +118,32 @@ export function createTextDom(options: TextDomOptions): TextDom {
   let disposed = false;
 
   // M6a-L3: each event takes the realm counter's next value, then runs the listeners.
-  const bump = (): void => {
+  const bump = (source: BumpSource): void => {
     if (disposed) return;
     generation = nextGeneration();
+    // V21-U1: the bench's text probe, if installed, records each bump's source and dispatch.
+    const probe = (globalThis as { __vsTextProbe?: (record: PortBumpRecord) => void })
+      .__vsTextProbe;
+    if (probe === undefined) {
+      listeners.dispatch();
+      return;
+    }
+    const clock = (globalThis as unknown as { performance: { now(): number } }).performance;
+    const atMs = clock.now();
     listeners.dispatch();
+    probe({ kind: 'port-bump', atMs, source, generation, dispatchMs: clock.now() - atMs });
   };
+  const onLoadingDone = (): void => bump('loadingdone');
+  const onLoadingError = (): void => bump('loadingerror');
 
-  fonts?.addEventListener('loadingdone', bump);
-  fonts?.addEventListener('loadingerror', bump);
+  fonts?.addEventListener('loadingdone', onLoadingDone);
+  fonts?.addEventListener('loadingerror', onLoadingError);
 
   // A device pixel ratio change, browser zoom included, re-armed after each change (M6a-Q15).
   let resolution: MediaQueryList | null = null;
   const onResolution = (): void => {
     arm();
-    bump();
+    bump('resolution');
   };
   const arm = (): void => {
     resolution?.removeEventListener('change', onResolution);
@@ -182,17 +210,17 @@ export function createTextDom(options: TextDomOptions): TextDom {
         return Promise.resolve('error');
       }
       faces.add(face);
-      bump(); // A registry change.
+      bump('add'); // A registry change.
       // The face settled; one still in flight at `dispose` resolves 'error', since dispose
       // removed it from `document.fonts` (review r1 N2).
       return face.load().then(
         () => {
           if (disposed) return 'error' as const;
-          bump();
+          bump('settle');
           return 'loaded' as const;
         },
         () => {
-          bump();
+          bump('settle-error');
           return 'error' as const;
         },
       );
@@ -201,8 +229,8 @@ export function createTextDom(options: TextDomOptions): TextDom {
       if (disposed) return;
       disposed = true;
       listeners.clear();
-      fonts?.removeEventListener('loadingdone', bump);
-      fonts?.removeEventListener('loadingerror', bump);
+      fonts?.removeEventListener('loadingdone', onLoadingDone);
+      fonts?.removeEventListener('loadingerror', onLoadingError);
       resolution?.removeEventListener('change', onResolution);
       resolution = null;
       for (const face of faces) fonts?.delete(face);

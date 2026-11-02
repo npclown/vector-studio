@@ -265,6 +265,8 @@ type PageHook = {
   enterTextEdit(id: string, offset: number): { ok: boolean; code?: string };
   /** V20-U1: renders per counted component (`tests/v20/v20-render-count.spec.ts`). */
   renders(): Readonly<Record<string, number>>;
+  /** V21-U1: the text probe's records (`tests/v21/v21-count.spec.ts`). */
+  textDispatches(): readonly Readonly<Record<string, unknown>>[];
 };
 declare global {
   interface Window {

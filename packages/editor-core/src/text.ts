@@ -2,6 +2,7 @@ import type { TextLayoutPort, TextLayoutRequest, TextLayoutResult } from '@vecto
 import type { Frame, TextNode, TextRun } from '@vector-studio/model';
 import { deepFreeze } from './freeze.js';
 import { rotate } from './geometry.js';
+import { probeNow, type RelayoutSplit } from './text-probe.js';
 
 // Text layout in the editor (MVP M6a contract, sections 5 and 6.2): the request built from a
 // text node, the request-keyed cache in front of the injected `TextLayoutPort`, the auto sizing
@@ -51,16 +52,30 @@ export class TextLayoutCache {
    * swallow the editor's event.
    */
   private notified: number;
+  /**
+   * V21-U1: while the bench's text probe times a relayout, the split it fills (layout calls,
+   * their time, and how many new layouts equal the previous generation's). Null otherwise.
+   */
+  split: RelayoutSplit | null = null;
+  /** V21-U1: the dropped generation's results, kept only while `split` is set. */
+  private previous: Map<string, TextLayoutResult> | null = null;
 
   constructor(readonly port: TextLayoutPort) {
     this.generation = port.generation;
     this.notified = this.generation;
   }
 
+  /** V21-U1: starts (`split`) or ends (null) a probed relayout; ending drops the kept results. */
+  probe(split: RelayoutSplit | null): void {
+    this.split = split;
+    if (split === null) this.previous = null;
+  }
+
   /** Drops the results of an older generation. */
   private sync(generation: number): void {
     if (generation === this.generation) return;
     this.generation = generation;
+    this.previous = this.split === null ? null : this.results;
     this.results = new Map();
   }
 
@@ -103,7 +118,18 @@ export class TextLayoutCache {
       this.results.set(key, cached);
       return cached;
     }
+    const split = this.split;
+    const started = split === null ? 0 : probeNow();
     const result = frozenCopy(this.port.layout(request()));
+    if (split !== null) {
+      split.layoutCalls += 1;
+      split.layoutMs += probeNow() - started;
+      const before = this.previous?.get(key);
+      if (before !== undefined) {
+        split.comparedLayouts += 1;
+        if (sameLayout(before, result)) split.equalLayouts += 1;
+      }
+    }
     // A port that bumped during the call gave a result of a generation the cache no longer
     // holds; it is returned but not stored.
     if (this.port.generation !== generation) return result;
@@ -118,6 +144,16 @@ export class TextLayoutCache {
   get size(): number {
     return this.results.size;
   }
+}
+
+/** V21-U1: whether two results lay out alike (the generation aside). */
+function sameLayout(left: TextLayoutResult, right: TextLayoutResult): boolean {
+  return (
+    left.width === right.width &&
+    left.height === right.height &&
+    JSON.stringify(left.lines) === JSON.stringify(right.lines) &&
+    JSON.stringify(left.clusters) === JSON.stringify(right.clusters)
+  );
 }
 
 /** A frozen copy of a port's result, so the port's own objects are never frozen or kept. */
