@@ -1,6 +1,6 @@
 # M9-U4 identity sitting at `5ee0f4d` (2026-11-02)
 
-The identity sitting of [M9 contract section 6](../../plans/mvp-m9-performance-exit-contract.md#6-identity-sitting-m9-u4), for M9-A06. **Result: 0 failed, 0 flaky, 0 skipped, 0 hangs** in every run. No committed capture or golden file changed.
+The identity sitting of [M9 contract section 6](../../plans/mvp-m9-performance-exit-contract.md#6-identity-sitting-m9-u4), for M9-A06. **Result: 0 failed, 0 flaky, 0 skipped, 0 hangs** in every headed run. No committed capture or golden file changed.
 
 ## Run
 
@@ -8,9 +8,9 @@ The identity sitting of [M9 contract section 6](../../plans/mvp-m9-performance-e
   - GPU and CPU: NVIDIA GeForce GTX 1660 SUPER (driver 32.0.16.1088), AMD Ryzen 7 3700X (8 cores, 16 threads).
   - Displays and power: two 1920×1080 displays at 60 Hz, Balanced power plan.
   - Software: Chrome 156.0.8078.74, Edge 156.0.4314.58, Node 24.22.1.
-- **Preflight, 2026-11-02 15:30 KST.** Input had been idle for 219 s, and for 239 s twenty seconds later. No Chrome or Edge window was open.
+- **Preflight, 2026-11-02 15:30 KST.** Input had been idle for 219 s, and for 239 s twenty seconds later. No Chrome or Edge window was open. User Node processes were not checked, which section 6 does not ask for.
 - **Commit.** `5ee0f4d` was the head of `main` when the sitting started (the M9 exit head, contract section 6). The tree was clean apart from three untracked, machine-local items that are never committed.
-  - **Main has moved since.** It has since gained #454 and #455, which change only headed-run selection, reporters and docs. No `packages/` or `apps/` file changes between `5ee0f4d` and those merges, so this sitting covers the product source of the exit.
+  - **Main has moved since.** It has since gained #454 and #455, which change test configs (headed-run selection and worker count), tooling, reporters, a unit test and docs. No `packages/`, `apps/` or spec file changes between `5ee0f4d` and those merges, so this sitting covers the product source of the exit.
 - **Setup.**
   - `pnpm install --frozen-lockfile`: OK.
   - `pnpm test:geometry`: 72 files, 1,217 passed and 6 skipped, 15:31 to 15:53.
@@ -48,6 +48,10 @@ The identity sitting of [M9 contract section 6](../../plans/mvp-m9-performance-e
 - **Some suite times are derived.** The progress summary file kept only its first two lines, because a monitor held it open. The suite times above come from Playwright's own output and from the log files' creation and modification times.
 - **Per-spec times were not recorded.** The `line` reporter does not record them. Coarse `pnpm test:gpu` progress: 90 tests by about 16:50, 96 by 17:29, 100 by 17:58, 166 by 18:29 and 203 by about 19:30 KST. The A08 corpus took most of each browser's time.
 - **The logs stay on the PC.** They are under `artifacts/m9-u4-5ee0f4d/`: install, geometry, build, one per next-host suite, and `test:gpu`. They are not committed.
+
+## Owed status updates
+
+The E28 records still call the headed run at `canvas-2d/raster-v1` NOT RUN: [the E28 index](../e28/README.md) and the [E28 contract](../../plans/d9-e28-text-glyph-atlas-contract.md) progress notes. This sitting covers that run. They are updated in the M9-U5 status PR, together with V-19 in the visualization track.
 
 ## Verdict
 
