@@ -234,8 +234,8 @@ M9 comes "after M1..M8" (MVP plan, section 7). M8 was accepted on 2026-11-01 (#4
 | M9-U1b | Harness fixes and one product fix found by the U2 laptop pre-run; notes below |
 | M9-U2 | Main-PC sitting at `89393f1` done 2026-11-02 (284 passed); record [u2-89393f1.md](../evidence/m9/u2-89393f1.md) (#452) |
 | M9-U3 | Not run: G1 (a), 2026-11-02 (G1 notes below); diagnostic traces only ([u3a-trace-3fd3be9.md](../evidence/m9/u3a-trace-3fd3be9.md)) |
-| M9-U4 | Not started |
-| M9-U5 | Not started |
+| M9-U4 | Main-PC sitting at `5ee0f4d` done 2026-11-02 (`test:gpu` 210 passed, next-host 246 passed, 0 failed); record [u4-5ee0f4d.md](../evidence/m9/u4-5ee0f4d.md); A06 PASS |
+| M9-U5 | Exit record [mvp-exit-2026-11-02.md](../evidence/mvp-exit-2026-11-02.md) in review; acceptance pending (M9-A08) |
 
 ### M9-U1 notes
 
