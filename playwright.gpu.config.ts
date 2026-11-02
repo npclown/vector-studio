@@ -23,8 +23,9 @@ export default defineConfig({
   outputDir: './test-results/gpu',
   // With more than one worker, the tests of one file spread over workers too: p1-primitives and
   // p4-clip-mask take about 10 min per browser each, longer than the rest of a parallel run's
-  // share. No gpu spec shares state between its tests; each writes its evidence under a run root
-  // named by its worker's process id, so one file's evidence can span several run roots.
+  // share. No gpu spec shares state between its tests. Most write their evidence under a run root
+  // named by the worker's process id (the corpus under VIZ_V4_RUN_ID, p1 under
+  // P1_EVIDENCE_OUTPUT_DIR when set), so one file's evidence can span several run roots.
   fullyParallel: workers > 1,
   workers,
   retries: 0,

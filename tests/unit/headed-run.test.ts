@@ -5,6 +5,7 @@ import {
   DEFAULT_WORKERS,
   missingPrerequisite,
   NEXT_HOST_SUITES,
+  resolveWorkers,
   parse,
   stageArgs,
   stages,
@@ -41,7 +42,7 @@ describe('run-headed-tier', () => {
   it('parses the tier, workers and Playwright arguments', () => {
     expect(parse(['--tier', '2'])).toEqual({
       tier: 2,
-      workers: DEFAULT_WORKERS,
+      workers: null,
       gpuOnly: false,
       extra: [],
     });
@@ -60,6 +61,12 @@ describe('run-headed-tier', () => {
       'chrome',
     ]);
     expect(stageArgs({ script: 'test:gpu' }, [])).toEqual(['run', 'test:gpu']);
+  });
+  it('takes --workers, then VS_HEADED_WORKERS, then the default', () => {
+    expect(resolveWorkers('2', { VS_HEADED_WORKERS: '1' })).toBe('2');
+    expect(resolveWorkers(null, { VS_HEADED_WORKERS: '1' })).toBe('1');
+    expect(resolveWorkers(null, { VS_HEADED_WORKERS: '' })).toBe(DEFAULT_WORKERS);
+    expect(resolveWorkers(null, {})).toBe(DEFAULT_WORKERS);
   });
   it('leaves out the next-host suites with --gpu-only', () => {
     expect(stages(3, true).map((stage) => stage.script)).toEqual(['test:gpu:viz-v4', 'test:gpu']);

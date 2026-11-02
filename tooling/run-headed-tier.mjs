@@ -33,7 +33,10 @@ export const NEXT_HOST_SUITES = [
   'm8',
 ];
 
-/** Measured on the main PC on 2026-11-02 (docs/validation.md, "Headed run tiers"). */
+/**
+ * The worker count when neither --workers nor VS_HEADED_WORKERS is given. Chosen from the
+ * 3-worker main-PC measurement of 2026-11-02 (docs/validation.md, "Headed run tiers").
+ */
 export const DEFAULT_WORKERS = '4';
 
 /** The committed headed M8-N3 baseline of the main PC, named in the refusal message. */
@@ -47,7 +50,7 @@ export function parse(argv) {
   const own = separator === -1 ? argv : argv.slice(0, separator);
   const extra = separator === -1 ? [] : argv.slice(separator + 1);
   let tier;
-  let workers = DEFAULT_WORKERS;
+  let workers = null;
   let gpuOnly = false;
   for (let index = 0; index < own.length; index++) {
     const argument = own[index];
@@ -79,6 +82,13 @@ export function stages(tier, gpuOnly = false) {
           script: `test:${suite}-next-host`,
         }))),
   ];
+}
+
+/** --workers, else VS_HEADED_WORKERS, else DEFAULT_WORKERS. */
+export function resolveWorkers(workers, env) {
+  if (workers !== null) return workers;
+  const value = env.VS_HEADED_WORKERS ?? '';
+  return value === '' ? DEFAULT_WORKERS : value;
 }
 
 /** Why the run cannot start, or null: the next-host stages need M8_N3_BASELINE. */
@@ -117,7 +127,9 @@ function pnpm(args, env) {
 function main() {
   // pnpm passes a leading `--` through to the script.
   const argv = process.argv.slice(2).filter((arg, index) => !(index === 0 && arg === '--'));
-  const { tier, workers, gpuOnly, extra } = parse(argv);
+  const parsed = parse(argv);
+  const { tier, gpuOnly, extra } = parsed;
+  const workers = resolveWorkers(parsed.workers, process.env);
   const missing = missingPrerequisite(gpuOnly, process.env);
   if (missing !== null) {
     console.error(missing);
