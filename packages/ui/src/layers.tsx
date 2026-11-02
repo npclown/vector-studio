@@ -22,6 +22,7 @@ import {
   visibilityCommand,
   type FieldEdit,
 } from './layer-model.js';
+import { countRender } from './render-probe.js';
 import { runAction, type ActionButton } from './toolbar-model.js';
 
 // MVP M8 contract, section 7.2 (M8-L2 to L4, M8-Q7 (a)): the page list and the layer tree. Each
@@ -216,6 +217,7 @@ const toggles = (event: MouseEvent) => event.shiftKey || event.ctrlKey || event.
  * selection (`reorderNodes`). A refused command shows its code (`layers-refusal`).
  */
 export function LayerTree() {
+  countRender('layers');
   const execute = useEditorCommands();
   const document = useEditorSelector(documentOf);
   const active = useActivePage();
@@ -245,61 +247,64 @@ export function LayerTree() {
         </output>
       )}
       <ul aria-label="layer list" style={LIST}>
-        {rows.map((row) => (
-          <li
-            key={row.id}
-            data-testid={row.testId}
-            data-depth={row.depth}
-            data-selected={row.selected}
-            style={{
-              ...ROW,
-              listStyle: 'none',
-              paddingLeft: row.depth * INDENT,
-              opacity: row.visible ? 1 : 0.5,
-            }}
-          >
-            {row.expandable ? (
-              <button
-                type="button"
-                data-testid={`layer-toggle-${row.id}`}
-                aria-expanded={row.expanded}
-                aria-label={row.expanded ? 'collapse' : 'expand'}
-                onClick={() => setExpanded((current) => toggleExpanded(current, row.id))}
-              >
-                {row.expanded ? '▾' : '▸'}
-              </button>
-            ) : null}
-            {draft !== null && draft.id === row.id ? (
-              <NameInput
-                label="layer name"
-                draft={draft}
-                onChange={rename.change}
-                onCommit={rename.commit}
-                onCancel={rename.cancel}
-              />
-            ) : (
-              <button
-                type="button"
-                data-testid={`layer-name-${row.id}`}
-                aria-pressed={row.selected}
-                onClick={(event) =>
-                  show(execute(rowClickCommand(selection, row.id, toggles(event))))
-                }
-                onDoubleClick={() => rename.start(row.id, row.name)}
-              >
-                {row.name}
-              </button>
-            )}
-            <span>{row.type}</span>
-            <button
-              type="button"
-              data-testid={`layer-visible-${row.id}`}
-              onClick={() => show(execute(visibilityCommand(row)))}
+        {rows.map((row) => {
+          countRender('layer-row');
+          return (
+            <li
+              key={row.id}
+              data-testid={row.testId}
+              data-depth={row.depth}
+              data-selected={row.selected}
+              style={{
+                ...ROW,
+                listStyle: 'none',
+                paddingLeft: row.depth * INDENT,
+                opacity: row.visible ? 1 : 0.5,
+              }}
             >
-              {row.visible ? 'hide' : 'show'}
-            </button>
-          </li>
-        ))}
+              {row.expandable ? (
+                <button
+                  type="button"
+                  data-testid={`layer-toggle-${row.id}`}
+                  aria-expanded={row.expanded}
+                  aria-label={row.expanded ? 'collapse' : 'expand'}
+                  onClick={() => setExpanded((current) => toggleExpanded(current, row.id))}
+                >
+                  {row.expanded ? '▾' : '▸'}
+                </button>
+              ) : null}
+              {draft !== null && draft.id === row.id ? (
+                <NameInput
+                  label="layer name"
+                  draft={draft}
+                  onChange={rename.change}
+                  onCommit={rename.commit}
+                  onCancel={rename.cancel}
+                />
+              ) : (
+                <button
+                  type="button"
+                  data-testid={`layer-name-${row.id}`}
+                  aria-pressed={row.selected}
+                  onClick={(event) =>
+                    show(execute(rowClickCommand(selection, row.id, toggles(event))))
+                  }
+                  onDoubleClick={() => rename.start(row.id, row.name)}
+                >
+                  {row.name}
+                </button>
+              )}
+              <span>{row.type}</span>
+              <button
+                type="button"
+                data-testid={`layer-visible-${row.id}`}
+                onClick={() => show(execute(visibilityCommand(row)))}
+              >
+                {row.visible ? 'hide' : 'show'}
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

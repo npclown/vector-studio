@@ -28,6 +28,7 @@ import {
   reporterFor,
   type PanelReporter,
 } from './panel-report.js';
+import { countRender } from './render-probe.js';
 
 // MVP M8 contract, section 6: the panel provider, the panel list and each panel's error
 // boundary. Panel open and collapsed state is React state in this module: no command, document,
@@ -233,6 +234,7 @@ function PanelSection({
  * `PanelBoundary`. Throws outside a `PanelProvider`.
  */
 export function EditorPanels() {
+  countRender('panels');
   const { panels, report, generation } = usePanelContext('EditorPanels');
   // Keyed by the composition, so a new editor or new contributions remount every panel and its
   // boundary, which drops a failed state together with the provider's recorded failures.

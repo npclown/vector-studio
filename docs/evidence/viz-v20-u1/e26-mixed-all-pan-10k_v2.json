@@ -1,0 +1,352 @@
+{
+  "unit": "V20-U1",
+  "scenario": "e26-mixed-all-pan-10k/v2",
+  "document": "m9-v2",
+  "steps": "camera",
+  "stepCount": 30,
+  "commit": "fb1125393496522d7740fed5317c15eed30a6cdb",
+  "dirty": true,
+  "browser": "chromium 153.0.8010.12",
+  "renderer": "error",
+  "expanded": ["f1", "g3"],
+  "layerRows": 655,
+  "mountedRows": {
+    "ready": 655,
+    "max": 655
+  },
+  "perStep": {
+    "appearance": {
+      "first": 1,
+      "laterMax": 1,
+      "laterMin": 1,
+      "total": 30
+    },
+    "layer-row": {
+      "first": 655,
+      "laterMax": 655,
+      "laterMin": 655,
+      "total": 19650
+    },
+    "layers": {
+      "first": 1,
+      "laterMax": 1,
+      "laterMin": 1,
+      "total": 30
+    },
+    "panels": {
+      "first": 1,
+      "laterMax": 1,
+      "laterMin": 1,
+      "total": 30
+    },
+    "properties": {
+      "first": 1,
+      "laterMax": 1,
+      "laterMin": 1,
+      "total": 30
+    }
+  },
+  "pageErrors": [],
+  "rawSteps": [
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 1,
+        "appearance": 1,
+        "panels": 1,
+        "layer-row": 655
+      },
+      "mountedRows": 655
+    }
+  ]
+}
