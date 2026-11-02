@@ -127,33 +127,91 @@ export function layerRows(
   activePage: string,
   expanded: ReadonlySet<string>,
   selection: readonly string[],
+  cache: LayerRowCache | null = null,
 ): readonly LayerRow[] {
   const page = document.pages.find((entry) => entry.id === activePage);
   if (page === undefined) return [];
   const selected = new Set(selection);
   const rows: LayerRow[] = [];
+  const next: LayerRowCache['entries'] = new Map();
   const visit = (ids: readonly string[], depth: number) => {
     for (let index = ids.length - 1; index >= 0; index -= 1) {
       const node = document.nodes[ids[index]!];
       if (node === undefined) continue;
       const children = childrenOf(node);
       const open = children !== null && expanded.has(node.id);
-      rows.push({
-        id: node.id,
-        testId: `layer-${node.id}`,
-        name: node.name,
-        type: node.type,
-        depth,
-        expandable: children !== null,
-        expanded: open,
-        selected: selected.has(node.id),
-        visible: node.visible,
-      });
+      const isSelected = selected.has(node.id);
+      const previous = cache?.entries.get(node.id);
+      const row =
+        previous !== undefined &&
+        previous.node === node &&
+        previous.row.depth === depth &&
+        previous.row.expanded === open &&
+        previous.row.selected === isSelected
+          ? previous.row
+          : {
+              id: node.id,
+              testId: `layer-${node.id}`,
+              name: node.name,
+              type: node.type,
+              depth,
+              expandable: children !== null,
+              expanded: open,
+              selected: isSelected,
+              visible: node.visible,
+            };
+      if (cache !== null) next.set(node.id, { node, row });
+      rows.push(row);
       if (open) visit(children, depth + 1);
     }
   };
   visit(page.children, 0);
+  if (cache !== null) cache.entries = next;
   return rows;
+}
+
+/**
+ * V-20 contract, lever L2: the rows of the last `layerRows` call that used this cache. A row whose
+ * node object, depth, expanded and selected state are unchanged is returned as the same object,
+ * so a memoized row component skips its render. The walk itself runs on every call.
+ */
+export type LayerRowCache = { entries: Map<string, Readonly<{ node: NodeV6; row: LayerRow }>> };
+
+/** An empty row cache, one per layer tree. */
+export function createLayerRowCache(): LayerRowCache {
+  return { entries: new Map() };
+}
+
+// ---------------------------------------------------------------------------------------------
+// The windowed list (V-20 contract, lever L3 and section 4)
+
+/** Rows mounted before the row height is measured, and when there is no layout. */
+export const UNMEASURED_ROWS = 32;
+/** Rows mounted beyond each edge of the list's viewport. */
+export const OVERSCAN_ROWS = 8;
+
+/**
+ * The half-open range `[start, end)` of row indexes the list mounts: the rows that intersect the
+ * viewport `[scrollTop, scrollTop + viewportHeight)` plus `OVERSCAN_ROWS` on each side, clamped to
+ * the rows. Before a measurement (`rowHeight` null or not positive) the first `UNMEASURED_ROWS`.
+ * Pinned rows (an open rename, the focused row) are mounted besides this range.
+ */
+export function windowRange(
+  count: number,
+  rowHeight: number | null,
+  scrollTop: number,
+  viewportHeight: number,
+): Readonly<{ start: number; end: number }> {
+  if (rowHeight === null || !(rowHeight > 0)) {
+    return { start: 0, end: Math.min(count, UNMEASURED_ROWS) };
+  }
+  const top = Math.max(0, scrollTop);
+  const first = Math.floor(top / rowHeight);
+  const last = Math.ceil((top + Math.max(0, viewportHeight)) / rowHeight);
+  return {
+    start: Math.max(0, Math.min(count, first - OVERSCAN_ROWS)),
+    end: Math.max(0, Math.min(count, last + OVERSCAN_ROWS)),
+  };
 }
 
 /** The expanded set after the row's expand or collapse toggle (React state). */

@@ -5,6 +5,7 @@ import {
   PropertyPanel,
   type UiExtension,
 } from '@vector-studio/ui';
+import { memo } from 'react';
 import { starUiExtension } from './m8-star-panel';
 import { faultPanelsQuery, testUiPanels } from './m8-test-panels';
 
@@ -47,8 +48,15 @@ export function hostContributions(search: string, bench: boolean): readonly UiEx
   return faultPanelsQuery(search) ? [starUiExtension, testUiPanels] : [starUiExtension];
 }
 
-/** The right side of the canvas row (M8-N3, M8-N5); `height` is the canvas row's height. */
-export function CanvasSide({ bench, height }: Readonly<{ bench: boolean; height: number }>) {
+/**
+ * The right side of the canvas row (M8-N3, M8-N5); `height` is the canvas row's height. V-20
+ * contract, lever L1: memoized, so the page's render on every editor event stops here; the
+ * column's components render on their own selectors only.
+ */
+export const CanvasSide = memo(function CanvasSide({
+  bench,
+  height,
+}: Readonly<{ bench: boolean; height: number }>) {
   if (bench) return <AppearancePanel />;
   return (
     <div data-testid="right-column" style={rightColumnStyle(height)}>
@@ -57,4 +65,4 @@ export function CanvasSide({ bench, height }: Readonly<{ bench: boolean; height:
       <EditorPanels />
     </div>
   );
-}
+});

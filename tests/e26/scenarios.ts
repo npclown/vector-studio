@@ -87,7 +87,8 @@ export type E26ScenarioId =
   | 'e26-mixed-all-pan-10k/v1'
   | 'e26-simple-stress-10k/v1'
   | 'e26-pointer-busy-10k/v1'
-  | M9ScenarioId;
+  | M9ScenarioId
+  | V20Ui0ScenarioId;
 
 /** The M9 scenarios (M9 contract, section 3.2). */
 export type M9ScenarioId =
@@ -97,6 +98,19 @@ export type M9ScenarioId =
   | 'e26-simple-stress-10k/v2'
   | 'e26-pointer-busy-10k/v2'
   | 'm9-typing-10k/v1';
+
+/**
+ * V-20 contract (V20-U2, A06): the five v2 frame and latency scenarios with `ui=0` (the bench's
+ * Appearance aside instead of the right column), under new IDs by the scenario identity rule.
+ * Diagnostic only: the 17a2b0a-aside floor, not a column-free floor, and no verdict. The IDs
+ * share no prefix with the v2 IDs, so an `E26_SCENARIOS` prefix filter keeps them apart.
+ */
+export type V20Ui0ScenarioId =
+  | 'e26-ui0-mixed-view-edit-10k/v1'
+  | 'e26-ui0-mixed-all-edit-10k/v1'
+  | 'e26-ui0-mixed-all-pan-10k/v1'
+  | 'e26-ui0-simple-stress-10k/v1'
+  | 'e26-ui0-pointer-busy-10k/v1';
 
 export type E26Scenario = Readonly<{
   id: E26ScenarioId;
@@ -120,8 +134,11 @@ export type E26Scenario = Readonly<{
 
 /** What an M9 scenario adds to its v1 counterpart (M9 contract, sections 3.2 and 4). */
 export type M9Extras = Readonly<{
-  /** `ui=1`: the right column instead of the bench's Appearance aside. */
-  ui: true;
+  /**
+   * `ui=1`: the right column instead of the bench's Appearance aside. False only for the V-20
+   * `ui=0` variant (`V20_UI0_SCENARIOS`).
+   */
+  ui: boolean;
   /** The page viewport of the v2 projects, wider than v1's 1400 x 1000 for the column. */
   window: Readonly<{ width: number; height: number }>;
   /** The font-load change: the test font registered under `family` at `armedAtMs`. */
@@ -196,7 +213,7 @@ export const M9_TYPING = Object.freeze({
 
 const m9 = (
   scenario: E26Scenario,
-  id: M9ScenarioId,
+  id: M9ScenarioId | V20Ui0ScenarioId,
   document: E26Scenario['document'],
   extras: Partial<Pick<M9Extras, 'fontLoad' | 'typing'>> = {},
 ): E26Scenario =>
@@ -237,6 +254,22 @@ export const M9_SCENARIOS: readonly E26Scenario[] = Object.freeze([
     setFillBeforeDownMs: null,
   }),
 ]);
+
+/** V-20 (V20-U2): the `ui=0` variant of the five v2 frame and latency scenarios, in that order. */
+export const V20_UI0_SCENARIOS: readonly E26Scenario[] = Object.freeze(
+  (
+    [
+      'e26-ui0-mixed-view-edit-10k/v1',
+      'e26-ui0-mixed-all-edit-10k/v1',
+      'e26-ui0-mixed-all-pan-10k/v1',
+      'e26-ui0-simple-stress-10k/v1',
+      'e26-ui0-pointer-busy-10k/v1',
+    ] as const
+  ).map((id, index) => {
+    const v2 = M9_SCENARIOS[index]!;
+    return Object.freeze({ ...v2, id, m9: Object.freeze({ ...v2.m9!, ui: false }) });
+  }),
+);
 
 // ---------------------------------------------------------------------------------------------
 // The stress document (section 3.1): P1's positions, sizes and seed, reduced styles.
@@ -687,8 +720,10 @@ export function m9Configuration(
 ): M9Configuration {
   if (scenario.m9 === undefined) throw new Error(`${scenario.id} is not an M9 scenario`);
   // The stress page has no containers: nothing to expand, every node one row.
-  const tree =
-    scenario.document === 'stress'
+  // V-20 `ui=0`: no column, so nothing to expand and no rows shown.
+  const tree = !scenario.m9.ui
+    ? { expanded: [], rows: 0 }
+    : scenario.document === 'stress'
       ? { expanded: [], rows: layerRows(loaded.document, loaded.pageId, new Set(), []).length }
       : m9LayerTree(loaded);
   return {
