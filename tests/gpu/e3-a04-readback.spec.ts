@@ -32,9 +32,11 @@ declare global {
 // the same check must fail when one read-back position is replaced by p* + 2β(p). The cases are
 // the non-corpus cases of section 16.2 and, after the freeze, the named subset of section 7.1
 // (E3-U5, section 19), in chunks. Clipped draws also get the strip coverage readback of
-// E3-Q11 (a), and T-junction crack widths are reported (E3-Q10 (b)). Manual, never CI:
+// E3-Q11 (a), and T-junction crack widths are reported (E3-Q10 (b)). Manual, never CI.
+// Since 2026-11-02 playwright.gpu.config.ts checks only the non-corpus cases below tier 3; the
+// named subset runs at tier 3 (VS_GPU_TIER=3) or with E3_A04_READBACK_NON_CORPUS_ONLY=0:
 //
-//   pnpm exec playwright test -c playwright.gpu.config.ts tests/gpu/e3-a04-readback.spec.ts
+//   E3_A04_READBACK_NON_CORPUS_ONLY=0 pnpm exec playwright test -c playwright.gpu.config.ts tests/gpu/e3-a04-readback.spec.ts
 //
 // Each project writes .tools/e3-a04-readback/<stamp>/<project>.json, which
 // `pnpm e3-a04:run --gpu <chrome.json>,<edge.json>` attaches to the record.
