@@ -29,7 +29,7 @@ When instructions conflict, the narrower document owns details inside its declar
 | Active milestone plan under `docs/plans/` | Milestone execution order, status, acceptance criteria and evidence        | Cross-project validation policy           |
 | `docs/plans/d9-rendering-track.md`        | Rendering-track items, status, acceptance criteria, P3 exit evidence index | The D9 decision text; visualization items |
 | `docs/plans/d9-visualization-track.md`    | Visualization-track items, status, acceptance criteria and evidence        | The D9 decision text; rendering items     |
-| `docs/plans/d10-roadmap-reset.md`         | Post-MVP 1 work order (R0-R4), backlog, WIP limit and document rules       | Track item detail; D9 ownership           |
+| `docs/plans/d10-roadmap-reset.md`         | Post-MVP 1 work order (R0-R6), backlog, WIP limit and document rules       | Track item detail; D9 ownership           |
 | `docs/validation.md`                      | Test layers, validation policy and evidence requirements                   | Benchmark thresholds or results           |
 | `docs/benchmarks/README.md`               | Benchmark methodology, metadata schema and result format                   | Milestone scope                           |
 | `docs/benchmarks/results/*`               | Immutable observations from individual runs                                | Requirements or thresholds                |
