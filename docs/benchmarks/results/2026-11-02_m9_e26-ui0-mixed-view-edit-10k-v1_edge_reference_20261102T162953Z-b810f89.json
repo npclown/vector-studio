@@ -1,0 +1,256 @@
+{
+  "schema": "m9-u2-result/1",
+  "scenario": "e26-ui0-mixed-view-edit-10k/v1",
+  "browser": "edge",
+  "machine": "reference",
+  "runId": "20261102T162953Z-b810f89",
+  "commits": [
+    "b810f89e7ece79c97a2c52b6225683d671b5751e"
+  ],
+  "rows": [
+    {
+      "scenario": "e26-ui0-mixed-view-edit-10k/v1",
+      "variant": "frame",
+      "project": "edge-dpr1-v2",
+      "repetitions": 5,
+      "commits": [
+        "b810f89e7ece79c97a2c52b6225683d671b5751e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "264bd077194107fd223db359e716545abe54abab2c23f5bc6d0da8a168457ae3"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 16.7,
+      "perRunMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "perRunP95Ms": [
+        33.4,
+        33.4,
+        33.4,
+        33.4,
+        33.4
+      ],
+      "perRunP99Ms": [
+        33.5,
+        33.5,
+        33.5,
+        33.4,
+        33.5
+      ],
+      "maxPerRunP95Ms": 33.4,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        11.3,
+        11.6,
+        11.5,
+        11.4,
+        11.4
+      ],
+      "longTasksOver50": [
+        0,
+        1,
+        0,
+        0,
+        1
+      ],
+      "frames": [
+        466,
+        464,
+        465,
+        471,
+        467
+      ]
+    },
+    {
+      "scenario": "e26-ui0-mixed-view-edit-10k/v1",
+      "variant": "frame",
+      "project": "edge-dpr2-v2",
+      "repetitions": 5,
+      "commits": [
+        "b810f89e7ece79c97a2c52b6225683d671b5751e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "13a4423211cf61e4213173f605ae8c693aa0efa6bed4e0b6ff89648d27049b2f"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 16.7,
+      "perRunMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "perRunP95Ms": [
+        33.4,
+        33.4,
+        33.4,
+        33.4,
+        33.4
+      ],
+      "perRunP99Ms": [
+        33.5,
+        33.5,
+        33.5,
+        33.5,
+        33.5
+      ],
+      "maxPerRunP95Ms": 33.4,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        11.1,
+        11.3,
+        11.6,
+        11.4,
+        12.1
+      ],
+      "longTasksOver50": [
+        1,
+        0,
+        1,
+        1,
+        1
+      ],
+      "frames": [
+        483,
+        469,
+        473,
+        468,
+        473
+      ]
+    }
+  ],
+  "intervalsOverOneAndHalfRefresh": {
+    "edge-dpr1-v2": [
+      {
+        "over": 131,
+        "intervals": 466,
+        "share": 0.2811
+      },
+      {
+        "over": 133,
+        "intervals": 464,
+        "share": 0.2866
+      },
+      {
+        "over": 132,
+        "intervals": 465,
+        "share": 0.2839
+      },
+      {
+        "over": 125,
+        "intervals": 471,
+        "share": 0.2654
+      },
+      {
+        "over": 130,
+        "intervals": 467,
+        "share": 0.2784
+      }
+    ],
+    "edge-dpr2-v2": [
+      {
+        "over": 114,
+        "intervals": 483,
+        "share": 0.236
+      },
+      {
+        "over": 127,
+        "intervals": 469,
+        "share": 0.2708
+      },
+      {
+        "over": 125,
+        "intervals": 473,
+        "share": 0.2643
+      },
+      {
+        "over": 130,
+        "intervals": 468,
+        "share": 0.2778
+      },
+      {
+        "over": 125,
+        "intervals": 473,
+        "share": 0.2643
+      }
+    ]
+  },
+  "records": [
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr1-v2--e26-ui0-mixed-view-edit-10k_v1--r1.json",
+      "sha256": "5efe07541e0516bfb5b0efa4e934ab68c8862ed43cc107cf1e97d9b900719905"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr1-v2--e26-ui0-mixed-view-edit-10k_v1--r2.json",
+      "sha256": "217554c2c2c743af8324e04ce14bc2cb5f5ea277e87cbd2f9753c4695cad1f38"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr1-v2--e26-ui0-mixed-view-edit-10k_v1--r3.json",
+      "sha256": "41fc18e89177d86320dc55dd5203ef06b646829d21003fd93be6d812b33a2674"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr1-v2--e26-ui0-mixed-view-edit-10k_v1--r4.json",
+      "sha256": "346f999ccffe3d4ab50d6fbf21b358e8d7534e16ff3d3fbf705859b7ee06521f"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr1-v2--e26-ui0-mixed-view-edit-10k_v1--r5.json",
+      "sha256": "6e45eacb06b3e071688bc19928115408a7b805c2643618541a5450f85f2897bc"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr2-v2--e26-ui0-mixed-view-edit-10k_v1--r1.json",
+      "sha256": "0363990142d5bc9d2bdef22ae047be563ae774afbf30e3b04a7929427cb01a0c"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr2-v2--e26-ui0-mixed-view-edit-10k_v1--r2.json",
+      "sha256": "1335be556dffddfc1e70d250d178c59d5e6408fdb1bdda9bf97dc5e25358d287"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr2-v2--e26-ui0-mixed-view-edit-10k_v1--r3.json",
+      "sha256": "1226d497ca1b4a54aa304c0ff9c510dc7f2fdbe72eb9b1414ce6a8441d978832"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr2-v2--e26-ui0-mixed-view-edit-10k_v1--r4.json",
+      "sha256": "b2da7b1a1ef44104fc574b9a8f7a15b7dbb7a87d835937ecadc96d5edf86c227"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr2-v2--e26-ui0-mixed-view-edit-10k_v1--r5.json",
+      "sha256": "46fe14211355cb2a80e21fa52012b694640e4a24deb69b2095106873b34e9ef5"
+    }
+  ]
+}

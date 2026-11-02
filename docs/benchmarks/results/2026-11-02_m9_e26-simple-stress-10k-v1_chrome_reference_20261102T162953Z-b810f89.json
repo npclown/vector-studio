@@ -1,0 +1,256 @@
+{
+  "schema": "m9-u2-result/1",
+  "scenario": "e26-simple-stress-10k/v1",
+  "browser": "chrome",
+  "machine": "reference",
+  "runId": "20261102T162953Z-b810f89",
+  "commits": [
+    "b810f89e7ece79c97a2c52b6225683d671b5751e"
+  ],
+  "rows": [
+    {
+      "scenario": "e26-simple-stress-10k/v1",
+      "variant": "frame",
+      "project": "chrome-dpr1",
+      "repetitions": 5,
+      "commits": [
+        "b810f89e7ece79c97a2c52b6225683d671b5751e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "76665ddc402ad3c6f4e365d499444a0d9a5e869f3110545f52cb610a1bfe7cd1"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "perRunP95Ms": [
+        16.8,
+        16.8,
+        16.8,
+        16.8,
+        16.8
+      ],
+      "perRunP99Ms": [
+        16.9,
+        16.9,
+        16.9,
+        16.9,
+        16.9
+      ],
+      "maxPerRunP95Ms": 16.8,
+      "pass": true,
+      "encodeAndSubmitP95Ms": [
+        11,
+        11.2,
+        12.4,
+        11,
+        11.1
+      ],
+      "longTasksOver50": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "frames": [
+        599,
+        599,
+        599,
+        599,
+        599
+      ]
+    },
+    {
+      "scenario": "e26-simple-stress-10k/v1",
+      "variant": "frame",
+      "project": "chrome-dpr2",
+      "repetitions": 5,
+      "commits": [
+        "b810f89e7ece79c97a2c52b6225683d671b5751e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "dc51ded9f9cdeda87abe4eac3fc51765d211e52f42bd1f8857c86686d3333fe6"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "perRunP95Ms": [
+        16.8,
+        16.8,
+        16.8,
+        16.8,
+        16.8
+      ],
+      "perRunP99Ms": [
+        16.9,
+        16.9,
+        16.9,
+        16.9,
+        16.9
+      ],
+      "maxPerRunP95Ms": 16.8,
+      "pass": true,
+      "encodeAndSubmitP95Ms": [
+        12.7,
+        12.6,
+        12.5,
+        13.9,
+        12
+      ],
+      "longTasksOver50": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "frames": [
+        599,
+        599,
+        599,
+        599,
+        599
+      ]
+    }
+  ],
+  "intervalsOverOneAndHalfRefresh": {
+    "chrome-dpr1": [
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      },
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      },
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      },
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      },
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      }
+    ],
+    "chrome-dpr2": [
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      },
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      },
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      },
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      },
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      }
+    ]
+  },
+  "records": [
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr1--e26-simple-stress-10k_v1--r1.json",
+      "sha256": "5e71717f3ec1b23fc23acea58b577be4ee2bd823430863cc6f9c887ccc892f80"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr1--e26-simple-stress-10k_v1--r2.json",
+      "sha256": "bcf4ace87a2fed699dd21fdce3e86703aae7f5e4a3ed43d94f1ea81f056964a8"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr1--e26-simple-stress-10k_v1--r3.json",
+      "sha256": "f87816ce467b8f1c6d5bf7248853ec76627796e180174a5c350d5dfb89037254"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr1--e26-simple-stress-10k_v1--r4.json",
+      "sha256": "67886dee6dd358ec5dc3895dd24341e50ab24e8e65cdb0ad2ae36ed06913b761"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr1--e26-simple-stress-10k_v1--r5.json",
+      "sha256": "b4a7b6e008f32e1adb2f8f733d4ff506675fbe3bf3a0efe68d146dfaee1f6077"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr2--e26-simple-stress-10k_v1--r1.json",
+      "sha256": "2a3788dd058785bfe7c5b13b2b440d452498427f88016846d172ee87a20dc9f7"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr2--e26-simple-stress-10k_v1--r2.json",
+      "sha256": "74b9842a716034e8e450e80391f240165a4668ef1fef173c76c0f5dbb58805aa"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr2--e26-simple-stress-10k_v1--r3.json",
+      "sha256": "03a6d3f4f09d1dfa6d5379dd600ddd7d80e223d321e9ffb9ae5345a01d036708"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr2--e26-simple-stress-10k_v1--r4.json",
+      "sha256": "ab2379ca55e501669a70eb7a54cfc19ed8b24302fd955fe1616797f6df2e59e8"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr2--e26-simple-stress-10k_v1--r5.json",
+      "sha256": "4683924253b08c73f8597b5ea84fffb2c86dc8e2fe885dca9a1ad3bace9660e4"
+    }
+  ]
+}

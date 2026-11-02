@@ -1,0 +1,603 @@
+{
+  "schema": "m9-u2-result/1",
+  "scenario": "e26-pointer-busy-10k/v2",
+  "browser": "chrome",
+  "machine": "reference",
+  "runId": "20261102T162953Z-b810f89",
+  "commits": [
+    "b810f89e7ece79c97a2c52b6225683d671b5751e"
+  ],
+  "rows": [
+    {
+      "scenario": "e26-pointer-busy-10k/v2",
+      "variant": "busy",
+      "project": "chrome-dpr1-v2",
+      "repetitions": 5,
+      "commits": [
+        "b810f89e7ece79c97a2c52b6225683d671b5751e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "4244e7ba542e6ad4013b10c4d76971766fba2752ca855a2de35e5e332507c59c"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        235,
+        167.8,
+        163.2,
+        150.7,
+        201.3
+      ],
+      "perRunP95Ms": [
+        733,
+        527.7,
+        618.4,
+        866.4,
+        565.1
+      ],
+      "maxPerRunP95Ms": 866.4,
+      "pass": false,
+      "samples": [
+        193,
+        199,
+        199,
+        196,
+        201
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        500,
+        499,
+        500,
+        500,
+        500
+      ],
+      "longTasksOver50OutsideIsolation": [
+        4,
+        3,
+        4,
+        3,
+        3
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        208,
+        195,
+        195,
+        198,
+        183
+      ],
+      "isolationMs": [
+        [
+          140.6
+        ],
+        [
+          142
+        ],
+        [
+          145.2
+        ],
+        [
+          144.7
+        ],
+        [
+          139.2
+        ]
+      ],
+      "writesDuringPress": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "firstWriteAfterUpMs": [
+        85,
+        81.1,
+        80.6,
+        70.6,
+        74.4
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ],
+      "fontLoadStatus": [
+        "loaded",
+        "loaded",
+        "loaded",
+        "loaded",
+        "loaded"
+      ],
+      "longTasksOver50DuringFontLoad": [
+        3,
+        3,
+        3,
+        3,
+        3
+      ]
+    },
+    {
+      "scenario": "e26-pointer-busy-10k/v2",
+      "variant": "busy",
+      "project": "chrome-dpr2-v2",
+      "repetitions": 5,
+      "commits": [
+        "b810f89e7ece79c97a2c52b6225683d671b5751e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "74f1b1e2f6fa80e93473da9af9dce3e5dfc3407d397451c90e83108fb7bc0f9f"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        169.3,
+        147.3,
+        335.6,
+        178.7,
+        185.3
+      ],
+      "perRunP95Ms": [
+        469.4,
+        392.4,
+        682.4,
+        763.7,
+        693.1
+      ],
+      "maxPerRunP95Ms": 763.7,
+      "pass": false,
+      "samples": [
+        200,
+        199,
+        200,
+        198,
+        195
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        500,
+        500,
+        499,
+        500,
+        500
+      ],
+      "longTasksOver50OutsideIsolation": [
+        4,
+        3,
+        5,
+        5,
+        4
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        183,
+        183,
+        183,
+        203,
+        200
+      ],
+      "isolationMs": [
+        [
+          137.8
+        ],
+        [
+          136.8
+        ],
+        [
+          136.9
+        ],
+        [
+          136.2
+        ],
+        [
+          137
+        ]
+      ],
+      "writesDuringPress": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "firstWriteAfterUpMs": [
+        75.8,
+        72.4,
+        75.9,
+        73.8,
+        72.9
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ],
+      "fontLoadStatus": [
+        "loaded",
+        "loaded",
+        "loaded",
+        "loaded",
+        "loaded"
+      ],
+      "longTasksOver50DuringFontLoad": [
+        3,
+        3,
+        4,
+        3,
+        3
+      ]
+    },
+    {
+      "scenario": "e26-pointer-busy-10k/v2",
+      "variant": "plain",
+      "project": "chrome-dpr1-v2",
+      "repetitions": 5,
+      "commits": [
+        "b810f89e7ece79c97a2c52b6225683d671b5751e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "86ae783b4a175c3881c99e5c23041afd87c7a95c12aade2b51c4e1894b32e2da"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        169.2,
+        155.7,
+        137.2,
+        137.9,
+        150.6
+      ],
+      "perRunP95Ms": [
+        558,
+        527.7,
+        486.5,
+        358.4,
+        479.5
+      ],
+      "maxPerRunP95Ms": 558,
+      "pass": false,
+      "samples": [
+        246,
+        248,
+        244,
+        243,
+        247
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        500,
+        500,
+        499,
+        500,
+        500
+      ],
+      "longTasksOver50OutsideIsolation": [
+        0,
+        0,
+        0,
+        1,
+        0
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        0,
+        0,
+        0,
+        69,
+        0
+      ],
+      "isolationMs": [
+        [],
+        [],
+        [],
+        [],
+        []
+      ],
+      "writesDuringPress": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "firstWriteAfterUpMs": [
+        535.9,
+        533.1,
+        522.3,
+        526.2,
+        534.4
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ],
+      "fontLoadStatus": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "longTasksOver50DuringFontLoad": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "scenario": "e26-pointer-busy-10k/v2",
+      "variant": "plain",
+      "project": "chrome-dpr2-v2",
+      "repetitions": 5,
+      "commits": [
+        "b810f89e7ece79c97a2c52b6225683d671b5751e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "1794d260c5097f4454c9a80d0a98d7df5e1b82a37f7a20889bd2802533b774cf"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        175,
+        179.8,
+        190.3,
+        230.4,
+        140.7
+      ],
+      "perRunP95Ms": [
+        610.2,
+        621.1,
+        651.4,
+        767.4,
+        438
+      ],
+      "maxPerRunP95Ms": 767.4,
+      "pass": false,
+      "samples": [
+        245,
+        243,
+        248,
+        247,
+        247
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        500,
+        499,
+        500,
+        500,
+        500
+      ],
+      "longTasksOver50OutsideIsolation": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "isolationMs": [
+        [],
+        [],
+        [],
+        [],
+        []
+      ],
+      "writesDuringPress": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "firstWriteAfterUpMs": [
+        527.3,
+        535.4,
+        534.2,
+        528.7,
+        529.8
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ],
+      "fontLoadStatus": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "longTasksOver50DuringFontLoad": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "intervalsOverOneAndHalfRefresh": null,
+  "records": [
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr1-v2--e26-pointer-busy-10k_v2--r1.json",
+      "sha256": "f084b6226f92824e0b1c7dc002c089f723b5d4f616617c934ced0cc9bcb0fe5a"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr1-v2--e26-pointer-busy-10k_v2--r2.json",
+      "sha256": "e2491957942e7d40157f495649f01f181c6907fd01eae4e1ca554c69160445ac"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr1-v2--e26-pointer-busy-10k_v2--r3.json",
+      "sha256": "ca006ee20242782f5d210a8567a90523b40d0027488e1cfcfd847cbdd3cf33cf"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr1-v2--e26-pointer-busy-10k_v2--r4.json",
+      "sha256": "d5a4effc9382dbad1bae506edf951d6df95ef71a6661240127a8133b337c8ce2"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr1-v2--e26-pointer-busy-10k_v2--r5.json",
+      "sha256": "4edf15333feea1182fd03008e673c98d372a1fc85bd72f6444fd11b5858b038e"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr1-v2--e26-pointer-busy-10k_v2-plain--r1.json",
+      "sha256": "fc6447953cef2924e8e717bd4779b3edc0dcd738c7e10b96d4763d8947c8f93a"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr1-v2--e26-pointer-busy-10k_v2-plain--r2.json",
+      "sha256": "f9f004b7e4f4bf12c725061d0f62790cb70ae88372f135d63f3808fc25d15bdc"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr1-v2--e26-pointer-busy-10k_v2-plain--r3.json",
+      "sha256": "647bb6d67cc14cc8f99c1afbcd38bcc37305b37465bd485862da4c7d142289b1"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr1-v2--e26-pointer-busy-10k_v2-plain--r4.json",
+      "sha256": "546c09d0fc2d5540d7d825f4f9dfce463c3ab0034a3d70b0f103ba097d8965c5"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr1-v2--e26-pointer-busy-10k_v2-plain--r5.json",
+      "sha256": "b7826dcb9105838c7fb222e1886e5866721b93374ff64c26dfeffa74683f9e1f"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr2-v2--e26-pointer-busy-10k_v2--r1.json",
+      "sha256": "94277fd07a4ff08563cc93d73e973a307ccabe26261778cbbbefe457e294c4fc"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr2-v2--e26-pointer-busy-10k_v2--r2.json",
+      "sha256": "33d391f338504ea8c40bc96f42bd0bb69d43da0f75f8e04743a00a7bda1d086f"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr2-v2--e26-pointer-busy-10k_v2--r3.json",
+      "sha256": "a4df65b7cc5f93ade8e40cc54575dbc41f816500a8f416fab299141caf052a9e"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr2-v2--e26-pointer-busy-10k_v2--r4.json",
+      "sha256": "ff997673247f71c7a7929f8eea24d40fd132e7b8d78fc15cc7a5c190e46c5ab9"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr2-v2--e26-pointer-busy-10k_v2--r5.json",
+      "sha256": "32b873706c926abb7c30b018175f7ede4568af7598589cbc558f565d71a612a7"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr2-v2--e26-pointer-busy-10k_v2-plain--r1.json",
+      "sha256": "e59cd417d5db8aba1bc8bf7cbd3dd93911920713f1af3f3645f88524a207d097"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr2-v2--e26-pointer-busy-10k_v2-plain--r2.json",
+      "sha256": "17afceb973c90cf9a335ef1775a2592cb40fe040fe9342bbb28fddafe6000f14"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr2-v2--e26-pointer-busy-10k_v2-plain--r3.json",
+      "sha256": "f0a3d53e5451c40f989310ab4e37bbec1a72028c8ce5e6c5d5196c1bf8b248a0"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr2-v2--e26-pointer-busy-10k_v2-plain--r4.json",
+      "sha256": "acb5c0d142f8939cc6f7749b422be167835a7a0bc8900485901f2a780d7455cc"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/chrome-dpr2-v2--e26-pointer-busy-10k_v2-plain--r5.json",
+      "sha256": "517c36dfbbdd838847ec65252f9f6dea2d91042ab86d2bda3d015357d6e519d7"
+    }
+  ]
+}

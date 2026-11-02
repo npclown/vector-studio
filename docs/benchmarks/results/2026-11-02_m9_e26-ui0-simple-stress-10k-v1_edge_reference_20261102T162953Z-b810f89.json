@@ -1,0 +1,256 @@
+{
+  "schema": "m9-u2-result/1",
+  "scenario": "e26-ui0-simple-stress-10k/v1",
+  "browser": "edge",
+  "machine": "reference",
+  "runId": "20261102T162953Z-b810f89",
+  "commits": [
+    "b810f89e7ece79c97a2c52b6225683d671b5751e"
+  ],
+  "rows": [
+    {
+      "scenario": "e26-ui0-simple-stress-10k/v1",
+      "variant": "frame",
+      "project": "edge-dpr1-v2",
+      "repetitions": 5,
+      "commits": [
+        "b810f89e7ece79c97a2c52b6225683d671b5751e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "41f62e86ef1bb7d376f173a5136f96ebeb140ea3bf46c31b4dba9a63df99e565"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "perRunP95Ms": [
+        16.8,
+        16.8,
+        16.8,
+        16.8,
+        16.8
+      ],
+      "perRunP99Ms": [
+        16.9,
+        16.9,
+        16.9,
+        16.9,
+        16.9
+      ],
+      "maxPerRunP95Ms": 16.8,
+      "pass": true,
+      "encodeAndSubmitP95Ms": [
+        10.6,
+        10.3,
+        10.4,
+        10.3,
+        10.5
+      ],
+      "longTasksOver50": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "frames": [
+        599,
+        599,
+        599,
+        599,
+        599
+      ]
+    },
+    {
+      "scenario": "e26-ui0-simple-stress-10k/v1",
+      "variant": "frame",
+      "project": "edge-dpr2-v2",
+      "repetitions": 5,
+      "commits": [
+        "b810f89e7ece79c97a2c52b6225683d671b5751e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "194d7db10fa3e422b40740be7065241db63cb34e841797398cab7bd82c2fc03a"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "perRunP95Ms": [
+        16.8,
+        16.8,
+        16.8,
+        16.8,
+        16.8
+      ],
+      "perRunP99Ms": [
+        16.9,
+        16.9,
+        16.9,
+        16.9,
+        16.9
+      ],
+      "maxPerRunP95Ms": 16.8,
+      "pass": true,
+      "encodeAndSubmitP95Ms": [
+        10.4,
+        11.4,
+        10.6,
+        10.3,
+        10.1
+      ],
+      "longTasksOver50": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "frames": [
+        599,
+        599,
+        599,
+        599,
+        599
+      ]
+    }
+  ],
+  "intervalsOverOneAndHalfRefresh": {
+    "edge-dpr1-v2": [
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      },
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      },
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      },
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      },
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      }
+    ],
+    "edge-dpr2-v2": [
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      },
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      },
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      },
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      },
+      {
+        "over": 0,
+        "intervals": 599,
+        "share": 0
+      }
+    ]
+  },
+  "records": [
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr1-v2--e26-ui0-simple-stress-10k_v1--r1.json",
+      "sha256": "04ac1a987d448624b509de8e6627b84e0891544229038fdce8c3e70c97ed2912"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr1-v2--e26-ui0-simple-stress-10k_v1--r2.json",
+      "sha256": "0eb71a70f9cf158679e7c6fa9c1524a2e4600a6670bbdd6c5d7ceee26dabca07"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr1-v2--e26-ui0-simple-stress-10k_v1--r3.json",
+      "sha256": "8bee0d07a0bca01981e87f6df8333031791aa75878004fdb033882fb8fb79709"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr1-v2--e26-ui0-simple-stress-10k_v1--r4.json",
+      "sha256": "ad6f664f93ace3b429216929ad1e0f24866b25a338f4b4598640435948469c49"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr1-v2--e26-ui0-simple-stress-10k_v1--r5.json",
+      "sha256": "62b364bacbf8655b027b5b6f24a02cd45a102a5ec2d0790d77cc72afa63cd331"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr2-v2--e26-ui0-simple-stress-10k_v1--r1.json",
+      "sha256": "8a5c33ff712357253b35627b5e2e814cb5fa1a4a5c0bda76969468e289b97c56"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr2-v2--e26-ui0-simple-stress-10k_v1--r2.json",
+      "sha256": "71c3f86cf873733b3cf73f0ca6d982bda7fe7eeb1e4e3527be56823f80cec763"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr2-v2--e26-ui0-simple-stress-10k_v1--r3.json",
+      "sha256": "f00c14b8437ecd356e9492addd6c19559bfe9cbca6c5a8a5cf2cb8017c76c520"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr2-v2--e26-ui0-simple-stress-10k_v1--r4.json",
+      "sha256": "581310e0f9ddf31df15808515b8556950d957cba3a3c17a7d09ef52004372069"
+    },
+    {
+      "file": "docs/evidence/viz-v20/u3-b810f89/runs/edge-dpr2-v2--e26-ui0-simple-stress-10k_v1--r5.json",
+      "sha256": "40358938b68d0219bf634ed0b614d80e422ea1bf41fb3eac22d8a60a96c4dc81"
+    }
+  ]
+}

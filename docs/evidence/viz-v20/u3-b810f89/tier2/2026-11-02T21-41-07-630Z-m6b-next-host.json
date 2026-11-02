@@ -1,0 +1,24 @@
+{
+  "schema": "headed-timing-v1",
+  "config": "playwright.m6b-next-host.config.ts",
+  "startedUtc": "2026-11-02T21:41:07.630Z",
+  "status": "passed",
+  "workers": 1,
+  "wallMilliseconds": 52302,
+  "tests": 38,
+  "testMilliseconds": 47074,
+  "specs": [
+    {
+      "file": "tests/m6b-next-host/m6b-next-host.spec.ts",
+      "project": "chrome",
+      "tests": 19,
+      "milliseconds": 23696
+    },
+    {
+      "file": "tests/m6b-next-host/m6b-next-host.spec.ts",
+      "project": "edge",
+      "tests": 19,
+      "milliseconds": 23378
+    }
+  ]
+}
