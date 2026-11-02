@@ -523,7 +523,7 @@ Every unit is test-only. No unit changes product source, a contract, an ABI or a
   - `pnpm test:e3-a04` (E3-U1 to E3-U3 unit tests; CI);
   - `pnpm e3-a04:freeze` (oracle-only freeze check; manual);
   - `pnpm e3-a04:run` (reference measurement and record; manual, not CI);
-  - `E3_A04_READBACK_NON_CORPUS_ONLY=0 pnpm exec playwright test -c playwright.gpu.config.ts tests/gpu/e3-a04-readback.spec.ts` (headed; manual). Since 2026-11-02 the gpu config checks only the non-corpus cases below tier 3 unless the variable is 0, and `pnpm e3-a04:run --gpu` refuses a non-corpus-only file ([headed run tiers](../validation.md#headed-run-tiers)).
+  - `E3_A04_READBACK_NON_CORPUS_ONLY=0 pnpm exec playwright test -c playwright.gpu.config.ts tests/gpu/e3-a04-readback.spec.ts` (headed; manual). Since 2026-11-02 the gpu config checks only the non-corpus cases below tier 3 unless the variable is 0, and `pnpm e3-a04:run --gpu` never passes E3-A6 on a non-corpus-only file (it records the check as failed) ([headed run tiers](../validation.md#headed-run-tiers)).
 - **This documentation checkpoint.** `pnpm exec prettier --check --config .prettierrc.json --ignore-path "" <changed .md files>`, the link and anchor check and `git diff --check`. No product, browser, GPU or measurement run is required or claimed.
 
 ## 10. Risks
