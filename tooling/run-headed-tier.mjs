@@ -77,10 +77,23 @@ export function stages(tier, gpuOnly = false) {
     { name: 'gpu', script: 'test:gpu' },
     ...(gpuOnly
       ? []
-      : NEXT_HOST_SUITES.map((suite) => ({
-          name: `${suite}-next-host`,
-          script: `test:${suite}-next-host`,
-        }))),
+      : NEXT_HOST_SUITES.flatMap((suite) =>
+          // m6c's IME typing spec runs alone after the rest (playwright.m6c-next-host.config.ts).
+          suite === 'm6c'
+            ? [
+                {
+                  name: 'm6c-next-host',
+                  script: 'test:m6c-next-host',
+                  env: { VS_M6C_PART: 'rest' },
+                },
+                {
+                  name: 'm6c-typing',
+                  script: 'test:m6c-next-host',
+                  env: { VS_M6C_PART: 'typing' },
+                },
+              ]
+            : [{ name: `${suite}-next-host`, script: `test:${suite}-next-host` }],
+        )),
   ];
 }
 
@@ -149,6 +162,7 @@ function main() {
       VS_HEADED_WORKERS: workers,
       VS_GPU_TIER: String(tier),
       VS_HEADED_TIMING_DIR: timingDirectory,
+      ...stage.env,
     });
     if (result.error !== undefined) throw result.error;
     rows.push({

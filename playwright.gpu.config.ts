@@ -16,6 +16,16 @@ const includeCorpus = process.env.VS_GPU_CORPUS === '1';
 // Set here, the default reaches the workers too, which load this config again.
 if (process.env.VS_GPU_TIER !== '3') process.env.E3_A04_READBACK_NON_CORPUS_ONLY ??= '1';
 const workers = headedWorkers();
+// Edge in the gpu stage: headed Chrome and Edge drive the same Chromium WebGPU stack, so Edge adds
+// most where the renderer or the kernel changed, which is tier 3. Below tier 3 the stage runs
+// Chrome only (decided 2026-11-02, docs/validation.md "Headed run tiers"). Edge comes back with
+// VS_GPU_TIER=3, the corpus (VS_GPU_CORPUS=1, whose counted runs need both browsers), the full
+// E3 readback (E3_A04_READBACK_NON_CORPUS_ONLY=0, whose E3-A6 needs both), or VS_GPU_EDGE=1.
+const includeEdge =
+  process.env.VS_GPU_TIER === '3' ||
+  includeCorpus ||
+  process.env.E3_A04_READBACK_NON_CORPUS_ONLY !== '1' ||
+  process.env.VS_GPU_EDGE === '1';
 
 export default defineConfig({
   testDir: './tests/gpu',
@@ -46,15 +56,19 @@ export default defineConfig({
         launchOptions: { args: webGpuArguments },
       },
     },
-    {
-      name: 'edge',
-      use: {
-        ...devices['Desktop Edge'],
-        channel: 'msedge',
-        headless: false,
-        launchOptions: { args: webGpuArguments },
-      },
-    },
+    ...(includeEdge
+      ? [
+          {
+            name: 'edge',
+            use: {
+              ...devices['Desktop Edge'],
+              channel: 'msedge' as const,
+              headless: false,
+              launchOptions: { args: webGpuArguments },
+            },
+          },
+        ]
+      : []),
   ],
   webServer: {
     command:
