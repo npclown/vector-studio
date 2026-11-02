@@ -46,6 +46,7 @@ import {
   transformValue,
   type PropertyAction,
 } from './property-model.js';
+import { countRender } from './render-probe.js';
 
 // MVP M8 contract, section 7.3 (M8-R1 to M8-R5, M8-U5): the property panel. Under the moved M4
 // appearance panel come the transform, layer (name and visibility), line, constraint, text and
@@ -418,6 +419,7 @@ export function PropertySections() {
  * renders `AppearancePanel`.
  */
 export function PropertyPanel() {
+  countRender('properties');
   return (
     <section aria-label="Properties" data-testid="property-panel">
       <AppearancePanel layout="section" />

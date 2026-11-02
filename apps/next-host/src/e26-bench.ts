@@ -277,6 +277,12 @@ export type BenchHook = Readonly<{
   fontLoads: readonly BenchFontLoad[];
   /** M9-U1: the typing seam, `enterTextEdit` on `id` with anchor and focus at `offset`. */
   enterTextEdit(id: string, offset: number): Readonly<{ ok: boolean; code?: string }>;
+  /**
+   * V20-U1 (V-20 contract, section 5): renders per counted component since the bench was
+   * installed, from `@vector-studio/ui`'s render probe: `layers`, `layer-row` (one per row the
+   * layer tree renders), `properties`, `appearance`, `panels` and `aside`.
+   */
+  renders: () => Readonly<Record<string, number>>;
 }>;
 
 declare global {
@@ -617,6 +623,13 @@ export class Bench {
     );
   }
 
+  /** V20-U1: the render probe `pageBench` installs; counts renders per id. */
+  readonly countRender = (id: string): void => {
+    this.renderCounts[id] = (this.renderCounts[id] ?? 0) + 1;
+  };
+
+  private readonly renderCounts: Record<string, number> = {};
+
   hook(): BenchHook {
     return {
       query: this.query,
@@ -655,6 +668,7 @@ export class Bench {
         const result = editor.execute({ type: 'enterTextEdit', id, anchor: offset, focus: offset });
         return result.ok ? { ok: true } : { ok: false, code: result.code };
       },
+      renders: () => ({ ...this.renderCounts }),
     };
   }
 
@@ -673,6 +687,7 @@ export function pageBench(): Bench | null {
   if (query === null) return null;
   current = new Bench(query);
   window.__e26Bench = current.hook();
+  (globalThis as { __vsRenderProbe?: (id: string) => void }).__vsRenderProbe = current.countRender;
   return current;
 }
 
