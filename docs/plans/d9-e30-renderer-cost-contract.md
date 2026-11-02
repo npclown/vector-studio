@@ -163,7 +163,7 @@ Order: U1a to U1c first, then U2 (through the coordinator's PC slot). U3 and U4 
 
 ## 9. Decisions
 
-2026-11-02, after review round 3, the recommended options were auto-adopted under the user's standing rule of 2026-10-24 (추천안 자동 채택: adopt the recommended option, record it with the date, tell the user): E30-Q1 (a) and E30-Q3 (a). E30-Q2 (a) is adopted the same way and takes effect when the pre-alpha plan amendment that records it merges through the visualization track; until then U1 waits for PA-U1's re-measure as the plan says.
+2026-11-02, after review round 3, the recommended options were auto-adopted under the user's standing rule of 2026-10-24 (추천안 자동 채택: adopt the recommended option, record it with the date, tell the user): E30-Q1 (a) and E30-Q3 (a). E30-Q2 (a) is adopted the same way and took effect when the pre-alpha plan amendment that records it merged through the visualization track (#463, `230f12c`, 2026-11-02): U1 may merge before PA-U1's re-measure; U3 to U5 still wait for it.
 
 ## 10. Review record
 
