@@ -31,8 +31,8 @@ The number of frames is in brackets. The times are inclusive and overlap: microt
 
 - **Stress v2.**
   - Microtasks take about 60 % of the window (6.0 s of 10 s), against 3 % in v1. Pre-paint, layout and paint take another 2.4 s, against 0.24 s in v1.
-  - The top self-time functions are in a bundle chunk that v1 barely touches (`06cn7386l0tmd.js`, about 4 s of samples). By its function shapes it is likely the React DOM chunk; the build is minified with no source maps, so this is not confirmed.
-  - This is consistent with the right column re-rendering and re-laying out its 10,000 layer rows on every camera step. The pan and zoom path changes no document, so the column's re-render on a camera step is itself the defect to look at first.
+  - The top self-time functions are in a bundle chunk that v1 barely touches (`06cn7386l0tmd.js`, about 4.4 s of samples). By its function shapes it is likely the React DOM chunk; the build is minified with no source maps, so this is not confirmed.
+  - This is consistent with the right column re-rendering and re-laying out its 10,000 layer rows on every camera step. The pan and zoom path changes no document, so whether the column re-renders on a camera-only step is the first thing to check.
 - **Typical view v2.**
   - Microtasks rise from 0.48 s to 1.5 s, and pre-paint and paint by about 0.4 s.
   - Functions that v1 does not show come up in another chunk (`page`, `node`, `e9` and `tl` in `1m-1klbguzh2u.js`; which package it holds is not confirmed). This is consistent with `layerRows` walking the page on each document change (the contract's "panel cost" risk) and with the property panel re-rendering on every drag step.

@@ -253,9 +253,16 @@ M9 comes "after M1..M8" (MVP plan, section 7). M8 was accepted on 2026-11-01 (#4
 
 - 2026-11-02 05:39Z: on the G1 card the user first chose (b), narrowed to the right column's cost and the font-load re-projection, with the renderer's share (E30) left disclosed.
 - 2026-11-02 05:57Z: the user then asked whether the remedy could wait. The reply set out that section 9 makes (a) a full exit path, and that the slow cases are 10,000-node documents with the column shown. On a second card the user chose to defer.
-- **G1 is (a): exit with the misses disclosed.** U3 does not run. The FAIL rows of section 2 go to the exit record (U5). The column cost becomes V-20 and the font-load re-projection V-21 in the [visualization track](d9-visualization-track.md#status-index). E30 keeps the renderer's share.
-- One diagnostic trace run on the main PC at `3fd3be9` points at the column re-rendering on camera-only changes and at its 10,000-row layout ([u3a-trace-3fd3be9.md](../evidence/m9/u3a-trace-3fd3be9.md)). It is not evidence. The opt-in `E26_TRACE` switch and `tooling/m9-trace-summary.mjs` stay for that work.
-- A reading note for V-20's re-measure: a frame of exactly two refresh intervals measures 33.3 or 33.4 ms, so under the no-rounding rule a stress scene that holds 30 fps can miss by 0.1 ms. If a remedy lands there, how to read the 33.3 ms ceiling goes to the user, as M9-Q2 did for 16.7 ms.
+- **G1 is (a): exit with the misses disclosed.** U3 does not run. The FAIL rows of section 2 go to the exit record (U5). The column cost becomes V-20 and the font-load re-projection V-21. Both go to the [visualization track](d9-visualization-track.md#status-index), not to the next rendering IDs after E32 as the U2 record suggested, because the column lives in `packages/ui` and the text projection in the editor and host, which that track owns. E30 keeps the renderer's share. Each FAIL row maps to backlog as follows:
+  - Worst case (all visible): E30 (camera F encode alone is 52 to 82 ms); V-20 for the column's share on top.
+  - Typical editing: V-20 (encode about 10 ms; the rest is outside encode).
+  - Stress: V-20 (encode equals v1's, which passes).
+  - Pointer priority, p95: V-20 for the v2 increase; E30 for the steady-drag latency that v1 already misses (193 to 268 ms).
+  - Pointer priority, held write within one frame (not met as measured, 74.6 to 97.4 ms): E30, which carries this E26-A05 clause from U6b.
+  - Pointer priority, long tasks outside isolation: V-21 for those overlapping the font-load change; E30 for the 57 to 78 ms tasks that v1 also has.
+- One diagnostic trace run on the main PC at `3fd3be9` is consistent with the column re-rendering on camera-only changes and with its 10,000-row layout ([u3a-trace-3fd3be9.md](../evidence/m9/u3a-trace-3fd3be9.md)). It is not evidence. The opt-in `E26_TRACE` switch and `tooling/m9-trace-summary.mjs` stay for that work.
+- A reading note for V-20's re-measure: a frame of exactly two refresh intervals measures 33.3 or 33.4 ms, so under the no-rounding rule a stress scene that holds 30 fps can miss by 0.1 ms. If a remedy lands there, how to read the 33.3 ms ceiling goes to the user, as M9-Q2 did for 16.7 ms. It is an open question for the exit record, not a verdict.
+- The trace switch is a diagnostic addition under this gate, beside U1's code: a traced record carries `traced: true`, and no traced run is evidence.
 
 ### M9-U1b notes
 

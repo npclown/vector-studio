@@ -686,6 +686,8 @@ for (const { scenario, variant } of runs) {
         configurationHash: configurationHash(configuration),
         configuration,
         visibility: visibility(document.bounds, camera, dpr),
+        // A traced run is a diagnostic, never evidence (M9-U3a): its record says so.
+        ...(traceDirectory === undefined ? {} : { traced: true }),
       };
       const slug = `${testInfo.project.name}--${scenario.id.replace(/[^a-z0-9-]+/gi, '_')}${
         variant === 'plain' ? '-plain' : ''

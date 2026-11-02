@@ -77,9 +77,15 @@ function summarize(file) {
   const startMark = markTime('e26-window-start');
   const endMark = markTime('e26-window-end');
   const mainEvents = events.filter(onMain);
-  const times = mainEvents.filter((event) => typeof event.ts === 'number').map((event) => event.ts);
-  const start = startMark ?? Math.min(...times);
-  const end = endMark ?? Math.max(...times);
+  let first = Infinity;
+  let last = -Infinity;
+  for (const event of mainEvents) {
+    if (typeof event.ts !== 'number') continue;
+    if (event.ts < first) first = event.ts;
+    if (event.ts > last) last = event.ts;
+  }
+  const start = startMark ?? first;
+  const end = endMark ?? last;
   const inside = (event) => event.ts >= start && event.ts < end;
 
   const totals = Object.fromEntries(NAMES.map((name) => [name, 0]));
