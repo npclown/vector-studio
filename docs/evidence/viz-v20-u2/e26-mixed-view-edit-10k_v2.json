@@ -1,0 +1,375 @@
+{
+  "unit": "V20-U1",
+  "scenario": "e26-mixed-view-edit-10k/v2",
+  "document": "m9-v2",
+  "steps": "drag",
+  "stepCount": 32,
+  "commit": "c7afa5a256b24cb9f7d93fabee6a8d858e0c9a54",
+  "dirty": false,
+  "browser": "chromium 153.0.8010.12",
+  "renderer": "pending",
+  "expanded": ["f1", "g3"],
+  "layerRows": 655,
+  "rowCount": 655,
+  "rowsInView": 12,
+  "mountedRows": {
+    "ready": 25,
+    "max": 25
+  },
+  "perStep": {
+    "appearance": {
+      "first": 1,
+      "laterMax": 1,
+      "laterMin": 1,
+      "total": 32
+    },
+    "layer-row": {
+      "first": 2,
+      "laterMax": 5,
+      "laterMin": 2,
+      "total": 67
+    },
+    "layers": {
+      "first": 1,
+      "laterMax": 1,
+      "laterMin": 1,
+      "total": 32
+    },
+    "panels": {
+      "first": 0,
+      "laterMax": 0,
+      "laterMin": 0,
+      "total": 0
+    },
+    "properties": {
+      "first": 0,
+      "laterMax": 0,
+      "laterMin": 0,
+      "total": 0
+    }
+  },
+  "dragMoved": true,
+  "pageErrors": [],
+  "rawSteps": [
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 2
+      },
+      "mountedRows": 25
+    },
+    {
+      "delta": {
+        "layers": 1,
+        "properties": 0,
+        "appearance": 1,
+        "panels": 0,
+        "layer-row": 5
+      },
+      "mountedRows": 25
+    }
+  ]
+}

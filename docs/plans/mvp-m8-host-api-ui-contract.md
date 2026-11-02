@@ -87,6 +87,7 @@ Each control commits through one public command (one undo step for a document co
 - **M8-L2 pages.** `PageList` renders exactly one button per page, in order, inside one element (`data-testid="pages"`), the active one pressed (`setActivePage`); double-click opens a rename textbox (`renamePage` on Enter or blur). Add and remove (`addPage`, `removePage`) are buttons outside that element.
 - **M8-L3 tree.** `LayerTree` lists the active page's nodes, front first (the last child on top), indented by depth, each row with name and type; containers, symbols and frames expand and collapse (React state); an instance's expansion is not listed (it is not a document node, M7). Click selects (`setSelection [id]`), Shift or Mod toggles the row in the selection; selected rows are marked.
 - **M8-L4 row edits.** A visibility toggle per row (`setNodeProps visible` on that row's node); rename on double-click (`setNodeProps name`); forward, backward, front and back buttons on the selection (`reorderNodes`, M8-Q7 (a)).
+- **M8-L3/L4 amendment (V-20, 2026-11-02).** The tree's list is windowed: a row scrolled out of view is not in the DOM. Height, scroll range, order, indentation and controls are unchanged; an open rename and the focused row stay mounted; Tab and Shift+Tab reach every row in order; each mounted row carries `aria-setsize` and `aria-posinset`. The rules are in the [V-20 contract, section 4](viz-v20-right-column-contract.md#4-behavior-change-m8-l3-and-l4-amendment).
 
 ### 7.3 Property panel
 

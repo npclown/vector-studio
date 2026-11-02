@@ -16,6 +16,7 @@ import {
   isolationTargets,
   loadScenarioDocument,
   M9_SCENARIOS,
+  V20_UI0_SCENARIOS,
   M9_WINDOW,
   m9CameraClaims,
   m9Cameras,
@@ -39,6 +40,7 @@ import {
 } from '../m9/layouts';
 import { parseDocument } from '@vector-studio/model';
 import type { TextLayoutRequest, TextLayoutResult } from '@vector-studio/contracts';
+import { expandLayerRows, layerRowCount } from '../support/layer-list.js';
 import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 import { installPageProbe, type Probe } from './probe';
 
@@ -138,7 +140,11 @@ const commit = git('git rev-parse HEAD') ?? 'unknown';
 const dirty = (git('git status --porcelain --untracked-files=no') ?? 'unknown') !== '';
 
 type Variant = 'frame' | 'busy' | 'plain' | 'typing';
-const runs: { scenario: E26Scenario; variant: Variant }[] = [...E26_SCENARIOS, ...M9_SCENARIOS]
+const runs: { scenario: E26Scenario; variant: Variant }[] = [
+  ...E26_SCENARIOS,
+  ...M9_SCENARIOS,
+  ...V20_UI0_SCENARIOS,
+]
   .filter(
     (scenario) => filter.length === 0 || filter.some((entry) => scenario.id.startsWith(entry)),
   )
@@ -323,6 +329,7 @@ async function open(
   query: string,
   errors: readonly string[],
   ui = false,
+  budget = !ui,
 ): Promise<void> {
   await page.goto(`/?bench=1&${query}${ui ? '&ui=1' : ''}`);
   const status = page.getByTestId('status');
@@ -331,8 +338,9 @@ async function open(
   expect(errors).toEqual([]);
   // M8-N3 (M8-U6): the layout budget against the 17a2b0a measurement of this project. M9-U1:
   // 17a2b0a had no 1600 x 1000 bench project, so a `ui=1` run checks the column itself.
+  // V-20 `ui=0` runs in the v2 projects, which have no 17a2b0a row: no budget check (`budget`).
   if (ui) await expectM9Column(page);
-  else await expectLayoutBudget(page, { bench: true });
+  else if (budget) await expectLayoutBudget(page, { bench: true });
   // M9-U1: the v2 document never runs on system fallback fonts (the page also fails its load).
   if (query.includes('doc=m9-v2')) {
     await expect(status, 'the committed test font').toHaveAttribute('data-text-font', 'loaded');
@@ -400,15 +408,12 @@ async function expectM9Column(page: Page): Promise<void> {
 
 /**
  * M9-U1 (section 4): clicks `layer-toggle-<id>` for each ID, page down, and returns the rows the
- * layer tree then shows.
+ * layer tree then shows. V-20 (contract, section 4): the list is windowed, so each toggle's row is
+ * scrolled into view first, and the count is the rows' `aria-setsize`.
  */
 async function expandLayers(page: Page, ids: readonly string[]): Promise<number> {
-  for (const id of ids) {
-    const toggle = page.getByTestId(`layer-toggle-${id}`);
-    await toggle.click();
-    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  }
-  return page.getByTestId('layers').locator('li').count();
+  await expandLayerRows(page, ids);
+  return layerRowCount(page);
 }
 
 /** Runs editor commands in the page and checks each result. */
@@ -668,10 +673,12 @@ for (const { scenario, variant } of runs) {
       const m9Config =
         m9 === undefined ? null : m9Configuration(configured, dpr, repetitions, document);
       const configuration = m9Config ?? e26Configuration(configured, dpr, repetitions, document);
-      const ui = m9 !== undefined;
+      const ui = m9?.ui === true;
+      // The v2 projects' `ui=0` variant (V-20) has no 17a2b0a layout row to check against.
+      const budget = m9 === undefined;
       /** M9-U1: the layer toggles before the warm-up, and the rows the tree then shows. */
       const expandTree = async () => {
-        if (m9Config === null) return null;
+        if (m9Config === null || !ui) return null;
         const rows = await expandLayers(page, m9Config.m9.expanded);
         return { expanded: m9Config.m9.expanded, rows, expectedRows: m9Config.m9.layerRows };
       };
@@ -721,7 +728,7 @@ for (const { scenario, variant } of runs) {
       }
 
       if (variant === 'frame') {
-        await open(page, `doc=${scenario.document}`, errors, ui);
+        await open(page, `doc=${scenario.document}`, errors, ui, budget);
         await execute(page, [{ type: 'setViewport', camera }]);
         const layers = await expandTree();
         const env = await environment(page);
@@ -831,6 +838,7 @@ for (const { scenario, variant } of runs) {
         `doc=${scenario.document}&persist=1${busy ? `&reject=${target.selection.ids[0]}` : ''}`,
         errors,
         ui,
+        budget,
       );
       // The load's own autosave write has completed (section 3.1).
       await page.waitForFunction(

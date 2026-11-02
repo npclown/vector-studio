@@ -3,7 +3,9 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
+import { layerRows, type LayerRow } from '../../packages/ui/src/layer-model.js';
 import { m1A13MoveSelection } from '../m1-a13/document';
+import { expandLayerRows, layerRowCount } from '../support/layer-list.js';
 import {
   M9_SCENARIOS,
   editDragOffset,
@@ -21,6 +23,10 @@ import {
 // the pan formula, or the edit drag as `input` pointer events through `__e26Bench.editor()`.
 // After each step it waits two animation frames, so React has committed, and reads the bench's
 // render counters and the mounted rows. It never waits for the renderer. Counts only.
+//
+// V20-U2 adds the assertions of V20-A01 and A02 to those runs, and the browser half of V20-A03
+// and A04 on the stress document: the windowed list against `layerRows`, the stable row
+// handlers, the rename and focus pins, and Tab through the rows.
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const resultsDirectory = path.resolve(
@@ -116,12 +122,17 @@ for (const counted of COUNTED) {
       { type: 'setSnapping', enabled: false },
     ]);
     // The scenario's layer toggles, as the harness clicks them (M9 contract, section 4).
-    for (const id of configuration.m9.expanded) {
-      const toggle = page.getByTestId(`layer-toggle-${id}`);
-      await toggle.click();
-      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    }
+    await expandLayerRows(page, configuration.m9.expanded);
     const ready = await step(page, []);
+    const rowCount = await layerRowCount(page);
+    // Rows that intersect the list's viewport at most: its height over the row height, plus one
+    // for a partly scrolled row.
+    const rowsInView = await page.evaluate(() => {
+      const viewport = document.querySelector<HTMLElement>('[data-testid="layer-list-viewport"]');
+      const row = document.querySelector<HTMLElement>('[data-testid="layers"] li');
+      if (viewport === null || row === null) return null;
+      return Math.ceil(viewport.clientHeight / row.getBoundingClientRect().height) + 1;
+    });
 
     const steps: (Step & { delta: Record<string, number> })[] = [];
     /** The pressed node before and after the drag, so a missed press cannot pass as no renders. */
@@ -216,6 +227,8 @@ for (const counted of COUNTED) {
       renderer,
       expanded: configuration.m9.expanded,
       layerRows: configuration.m9.layerRows,
+      rowCount,
+      rowsInView,
       mountedRows: { ready: ready.mountedRows, max: Math.max(...steps.map((s) => s.mountedRows)) },
       perStep,
       dragMoved: counted.steps === 'drag' ? dragged.before !== dragged.after : null,
@@ -231,5 +244,253 @@ for (const counted of COUNTED) {
     if (counted.steps === 'drag')
       expect(result.dragMoved, 'the drag moved the pressed node').toBe(true);
     expect(ready.mountedRows, 'rows mounted after the toggles').toBeGreaterThan(0);
+    expect(rowCount, 'the rows the tree lists').toBe(configuration.m9.layerRows);
+    // V20-A01 (the camera path) and V20-A02 (both paths): no column render on a camera-only
+    // step after the first; at most the rows in view + 16 + the pinned edge rows mounted and
+    // rendered per step.
+    // The first and last rows are pinned (Tab into the list from outside reaches them).
+    const bound = (rowsInView ?? 0) + 16 + 2;
+    if (counted.steps === 'camera') {
+      for (const id of ['layers', 'properties', 'panels']) {
+        expect(perStep[id]?.laterMax ?? 0, `${id} renders per camera step`).toBe(0);
+      }
+    }
+    expect(result.mountedRows.max, 'rows mounted').toBeLessThanOrEqual(bound);
+    expect(perStep['layer-row']?.laterMax ?? 0, 'rows rendered per step').toBeLessThanOrEqual(
+      bound,
+    );
   });
 }
+
+// ---------------------------------------------------------------------------------------------
+// V20-A03 and A04 on the stress document (10,000 rows, no containers).
+
+type EditorView = {
+  getSnapshot(): { history: { undoDepth: number }; selection: readonly string[] };
+  execute(command: unknown): { ok: boolean; code?: string };
+  query(query: unknown): unknown;
+};
+
+const stress = () => loadScenarioDocument('stress');
+
+async function openStress(page: Page): Promise<void> {
+  await page.goto('/?bench=1&ui=1&doc=stress');
+  await expect(page.getByTestId('status')).toHaveAttribute('data-fixture', 'bench-loaded', {
+    timeout: 120_000,
+  });
+  await expect(page.locator('[data-testid="layers"] li[style*="absolute"]').first()).toBeVisible();
+}
+
+/** Scrolls the list to `top` (clamped by the browser) and waits two frames. */
+async function scrollList(page: Page, top: number | 'end'): Promise<void> {
+  await page.evaluate(async (offset) => {
+    const viewport = document.querySelector<HTMLElement>('[data-testid="layer-list-viewport"]')!;
+    viewport.scrollTop = offset === 'end' ? viewport.scrollHeight : offset;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  }, top);
+}
+
+/** The mounted rows as the list shows them, and the list's geometry. */
+function mountedRows(page: Page) {
+  return page.evaluate(() => {
+    const viewport = document.querySelector<HTMLElement>('[data-testid="layer-list-viewport"]')!;
+    const items = [...document.querySelectorAll<HTMLElement>('[data-testid="layers"] li')];
+    return {
+      scrollTop: viewport.scrollTop,
+      clientHeight: viewport.clientHeight,
+      rowHeight: items[0]?.getBoundingClientRect().height ?? 0,
+      rows: items.map((item) => ({
+        id: item.dataset.testid!.slice('layer-'.length),
+        posinset: Number(item.getAttribute('aria-posinset')),
+        setsize: Number(item.getAttribute('aria-setsize')),
+        depth: Number(item.dataset.depth),
+        selected: item.dataset.selected,
+        name: item.querySelector('[data-testid^="layer-name-"]')?.textContent ?? null,
+        toggle: item.querySelector('[data-testid^="layer-toggle-"]')?.textContent ?? null,
+        visible: item.querySelector('[data-testid^="layer-visible-"]')?.textContent ?? null,
+      })),
+    };
+  });
+}
+
+const rowRenders = (page: Page) =>
+  page.evaluate(() => window.__e26Bench!.renders()['layer-row'] ?? 0);
+const snapshot = (page: Page) =>
+  page.evaluate(() => {
+    const view = (window.__e26Bench!.editor() as unknown as EditorView).getSnapshot();
+    return { undoDepth: view.history.undoDepth, selection: [...view.selection] };
+  });
+const nodeName = (page: Page, id: string) =>
+  page.evaluate(
+    (nodeId) =>
+      (window.__e26Bench!.editor()!.query({ type: 'node', id: nodeId }) as { name: string }).name,
+    id,
+  );
+
+/**
+ * V20-A03: at the top, the middle, the end and one row short of the end, every mounted row equals
+ * the row of `layerRows` at its position, the rows in view are one contiguous run, and only the
+ * pinned first and last rows lie outside it.
+ */
+async function expectWindowed(page: Page, expected: readonly LayerRow[]): Promise<void> {
+  const first = await mountedRows(page);
+  const h = first.rowHeight;
+  expect(h).toBeGreaterThan(0);
+  const end = expected.length * h - first.clientHeight;
+  for (const offset of [0, Math.round(end / 2), end, end - h]) {
+    await scrollList(page, offset);
+    const view = await mountedRows(page);
+    expect(view.scrollTop, `scrolled to ${offset}`).toBeCloseTo(offset, 0);
+    const positions = view.rows.map((row) => row.posinset);
+    expect(positions, 'mounted rows in list order').toEqual([...positions].sort((a, b) => a - b));
+    for (const row of view.rows) {
+      const want = expected[row.posinset - 1]!;
+      expect(row).toEqual({
+        id: want.id,
+        posinset: row.posinset,
+        setsize: expected.length,
+        depth: want.depth,
+        selected: String(want.selected),
+        toggle: want.expandable ? (want.expanded ? '▾' : '▸') : null,
+        name: want.name,
+        visible: want.visible ? 'hide' : 'show',
+      });
+    }
+    // Every row that intersects the viewport is mounted, as one run; outside it only the pins.
+    const top = Math.floor(view.scrollTop / h) + 1;
+    const bottom = Math.min(expected.length, Math.ceil((view.scrollTop + view.clientHeight) / h));
+    const run = positions.filter((position) => position >= top - 8 && position <= bottom + 8);
+    expect(run).toEqual(run.map((_, index) => run[0]! + index));
+    expect(run[0]).toBeLessThanOrEqual(top);
+    expect(run[run.length - 1]).toBeGreaterThanOrEqual(bottom);
+    for (const position of positions) {
+      if (!run.includes(position)) expect([1, expected.length]).toContain(position);
+    }
+  }
+}
+
+test('V20-A03 the windowed list equals the unwindowed one', async ({ page }) => {
+  // The expanded mixed v2 tree, with a selection: depths, toggles and selected rows.
+  const mixed = loadScenarioDocument('m9-v2');
+  const tree = m9Configuration(M9_SCENARIOS[0]!, 1, 1, mixed).m9.expanded;
+  await page.goto('/?bench=1&ui=1&doc=m9-v2');
+  await expect(page.getByTestId('status')).toHaveAttribute('data-fixture', 'bench-loaded', {
+    timeout: 120_000,
+  });
+  await expandLayerRows(page, tree);
+  // The last toggle keeps focus, which pins its row; drop it so only the edge rows are pinned.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  const opened = layerRows(mixed.document, mixed.pageId, new Set(tree), []);
+  const chosen = opened
+    .filter((row) => row.depth > 0)
+    .map((row) => row.id)
+    .slice(0, 2);
+  await page.evaluate(
+    (ids) => window.__e26Bench!.editor()!.execute({ type: 'setSelection', ids }),
+    chosen,
+  );
+  await expectWindowed(page, layerRows(mixed.document, mixed.pageId, new Set(tree), chosen));
+
+  // The flat stress list.
+  const loaded = stress();
+  const expected = layerRows(loaded.document, loaded.pageId, new Set(), []);
+  await openStress(page);
+  await expectWindowed(page, expected);
+
+  // Stable handlers: an unrelated selection change re-renders no mounted row, and a Shift-click
+  // on a row that did not re-render sends the command built from the current selection.
+  await scrollList(page, 0);
+  // A row far from the top and from the pinned last row.
+  const far = expected[Math.floor(expected.length / 2)]!.id;
+  const near = (await mountedRows(page)).rows[3]!.id;
+  const before = await rowRenders(page);
+  await page.evaluate(
+    (id) => window.__e26Bench!.editor()!.execute({ type: 'setSelection', ids: [id] }),
+    far,
+  );
+  await scrollList(page, 0);
+  expect(await rowRenders(page), 'rows rendered by an unrelated selection').toBe(before);
+  await page.getByTestId(`layer-name-${near}`).click({ modifiers: ['Shift'] });
+  expect((await snapshot(page)).selection).toEqual([far, near]);
+});
+
+test('V20-A04 rename and focus pins, and Tab through the rows', async ({ page }) => {
+  const loaded = stress();
+  const expected = layerRows(loaded.document, loaded.pageId, new Set(), []);
+  await openStress(page);
+  const [a, b, c] = [expected[1]!.id, expected[2]!.id, expected[3]!.id];
+
+  // Typing updates the textbox on every key and renders only its own row.
+  await page.getByTestId(`layer-name-${a}`).dblclick();
+  const input = page.getByRole('textbox', { name: 'layer name' });
+  await expect(input).toBeFocused();
+  await input.fill('');
+  let typed = '';
+  for (const key of 'Moved') {
+    const renders = await rowRenders(page);
+    await page.keyboard.type(key);
+    typed += key;
+    await expect(input).toHaveValue(typed);
+    expect((await rowRenders(page)) - renders, `rows rendered by "${key}"`).toBe(1);
+  }
+  // Scrolled out of view, the open textbox stays mounted and focused; Enter commits once.
+  const depth = (await snapshot(page)).undoDepth;
+  await scrollList(page, 'end');
+  await expect(input).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(input).toHaveCount(0);
+  expect(await nodeName(page, a)).toBe('Moved');
+  expect((await snapshot(page)).undoDepth).toBe(depth + 1);
+
+  // Escape sends nothing, also after a scroll.
+  await scrollList(page, 0);
+  await page.getByTestId(`layer-name-${b}`).dblclick();
+  await input.fill('Never');
+  await scrollList(page, 'end');
+  await page.keyboard.press('Escape');
+  await expect(input).toHaveCount(0);
+  expect(await nodeName(page, b)).toBe(expected[2]!.name);
+  expect((await snapshot(page)).undoDepth).toBe(depth + 1);
+
+  // A blur while scrolled away commits once.
+  await scrollList(page, 0);
+  await page.getByTestId(`layer-name-${c}`).dblclick();
+  await input.fill('Blurred');
+  await scrollList(page, 'end');
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await expect(input).toHaveCount(0);
+  expect(await nodeName(page, c)).toBe('Blurred');
+  expect((await snapshot(page)).undoDepth).toBe(depth + 2);
+
+  // A focused row button scrolled out of view keeps focus.
+  await scrollList(page, 0);
+  const visible = page.getByTestId(`layer-visible-${expected[5]!.id}`);
+  await visible.focus();
+  await scrollList(page, 'end');
+  await expect(visible).toBeFocused();
+
+  // Tab from the first row reaches at least three viewports of rows in order; Shift+Tab returns.
+  await scrollList(page, 0);
+  const view = await mountedRows(page);
+  const perView = Math.floor(view.clientHeight / view.rowHeight);
+  await page.getByTestId(`layer-name-${expected[0]!.id}`).focus();
+  const position = () =>
+    page.evaluate(() =>
+      Number(document.activeElement?.closest('li')?.getAttribute('aria-posinset') ?? 0),
+    );
+  const forward: number[] = [await position()];
+  // Two controls per row (name, visibility): two Tabs per row.
+  const tabs = 2 * 3 * perView + 2;
+  for (let index = 0; index < tabs; index += 1) {
+    await page.keyboard.press('Tab');
+    forward.push(await position());
+  }
+  expect(forward.every((value, index) => index === 0 || value >= forward[index - 1]!)).toBe(true);
+  expect(forward.every((value, index) => index === 0 || value - forward[index - 1]! <= 1)).toBe(
+    true,
+  );
+  expect(forward[forward.length - 1]!).toBeGreaterThanOrEqual(3 * perView + 1);
+  for (let index = 0; index < tabs; index += 1) await page.keyboard.press('Shift+Tab');
+  expect(await position()).toBe(1);
+});
