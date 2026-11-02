@@ -137,7 +137,7 @@ One stress r1 run per browser (`d_pairing` in `findings.json`), main thread only
 
 There are 40 traces, 8,811,614 to 12,712,251 bytes each and 420,107,948 bytes in total (`e_sizes` in `findings.json`):
 
-- stress: about 8.8 to 9.1 MB;
-- view-edit: about 11.4 to 12.7 MB.
+- stress: 8.8 to 9.4 MB;
+- view-edit: 11.5 to 12.7 MB.
 
 Gzipped with `gzip -9`, chrome-dpr1-v2 stress r1 is 760,365 bytes and edge-dpr1-v2 stress r1 is 761,573 bytes. Both are under 20 MB and are committed in `traces/`.
