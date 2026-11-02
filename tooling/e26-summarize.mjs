@@ -38,7 +38,9 @@ const option = (name) => {
 const records = readdirSync(directory)
   .filter((name) => name.endsWith('.json'))
   .sort()
-  .map((name) => ({ name, ...JSON.parse(readFileSync(path.join(directory, name), 'utf8')) }));
+  .map((name) => ({ name, ...JSON.parse(readFileSync(path.join(directory, name), 'utf8')) }))
+  // PA-U4b: memory-variant runs are never timed evidence (A09-A03).
+  .filter((record) => record.memoryVariant !== true);
 
 const groups = new Map();
 for (const record of records) {
