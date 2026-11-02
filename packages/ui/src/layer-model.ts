@@ -205,7 +205,9 @@ export function windowRange(
   if (rowHeight === null || !(rowHeight > 0)) {
     return { start: 0, end: Math.min(count, UNMEASURED_ROWS) };
   }
-  const top = Math.max(0, scrollTop);
+  // Clamped to the scroll range the browser will settle on, so a list that just got shorter
+  // (a collapse, a page change) shows its last rows before the browser's own clamp scrolls.
+  const top = Math.max(0, Math.min(scrollTop, count * rowHeight - Math.max(0, viewportHeight)));
   const first = Math.floor(top / rowHeight);
   const last = Math.ceil((top + Math.max(0, viewportHeight)) / rowHeight);
   return {
@@ -270,4 +272,32 @@ export function reorderActions(selection: readonly string[]): readonly ActionBut
     command: selection.length === 0 ? null : { type: 'reorderNodes', ids: selection, op },
     selectAfter: null,
   }));
+}
+
+/**
+ * The row indexes the list mounts, ascending: the window `range`, and once the row height is
+ * measured also the first and the last row (so Tab and Shift+Tab into the list from outside reach
+ * row 1 and the last row, as with every row mounted), the focused row with its neighbours (so
+ * Tab and Shift+Tab inside the list always find the next row) and the row of an open rename.
+ */
+export function mountedIndexes(
+  range: Readonly<{ start: number; end: number }>,
+  count: number,
+  measured: boolean,
+  focused: number | null,
+  draft: number | null,
+): readonly number[] {
+  const mounted = new Set<number>();
+  for (let index = range.start; index < range.end; index += 1) mounted.add(index);
+  if (measured && count > 0) {
+    mounted.add(0);
+    mounted.add(count - 1);
+    if (focused !== null) {
+      for (let index = focused - 1; index <= focused + 1; index += 1) {
+        if (index >= 0 && index < count) mounted.add(index);
+      }
+    }
+    if (draft !== null && draft >= 0 && draft < count) mounted.add(draft);
+  }
+  return [...mounted].sort((a, b) => a - b);
 }

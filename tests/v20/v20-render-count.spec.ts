@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
-import { layerRows } from '../../packages/ui/src/layer-model.js';
+import { layerRows, type LayerRow } from '../../packages/ui/src/layer-model.js';
 import { m1A13MoveSelection } from '../m1-a13/document';
 import { expandLayerRows, layerRowCount } from '../support/layer-list.js';
 import {
@@ -246,9 +246,10 @@ for (const counted of COUNTED) {
     expect(ready.mountedRows, 'rows mounted after the toggles').toBeGreaterThan(0);
     expect(rowCount, 'the rows the tree lists').toBe(configuration.m9.layerRows);
     // V20-A01 (the camera path) and V20-A02 (both paths): no column render on a camera-only
-    // step after the first; at most the rows in view + 16 (+ pinned, none here) mounted and
+    // step after the first; at most the rows in view + 16 + the pinned edge rows mounted and
     // rendered per step.
-    const bound = (rowsInView ?? 0) + 16;
+    // The first and last rows are pinned (Tab into the list from outside reaches them).
+    const bound = (rowsInView ?? 0) + 16 + 2;
     if (counted.steps === 'camera') {
       for (const id of ['layers', 'properties', 'panels']) {
         expect(perStep[id]?.laterMax ?? 0, `${id} renders per camera step`).toBe(0);
@@ -306,6 +307,7 @@ function mountedRows(page: Page) {
         depth: Number(item.dataset.depth),
         selected: item.dataset.selected,
         name: item.querySelector('[data-testid^="layer-name-"]')?.textContent ?? null,
+        toggle: item.querySelector('[data-testid^="layer-toggle-"]')?.textContent ?? null,
         visible: item.querySelector('[data-testid^="layer-visible-"]')?.textContent ?? null,
       })),
     };
@@ -326,10 +328,12 @@ const nodeName = (page: Page, id: string) =>
     id,
   );
 
-test('V20-A03 the windowed list equals the unwindowed one', async ({ page }) => {
-  const loaded = stress();
-  const expected = layerRows(loaded.document, loaded.pageId, new Set(), []);
-  await openStress(page);
+/**
+ * V20-A03: at the top, the middle, the end and one row short of the end, every mounted row equals
+ * the row of `layerRows` at its position, the rows in view are one contiguous run, and only the
+ * pinned first and last rows lie outside it.
+ */
+async function expectWindowed(page: Page, expected: readonly LayerRow[]): Promise<void> {
   const first = await mountedRows(page);
   const h = first.rowHeight;
   expect(h).toBeGreaterThan(0);
@@ -338,9 +342,8 @@ test('V20-A03 the windowed list equals the unwindowed one', async ({ page }) => 
     await scrollList(page, offset);
     const view = await mountedRows(page);
     expect(view.scrollTop, `scrolled to ${offset}`).toBeCloseTo(offset, 0);
-    // The mounted rows are one contiguous slice of `layerRows`, in order.
     const positions = view.rows.map((row) => row.posinset);
-    expect(positions).toEqual(positions.map((_, index) => positions[0]! + index));
+    expect(positions, 'mounted rows in list order').toEqual([...positions].sort((a, b) => a - b));
     for (const row of view.rows) {
       const want = expected[row.posinset - 1]!;
       expect(row).toEqual({
@@ -349,21 +352,57 @@ test('V20-A03 the windowed list equals the unwindowed one', async ({ page }) => 
         setsize: expected.length,
         depth: want.depth,
         selected: String(want.selected),
+        toggle: want.expandable ? (want.expanded ? '▾' : '▸') : null,
         name: want.name,
         visible: want.visible ? 'hide' : 'show',
       });
     }
-    // Every row that intersects the viewport is mounted.
+    // Every row that intersects the viewport is mounted, as one run; outside it only the pins.
     const top = Math.floor(view.scrollTop / h) + 1;
     const bottom = Math.min(expected.length, Math.ceil((view.scrollTop + view.clientHeight) / h));
-    expect(positions[0]).toBeLessThanOrEqual(top);
-    expect(positions[positions.length - 1]).toBeGreaterThanOrEqual(bottom);
+    const run = positions.filter((position) => position >= top - 8 && position <= bottom + 8);
+    expect(run).toEqual(run.map((_, index) => run[0]! + index));
+    expect(run[0]).toBeLessThanOrEqual(top);
+    expect(run[run.length - 1]).toBeGreaterThanOrEqual(bottom);
+    for (const position of positions) {
+      if (!run.includes(position)) expect([1, expected.length]).toContain(position);
+    }
   }
+}
+
+test('V20-A03 the windowed list equals the unwindowed one', async ({ page }) => {
+  // The expanded mixed v2 tree, with a selection: depths, toggles and selected rows.
+  const mixed = loadScenarioDocument('m9-v2');
+  const tree = m9Configuration(M9_SCENARIOS[0]!, 1, 1, mixed).m9.expanded;
+  await page.goto('/?bench=1&ui=1&doc=m9-v2');
+  await expect(page.getByTestId('status')).toHaveAttribute('data-fixture', 'bench-loaded', {
+    timeout: 120_000,
+  });
+  await expandLayerRows(page, tree);
+  // The last toggle keeps focus, which pins its row; drop it so only the edge rows are pinned.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  const opened = layerRows(mixed.document, mixed.pageId, new Set(tree), []);
+  const chosen = opened
+    .filter((row) => row.depth > 0)
+    .map((row) => row.id)
+    .slice(0, 2);
+  await page.evaluate(
+    (ids) => window.__e26Bench!.editor()!.execute({ type: 'setSelection', ids }),
+    chosen,
+  );
+  await expectWindowed(page, layerRows(mixed.document, mixed.pageId, new Set(tree), chosen));
+
+  // The flat stress list.
+  const loaded = stress();
+  const expected = layerRows(loaded.document, loaded.pageId, new Set(), []);
+  await openStress(page);
+  await expectWindowed(page, expected);
 
   // Stable handlers: an unrelated selection change re-renders no mounted row, and a Shift-click
   // on a row that did not re-render sends the command built from the current selection.
   await scrollList(page, 0);
-  const far = expected[expected.length - 1]!.id;
+  // A row far from the top and from the pinned last row.
+  const far = expected[Math.floor(expected.length / 2)]!.id;
   const near = (await mountedRows(page)).rows[3]!.id;
   const before = await rowRenders(page);
   await page.evaluate(

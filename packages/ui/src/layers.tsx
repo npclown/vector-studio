@@ -10,6 +10,7 @@ import {
 } from '@vector-studio/react';
 import {
   memo,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -20,6 +21,7 @@ import {
 import {
   createLayerRowCache,
   layerRows,
+  mountedIndexes,
   windowRange,
   type LayerRow,
   pageActions,
@@ -340,9 +342,10 @@ function rowIndexOf(target: EventTarget | null): number | null {
  * V-20 contract (levers L2 and L3, section 4): the list is windowed. Every row has one height,
  * measured once from the first mounted row; rows sit at index × height inside a list of
  * count × height, so the scroll range is that of every row. Only the rows in the viewport plus
- * `OVERSCAN_ROWS` on each side are mounted, with the row of an open rename and the focused row
- * (and its neighbours, so Tab and Shift+Tab always find the next row). Before the measurement,
- * and in `renderToString`, the first `UNMEASURED_ROWS` rows are mounted in normal flow.
+ * `OVERSCAN_ROWS` on each side are mounted, with the first and last rows, the row of an open
+ * rename and the focused row (and its neighbours, so Tab and Shift+Tab always find the next
+ * row). Before the measurement, and in `renderToString`, the first `UNMEASURED_ROWS` rows are
+ * mounted in normal flow.
  */
 export function LayerTree() {
   countRender('layers');
@@ -367,8 +370,11 @@ export function LayerTree() {
   const { draft } = rename;
 
   // The latest values for the stable row actions.
+  // Assigned after commit, so a render React discards never leaves its values here.
   const latest = useRef({ execute, selection, show, rename });
-  latest.current = { execute, selection, show, rename };
+  useLayoutEffect(() => {
+    latest.current = { execute, selection, show, rename };
+  });
   const [actions] = useState<RowActions>(() => ({
     toggle: (id) => setExpanded((current) => toggleExpanded(current, id)),
     click: (id, event) => {
@@ -389,7 +395,8 @@ export function LayerTree() {
   const list = useRef<HTMLDivElement | null>(null);
   const [rowHeight, setRowHeight] = useState<number | null>(null);
   const [view, setView] = useState({ scrollTop: 0, height: 0 });
-  const [focused, setFocused] = useState<number | null>(null);
+  // The focused row by ID, so it stays pinned when rows above it are added or removed.
+  const [focusedId, setFocusedId] = useState<string | null>(null);
   useLayoutEffect(() => {
     if (rowHeight !== null) return;
     const element = list.current;
@@ -405,23 +412,36 @@ export function LayerTree() {
     if (element === null) return;
     setView({ scrollTop: element.scrollTop, height: element.clientHeight });
   };
+  // A list that changes height (a refusal shown or cleared, a resized column) or that was hidden
+  // at mount updates its viewport; the render after it measures the row height if still unset.
+  useEffect(() => {
+    const element = list.current;
+    if (element === null || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      setView((current) =>
+        current.height === element.clientHeight && current.scrollTop === element.scrollTop
+          ? current
+          : { scrollTop: element.scrollTop, height: element.clientHeight },
+      );
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   const count = rows.length;
   const range = windowRange(count, rowHeight, view.scrollTop, view.height);
-  const mounted = new Set<number>();
-  for (let index = range.start; index < range.end; index += 1) mounted.add(index);
-  if (rowHeight !== null) {
-    if (focused !== null) {
-      for (let index = focused - 1; index <= focused + 1; index += 1) {
-        if (index >= 0 && index < count) mounted.add(index);
-      }
-    }
-    if (draft !== null) {
-      const index = rows.findIndex((row) => row.id === draft.id);
-      if (index >= 0) mounted.add(index);
-    }
-  }
-  const indexes = [...mounted].sort((a, b) => a - b);
+  const indexOf = (id: string | null) => {
+    if (id === null) return null;
+    const index = rows.findIndex((row) => row.id === id);
+    return index < 0 ? null : index;
+  };
+  const indexes = mountedIndexes(
+    range,
+    count,
+    rowHeight !== null,
+    indexOf(focusedId),
+    indexOf(draft?.id ?? null),
+  );
 
   return (
     <section aria-label="layers" data-testid="layers" style={TREE}>
@@ -444,9 +464,12 @@ export function LayerTree() {
               ? LIST_ROWS
               : { ...LIST_ROWS, position: 'relative', height: count * rowHeight }
           }
-          onFocus={(event) => setFocused(rowIndexOf(event.target))}
+          onFocus={(event) => {
+            const index = rowIndexOf(event.target);
+            setFocusedId(index === null ? null : (rows[index]?.id ?? null));
+          }}
           onBlur={(event) => {
-            if (rowIndexOf(event.relatedTarget) === null) setFocused(null);
+            if (rowIndexOf(event.relatedTarget) === null) setFocusedId(null);
           }}
         >
           {indexes.map((index) => {

@@ -13,6 +13,7 @@ import {
   UNMEASURED_ROWS,
   createLayerRowCache,
   layerRows,
+  mountedIndexes,
   windowRange,
 } from '../../packages/ui/src/layer-model.js';
 
@@ -139,6 +140,30 @@ describe('V20-U2 window range (lever L3)', () => {
     expect(windowRange(1000, 20, 19_780, 200)).toEqual({ start: 989 - OVERSCAN_ROWS, end: 1000 });
     expect(windowRange(0, 20, 0, 200)).toEqual({ start: 0, end: 0 });
     expect(windowRange(5, 20, -30, 200)).toEqual({ start: 0, end: 5 });
+    // A scroll offset beyond a list that just got shorter is clamped to its last rows.
+    expect(windowRange(100, 20, 19_800, 200)).toEqual({ start: 90 - OVERSCAN_ROWS, end: 100 });
+  });
+
+  it('mounts the edge rows, the focused row with its neighbours and the rename row', () => {
+    const range = { start: 40, end: 66 };
+    const window = Array.from({ length: 26 }, (_, index) => 40 + index);
+    // Before the measurement only the range.
+    expect(mountedIndexes({ start: 0, end: 32 }, 100, false, 70, 80)).toEqual(
+      Array.from({ length: 32 }, (_, index) => index),
+    );
+    expect(mountedIndexes(range, 1000, true, null, null)).toEqual([0, ...window, 999]);
+    expect(mountedIndexes(range, 1000, true, 500, 700)).toEqual([
+      0,
+      ...window,
+      499,
+      500,
+      501,
+      700,
+      999,
+    ]);
+    // Neighbours stay inside the rows; a pin inside the window adds nothing.
+    expect(mountedIndexes({ start: 0, end: 3 }, 3, true, 0, 2)).toEqual([0, 1, 2]);
+    expect(mountedIndexes({ start: 0, end: 0 }, 0, true, null, null)).toEqual([]);
   });
 });
 
