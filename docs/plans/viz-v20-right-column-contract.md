@@ -1,6 +1,6 @@
 # V-20 right-column cost contract (pre-alpha PA-U1)
 
-Status: DRAFT 2026-11-02, Full tier (product UI behavior of `packages/ui`: the layer tree's rows in the DOM; an amendment of M8-L3 and L4). Visualization-track item [V-20](d9-visualization-track.md#status-index), unit PA-U1 of the [pre-alpha gate plan](pre-alpha-gate-plan.md#4-units-and-order). Questions V20-Q1 to V20-Q4 (section 8) are adopted as recommended under the user's standing instruction of 2026-10-24 once the contract is approved (추천안 자동 채택).
+Status: APPROVED 2026-11-02 (#461, `f4add96`), Full tier (product UI behavior of `packages/ui`: the layer tree's rows in the DOM; an amendment of M8-L3 and L4). Visualization-track item [V-20](d9-visualization-track.md#status-index), unit PA-U1 of the [pre-alpha gate plan](pre-alpha-gate-plan.md#4-units-and-order). Questions V20-Q1 to V20-Q4 (section 8) are adopted as recommended under the user's standing instruction of 2026-10-24 once the contract is approved (추천안 자동 채택).
 
 Owners: this contract owns V-20's levers, its acceptance criteria and its re-measure. The pre-alpha plan owns the gate (PA-A01 to A04) and what happens after the re-measure (its section 5). The [M8 contract](mvp-m8-host-api-ui-contract.md) owns the panels' behavior and is amended only where section 4 says.
 
@@ -83,3 +83,5 @@ Documentation only: Prettier check, local links, independent review (r1 NOT READ
 ## 11. Progress
 
 - 2026-11-02: drafted; independent review r1 NOT READY (three blocking items: row memo closures, harness dependencies and the `ui=0` variant, unmeasurable counters), applied; r2 READY WITH FOLLOW-UPS (Tab through every row), applied.
+- 2026-11-02: merged #461 (`f4add96`).
+- 2026-11-02: V20-U1 counts recorded ([record](../evidence/viz-v20-u1-render-counts-2026-11-02.md)): every camera step and every drag step renders `LayerTree`, `PropertyPanel` and `EditorPanels` once and every row again (10,000 on stress, 655 on the v2 tree); all rows are mounted. The probe also counts `layer-row` and the property panel's `appearance` section, which V20-A02 and L1 need. Next: V20-U2.

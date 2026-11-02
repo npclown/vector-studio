@@ -243,6 +243,8 @@ type PageHook = {
     revisionAfter: number | null;
   }[];
   enterTextEdit(id: string, offset: number): { ok: boolean; code?: string };
+  /** V20-U1: renders per counted component (`tests/v20/v20-render-count.spec.ts`). */
+  renders(): Readonly<Record<string, number>>;
 };
 declare global {
   interface Window {

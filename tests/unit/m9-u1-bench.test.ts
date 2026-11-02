@@ -25,6 +25,7 @@ type Latency = { inputMs: number; revision: number; doneMs: number | null; faile
  * declare `window.__e26Bench`, which the harness declares too.
  */
 type BenchModule = {
+  pageBench(): unknown;
   benchQuery(search: string): Query | null;
   benchAside(query: Query | null): boolean;
   benchTextFont(search: string): boolean;
@@ -114,6 +115,18 @@ function renderer() {
 }
 
 describe('M9-A03: the M9 bench flags are inert without ?bench=1', () => {
+  it('installs the V20-U1 render probe only with ?bench=1', () => {
+    const probe = () => (globalThis as { __vsRenderProbe?: unknown }).__vsRenderProbe;
+    expect(probe()).toBeUndefined();
+    stubWindow('?ui=1&doc=m9-v2');
+    expect(bench.pageBench()).toBeNull();
+    expect(probe()).toBeUndefined();
+    stubWindow('?bench=1&ui=1');
+    expect(bench.pageBench()).not.toBeNull();
+    expect(typeof probe()).toBe('function');
+    delete (globalThis as { __vsRenderProbe?: unknown }).__vsRenderProbe;
+  });
+
   it('parses ui=1 and doc=m9-v2 only with ?bench=1', () => {
     for (const search of ['?ui=1', '?doc=m9-v2', '?ui=1&doc=m9-v2&persist=1', '?bench=0&ui=1']) {
       expect(bench.benchQuery(search), search).toBeNull();

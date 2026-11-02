@@ -50,6 +50,7 @@
     "test:m7-next-host": "playwright test --config playwright.m7-next-host.config.ts",
     "test:m8-next-host": "playwright test --config playwright.m8-next-host.config.ts",
     "test:e26": "playwright test --config playwright.e26.config.ts",
+    "test:v20-count": "playwright test --config playwright.v20-count.config.ts",
     "measure:m8-n3": "node tooling/m8-n3-measure.mjs",
     "test:geometry": "node tooling/test-geometry.mjs",
     "test:geometry:browser": "node tooling/test-geometry-browser.mjs",

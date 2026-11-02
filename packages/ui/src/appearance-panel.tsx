@@ -40,6 +40,7 @@ import {
   type PaintKind,
 } from './appearance-model.js';
 import { Choice, Row, TextField } from './fields.js';
+import { countRender } from './render-probe.js';
 
 // MVP M8 contract, M8-R1 (M8-U5): the M4 appearance panel, moved from next-host's
 // `src/m4-appearance-panel.tsx` with its behavior, roles, names and test IDs unchanged (M8-Q11
@@ -437,6 +438,7 @@ const SECTION_STYLE = { fontSize: 13 } as const;
  * shows its code (`appearance-error`).
  */
 export function AppearancePanel({ layout = 'aside' }: AppearancePanelProps) {
+  countRender(layout === 'aside' ? 'aside' : 'appearance');
   const execute = useEditorCommands();
   const selection = useEditorSelector((snapshot) => snapshot.selection);
   const content = useEditorSelector((snapshot) => snapshot.document);
