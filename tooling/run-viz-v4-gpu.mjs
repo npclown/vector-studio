@@ -4,6 +4,7 @@
 // the built geometry-wasm package (the page imports its dist) carries the same fill and stroke
 // revisions as its source, since `pnpm test:geometry` rebuilds the WASM but not dist. Extra
 // arguments go to Playwright. Manual, never CI; the spec refuses before the E3 freeze record.
+// VS_GPU_CORPUS=1 opts the spec back in: `pnpm test:gpu` leaves it out (playwright.gpu.config.ts).
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -64,7 +65,7 @@ const result = spawnSync(command, commandArgs, {
   cwd: root,
   stdio: 'inherit',
   shell: false,
-  env: { ...process.env, VIZ_V4_RUN_ID: runId },
+  env: { ...process.env, VIZ_V4_RUN_ID: runId, VS_GPU_CORPUS: '1' },
 });
 if (result.error !== undefined) throw result.error;
 process.exit(result.status ?? 1);

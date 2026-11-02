@@ -2,8 +2,15 @@ import { defineConfig, devices } from '@playwright/test';
 
 const webGpuArguments = ['--enable-unsafe-webgpu'];
 
+// The V-4 A08 corpus spec takes about 2 h of a full run (Edge 1.1 h, Chrome 1 h) and its result
+// changes only with the geometry kernel or the mesh paths. `pnpm test:gpu` leaves it out;
+// `pnpm test:gpu:viz-v4` (and so `pnpm test:gpu:full`) runs it by setting VS_GPU_CORPUS=1.
+// See docs/validation.md, "Headed run tiers".
+const includeCorpus = process.env.VS_GPU_CORPUS === '1';
+
 export default defineConfig({
   testDir: './tests/gpu',
+  testIgnore: includeCorpus ? [] : ['**/viz-v4-a08-corpus.spec.ts'],
   outputDir: './test-results/gpu',
   fullyParallel: false,
   workers: 1,
