@@ -1,6 +1,6 @@
 # Pre-alpha gate plan
 
-Status: DRAFT 2026-11-02, Full tier (acceptance criteria, thresholds, gate and milestone order). Visualization-track item [V-22](d9-visualization-track.md#status-index), with rendering-track units. Section 8 lists PA-Q1 to PA-Q9. PA-Q1, Q6, Q7 and the choice of machine in PA-Q5 are adopted as recommended under the user's standing instruction of 2026-10-24 once the plan is approved (추천안 자동 채택). PA-Q2, Q3 and Q4 change how P1 and P2 exit criteria are judged, PA-Q5's gate half changes how the prototype-plan's lower-tier constraint is judged, and PA-Q9 lifts the user's 2026-11-01 pause of rendering work, so the user decides those, as M9-Q5 was; PA-Q8 is the user's too.
+Status: APPROVED 2026-11-02 (#458; the user chose "adopt all recommended options" on a decision card at 13:42Z for PA-Q2 to Q5 and Q9, all (a); PA-Q1, Q6, Q7 adopted as recommended, 추천안 자동 채택 2026-11-02; PA-Q8 open), Full tier (acceptance criteria, thresholds, gate and milestone order). Visualization-track item [V-22](d9-visualization-track.md#status-index), with rendering-track units. Section 8 lists PA-Q1 to PA-Q9. PA-Q1, Q6, Q7 and the choice of machine in PA-Q5 are adopted as recommended under the user's standing instruction of 2026-10-24 once the plan is approved (추천안 자동 채택). PA-Q2, Q3 and Q4 change how P1 and P2 exit criteria are judged, PA-Q5's gate half changes how the prototype-plan's lower-tier constraint is judged, and PA-Q9 lifts the user's 2026-11-01 pause of rendering work, so the user decides those, as M9-Q5 was; PA-Q8 is the user's too.
 
 Owners: this file owns the pre-alpha gate: its scope, acceptance criteria, unit order and exit record form. [`requirements.md`](../requirements.md) owns product behavior and is not changed here. The 16.7, 33.3 and 50 ms numbers and the 256,000,000-byte ceiling stay owned by [`prototype-plan.md`](../prototype-plan.md) and the [P1 plan](p1-instanced-primitives.md#acceptance-and-evidence-map). Each remedy item keeps its own contract and acceptance criteria in its track plan ([rendering](d9-rendering-track.md), [visualization](d9-visualization-track.md)).
 
@@ -109,4 +109,5 @@ Documentation only: Prettier check on the changed Markdown, local link check, in
 ## 10. Progress
 
 - 2026-11-02: drafted (PA-U0).
-- 2026-11-02: independent review r1 NOT READY (applied), r2 READY WITH FOLLOW-UPS (applied).
+- 2026-11-02: independent review r1 NOT READY (applied), r2 READY WITH FOLLOW-UPS (applied); merged #458 (`ecfd0f5`).
+- 2026-11-02 13:42Z: the user chose (a) for PA-Q2, Q3, Q4, Q5 and Q9 on one decision card. The rendering-track pause of 2026-11-01 is lifted for E33 (PA-U3 to U6, R68) only. Next: PA-U1 (V-20 contract) and, in parallel, the E30 contract (PA-U3) and the A09 method (PA-U4).
