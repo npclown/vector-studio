@@ -1,0 +1,279 @@
+{
+  "scenario": "e26-isolation-m1-a13/v1",
+  "repetition": 5,
+  "project": "chrome-dpr1",
+  "browser": "chromium 156.0.8078.74",
+  "devicePixelRatio": 1,
+  "commit": "89393f13eeb465063d0b24f5c3137d88adf9f6d5",
+  "dirty": false,
+  "configurationHash": "7c0ce2db463d0ad1f6a8a8a49ae6ac477738166368900e7cea46d3c123b9ff1f",
+  "configuration": {
+    "isolation": {
+      "id": "e26-isolation-m1-a13/v1",
+      "document": "m1-a13",
+      "replaceRuns": 5,
+      "scattered": 16,
+      "one": {
+        "factor": 3,
+        "constantMs": 50,
+        "capMs": 500
+      },
+      "sixteen": {
+        "factor": 6,
+        "constantMs": 100,
+        "capMs": 1000
+      }
+    },
+    "documentSha256": "d8658b14694ca1e6bbcff734e35575222511df96281720068fa4efe2cb9ef974",
+    "schemaVersion": 6,
+    "sceneNodes": 10634,
+    "targets": {
+      "one": "l4634",
+      "sixteen": [
+        "e289",
+        "l876",
+        "l1456",
+        "e2043",
+        "e2623",
+        "r3204",
+        "e3775",
+        "r4344",
+        "p4920",
+        "r5506",
+        "l6084",
+        "p6656",
+        "e7229",
+        "e7817",
+        "r8388",
+        "r8962"
+      ]
+    },
+    "devicePixelRatio": 1,
+    "repetitions": 5
+  },
+  "environment": {
+    "devicePixelRatio": 1,
+    "canvas": {
+      "width": 1280,
+      "height": 720
+    },
+    "screen": {
+      "width": 1400,
+      "height": 1000
+    },
+    "idleRafMedianMs": 16.699999999999818,
+    "adapter": {
+      "vendor": "nvidia",
+      "architecture": "turing",
+      "device": "",
+      "description": ""
+    },
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Safari/537.36"
+  },
+  "presence": {
+    "start": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    },
+    "end": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    }
+  },
+  "errors": [],
+  "consoleErrors": [],
+  "replaceSnapshotMs": {
+    "samples": [
+      77.7999999821186,
+      81.90000000596046,
+      82.10000002384186,
+      96.19999998807907,
+      103.7999999821186
+    ],
+    "median": 82.10000002384186
+  },
+  "cleanLoadTailMs": {
+    "samples": [
+      80.19999998807907,
+      80.7999999821186,
+      85.80000001192093,
+      104.60000002384186,
+      124.30000001192093
+    ],
+    "median": 85.80000001192093
+  },
+  "boundsMs": {
+    "one": 296.3000000715256,
+    "sixteen": 592.6000001430511
+  },
+  "oneMs": 103.5,
+  "sixteenMs": 128.2999999821186,
+  "pass": {
+    "one": true,
+    "sixteen": true
+  },
+  "run": {
+    "loadErrors": [],
+    "settleErrors": [],
+    "replaces": [
+      {
+        "durationMs": 103.7999999821186,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 208.40000000596046
+      },
+      {
+        "durationMs": 82.10000002384186,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 162.90000000596046
+      },
+      {
+        "durationMs": 77.7999999821186,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 163.59999999403954
+      },
+      {
+        "durationMs": 96.19999998807907,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 220.5
+      },
+      {
+        "durationMs": 81.90000000596046,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 162.09999999403954
+      }
+    ],
+    "warmUp": {
+      "error": null,
+      "commandMs": 216.69999998807907,
+      "rejected": [
+        "l4634"
+      ],
+      "rejections": 15,
+      "measures": [
+        {
+          "startMs": 7172.199999988079,
+          "durationMs": 131
+        }
+      ],
+      "durationMs": 131
+    },
+    "single": {
+      "error": null,
+      "commandMs": 194.90000000596046,
+      "rejected": [
+        "l4634"
+      ],
+      "rejections": 15,
+      "measures": [
+        {
+          "startMs": 8205.09999999404,
+          "durationMs": 103.5
+        }
+      ],
+      "durationMs": 103.5
+    },
+    "scattered": {
+      "error": null,
+      "commandMs": 204.59999999403954,
+      "rejected": [
+        "e2043",
+        "e2623",
+        "e289",
+        "e3775",
+        "e7229",
+        "e7817",
+        "l1456",
+        "l6084",
+        "l876",
+        "p4920",
+        "p6656",
+        "r3204",
+        "r4344",
+        "r5506",
+        "r8388",
+        "r8962"
+      ],
+      "rejections": 181,
+      "measures": [
+        {
+          "startMs": 9167.300000011921,
+          "durationMs": 128.2999999821186
+        }
+      ],
+      "durationMs": 128.2999999821186
+    },
+    "longTasks": [
+      {
+        "startMs": 5980.800000011921,
+        "durationMs": 67
+      },
+      {
+        "startMs": 6066.800000011921,
+        "durationMs": 164
+      },
+      {
+        "startMs": 6230.800000011921,
+        "durationMs": 63
+      },
+      {
+        "startMs": 6301.300000011921,
+        "durationMs": 164
+      },
+      {
+        "startMs": 6465.9000000059605,
+        "durationMs": 61
+      },
+      {
+        "startMs": 6535.199999988079,
+        "durationMs": 221
+      },
+      {
+        "startMs": 6756.800000011921,
+        "durationMs": 79
+      },
+      {
+        "startMs": 6849.199999988079,
+        "durationMs": 163
+      },
+      {
+        "startMs": 7012.9000000059605,
+        "durationMs": 65
+      },
+      {
+        "startMs": 7086.199999988079,
+        "durationMs": 218
+      },
+      {
+        "startMs": 7304.199999988079,
+        "durationMs": 804
+      },
+      {
+        "startMs": 8113.5,
+        "durationMs": 195
+      },
+      {
+        "startMs": 8309.40000000596,
+        "durationMs": 759
+      },
+      {
+        "startMs": 9090.90000000596,
+        "durationMs": 205
+      },
+      {
+        "startMs": 9296.300000011921,
+        "durationMs": 754
+      }
+    ],
+    "lifecycle": "ready",
+    "recoveryAttempts": 0
+  }
+}
