@@ -7,8 +7,9 @@ export const headedReporter = [['line'], ['./tests/support/timing-reporter.ts']]
 
 /**
  * Worker count of a headed config: VS_HEADED_WORKERS (a positive integer), default 1.
- * Parallelism is by file and project: tests of one file in one project stay in order in one
- * worker, so every spec's evidence directory is laid out as in a one-worker run. Pass
+ * Parallelism is by file and project unless the config sets `fullyParallel` (the gpu config does
+ * with more than one worker, so one file's tests, and its evidence run roots, can spread over
+ * workers). Pass
  * `serial: true` for a suite that must not run beside anything else on the machine: one that
  * uses the system clipboard (shared by every browser window), or one that records a timing
  * observation a contract expects to be taken alone on the machine.

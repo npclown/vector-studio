@@ -104,7 +104,8 @@ export type GpuBrowserCheck = Readonly<{
 
 /**
  * E3-A6 from the per-browser files: it passes only when Chrome and Edge both passed, on this
- * shader source and this release WASM.
+ * shader source and this release WASM, over the named subset. A non-corpus-only file
+ * (`subset.corpus: null`, what a run below tier 3 writes since 2026-11-02) never passes E3-A6.
  */
 export function combineGpuChecks(
   checks: readonly GpuBrowserCheck[],
@@ -119,6 +120,7 @@ export function combineGpuChecks(
       (c) =>
         c.schema === 'e3-a04-gpu-check/v1' &&
         c.passed &&
+        (c.subset as Readonly<{ corpus?: unknown }> | undefined)?.corpus != null &&
         (c.browser.adapter as Readonly<{ software?: boolean }> | undefined)?.software !== true &&
         c.shaderSha256 === expected.shaderSha256 &&
         c.wasmSha256 === expected.wasmSha256,
