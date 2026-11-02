@@ -24,7 +24,7 @@ const workers = headedWorkers();
 const includeEdge =
   process.env.VS_GPU_TIER === '3' ||
   includeCorpus ||
-  process.env.E3_A04_READBACK_NON_CORPUS_ONLY === '0' ||
+  process.env.E3_A04_READBACK_NON_CORPUS_ONLY !== '1' ||
   process.env.VS_GPU_EDGE === '1';
 
 export default defineConfig({
