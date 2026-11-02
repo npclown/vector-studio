@@ -1,7 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { headedWorkers } from '../../tooling/headed-run.mjs';
-import { NEXT_HOST_SUITES, parse, stageArgs, stages } from '../../tooling/run-headed-tier.mjs';
+import {
+  DEFAULT_WORKERS,
+  missingPrerequisite,
+  NEXT_HOST_SUITES,
+  parse,
+  stageArgs,
+  stages,
+} from '../../tooling/run-headed-tier.mjs';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -32,12 +39,15 @@ describe('headedWorkers', () => {
 
 describe('run-headed-tier', () => {
   it('parses the tier, workers and Playwright arguments', () => {
-    expect(parse(['--tier', '2'])).toEqual({ tier: 2, workers: '1', extra: [] });
-    expect(parse(['--tier', '3', '--workers', '4', '--', '--project', 'chrome'])).toEqual({
-      tier: 3,
-      workers: '4',
-      extra: ['--project', 'chrome'],
+    expect(parse(['--tier', '2'])).toEqual({
+      tier: 2,
+      workers: DEFAULT_WORKERS,
+      gpuOnly: false,
+      extra: [],
     });
+    expect(
+      parse(['--tier', '3', '--workers', '2', '--gpu-only', '--', '--project', 'chrome']),
+    ).toEqual({ tier: 3, workers: '2', gpuOnly: true, extra: ['--project', 'chrome'] });
     expect(() => parse([])).toThrow(/Usage/u);
     expect(() => parse(['--tier', '1'])).toThrow(/Usage/u);
     expect(() => parse(['--tier', '2', '--workers', '0'])).toThrow(/Usage/u);
@@ -50,6 +60,16 @@ describe('run-headed-tier', () => {
       'chrome',
     ]);
     expect(stageArgs({ script: 'test:gpu' }, [])).toEqual(['run', 'test:gpu']);
+  });
+  it('leaves out the next-host suites with --gpu-only', () => {
+    expect(stages(3, true).map((stage) => stage.script)).toEqual(['test:gpu:viz-v4', 'test:gpu']);
+    expect(stages(2, true).map((stage) => stage.script)).toEqual(['test:gpu']);
+  });
+  it('refuses next-host stages without M8_N3_BASELINE', () => {
+    expect(missingPrerequisite(false, {})).toMatch(/M8_N3_BASELINE/u);
+    expect(missingPrerequisite(false, { M8_N3_BASELINE: '' })).toMatch(/M8_N3_BASELINE/u);
+    expect(missingPrerequisite(false, { M8_N3_BASELINE: 'baseline.json' })).toBeNull();
+    expect(missingPrerequisite(true, {})).toBeNull();
   });
   it('runs the corpus only at tier 3, first', () => {
     expect(stages(2).map((stage) => stage.script)[0]).toBe('test:gpu');
