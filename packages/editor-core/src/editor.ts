@@ -941,8 +941,12 @@ class EditorCore implements Editor {
       const split = emptySplit();
       const atMs = probeNow();
       cache.probe(split);
-      const timing = this.onTextGeneration(cache, split);
-      cache.probe(null);
+      let timing: ReturnType<EditorCore['onTextGeneration']>;
+      try {
+        timing = this.onTextGeneration(cache, split);
+      } finally {
+        cache.probe(null);
+      }
       const totalMs = probeNow() - atMs;
       probe({
         kind: 'editor-dispatch',

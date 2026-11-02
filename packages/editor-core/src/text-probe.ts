@@ -60,7 +60,12 @@ export function textProbe(): TextProbe | undefined {
   return (globalThis as { __vsTextProbe?: TextProbe }).__vsTextProbe;
 }
 
-/** The relayout's split while a probe is installed; the projector and cache fill it. */
+/**
+ * The relayout's split while a probe is installed; the projector and cache fill it. It splits
+ * cleanly only on the whole-page path without released-subtree retries: `retry`, a snapshot and
+ * a resync project without adding to `projectMs` (their layouts still count), a cleanup `sync`
+ * adds a second diff and apply, and a deferred or nested relayout is not split at all.
+ */
 export type RelayoutSplit = {
   layoutCalls: number;
   layoutMs: number;
