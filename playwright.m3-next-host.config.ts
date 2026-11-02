@@ -1,4 +1,5 @@
 import { defineConfig, devices, type Project } from '@playwright/test';
+import { headedReporter, headedWorkers } from './tooling/headed-run.mjs';
 
 // M3-U4 (MVP M3 contract, M3-A12): the next-host page's path edit mode on the `?fixture=path-edit`
 // document (a closed cubic path and an open path inside a rotated group) through real input, with
@@ -62,9 +63,9 @@ export default defineConfig({
   testDir: './tests/m3-next-host',
   outputDir: './test-results/m3-next-host',
   fullyParallel: false,
-  workers: 1,
+  workers: headedWorkers(),
   retries: 0,
-  reporter: 'line',
+  reporter: headedReporter,
   timeout: 90_000,
   use: {
     baseURL: 'http://127.0.0.1:4183',

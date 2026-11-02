@@ -1,4 +1,5 @@
 import { defineConfig, devices, type Project } from '@playwright/test';
+import { headedReporter, headedWorkers } from './tooling/headed-run.mjs';
 
 // M2-U8 (MVP M2 contract, M2-A13): the next-host page's M2 interactions (system clipboard, the
 // default keymap, Alt-drag and Alt-click, frame entry, zoom controls, snap overlay, scope
@@ -61,9 +62,9 @@ export default defineConfig({
   testDir: './tests/m2-next-host',
   outputDir: './test-results/m2-next-host',
   fullyParallel: false,
-  workers: 1,
+  workers: headedWorkers({ serial: true }),
   retries: 0,
-  reporter: 'line',
+  reporter: headedReporter,
   timeout: 90_000,
   use: {
     baseURL: 'http://127.0.0.1:4178',

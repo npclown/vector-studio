@@ -1,4 +1,5 @@
 import { defineConfig, devices, type Project } from '@playwright/test';
+import { headedReporter, headedWorkers } from './tooling/headed-run.mjs';
 
 // M8-U7 (MVP M8 contract, M8-A14): the next-host page composed from `@vector-studio/ui` (layer
 // panel, page list, property panel, the `ext.star` sample panel and, under `?test=1&faults=1`,
@@ -94,9 +95,9 @@ export default defineConfig({
   testDir: './tests/m8-next-host',
   outputDir: './test-results/m8-next-host',
   fullyParallel: false,
-  workers: 1,
+  workers: headedWorkers(),
   retries: 0,
-  reporter: 'line',
+  reporter: headedReporter,
   timeout: 90_000,
   use: {
     baseURL: 'http://127.0.0.1:4194',

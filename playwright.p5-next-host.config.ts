@@ -1,4 +1,5 @@
 import { defineConfig, devices, type Project } from '@playwright/test';
+import { headedReporter, headedWorkers } from './tooling/headed-run.mjs';
 
 // P5-U6 (P5 plan, P5-A09 headed half and P5-A12): the Next.js host in headed Chrome and Edge.
 // Needs `pnpm build` (the next-host production build) and the geometry kernel WASM from
@@ -60,9 +61,9 @@ export default defineConfig({
   testDir: './tests/p5-next-host',
   outputDir: './test-results/p5-next-host',
   fullyParallel: false,
-  workers: 1,
+  workers: headedWorkers(),
   retries: 0,
-  reporter: 'line',
+  reporter: headedReporter,
   timeout: 60_000,
   use: {
     baseURL: 'http://127.0.0.1:4176',

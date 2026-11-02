@@ -1,4 +1,5 @@
 import { defineConfig, devices, type Project } from '@playwright/test';
+import { headedReporter, headedWorkers } from './tooling/headed-run.mjs';
 
 // M6b-U9 (MVP M6b contract, M6b-A12 and A13): the next-host page on `?fixture=text-edit` (the
 // committed edit fixture with the committed test font registered as `Noto Sans KR`): caret
@@ -63,9 +64,9 @@ export default defineConfig({
   testDir: './tests/m6b-next-host',
   outputDir: './test-results/m6b-next-host',
   fullyParallel: false,
-  workers: 1,
+  workers: headedWorkers({ serial: true }),
   retries: 0,
-  reporter: 'line',
+  reporter: headedReporter,
   timeout: 120_000,
   use: {
     baseURL: 'http://127.0.0.1:4189',

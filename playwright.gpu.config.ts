@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { headedReporter, headedWorkers } from './tooling/headed-run.mjs';
 
 const webGpuArguments = ['--enable-unsafe-webgpu'];
 
@@ -14,9 +15,9 @@ export default defineConfig({
   testIgnore: includeCorpus ? [] : ['**/viz-v4-a08-corpus.spec.ts'],
   outputDir: './test-results/gpu',
   fullyParallel: false,
-  workers: 1,
+  workers: headedWorkers(),
   retries: 0,
-  reporter: 'line',
+  reporter: headedReporter,
   timeout: 30_000,
   use: {
     baseURL: 'http://127.0.0.1:4175',

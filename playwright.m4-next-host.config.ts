@@ -1,4 +1,5 @@
 import { defineConfig, devices, type Project } from '@playwright/test';
+import { headedReporter, headedWorkers } from './tooling/headed-run.mjs';
 
 // M4-U4 (MVP M4 contract, M4-A12): the next-host page on the `?fixture=appearance` document (H1
 // to H9: E23's G1 to G3, E24's D3 and D1, a dashed arrow line, and E25's O1, O5 and O4 as a
@@ -64,9 +65,9 @@ export default defineConfig({
   testDir: './tests/m4-next-host',
   outputDir: './test-results/m4-next-host',
   fullyParallel: false,
-  workers: 1,
+  workers: headedWorkers(),
   retries: 0,
-  reporter: 'line',
+  reporter: headedReporter,
   timeout: 300_000,
   use: {
     baseURL: 'http://127.0.0.1:4188',
