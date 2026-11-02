@@ -12,7 +12,7 @@
 //
 // The sitting directory holds runs/ (records and files.txt) and summary.json.
 import { createHash } from 'node:crypto';
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const [directory, ...rest] = process.argv.slice(2);
@@ -35,6 +35,14 @@ if (directory === undefined || date === null || runId === null) {
 if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`--date ${date} is not YYYY-MM-DD`);
 if (!/^[A-Za-z0-9-]+$/.test(runId))
   throw new Error(`--run-id ${runId} must be letters, digits and dashes`);
+
+// The directory goes into the public JSON, so it must be a repository-relative path.
+if (
+  path.isAbsolute(directory) ||
+  path.win32.isAbsolute(directory) ||
+  directory.split(/[\\/]/).includes('..')
+)
+  throw new Error(`the sitting directory ${directory} must be relative to the repository root`);
 
 const runsDirectory = path.join(directory, 'runs');
 const summary = JSON.parse(readFileSync(path.join(directory, 'summary.json'), 'utf8'));
@@ -81,7 +89,7 @@ for (const row of summary.rows) {
 
 const formatList = (values) =>
   values.map((value) => (value === null ? 'n/a' : String(value))).join(', ');
-const written = [];
+const pending = [];
 for (const [key, rows] of groups) {
   const [scenario, browser] = key.split('|');
   const projects = new Set(rows.map((row) => row.project));
@@ -167,15 +175,21 @@ for (const [key, rows] of groups) {
     `Raw records: ${mine.length} files, listed with their SHA-256 in the [.json beside this file](${base}.json).`,
     '',
   );
-  writeFileSync(path.join(out, `${base}.json`), `${JSON.stringify(json, null, 2)}\n`, {
-    flag: 'wx',
-  });
-  writeFileSync(
+  pending.push([path.join(out, `${base}.json`), `${JSON.stringify(json, null, 2)}\n`]);
+  pending.push([
     path.join(out, `${base}.md`),
     lines.filter((line, index) => !(line === '' && lines[index - 1] === '')).join('\n'),
-    { flag: 'wx' },
-  );
-  written.push(base);
+  ]);
 }
-console.log(`wrote ${written.length} result pairs`);
-for (const base of written) console.log(base);
+// Refuse before writing anything, so a refused run leaves no partial set; `wx` still refuses a
+// file that appears in between.
+const existing = pending.filter(([file]) => existsSync(file)).map(([file]) => file);
+if (existing.length > 0) {
+  console.error(
+    `refusing to replace ${existing.length} existing result files, e.g. ${existing[0]}`,
+  );
+  process.exit(1);
+}
+for (const [file, text] of pending) writeFileSync(file, text, { flag: 'wx' });
+console.log(`wrote ${pending.length / 2} result pairs`);
+for (const [file] of pending) if (file.endsWith('.json')) console.log(path.basename(file, '.json'));
