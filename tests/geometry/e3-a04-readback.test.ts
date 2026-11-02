@@ -83,10 +83,23 @@ describe('E3-U4 GPU model check, Node side (section 16)', () => {
       browser: { project, adapter: { software: false } },
       shaderSha256: payload.shaderSha256,
       wasmSha256: 'w',
+      subset: { corpus: 'named rows' },
       ...extra,
     });
     expect(combineGpuChecks([check('chrome'), check('edge')], expected, 'r').passed).toBe(true);
     expect(combineGpuChecks([check('chrome')], expected, 'r').passed).toBe(false);
+    // A run below tier 3 checks the non-corpus cases only: not E3-A6 evidence.
+    expect(
+      combineGpuChecks(
+        [check('chrome'), check('edge', { subset: { corpus: null } })],
+        expected,
+        'r',
+      ).passed,
+    ).toBe(false);
+    expect(
+      combineGpuChecks([check('chrome', { subset: undefined }), check('edge')], expected, 'r')
+        .passed,
+    ).toBe(false);
     expect(
       combineGpuChecks([check('chrome'), check('edge', { wasmSha256: 'x' })], expected, 'r').passed,
     ).toBe(false);
