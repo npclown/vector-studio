@@ -1,0 +1,518 @@
+$ node tooling/run-headed-tier.mjs "--tier" "2"
+headed tier 2 run 2026-11-02T21-22-29-472Z-tier2, workers 4
+
+=== gpu: pnpm test:gpu ===
+$ playwright test --config playwright.gpu.config.ts
+
+Running 93 tests using 4 workers
+
+[1/93] [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 4x, DPR 1
+[2/93] [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 1x, DPR 1.5
+[3/93] [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 1x, DPR 1
+[4/93] [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 1x, DPR 2
+[5/93] [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 4x, DPR 1.5
+[6/93] [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 4x, DPR 2
+[7/93] [chrome] › tests\gpu\e17-write-once.spec.ts:120:1 › E17-A5 fixtures: count at most 1, covered pixels counted once, 4x equals 1x
+[8/93] [chrome] › tests\gpu\e17-write-once.spec.ts:226:3 › E17-A5 reset path: 511 mesh draws, rectangle A at ordinals 0, 255 and 510, at 1x
+[9/93] [chrome] › tests\gpu\e17-write-once.spec.ts:226:3 › E17-A5 reset path: 511 mesh draws, rectangle A at ordinals 0, 255 and 510, at 4x
+[10/93] [chrome] › tests\gpu\e23-gradient-paint.spec.ts:543:3 › E23-A03 G1 to G8 against the oracle at DPR 1
+[11/93] [chrome] › tests\gpu\e23-gradient-paint.spec.ts:584:3 › E23-A04 premultiplied ramp and hard stop at DPR 1
+[12/93] [chrome] › tests\gpu\e23-gradient-paint.spec.ts:543:3 › E23-A03 G1 to G8 against the oracle at DPR 2
+[13/93] [chrome] › tests\gpu\e23-gradient-paint.spec.ts:584:3 › E23-A04 premultiplied ramp and hard stop at DPR 2
+[14/93] [chrome] › tests\gpu\e23-gradient-paint.spec.ts:617:1 › E23-A05 and A06: invalidation and batching counters
+[15/93] [chrome] › tests\gpu\e23-gradient-paint.spec.ts:747:1 › E23-A09 paint resources in accounting, after removal, device loss and disposal
+[16/93] [chrome] › tests\gpu\e24-stroke-dash.spec.ts:466:3 › E24-A05 D1 to D9 against the oracle at DPR 1
+[17/93] [chrome] › tests\gpu\e24-stroke-dash.spec.ts:530:3 › E24-A05 D7 dash ends agree across zooms at DPR 1
+[18/93] [chrome] › tests\gpu\e24-stroke-dash.spec.ts:466:3 › E24-A05 D1 to D9 against the oracle at DPR 2
+[19/93] [chrome] › tests\gpu\e24-stroke-dash.spec.ts:530:3 › E24-A05 D7 dash ends agree across zooms at DPR 2
+[20/93] [chrome] › tests\gpu\e24-stroke-dash.spec.ts:715:1 › E24-A04 GPU part: invalidation counters
+[21/93] [chrome] › tests\gpu\e24-stroke-dash.spec.ts:820:1 › E24-A03 note: the real kernel at 4,096 dashes on D8 geometry
+[22/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:471:5 › E25-A03 O1 to O8 against the oracle at 4x, DPR 1
+[23/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:471:5 › E25-A03 O1 to O8 against the oracle at 4x, DPR 2
+[24/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:471:5 › E25-A03 O1 to O8 against the oracle at 1x, DPR 1
+[25/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:471:5 › E25-A03 O1 to O8 against the oracle at 1x, DPR 2
+[26/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:606:3 › E25-A05 O8 tile seams on a 2100 x 1300 surface at 4x
+[27/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:606:3 › E25-A05 O8 tile seams on a 2100 x 1300 surface at 1x
+[28/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:681:1 › E25-A03 O7 opacity 0 and opacity 1
+[29/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:737:1 › E25-A07 O9 layer budget on a 3840 x 2160 surface at 4x
+[30/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:848:1 › E25-A04 opacity edits, visibility, pan and layer passes
+[31/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:965:1 › E25-A06 layer resources in accounting, after removal, device loss and disposal
+[32/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:1049:3 › E25 shared-edge observation at DPR 1
+[33/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:1049:3 › E25 shared-edge observation at DPR 2
+[34/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:499:5 › E28-A03 T1 to T7 against the oracle at 4x, DPR 1
+[35/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:499:5 › E28-A03 T1 to T7 against the oracle at 4x, DPR 2
+[36/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:499:5 › E28-A03 T1 to T7 against the oracle at 1x, DPR 1
+[37/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:499:5 › E28-A03 T1 to T7 against the oracle at 1x, DPR 2
+[38/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:607:1 › E28-A04 edits, pans, zoom and generation on the raster counters
+[39/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:724:1 › E28-A05 atlas pages and sampler in accounting, resize, removal, device loss
+[40/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:823:1 › T8 atlas pressure: eviction, over-limit notice and convergence (E28-A06)
+[41/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:918:1 › T8 raster budget convergence and the 32 MiB atlas bound (E28-A06)
+[42/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:977:1 › T8 eviction order: an older-generation page goes before the least recent (E28-A06)
+[43/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:1032:1 › T9 generation 2 never draws generation 1 bitmaps (E28-A08)
+[44/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:1089:1 › E28-A07 scenes without text are identical with text=none and text=atlas
+[45/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:1132:1 › E28-A08 the canvas port: identity, empty, too-large, unavailable, bearings, two pages
+[46/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:1233:3 › E28 M6c per-cluster readback and raster cost at DPR 1
+[47/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:1233:3 › E28 M6c per-cluster readback and raster cost at DPR 2
+[48/93] [chrome] › tests\gpu\e3-a04-readback.spec.ts:75:1 › E3-U4 GPU model check and E3-PC12
+[49/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples1 dpr1
+[50/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples1 dpr1
+[51/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples1 dpr1.5
+[52/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples1 dpr1.5
+[53/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples1 dpr2
+[54/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples1 dpr2
+[55/93] [chrome] › tests\gpu\p1-primitives.spec.ts:149:3 › P1 latest-scene recovery samples1
+[56/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples4 dpr1
+[57/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples4 dpr1
+[58/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples4 dpr1.5
+[59/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples4 dpr1.5
+[60/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples4 dpr2
+[61/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples4 dpr2
+[62/93] [chrome] › tests\gpu\p1-primitives.spec.ts:149:3 › P1 latest-scene recovery samples4
+[63/93] [chrome] › tests\gpu\p3-b2-strokes.spec.ts:178:5 › DPR 1 › P3 B2 stroke page screenshots at DPR 1 (UNVERIFIED precision)
+[64/93] [chrome] › tests\gpu\p3-b2-strokes.spec.ts:178:5 › DPR 2 › P3 B2 stroke page screenshots at DPR 2 (UNVERIFIED precision)
+[65/93] [chrome] › tests\gpu\p3-b2-strokes.spec.ts:178:5 › DPR 3 › P3 B2 stroke page screenshots at DPR 3 (UNVERIFIED precision)
+[66/93] [chrome] › tests\gpu\p3-st-u6-stroke.spec.ts:38:3 › P3 ST-U6 stroke fixtures samples1 (UNVERIFIED precision)
+[67/93] [chrome] › tests\gpu\p3-st-u6-stroke.spec.ts:38:3 › P3 ST-U6 stroke fixtures samples4 (UNVERIFIED precision)
+[68/93] [chrome] › tests\gpu\p3-st-u7-joint.spec.ts:76:3 › P3 ST-U7 joint fixtures samples1 (UNVERIFIED precision)
+[69/93] [chrome] › tests\gpu\p3-st-u7-joint.spec.ts:76:3 › P3 ST-U7 joint fixtures samples4 (UNVERIFIED precision)
+[70/93] [chrome] › tests\gpu\p3-st-u7-joint.spec.ts:296:1 › P3 ST-U7 seeded defects fail their checks (UNVERIFIED precision)
+[71/93] [chrome] › tests\gpu\p3-v3-mesh-smoke.spec.ts:36:3 › P3 V3c mesh smoke samples1 (UNVERIFIED precision)
+[72/93] [chrome] › tests\gpu\p3-v3-mesh-smoke.spec.ts:36:3 › P3 V3c mesh smoke samples4 (UNVERIFIED precision)
+[73/93] [chrome] › tests\gpu\p3-v4-paths.spec.ts:75:1 › P3 V4 path page screenshots (UNVERIFIED precision)
+[74/93] [chrome] › tests\gpu\p4-clip-mask.spec.ts:411:3 › P4 U5 images (P4-A02 to A05, A10), 1x, DPR 1
+[75/93] [chrome] › tests\gpu\p4-clip-mask.spec.ts:411:3 › P4 U5 images (P4-A02 to A05, A10), 4x, DPR 1
+[76/93] [chrome] › tests\gpu\p4-clip-mask.spec.ts:411:3 › P4 U5 images (P4-A02 to A05, A10), 1x, DPR 2
+[77/93] [chrome] › tests\gpu\p4-clip-mask.spec.ts:411:3 › P4 U5 images (P4-A02 to A05, A10), 4x, DPR 2
+[78/93] [chrome] › tests\gpu\p4-clip-mask.spec.ts:614:1 › P4 U5 invalidation, culling, batching and resources (P4-A06 to A08), 4x, DPR 1
+[79/93] [chrome] › tests\gpu\p4-clip-mask.spec.ts:995:1 › P4 U5 mask texture budget (P4-A08), 1x
+[80/93] [chrome] › tests\gpu\p4-clip-mask.spec.ts:1099:3 › P4 U5 frame-time observation (P4-A11), 4x
+[81/93] [chrome] › tests\gpu\p4-clip-mask.spec.ts:1099:3 › P4 U5 frame-time observation (P4-A11), 1x
+[82/93] [chrome] › tests\gpu\p4-clip-mask.spec.ts:1193:1 › E22 U3 tiled mask passes at 3840 x 2160 (E22-A5), 4x, DPR 2
+[83/93] [chrome] › tests\gpu\viz-v1-appearance.spec.ts:218:5 › DPR 1 › V-1 path appearance page at DPR 1 (UNVERIFIED precision)
+[84/93] [chrome] › tests\gpu\viz-v1-appearance.spec.ts:218:5 › DPR 2 › V-1 path appearance page at DPR 2 (UNVERIFIED precision)
+[85/93] [chrome] › tests\gpu\viz-v2-path-data.spec.ts:212:5 › DPR 1 › V-2 path-data page at DPR 1 (UNVERIFIED precision)
+[86/93] [chrome] › tests\gpu\viz-v2-path-data.spec.ts:212:5 › DPR 2 › V-2 path-data page at DPR 2 (UNVERIFIED precision)
+[87/93] [chrome] › tests\gpu\viz-v3-integration.spec.ts:97:5 › DPR 1 › V-3 A07 integration page at DPR 1 (UNVERIFIED precision)
+[88/93] [chrome] › tests\gpu\viz-v3-integration.spec.ts:97:5 › DPR 2 › V-3 A07 integration page at DPR 2 (UNVERIFIED precision)
+[89/93] [chrome] › tests\gpu\foundation-experiments.spec.ts:175:5 › camera triangle at DPR 1 › preserves camera, shared-buffer, and pipeline-cache evidence through recovery
+[90/93] [chrome] › tests\gpu\foundation-experiments.spec.ts:175:5 › camera triangle at DPR 1.5 › preserves camera, shared-buffer, and pipeline-cache evidence through recovery
+[91/93] [chrome] › tests\gpu\foundation-experiments.spec.ts:175:5 › camera triangle at DPR 2 › preserves camera, shared-buffer, and pipeline-cache evidence through recovery
+[92/93] [chrome] › tests\gpu\playground-dashboard.spec.ts:12:1 › captures a functional dashboard smoke artifact
+[93/93] [chrome] › tests\gpu\webgpu-recovery.spec.ts:13:1 › surfaces validation error and recovers once after deliberate device destruction
+  93 passed (13.7m)
+
+headed timing: 93 tests, wall 13.7 min, 4 worker(s); D:\GIT\vector-studio\artifacts\headed-timing\2026-11-02T21-22-29-472Z-tier2\2026-11-02T21-22-30-698Z-gpu.json
+    12.3 min  chrome       tests/gpu/p1-primitives.spec.ts
+     9.6 min  chrome       tests/gpu/p4-clip-mask.spec.ts
+     3.0 min  chrome       tests/gpu/e24-stroke-dash.spec.ts
+     2.8 min  chrome       tests/gpu/e25-isolated-opacity.spec.ts
+     2.5 min  chrome       tests/gpu/e28-text-atlas.spec.ts
+     1.7 min  chrome       tests/gpu/viz-v3-integration.spec.ts
+     1.2 min  chrome       tests/gpu/viz-v2-path-data.spec.ts
+     1.0 min  chrome       tests/gpu/viz-v1-appearance.spec.ts
+
+=== p5-next-host: pnpm test:p5-next-host ===
+$ playwright test --config playwright.p5-next-host.config.ts
+
+Running 4 tests using 2 workers
+
+[1/4] [edge] › tests\p5-next-host\p5-next-host.spec.ts:91:1 › P5-A09: the WebGPU host and the recording renderer agree on a command script
+[2/4] [chrome] › tests\p5-next-host\p5-next-host.spec.ts:91:1 › P5-A09: the WebGPU host and the recording renderer agree on a command script
+[3/4] [chrome] › tests\p5-next-host\p5-next-host.spec.ts:116:1 › P5-A12: the page creates, selects, moves, undoes and draws through EditorCanvas
+[4/4] [edge] › tests\p5-next-host\p5-next-host.spec.ts:116:1 › P5-A12: the page creates, selects, moves, undoes and draws through EditorCanvas
+  4 passed (15.5s)
+
+headed timing: 4 tests, wall 0.3 min, 4 worker(s); D:\GIT\vector-studio\artifacts\headed-timing\2026-11-02T21-22-29-472Z-tier2\2026-11-02T21-36-13-287Z-p5-next-host.json
+     0.2 min  edge         tests/p5-next-host/p5-next-host.spec.ts
+     0.2 min  chrome       tests/p5-next-host/p5-next-host.spec.ts
+
+=== m1-next-host: pnpm test:m1-next-host ===
+$ playwright test --config playwright.m1-next-host.config.ts
+
+Running 2 tests using 2 workers
+
+[1/2] [edge] › tests\m1-next-host\m1-next-host.spec.ts:289:1 › M1-A12: the next-host page renders the M1 fixture and edits it
+[2/2] [chrome] › tests\m1-next-host\m1-next-host.spec.ts:289:1 › M1-A12: the next-host page renders the M1 fixture and edits it
+  2 passed (11.6s)
+
+headed timing: 2 tests, wall 0.2 min, 4 worker(s); D:\GIT\vector-studio\artifacts\headed-timing\2026-11-02T21-22-29-472Z-tier2\2026-11-02T21-36-29-913Z-m1-next-host.json
+     0.1 min  chrome       tests/m1-next-host/m1-next-host.spec.ts
+     0.1 min  edge         tests/m1-next-host/m1-next-host.spec.ts
+
+=== m2-next-host: pnpm test:m2-next-host ===
+$ playwright test --config playwright.m2-next-host.config.ts
+
+Running 10 tests using 1 worker
+
+[1/10] [chrome] › tests\m2-next-host\m2-next-host.spec.ts:285:1 › M2-A13 section 7: every default chord reaches the editor
+[2/10] [chrome] › tests\m2-next-host\m2-next-host.spec.ts:433:1 › M2-A13: frame entry by double-click, the scope indicator and the toolbar ungroup
+[3/10] [chrome] › tests\m2-next-host\m2-next-host.spec.ts:479:1 › M2-A13: Alt-drag duplicates and Alt-click cycles an overlapping stack
+[4/10] [chrome] › tests\m2-next-host\m2-next-host.spec.ts:525:1 › M2-A13: copy, cut and paste through the system clipboard, also in a second tab
+[5/10] [chrome] › tests\m2-next-host\m2-next-host.spec.ts:610:1 › M2-A13 host: zoom controls, snap overlay and the rotate cursor
+[6/10] [edge] › tests\m2-next-host\m2-next-host.spec.ts:285:1 › M2-A13 section 7: every default chord reaches the editor
+[7/10] [edge] › tests\m2-next-host\m2-next-host.spec.ts:433:1 › M2-A13: frame entry by double-click, the scope indicator and the toolbar ungroup
+[8/10] [edge] › tests\m2-next-host\m2-next-host.spec.ts:479:1 › M2-A13: Alt-drag duplicates and Alt-click cycles an overlapping stack
+[9/10] [edge] › tests\m2-next-host\m2-next-host.spec.ts:525:1 › M2-A13: copy, cut and paste through the system clipboard, also in a second tab
+[10/10] [edge] › tests\m2-next-host\m2-next-host.spec.ts:610:1 › M2-A13 host: zoom controls, snap overlay and the rotate cursor
+  10 passed (58.3s)
+
+headed timing: 10 tests, wall 1.0 min, 1 worker(s); D:\GIT\vector-studio\artifacts\headed-timing\2026-11-02T21-22-29-472Z-tier2\2026-11-02T21-36-42-664Z-m2-next-host.json
+     0.5 min  edge         tests/m2-next-host/m2-next-host.spec.ts
+     0.4 min  chrome       tests/m2-next-host/m2-next-host.spec.ts
+
+=== m3-next-host: pnpm test:m3-next-host ===
+$ playwright test --config playwright.m3-next-host.config.ts
+
+Running 2 tests using 2 workers
+
+[1/2] [chrome] › tests\m3-next-host\m3-next-host.spec.ts:321:1 › M3-A12: edits a closed cubic path and an open path in a rotated group
+[2/2] [edge] › tests\m3-next-host\m3-next-host.spec.ts:321:1 › M3-A12: edits a closed cubic path and an open path in a rotated group
+  2 passed (20.4s)
+
+headed timing: 2 tests, wall 0.3 min, 4 worker(s); D:\GIT\vector-studio\artifacts\headed-timing\2026-11-02T21-22-29-472Z-tier2\2026-11-02T21-37-42-142Z-m3-next-host.json
+     0.3 min  chrome       tests/m3-next-host/m3-next-host.spec.ts
+     0.3 min  edge         tests/m3-next-host/m3-next-host.spec.ts
+
+=== m4-next-host: pnpm test:m4-next-host ===
+$ playwright test --config playwright.m4-next-host.config.ts
+
+Running 10 tests using 1 worker
+
+[1/10] [chrome] › tests\m4-next-host\m4-next-host.spec.ts:334:5 › DPR 1 › M4-A12: H1 to H9 against the E23, E24 and E25 oracles at DPR 1
+[2/10] [chrome] › tests\m4-next-host\m4-next-host.spec.ts:334:5 › DPR 2 › M4-A12: H1 to H9 against the E23, E24 and E25 oracles at DPR 2
+[3/10] [chrome] › tests\m4-next-host\m4-next-host.spec.ts:409:1 › M4-A12: every panel control once, one undo step each
+[4/10] [chrome] › tests\m4-next-host\m4-next-host.spec.ts:751:1 › M4-A12: a ?persist=1 reload keeps the appearance
+[5/10] [chrome] › tests\m4-next-host\m4-next-host.spec.ts:818:1 › M4-A13: frame time of 10,000 stroked rectangles (observation)
+[6/10] [edge] › tests\m4-next-host\m4-next-host.spec.ts:334:5 › DPR 1 › M4-A12: H1 to H9 against the E23, E24 and E25 oracles at DPR 1
+[7/10] [edge] › tests\m4-next-host\m4-next-host.spec.ts:334:5 › DPR 2 › M4-A12: H1 to H9 against the E23, E24 and E25 oracles at DPR 2
+[8/10] [edge] › tests\m4-next-host\m4-next-host.spec.ts:409:1 › M4-A12: every panel control once, one undo step each
+[9/10] [edge] › tests\m4-next-host\m4-next-host.spec.ts:751:1 › M4-A12: a ?persist=1 reload keeps the appearance
+[10/10] [edge] › tests\m4-next-host\m4-next-host.spec.ts:818:1 › M4-A13: frame time of 10,000 stroked rectangles (observation)
+  10 passed (1.8m)
+
+headed timing: 10 tests, wall 1.8 min, 1 worker(s); D:\GIT\vector-studio\artifacts\headed-timing\2026-11-02T21-22-29-472Z-tier2\2026-11-02T21-38-03-639Z-m4-next-host.json
+     0.9 min  edge         tests/m4-next-host/m4-next-host.spec.ts
+     0.9 min  chrome       tests/m4-next-host/m4-next-host.spec.ts
+
+=== m5-next-host: pnpm test:m5-next-host ===
+$ playwright test --config playwright.m5-next-host.config.ts
+
+Running 10 tests using 2 workers
+
+[1/10] [edge] › tests\m5-next-host\m5-next-host.spec.ts:247:1 › M5-A10: a reload restores the document and the last open page
+[2/10] [chrome] › tests\m5-next-host\m5-next-host.spec.ts:247:1 › M5-A10: a reload restores the document and the last open page
+[3/10] [chrome] › tests\m5-next-host\m5-next-host.spec.ts:296:1 › M5-A10: Save file downloads an envelope and Open file restores it
+[4/10] [edge] › tests\m5-next-host\m5-next-host.spec.ts:296:1 › M5-A10: Save file downloads an envelope and Open file restores it
+[5/10] [chrome] › tests\m5-next-host\m5-next-host.spec.ts:365:3 › M5-A10: a corrupt entry (malformed text) loads nothing and is kept
+[6/10] [edge] › tests\m5-next-host\m5-next-host.spec.ts:365:3 › M5-A10: a corrupt entry (malformed text) loads nothing and is kept
+[7/10] [chrome] › tests\m5-next-host\m5-next-host.spec.ts:365:3 › M5-A10: a corrupt entry (a document with a bad field) loads nothing and is kept
+[8/10] [edge] › tests\m5-next-host\m5-next-host.spec.ts:365:3 › M5-A10: a corrupt entry (a document with a bad field) loads nothing and is kept
+[9/10] [edge] › tests\m5-next-host\m5-next-host.spec.ts:403:1 › M5 section 5.3: persist=1 ignores fixture= and persistence.flush writes
+[10/10] [chrome] › tests\m5-next-host\m5-next-host.spec.ts:403:1 › M5 section 5.3: persist=1 ignores fixture= and persistence.flush writes
+  10 passed (50.7s)
+
+headed timing: 10 tests, wall 0.8 min, 4 worker(s); D:\GIT\vector-studio\artifacts\headed-timing\2026-11-02T21-22-29-472Z-tier2\2026-11-02T21-39-55-091Z-m5-next-host.json
+     0.8 min  edge         tests/m5-next-host/m5-next-host.spec.ts
+     0.8 min  chrome       tests/m5-next-host/m5-next-host.spec.ts
+
+=== m6a-next-host: pnpm test:m6a-next-host ===
+$ playwright test --config playwright.m6a-next-host.config.ts
+
+Running 22 tests using 2 workers
+
+[1/22] [chrome] › tests\m6a-next-host\m6a-next-host.spec.ts:242:1 › M6a-A11: the test font registers and the fixture lays out its committed structure
+[2/22] [edge] › tests\m6a-next-host\m6a-next-host.spec.ts:242:1 › M6a-A11: the test font registers and the fixture lays out its committed structure
+[3/22] [chrome] › tests\m6a-next-host\m6a-next-host.spec.ts:298:1 › M6a-A11: a face loading after the first layout re-lays out with no document event
+[4/22] [edge] › tests\m6a-next-host\m6a-next-host.spec.ts:298:1 › M6a-A11: a face loading after the first layout re-lays out with no document event
+[5/22] [chrome] › tests\m6a-next-host\m6a-next-host.spec.ts:369:1 › M6a-A11: a missing family and Hangul in a Latin-only family fall back
+[6/22] [edge] › tests\m6a-next-host\m6a-next-host.spec.ts:369:1 › M6a-A11: a missing family and Hangul in a Latin-only family fall back
+[7/22] [chrome] › tests\m6a-next-host\m6a-next-host.spec.ts:444:1 › M6a-A11: every fixture agrees with an unprobed reference block
+[8/22] [edge] › tests\m6a-next-host\m6a-next-host.spec.ts:444:1 › M6a-A11: every fixture agrees with an unprobed reference block
+[9/22] [chrome] › tests\m6a-next-host\m6a-next-host.spec.ts:600:1 › M6a-A11 (A05's Chrome half): grapheme segmentation in Chrome equals Node's
+[10/22] [edge] › tests\m6a-next-host\m6a-next-host.spec.ts:600:1 › M6a-A11 (A05's Chrome half): grapheme segmentation in Chrome equals Node's
+[11/22] [chrome] › tests\m6a-next-host\m6a-next-host.spec.ts:627:1 › M6a-A11 (carry list f): a 128-DEL family registers and lays out
+[12/22] [edge] › tests\m6a-next-host\m6a-next-host.spec.ts:627:1 › M6a-A11 (carry list f): a 128-DEL family registers and lays out
+[13/22] [chrome] › tests\m6a-next-host\m6a-next-host.spec.ts:648:1 › M6a-A11: sizes 0.5 and 4096 lay out, with no minimum font size clamp at 0.5
+[14/22] [edge] › tests\m6a-next-host\m6a-next-host.spec.ts:648:1 › M6a-A11: sizes 0.5 and 4096 lay out, with no minimum font size clamp at 0.5
+[15/22] [chrome] › tests\m6a-next-host\m6a-next-host.spec.ts:684:1 › M6a-A11: the measurement block is isolated from the page's direction
+[16/22] [edge] › tests\m6a-next-host\m6a-next-host.spec.ts:684:1 › M6a-A11: the measurement block is isolated from the page's direction
+[17/22] [chrome] › tests\m6a-next-host\m6a-next-host.spec.ts:715:1 › M6a-A11 (carry list h): a registered-font cluster draws through the atlas renderer
+[18/22] [edge] › tests\m6a-next-host\m6a-next-host.spec.ts:715:1 › M6a-A11 (carry list h): a registered-font cluster draws through the atlas renderer
+[19/22] [chrome] › tests\m6a-next-host\m6a-next-host.spec.ts:814:1 › M6a-A12: DPR 1, 1.25, 1.5 and 2 by emulation give the same layout and bump the generation
+[20/22] [edge] › tests\m6a-next-host\m6a-next-host.spec.ts:814:1 › M6a-A12: DPR 1, 1.25, 1.5 and 2 by emulation give the same layout and bump the generation
+[21/22] [chrome] › tests\m6a-next-host\m6a-next-host.spec.ts:888:1 › M6a-A12: size linearity, s and 4s at width 4w, within a quarter pixel
+[22/22] [edge] › tests\m6a-next-host\m6a-next-host.spec.ts:888:1 › M6a-A12: size linearity, s and 4s at width 4w, within a quarter pixel
+  22 passed (19.6s)
+
+headed timing: 22 tests, wall 0.3 min, 4 worker(s); D:\GIT\vector-studio\artifacts\headed-timing\2026-11-02T21-22-29-472Z-tier2\2026-11-02T21-40-46-936Z-m6a-next-host.json
+     0.2 min  edge         tests/m6a-next-host/m6a-next-host.spec.ts
+     0.2 min  chrome       tests/m6a-next-host/m6a-next-host.spec.ts
+
+=== m6b-next-host: pnpm test:m6b-next-host ===
+$ playwright test --config playwright.m6b-next-host.config.ts
+
+Running 38 tests using 1 worker
+
+[1/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:240:1 › M6b-A12: caret segments and selection rectangles match the measured clusters
+[2/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:345:1 › M6b-A12: a click places the caret, a double-click selects the word, focus stays
+[3/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:415:1 › M6b-A12: Up and Down move by lines at the goal x
+[4/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:489:1 › M6b-A13: real keys follow rules 1 to 6, Tab keeps focus, the clipboard chords run
+[5/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:605:1 › M6b-A13: a DOM paste of text/plain with HTML reads the plain text, in and outside edit mode
+[6/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:666:1 › M6b-A13: presses in edit mode keep focus on the textarea, which sits at the caret
+[7/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 01-syllable-space-punctuation.json replays through CDP (A syllable, then a space, then a punctuation mark)
+[8/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 02a-enter-keydown.json replays through CDP (Enter during a composition: compositionend, then a non-229 Enter keydown)
+[9/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 02b-enter-linebreak.json replays through CDP (Enter during a composition: compositionend, then insertLineBreak with no second keydown)
+[10/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 03a-arrow-keydown.json replays through CDP (An arrow during a composition: compositionend, then a non-229 ArrowLeft keydown)
+[11/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 03b-arrow-commit-only.json replays through CDP (An arrow during a composition: compositionend and no second keydown)
+[12/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 04-backspace-jamo-and-after-commit.json replays through CDP (Backspace inside a composition (jamo), then in the empty textarea after the commit)
+[13/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 06a-empty-end-empty-range.json replays through CDP (An empty compositionend over an empty range)
+[14/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 06b-empty-end-selection.json replays through CDP (An empty compositionend over a selection)
+[15/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 08a-click-focus-kept.json replays through CDP (A click during a composition with focus kept (pointerdown prevented))
+[16/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 08b-click-focus-moved.json replays through CDP (A click during a composition with focus moved)
+[17/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 08c-blur-to-panel.json replays through CDP (An element blur to a panel input during a composition)
+[18/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 09a-pending-commit.json replays through CDP (A first composition on a pending node, committed)
+[19/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 09b-pending-cancel.json replays through CDP (A first composition on a pending node, cancelled)
+[20/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:240:1 › M6b-A12: caret segments and selection rectangles match the measured clusters
+[21/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:345:1 › M6b-A12: a click places the caret, a double-click selects the word, focus stays
+[22/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:415:1 › M6b-A12: Up and Down move by lines at the goal x
+[23/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:489:1 › M6b-A13: real keys follow rules 1 to 6, Tab keeps focus, the clipboard chords run
+[24/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:605:1 › M6b-A13: a DOM paste of text/plain with HTML reads the plain text, in and outside edit mode
+[25/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:666:1 › M6b-A13: presses in edit mode keep focus on the textarea, which sits at the caret
+[26/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 01-syllable-space-punctuation.json replays through CDP (A syllable, then a space, then a punctuation mark)
+[27/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 02a-enter-keydown.json replays through CDP (Enter during a composition: compositionend, then a non-229 Enter keydown)
+[28/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 02b-enter-linebreak.json replays through CDP (Enter during a composition: compositionend, then insertLineBreak with no second keydown)
+[29/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 03a-arrow-keydown.json replays through CDP (An arrow during a composition: compositionend, then a non-229 ArrowLeft keydown)
+[30/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 03b-arrow-commit-only.json replays through CDP (An arrow during a composition: compositionend and no second keydown)
+[31/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 04-backspace-jamo-and-after-commit.json replays through CDP (Backspace inside a composition (jamo), then in the empty textarea after the commit)
+[32/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 06a-empty-end-empty-range.json replays through CDP (An empty compositionend over an empty range)
+[33/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 06b-empty-end-selection.json replays through CDP (An empty compositionend over a selection)
+[34/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 08a-click-focus-kept.json replays through CDP (A click during a composition with focus kept (pointerdown prevented))
+[35/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 08b-click-focus-moved.json replays through CDP (A click during a composition with focus moved)
+[36/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 08c-blur-to-panel.json replays through CDP (An element blur to a panel input during a composition)
+[37/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 09a-pending-commit.json replays through CDP (A first composition on a pending node, committed)
+[38/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 09b-pending-cancel.json replays through CDP (A first composition on a pending node, cancelled)
+  38 passed (52.3s)
+
+headed timing: 38 tests, wall 0.9 min, 1 worker(s); D:\GIT\vector-studio\artifacts\headed-timing\2026-11-02T21-22-29-472Z-tier2\2026-11-02T21-41-07-630Z-m6b-next-host.json
+     0.4 min  chrome       tests/m6b-next-host/m6b-next-host.spec.ts
+     0.4 min  edge         tests/m6b-next-host/m6b-next-host.spec.ts
+
+=== m6c-next-host: pnpm test:m6c-next-host ===
+$ playwright test --config playwright.m6c-next-host.config.ts
+
+Running 100 tests using 4 workers
+
+[1/100] [chrome] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text draws ink inside each text leaf's cluster bounds
+[2/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:324:1 › M6c-A06 (structure): each agreement fixture keeps its committed line starts
+[3/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:324:1 › M6c-A06 (structure): each agreement fixture keeps its committed line starts
+[4/100] [chrome] › tests\m6c-next-host\m6c-scene.spec.ts:614:1 › M6c-A05 (structure): the scene page overlaps, clips, masks and instances its text
+[5/100] [chrome] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 1
+[6/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: kerning agrees with the port and the browser's paint (section 6.1 split)
+[7/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: kerning agrees with the port and the browser's paint (section 6.1 split)
+[8/100] [chrome] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text-edit draws ink inside each text leaf's cluster bounds
+[9/100] [chrome] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text-gpu draws ink inside each text leaf's cluster bounds
+[10/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: hangul agrees with the port and the browser's paint (section 6.1 split)
+[11/100] [chrome] › tests\m6c-next-host\m6c-next-host.spec.ts:369:1 › M6c-A04: the cluster probe draws a projected cluster through the host options
+[12/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: hangul agrees with the port and the browser's paint (section 6.1 split)
+[13/100] [chrome] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 0.5
+[14/100] [chrome] › tests\m6c-next-host\m6c-next-host.spec.ts:478:1 › M6c-A04 (smoke half): each text fixture loads with the test font and lays out
+[15/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: mixed-sizes agrees with the port and the browser's paint (section 6.1 split)
+[16/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: mixed-sizes agrees with the port and the browser's paint (section 6.1 split)
+[17/100] [chrome] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 2
+[18/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: hangul-in-latin agrees with the port and the browser's paint (section 6.1 split)
+[19/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: hangul-in-latin agrees with the port and the browser's paint (section 6.1 split)
+[20/100] [edge] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text draws ink inside each text leaf's cluster bounds
+[21/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: two-families agrees with the port and the browser's paint (section 6.1 split)
+[22/100] [chrome] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 8
+[23/100] [edge] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text-edit draws ink inside each text leaf's cluster bounds
+[24/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: two-families agrees with the port and the browser's paint (section 6.1 split)
+[25/100] [edge] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text-gpu draws ink inside each text leaf's cluster bounds
+[26/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: spacing-tight agrees with the port and the browser's paint (section 6.1 split)
+[27/100] [chrome] › tests\m6c-next-host\m6c-scene.spec.ts:744:1 › M6c-A05: a generation change rasterizes every drawn key again and never draws an older bitmap
+[28/100] [edge] › tests\m6c-next-host\m6c-next-host.spec.ts:369:1 › M6c-A04: the cluster probe draws a projected cluster through the host options
+[29/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: spacing-tight agrees with the port and the browser's paint (section 6.1 split)
+[30/100] [edge] › tests\m6c-next-host\m6c-next-host.spec.ts:478:1 › M6c-A04 (smoke half): each text fixture loads with the test font and lays out
+[31/100] [edge] › tests\m6c-next-host\m6c-scene.spec.ts:614:1 › M6c-A05 (structure): the scene page overlaps, clips, masks and instances its text
+[32/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: spacing-wide agrees with the port and the browser's paint (section 6.1 split)
+[33/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: spacing-wide agrees with the port and the browser's paint (section 6.1 split)
+[34/100] [edge] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 1
+[35/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: small-12 agrees with the port and the browser's paint (section 6.1 split)
+[36/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: small-12 agrees with the port and the browser's paint (section 6.1 split)
+[37/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:324:1 › M6c-A06 (structure): each agreement fixture keeps its committed line starts
+[38/100] [edge] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 0.5
+[39/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: kerning agrees with the port and the browser's paint (section 6.1 split)
+[40/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: small-9 agrees with the port and the browser's paint (section 6.1 split)
+[41/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: small-9 agrees with the port and the browser's paint (section 6.1 split)
+[42/100] [edge] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 2
+[43/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: wrapped agrees with the port and the browser's paint (section 6.1 split)
+[44/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: wrapped agrees with the port and the browser's paint (section 6.1 split)
+[45/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: hangul agrees with the port and the browser's paint (section 6.1 split)
+[46/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: mixed-sizes agrees with the port and the browser's paint (section 6.1 split)
+[47/100] [edge] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 8
+[48/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: hangul-in-latin agrees with the port and the browser's paint (section 6.1 split)
+[49/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: align-center agrees with the port and the browser's paint (section 6.1 split)
+[50/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: align-center agrees with the port and the browser's paint (section 6.1 split)
+[51/100] [edge] › tests\m6c-next-host\m6c-scene.spec.ts:744:1 › M6c-A05: a generation change rasterizes every drawn key again and never draws an older bitmap
+[52/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: two-families agrees with the port and the browser's paint (section 6.1 split)
+[53/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: align-right agrees with the port and the browser's paint (section 6.1 split)
+[54/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: align-right agrees with the port and the browser's paint (section 6.1 split)
+[55/100] [chrome-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text draws ink inside each text leaf's cluster bounds
+[56/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:474:1 › M6c-A07: a web font that loads after the first draw re-projects and draws its face
+[57/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:474:1 › M6c-A07: a web font that loads after the first draw re-projects and draws its face
+[58/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: spacing-tight agrees with the port and the browser's paint (section 6.1 split)
+[59/100] [chrome-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text-edit draws ink inside each text leaf's cluster bounds
+[60/100] [chrome-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text-gpu draws ink inside each text leaf's cluster bounds
+[61/100] [chrome-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:614:1 › M6c-A05 (structure): the scene page overlaps, clips, masks and instances its text
+[62/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: spacing-wide agrees with the port and the browser's paint (section 6.1 split)
+[63/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:324:1 › M6c-A06 (structure): each agreement fixture keeps its committed line starts
+[64/100] [chrome-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:369:1 › M6c-A04: the cluster probe draws a projected cluster through the host options
+[65/100] [chrome-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 1
+[66/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: kerning agrees with the port and the browser's paint (section 6.1 split)
+[67/100] [chrome-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:478:1 › M6c-A04 (smoke half): each text fixture loads with the test font and lays out
+[68/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: small-12 agrees with the port and the browser's paint (section 6.1 split)
+[69/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: hangul agrees with the port and the browser's paint (section 6.1 split)
+[70/100] [chrome-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 0.5
+[71/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: small-9 agrees with the port and the browser's paint (section 6.1 split)
+[72/100] [edge-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text draws ink inside each text leaf's cluster bounds
+[73/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: wrapped agrees with the port and the browser's paint (section 6.1 split)
+[74/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: mixed-sizes agrees with the port and the browser's paint (section 6.1 split)
+[75/100] [edge-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text-edit draws ink inside each text leaf's cluster bounds
+[76/100] [chrome-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 2
+[77/100] [edge-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text-gpu draws ink inside each text leaf's cluster bounds
+[78/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: hangul-in-latin agrees with the port and the browser's paint (section 6.1 split)
+[79/100] [edge-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:369:1 › M6c-A04: the cluster probe draws a projected cluster through the host options
+[80/100] [edge-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:478:1 › M6c-A04 (smoke half): each text fixture loads with the test font and lays out
+[81/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: two-families agrees with the port and the browser's paint (section 6.1 split)
+[82/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: align-center agrees with the port and the browser's paint (section 6.1 split)
+[83/100] [chrome-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 8
+[84/100] [edge-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:614:1 › M6c-A05 (structure): the scene page overlaps, clips, masks and instances its text
+[85/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: align-right agrees with the port and the browser's paint (section 6.1 split)
+[86/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: spacing-tight agrees with the port and the browser's paint (section 6.1 split)
+[87/100] [edge-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 1
+[88/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:474:1 › M6c-A07: a web font that loads after the first draw re-projects and draws its face
+[89/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: spacing-wide agrees with the port and the browser's paint (section 6.1 split)
+[90/100] [edge-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 0.5
+[91/100] [chrome-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:744:1 › M6c-A05: a generation change rasterizes every drawn key again and never draws an older bitmap
+[92/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: small-12 agrees with the port and the browser's paint (section 6.1 split)
+[93/100] [edge-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 2
+[94/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: small-9 agrees with the port and the browser's paint (section 6.1 split)
+[95/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: wrapped agrees with the port and the browser's paint (section 6.1 split)
+[96/100] [edge-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 8
+[97/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: align-center agrees with the port and the browser's paint (section 6.1 split)
+[98/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: align-right agrees with the port and the browser's paint (section 6.1 split)
+[99/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:474:1 › M6c-A07: a web font that loads after the first draw re-projects and draws its face
+[100/100] [edge-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:744:1 › M6c-A05: a generation change rasterizes every drawn key again and never draws an older bitmap
+  100 passed (5.2m)
+
+headed timing: 100 tests, wall 5.2 min, 4 worker(s); D:\GIT\vector-studio\artifacts\headed-timing\2026-11-02T21-22-29-472Z-tier2\2026-11-02T21-42-01-082Z-m6c-next-host.json
+     2.7 min  chrome-dpr2  tests/m6c-next-host/m6c-agreement.spec.ts
+     2.6 min  edge         tests/m6c-next-host/m6c-agreement.spec.ts
+     2.5 min  chrome       tests/m6c-next-host/m6c-agreement.spec.ts
+     2.5 min  edge-dpr2    tests/m6c-next-host/m6c-agreement.spec.ts
+     1.6 min  chrome-dpr2  tests/m6c-next-host/m6c-scene.spec.ts
+     1.4 min  edge-dpr2    tests/m6c-next-host/m6c-scene.spec.ts
+     1.1 min  edge         tests/m6c-next-host/m6c-scene.spec.ts
+     1.1 min  chrome       tests/m6c-next-host/m6c-scene.spec.ts
+
+=== m6c-typing: pnpm test:m6c-next-host ===
+$ playwright test --config playwright.m6c-next-host.config.ts
+
+Running 8 tests using 1 worker
+
+[1/8] [chrome] › tests\m6c-next-host\m6c-typing.spec.ts:235:1 › M6c-A08: a typed word and a composing syllable draw at the port positions with ink
+[2/8] [chrome] › tests\m6c-next-host\m6c-typing.spec.ts:410:1 › M6c-A08 (input half): the word and the syllable reach the document through real input
+[3/8] [edge] › tests\m6c-next-host\m6c-typing.spec.ts:235:1 › M6c-A08: a typed word and a composing syllable draw at the port positions with ink
+[4/8] [edge] › tests\m6c-next-host\m6c-typing.spec.ts:410:1 › M6c-A08 (input half): the word and the syllable reach the document through real input
+[5/8] [chrome-dpr2] › tests\m6c-next-host\m6c-typing.spec.ts:235:1 › M6c-A08: a typed word and a composing syllable draw at the port positions with ink
+[6/8] [chrome-dpr2] › tests\m6c-next-host\m6c-typing.spec.ts:410:1 › M6c-A08 (input half): the word and the syllable reach the document through real input
+[7/8] [edge-dpr2] › tests\m6c-next-host\m6c-typing.spec.ts:235:1 › M6c-A08: a typed word and a composing syllable draw at the port positions with ink
+[8/8] [edge-dpr2] › tests\m6c-next-host\m6c-typing.spec.ts:410:1 › M6c-A08 (input half): the word and the syllable reach the document through real input
+  8 passed (1.3m)
+
+headed timing: 8 tests, wall 1.3 min, 1 worker(s); D:\GIT\vector-studio\artifacts\headed-timing\2026-11-02T21-22-29-472Z-tier2\2026-11-02T21-47-16-980Z-m6c-next-host.json
+     0.3 min  edge-dpr2    tests/m6c-next-host/m6c-typing.spec.ts
+     0.3 min  chrome-dpr2  tests/m6c-next-host/m6c-typing.spec.ts
+     0.3 min  edge         tests/m6c-next-host/m6c-typing.spec.ts
+     0.3 min  chrome       tests/m6c-next-host/m6c-typing.spec.ts
+
+=== m7-next-host: pnpm test:m7-next-host ===
+$ playwright test --config playwright.m7-next-host.config.ts
+
+Running 4 tests using 2 workers
+
+[1/4] [chrome] › tests\m7-next-host\m7-next-host.spec.ts:309:1 › M7-A11: source edits reach instances; resize, detach, source delete and undo
+[2/4] [edge] › tests\m7-next-host\m7-next-host.spec.ts:309:1 › M7-A11: source edits reach instances; resize, detach, source delete and undo
+[3/4] [chrome] › tests\m7-next-host\m7-next-host.spec.ts:589:1 › M7-A11: a ?persist=1 reload keeps the instances linked
+[4/4] [edge] › tests\m7-next-host\m7-next-host.spec.ts:589:1 › M7-A11: a ?persist=1 reload keeps the instances linked
+  4 passed (19.8s)
+
+headed timing: 4 tests, wall 0.3 min, 4 worker(s); D:\GIT\vector-studio\artifacts\headed-timing\2026-11-02T21-22-29-472Z-tier2\2026-11-02T21-48-34-793Z-m7-next-host.json
+     0.3 min  edge         tests/m7-next-host/m7-next-host.spec.ts
+     0.3 min  chrome       tests/m7-next-host/m7-next-host.spec.ts
+
+=== m8-next-host: pnpm test:m8-next-host ===
+$ playwright test --config playwright.m8-next-host.config.ts
+
+Running 36 tests using 4 workers
+
+[1/36] [chrome-720] › tests\m8-next-host\m8-next-host.spec.ts:139:1 › M8-A14: the M8-N3 budget holds on open and with a page rename open
+[2/36] [chrome-900] › tests\m8-next-host\m8-next-host.spec.ts:139:1 › M8-A14: the M8-N3 budget holds on open and with a page rename open
+[3/36] [edge-900] › tests\m8-next-host\m8-next-host.spec.ts:139:1 › M8-A14: the M8-N3 budget holds on open and with a page rename open
+[4/36] [edge-720] › tests\m8-next-host\m8-next-host.spec.ts:139:1 › M8-A14: the M8-N3 budget holds on open and with a page rename open
+[5/36] [edge-720] › tests\m8-next-host\m8-next-host.spec.ts:151:1 › M8-A14: focusing an Appearance field scrolls the right column, never the window
+[6/36] [chrome-900] › tests\m8-next-host\m8-next-host.spec.ts:151:1 › M8-A14: focusing an Appearance field scrolls the right column, never the window
+[7/36] [chrome-720] › tests\m8-next-host\m8-next-host.spec.ts:151:1 › M8-A14: focusing an Appearance field scrolls the right column, never the window
+[8/36] [edge-900] › tests\m8-next-host\m8-next-host.spec.ts:151:1 › M8-A14: focusing an Appearance field scrolls the right column, never the window
+[9/36] [edge-720] › tests\m8-next-host\m8-next-host.spec.ts:218:1 › M8-A14: layer panel select, toggle, expand, rename, hide and reorder
+[10/36] [chrome-900] › tests\m8-next-host\m8-next-host.spec.ts:218:1 › M8-A14: layer panel select, toggle, expand, rename, hide and reorder
+[11/36] [chrome-720] › tests\m8-next-host\m8-next-host.spec.ts:218:1 › M8-A14: layer panel select, toggle, expand, rename, hide and reorder
+[12/36] [edge-900] › tests\m8-next-host\m8-next-host.spec.ts:218:1 › M8-A14: layer panel select, toggle, expand, rename, hide and reorder
+[13/36] [edge-720] › tests\m8-next-host\m8-next-host.spec.ts:343:1 › M8-A14: add, rename, switch and remove pages
+[14/36] [chrome-900] › tests\m8-next-host\m8-next-host.spec.ts:343:1 › M8-A14: add, rename, switch and remove pages
+[15/36] [chrome-720] › tests\m8-next-host\m8-next-host.spec.ts:343:1 › M8-A14: add, rename, switch and remove pages
+[16/36] [edge-900] › tests\m8-next-host\m8-next-host.spec.ts:343:1 › M8-A14: add, rename, switch and remove pages
+[17/36] [edge-720] › tests\m8-next-host\m8-next-host.spec.ts:408:1 › M8-A14: transform, line arrow, child constraint and an invalid field
+[18/36] [chrome-900] › tests\m8-next-host\m8-next-host.spec.ts:408:1 › M8-A14: transform, line arrow, child constraint and an invalid field
+[19/36] [chrome-720] › tests\m8-next-host\m8-next-host.spec.ts:408:1 › M8-A14: transform, line arrow, child constraint and an invalid field
+[20/36] [edge-900] › tests\m8-next-host\m8-next-host.spec.ts:408:1 › M8-A14: transform, line arrow, child constraint and an invalid field
+[21/36] [edge-720] › tests\m8-next-host\m8-next-host.spec.ts:504:1 › M8-A14: a text style over a text edit selection
+[22/36] [chrome-900] › tests\m8-next-host\m8-next-host.spec.ts:504:1 › M8-A14: a text style over a text edit selection
+[23/36] [chrome-720] › tests\m8-next-host\m8-next-host.spec.ts:504:1 › M8-A14: a text style over a text edit selection
+[24/36] [edge-720] › tests\m8-next-host\m8-next-host.spec.ts:557:1 › M8-A14: Create instance, Reset text in its group and Detach instance
+[25/36] [edge-900] › tests\m8-next-host\m8-next-host.spec.ts:504:1 › M8-A14: a text style over a text edit selection
+[26/36] [chrome-900] › tests\m8-next-host\m8-next-host.spec.ts:557:1 › M8-A14: Create instance, Reset text in its group and Detach instance
+[27/36] [chrome-720] › tests\m8-next-host\m8-next-host.spec.ts:557:1 › M8-A14: Create instance, Reset text in its group and Detach instance
+[28/36] [edge-900] › tests\m8-next-host\m8-next-host.spec.ts:557:1 › M8-A14: Create instance, Reset text in its group and Detach instance
+[29/36] [edge-720] › tests\m8-next-host\m8-next-host.spec.ts:652:1 › M8-A14: Create star and its points from the ext.star panel
+[30/36] [chrome-900] › tests\m8-next-host\m8-next-host.spec.ts:652:1 › M8-A14: Create star and its points from the ext.star panel
+[31/36] [chrome-720] › tests\m8-next-host\m8-next-host.spec.ts:652:1 › M8-A14: Create star and its points from the ext.star panel
+[32/36] [edge-900] › tests\m8-next-host\m8-next-host.spec.ts:652:1 › M8-A14: Create star and its points from the ext.star panel
+[33/36] [edge-720] › tests\m8-next-host\m8-next-host.spec.ts:706:1 › M8-A14: under ?test=1&faults=1 a throwing panel fails alone and the unowned panel is reported
+[34/36] [chrome-900] › tests\m8-next-host\m8-next-host.spec.ts:706:1 › M8-A14: under ?test=1&faults=1 a throwing panel fails alone and the unowned panel is reported
+[35/36] [chrome-720] › tests\m8-next-host\m8-next-host.spec.ts:706:1 › M8-A14: under ?test=1&faults=1 a throwing panel fails alone and the unowned panel is reported
+[36/36] [edge-900] › tests\m8-next-host\m8-next-host.spec.ts:706:1 › M8-A14: under ?test=1&faults=1 a throwing panel fails alone and the unowned panel is reported
+  36 passed (59.8s)
+
+headed timing: 36 tests, wall 1.0 min, 4 worker(s); D:\GIT\vector-studio\artifacts\headed-timing\2026-11-02T21-22-29-472Z-tier2\2026-11-02T21-48-55-767Z-m8-next-host.json
+     0.9 min  edge-900     tests/m8-next-host/m8-next-host.spec.ts
+     0.9 min  chrome-720   tests/m8-next-host/m8-next-host.spec.ts
+     0.9 min  chrome-900   tests/m8-next-host/m8-next-host.spec.ts
+     0.9 min  edge-720     tests/m8-next-host/m8-next-host.spec.ts
+
+stage	status	minutes
+gpu	passed	13.7
+p5-next-host	passed	0.3
+m1-next-host	passed	0.2
+m2-next-host	passed	1.0
+m3-next-host	passed	0.4
+m4-next-host	passed	1.9
+m5-next-host	passed	0.9
+m6a-next-host	passed	0.3
+m6b-next-host	passed	0.9
+m6c-next-host	passed	5.3
+m6c-typing	passed	1.3
+m7-next-host	passed	0.3
+m8-next-host	passed	1.0
+total	passed	27.4
+timing: D:\GIT\vector-studio\artifacts\headed-timing\2026-11-02T21-22-29-472Z-tier2
+exit 0
