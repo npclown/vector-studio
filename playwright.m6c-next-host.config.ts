@@ -86,13 +86,25 @@ const smoke: Project[] = [
   },
 ];
 
+// m6c-typing.spec.ts composes a syllable through CDP IME calls, and a composition ends when the
+// window loses focus: beside other headed windows (their new pages take the focus) it can commit
+// early (main PC 2026-11-02, 4 workers: "ab cd vex하한"). VS_M6C_PART splits the suite:
+// `rest` leaves the typing spec out and runs in parallel, `typing` runs only the typing spec on
+// one worker; `pnpm test:headed` runs both, in that order. Unset, the whole suite runs, and on
+// one worker, because it includes the typing spec.
+const part = process.env.VS_M6C_PART ?? '';
+if (part !== '' && part !== 'rest' && part !== 'typing')
+  throw new Error(`VS_M6C_PART must be rest or typing, got ${JSON.stringify(part)}`);
+const typingSpec = 'm6c-typing.spec.ts';
+
 export default defineConfig({
   testDir: './tests/m6c-next-host',
   // M6c-U5: the observation spec runs under playwright.m6c-observe.config.ts only.
-  testIgnore: 'm6c-observe.spec.ts',
+  testIgnore: part === 'rest' ? ['m6c-observe.spec.ts', typingSpec] : 'm6c-observe.spec.ts',
+  ...(part === 'typing' ? { testMatch: typingSpec } : {}),
   outputDir: './test-results/m6c-next-host',
   fullyParallel: false,
-  workers: headedWorkers(),
+  workers: headedWorkers({ serial: part !== 'rest' }),
   retries: 0,
   reporter: headedReporter,
   timeout: 180_000,

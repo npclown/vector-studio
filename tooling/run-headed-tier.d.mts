@@ -14,5 +14,8 @@ export declare function parse(argv: readonly string[]): {
   gpuOnly: boolean;
   extra: string[];
 };
-export declare function stages(tier: number, gpuOnly?: boolean): { name: string; script: string }[];
+export declare function stages(
+  tier: number,
+  gpuOnly?: boolean,
+): { name: string; script: string; env?: Record<string, string> }[];
 export declare function stageArgs(stage: { script: string }, extra: readonly string[]): string[];
