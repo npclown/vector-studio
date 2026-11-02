@@ -1,0 +1,1659 @@
+{
+  "files": 40,
+  "a_names": {
+    "V8.GC_SCAVENGER_BACKGROUND_SCAVENGE_PARALLEL": {
+      "count": 64867,
+      "ph": {
+        "X": 64865,
+        "I": 2
+      }
+    },
+    "V8.GC_SCAVENGER_SWEEP_ARRAY_BUFFERS": {
+      "count": 28644,
+      "ph": {
+        "X": 9548,
+        "s": 9548,
+        "f": 9548
+      }
+    },
+    "V8.GC_MINOR_MS_BACKGROUND_SWEEPING": {
+      "count": 28564,
+      "ph": {
+        "X": 9548,
+        "s": 9508,
+        "f": 9508
+      }
+    },
+    "V8.GCPretenuringFeedback": {
+      "count": 23375,
+      "ph": {
+        "I": 23375
+      }
+    },
+    "V8.GC_MC_INCREMENTAL": {
+      "count": 21451,
+      "ph": {
+        "X": 7150,
+        "s": 7150,
+        "f": 7150,
+        "B": 1
+      }
+    },
+    "V8.GC_SCAVENGER_SCAVENGE_PARALLEL": {
+      "count": 13539,
+      "ph": {
+        "X": 13527,
+        "I": 12
+      }
+    },
+    "V8.GC_TIME_TO_SAFEPOINT": {
+      "count": 10467,
+      "ph": {
+        "X": 7207,
+        "I": 3260
+      }
+    },
+    "V8.GC_HEAP_EXTERNAL_PROLOGUE": {
+      "count": 10278,
+      "ph": {
+        "X": 10278
+      }
+    },
+    "V8.GC_HEAP_PROLOGUE": {
+      "count": 10278,
+      "ph": {
+        "X": 9163,
+        "I": 1115
+      }
+    },
+    "V8.GC_HEAP_PROLOGUE_SAFEPOINT": {
+      "count": 10278,
+      "ph": {
+        "X": 6234,
+        "I": 4044
+      }
+    },
+    "V8.GC_HEAP_EPILOGUE_SAFEPOINT": {
+      "count": 10277,
+      "ph": {
+        "X": 10275,
+        "I": 2
+      }
+    },
+    "V8.GC_HEAP_EPILOGUE": {
+      "count": 10277,
+      "ph": {
+        "X": 10277
+      }
+    },
+    "V8.GCTraceGCNVP": {
+      "count": 10277,
+      "ph": {
+        "I": 10277
+      }
+    },
+    "V8.GC_HEAP_DUMP_STATISTICS": {
+      "count": 10277,
+      "ph": {
+        "X": 6715,
+        "I": 3562
+      }
+    },
+    "V8.GC_Heap_Stats": {
+      "count": 10277,
+      "ph": {
+        "I": 10277
+      }
+    },
+    "V8.GC_HEAP_EXTERNAL_EPILOGUE": {
+      "count": 10277,
+      "ph": {
+        "X": 10258,
+        "I": 19
+      }
+    },
+    "MinorGC": {
+      "count": 10170,
+      "ph": {
+        "X": 10170
+      }
+    },
+    "V8.GCScavenger": {
+      "count": 10170,
+      "ph": {
+        "X": 10170
+      }
+    },
+    "V8.GC_SCAVENGER": {
+      "count": 10170,
+      "ph": {
+        "X": 10170
+      }
+    },
+    "V8.GC_SCAVENGER_SCAVENGE": {
+      "count": 10170,
+      "ph": {
+        "X": 10170
+      }
+    },
+    "V8.GC_SCAVENGER_SCAVENGE_WEAK_GLOBAL_HANDLES_IDENTIFY": {
+      "count": 10170,
+      "ph": {
+        "X": 10170
+      }
+    },
+    "V8.GC_SCAVENGER_SCAVENGE_COLLECT_OLD_TO_NEW_PAGES": {
+      "count": 10170,
+      "ph": {
+        "X": 10170
+      }
+    },
+    "V8.GC_SCAVENGER_SCAVENGE_PARALLEL_PHASE": {
+      "count": 10170,
+      "ph": {
+        "X": 10170
+      }
+    },
+    "V8.GC_SCAVENGER_SCAVENGE_ROOTS": {
+      "count": 10170,
+      "ph": {
+        "X": 10170
+      }
+    },
+    "V8.GC_SCAVENGER_SCAVENGE_WEAK_GLOBAL_HANDLES_PROCESS": {
+      "count": 10170,
+      "ph": {
+        "X": 10170
+      }
+    },
+    "V8.GC_SCAVENGER_SCAVENGE_FINALIZE": {
+      "count": 10170,
+      "ph": {
+        "X": 10170
+      }
+    },
+    "V8.GC_SCAVENGER_SCAVENGE_RESTORE_AND_QUARANTINE_PINNED": {
+      "count": 10170,
+      "ph": {
+        "X": 10145,
+        "I": 25
+      }
+    },
+    "V8.GC_SCAVENGER_FREE_REMEMBERED_SET": {
+      "count": 10170,
+      "ph": {
+        "X": 10160,
+        "I": 10
+      }
+    },
+    "V8.GC_SCAVENGER_RESIZE_NEW_SPACE": {
+      "count": 10170,
+      "ph": {
+        "X": 7573,
+        "I": 2597
+      }
+    },
+    "V8.GC_BACKGROUND_YOUNG_ARRAY_BUFFER_SWEEP": {
+      "count": 9548,
+      "ph": {
+        "X": 9548
+      }
+    },
+    "CppGC.MarkTransitiveClosureWithDeadline": {
+      "count": 8313,
+      "ph": {
+        "X": 8312,
+        "B": 1
+      }
+    },
+    "CppGC.MarkTransitiveClosure": {
+      "count": 8313,
+      "ph": {
+        "X": 5218,
+        "I": 3094,
+        "B": 1
+      }
+    },
+    "V8.GC_SCAVENGER_TRACED_HANDLES_RESET_PARALLEL": {
+      "count": 7412,
+      "ph": {
+        "X": 7411,
+        "I": 1
+      }
+    },
+    "V8.GC_SCAVENGER_TRACED_HANDLES_COMPUTE_WEAKNESS_PARALLEL": {
+      "count": 7400,
+      "ph": {
+        "X": 7399,
+        "I": 1
+      }
+    },
+    "CppGC.IncrementalMark": {
+      "count": 7382,
+      "ph": {
+        "X": 7382
+      }
+    },
+    "V8.GCIncrementalMarking": {
+      "count": 7151,
+      "ph": {
+        "X": 7150,
+        "B": 1
+      }
+    },
+    "V8.GC_MC_INCREMENTAL_EMBEDDER_TRACING": {
+      "count": 7151,
+      "ph": {
+        "X": 7151
+      }
+    },
+    "V8.GCPretenuringSummary": {
+      "count": 3508,
+      "ph": {
+        "I": 3508
+      }
+    },
+    "V8.GC_MC_BACKGROUND_SWEEPING": {
+      "count": 3304,
+      "ph": {
+        "X": 1458,
+        "s": 923,
+        "f": 923
+      }
+    },
+    "CppGC.IncrementalSweep": {
+      "count": 3095,
+      "ph": {
+        "X": 3095
+      }
+    },
+    "CppGC.SweepOnAllocation": {
+      "count": 2244,
+      "ph": {
+        "X": 2244
+      }
+    },
+    "V8.GC_MC_BACKGROUND_MARKING": {
+      "count": 2134,
+      "ph": {
+        "X": 2127,
+        "B": 7
+      }
+    },
+    "CppGC.SweepFinalizeSweptPages": {
+      "count": 1999,
+      "ph": {
+        "X": 1958,
+        "I": 41
+      }
+    },
+    "CppGC.ConcurrentMark": {
+      "count": 1453,
+      "ph": {
+        "X": 1453
+      }
+    },
+    "CppGC.SweepFinalizeEmptyPages": {
+      "count": 1367,
+      "ph": {
+        "X": 1342,
+        "I": 25
+      }
+    },
+    "CppGC.AtomicMark": {
+      "count": 1255,
+      "ph": {
+        "X": 1254,
+        "B": 1
+      }
+    },
+    "CppGC.ConcurrentMarkProcessMarkingWorklist": {
+      "count": 1139,
+      "ph": {
+        "X": 1132,
+        "I": 7
+      }
+    },
+    "V8.GC_MC_SWEEP": {
+      "count": 1136,
+      "ph": {
+        "X": 441,
+        "I": 9,
+        "s": 343,
+        "f": 343
+      }
+    },
+    "CppGC.MarkFlushEphemerons": {
+      "count": 1130,
+      "ph": {
+        "X": 527,
+        "I": 603
+      }
+    },
+    "V8.GC_MC_MARK_EMBEDDER_TRACING": {
+      "count": 1040,
+      "ph": {
+        "X": 1039,
+        "B": 1
+      }
+    },
+    "V8.GCReachTransitiveClosureWithEmbedder": {
+      "count": 1028,
+      "ph": {
+        "X": 1027,
+        "B": 1
+      }
+    },
+    "V8.GCMarkTransitiveClosureFixpoint": {
+      "count": 991,
+      "ph": {
+        "X": 990,
+        "B": 1
+      }
+    },
+    "V8.GC_MC_MARK_WEAK_CLOSURE_EPHEMERON_MARKING": {
+      "count": 991,
+      "ph": {
+        "X": 990,
+        "B": 1
+      }
+    },
+    "V8.GC_MC_CLEAR_STRING_TABLE": {
+      "count": 856,
+      "ph": {
+        "X": 856
+      }
+    },
+    "CppGC.MarkProcessMarkingWorklist": {
+      "count": 794,
+      "ph": {
+        "X": 777,
+        "I": 17
+      }
+    },
+    "V8.GCDeoptMarkedAllocationSites": {
+      "count": 767,
+      "ph": {
+        "X": 767
+      }
+    },
+    "CppGC.SweepInLowPriorityTask": {
+      "count": 739,
+      "ph": {
+        "X": 560,
+        "I": 179
+      }
+    },
+    "CppGC.MarkProcessEphemerons": {
+      "count": 709,
+      "ph": {
+        "X": 684,
+        "I": 25
+      }
+    },
+    "V8.GC_BACKGROUND_SAFEPOINT": {
+      "count": 692,
+      "ph": {
+        "X": 692
+      }
+    },
+    "V8.GC_MC_BACKGROUND_EVACUATE_COPY": {
+      "count": 676,
+      "ph": {
+        "X": 676
+      }
+    },
+    "CppGC.MarkProcessBailOutObjects": {
+      "count": 652,
+      "ph": {
+        "X": 646,
+        "I": 6
+      }
+    },
+    "AcquiredForGC": {
+      "count": 590,
+      "ph": {
+        "b": 267,
+        "e": 266,
+        "n": 57
+      }
+    },
+    "V8.GC_MC_BACKGROUND_EVACUATE_UPDATE_POINTERS": {
+      "count": 551,
+      "ph": {
+        "X": 551
+      }
+    },
+    "V8.GC_BACKGROUND_UNPARK": {
+      "count": 516,
+      "ph": {
+        "X": 516
+      }
+    },
+    "V8.GC_MC_INCREMENTAL_START": {
+      "count": 327,
+      "ph": {
+        "X": 109,
+        "s": 109,
+        "f": 109
+      }
+    },
+    "V8.GC_SCAVENGER_BACKGROUND_TRACED_HANDLES_COMPUTE_WEAKNESS_PARALLEL": {
+      "count": 324,
+      "ph": {
+        "X": 324
+      }
+    },
+    "V8.GC_MC_MARK_ROOTS": {
+      "count": 324,
+      "ph": {
+        "X": 324
+      }
+    },
+    "V8.GC_MC_FINISH_SWEEP_ARRAY_BUFFERS": {
+      "count": 321,
+      "ph": {
+        "X": 107,
+        "s": 107,
+        "f": 107
+      }
+    },
+    "V8.GC_MC_SWEEP_START_JOBS": {
+      "count": 321,
+      "ph": {
+        "X": 107,
+        "s": 107,
+        "f": 107
+      }
+    },
+    "V8.GC_MC_COMPLETE_SWEEPING": {
+      "count": 318,
+      "ph": {
+        "X": 106,
+        "s": 106,
+        "f": 106
+      }
+    },
+    "CppGC.MarkProcessWriteBarrierWorklist": {
+      "count": 306,
+      "ph": {
+        "X": 305,
+        "I": 1
+      }
+    },
+    "V8.GC_HEAP_ENSURE_SWEEPING_COMPLETED": {
+      "count": 295,
+      "ph": {
+        "X": 295
+      }
+    },
+    "GlobalMemoryDump.Computation": {
+      "count": 288,
+      "ph": {
+        "X": 235,
+        "I": 53
+      }
+    },
+    "V8.GC_SCAVENGER_COMPLETE_SWEEP_ARRAY_BUFFERS": {
+      "count": 284,
+      "ph": {
+        "X": 284
+      }
+    },
+    "V8.GC_SCAVENGER_BACKGROUND_TRACED_HANDLES_RESET_PARALLEL": {
+      "count": 251,
+      "ph": {
+        "X": 251
+      }
+    },
+    "CppGC.ConcurrentMarkProcessWriteBarrierWorklist": {
+      "count": 230,
+      "ph": {
+        "X": 230
+      }
+    },
+    "V8.GC_MC_MARK_EMBEDDER_PROLOGUE": {
+      "count": 218,
+      "ph": {
+        "X": 218
+      }
+    },
+    "CppGC.MarkVisitRoots": {
+      "count": 217,
+      "ph": {
+        "X": 217
+      }
+    },
+    "CppGC.MarkVisitPersistents": {
+      "count": 217,
+      "ph": {
+        "X": 217
+      }
+    },
+    "CppGC.AtomicWeak": {
+      "count": 214,
+      "ph": {
+        "X": 214
+      }
+    },
+    "V8.GC_MC_EVACUATE": {
+      "count": 214,
+      "ph": {
+        "X": 214
+      }
+    },
+    "CppGC.AtomicSweep": {
+      "count": 214,
+      "ph": {
+        "X": 214
+      }
+    },
+    "V8.GCUpdateAllocationLimits": {
+      "count": 213,
+      "ph": {
+        "I": 213
+      }
+    },
+    "V8.GCShouldWaitForTask": {
+      "count": 121,
+      "ph": {
+        "I": 121
+      }
+    },
+    "V8.GCIncrementalMarkingStart": {
+      "count": 109,
+      "ph": {
+        "X": 109
+      }
+    },
+    "V8.GC_MC_INCREMENTAL_EXTERNAL_PROLOGUE": {
+      "count": 109,
+      "ph": {
+        "X": 109
+      }
+    },
+    "CppGC.MarkIncrementalStart": {
+      "count": 109,
+      "ph": {
+        "X": 109
+      }
+    },
+    "V8.GC_MC_INCREMENTAL_EXTERNAL_EPILOGUE": {
+      "count": 109,
+      "ph": {
+        "X": 109
+      }
+    },
+    "MajorGC": {
+      "count": 108,
+      "ph": {
+        "X": 107,
+        "B": 1
+      }
+    },
+    "V8.GCFinalizeMC": {
+      "count": 108,
+      "ph": {
+        "X": 107,
+        "B": 1
+      }
+    },
+    "V8.GC_MARK_COMPACTOR": {
+      "count": 108,
+      "ph": {
+        "X": 107,
+        "B": 1
+      }
+    },
+    "V8.GC_MC_PROLOGUE": {
+      "count": 108,
+      "ph": {
+        "X": 108
+      }
+    },
+    "V8.GC_MC_MARK": {
+      "count": 108,
+      "ph": {
+        "X": 107,
+        "B": 1
+      }
+    },
+    "V8.GC_MC_MARK_FINISH_INCREMENTAL": {
+      "count": 108,
+      "ph": {
+        "X": 108
+      }
+    },
+    "CppGC.MarkAtomicPrologue": {
+      "count": 108,
+      "ph": {
+        "X": 108
+      }
+    },
+    "V8.GC_MC_MARK_CLIENT_HEAPS": {
+      "count": 108,
+      "ph": {
+        "X": 101,
+        "I": 7
+      }
+    },
+    "V8.GC_MC_MARK_RETAIN_MAPS": {
+      "count": 108,
+      "ph": {
+        "X": 108
+      }
+    },
+    "V8.GC_MC_MARK_FULL_CLOSURE_PARALLEL": {
+      "count": 108,
+      "ph": {
+        "X": 107,
+        "B": 1
+      }
+    },
+    "V8.GC_CONSERVATIVE_STACK_SCANNING": {
+      "count": 107,
+      "ph": {
+        "X": 102,
+        "I": 5
+      }
+    },
+    "V8.GC_MC_MARK_FULL_CLOSURE_SERIAL": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "CppGC.MarkVisitCrossThreadPersistents": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_CLEAR": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_CLEAR_JOIN_JOB": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_CLEAR_WEAK_COLLECTIONS": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_CLEAR_SWEEP_WASM_CODE_POINTER_TABLE": {
+      "count": 107,
+      "ph": {
+        "X": 102,
+        "I": 5
+      }
+    },
+    "V8.GC_MC_CLEAR_MAPS": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_CLEAR_WEAK_LISTS": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_CLEAR_JS_WEAK_REFERENCES": {
+      "count": 107,
+      "ph": {
+        "X": 104,
+        "I": 3
+      }
+    },
+    "V8.GC_MC_CLEAR_FLUSHED_JS_FUNCTIONS": {
+      "count": 107,
+      "ph": {
+        "X": 97,
+        "I": 10
+      }
+    },
+    "V8.GC_MC_CLEAR_SWEEP_JS_DISPATCH_TABLE": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_CLEAR_WEAK_GLOBAL_HANDLES": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_CLEAR_EXTERNAL_STRING_TABLE": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_CLEAR_SWEEP_EXTERNAL_POINTER_TABLE": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_CLEAR_FLUSHABLE_BYTECODE": {
+      "count": 107,
+      "ph": {
+        "X": 103,
+        "I": 4
+      }
+    },
+    "V8.GC_MC_CLEAR_SWEEP_TRUSTED_POINTER_TABLE": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_CLEAR_WEAK_REFERENCES_NON_TRIVIAL": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_CLEAR_WEAK_REFERENCES_TRUSTED": {
+      "count": 107,
+      "ph": {
+        "X": 98,
+        "I": 9
+      }
+    },
+    "V8.GC_MC_CLEAR_WEAK_REFERENCES_TRIVIAL": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "CppGC.MarkAtomicEpilogue": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "CppGC.WeakContainerCallbacksProcessing": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "CppGC.ConcurrentWeakCallback": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "CppGC.CustomCallbacksProcessing": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_EVACUATE_PROLOGUE": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_EVACUATE_COPY": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_EVACUATE_COPY_PARALLEL": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_EVACUATE_UPDATE_POINTERS": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_EVACUATE_UPDATE_POINTERS_TO_NEW_ROOTS": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_EVACUATE_UPDATE_POINTERS_CLIENT_HEAPS": {
+      "count": 107,
+      "ph": {
+        "X": 104,
+        "I": 3
+      }
+    },
+    "V8.GC_MC_EVACUATE_UPDATE_POINTERS_SLOTS_MAIN": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_EVACUATE_UPDATE_POINTERS_PARALLEL": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_EVACUATE_UPDATE_POINTERS_WEAK": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_EVACUATE_UPDATE_POINTERS_POINTER_TABLES": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_EVACUATE_CLEAN_UP": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_EVACUATE_EPILOGUE": {
+      "count": 107,
+      "ph": {
+        "X": 104,
+        "I": 3
+      }
+    },
+    "V8.GC_MC_SWEEP_NEW_LO": {
+      "count": 107,
+      "ph": {
+        "I": 5,
+        "X": 102
+      }
+    },
+    "V8.GC_MC_EVACUATE_REBALANCE": {
+      "count": 107,
+      "ph": {
+        "X": 104,
+        "I": 3
+      }
+    },
+    "V8.GC_MC_FINISH": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_BACKGROUND_FULL_ARRAY_BUFFER_SWEEP": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_MC_EPILOGUE": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GCEvaluateOldSpaceLocalPretenuring": {
+      "count": 107,
+      "ph": {
+        "I": 107
+      }
+    },
+    "V8.GC_HEAP_EXTERNAL_WEAK_GLOBAL_HANDLES": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_HEAP_EMBEDDER_TRACING_EPILOGUE": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "CppGC.SweepInvokePreFinalizers": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "CppGC.ConcurrentSweep": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GCMarkCompactorSummary": {
+      "count": 107,
+      "ph": {
+        "I": 107
+      }
+    },
+    "V8.GCMarkCompactorMarkingSummary": {
+      "count": 107,
+      "ph": {
+        "I": 107
+      }
+    },
+    "V8.GCSpeedSummary": {
+      "count": 107,
+      "ph": {
+        "I": 107
+      }
+    },
+    "V8.GCPhantomHandleProcessingCallback": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GC_HEAP_EXTERNAL_SECOND_PASS_CALLBACKS": {
+      "count": 107,
+      "ph": {
+        "X": 107
+      }
+    },
+    "V8.GCTryInitializeTaskTimeout": {
+      "count": 99,
+      "ph": {
+        "I": 99
+      }
+    },
+    "V8.GCHandleGCRequest": {
+      "count": 97,
+      "ph": {
+        "X": 97
+      }
+    },
+    "CppGC.MarkVisitStack": {
+      "count": 97,
+      "ph": {
+        "X": 97
+      }
+    },
+    "CppGC.SweepInTask": {
+      "count": 93,
+      "ph": {
+        "X": 93
+      }
+    },
+    "CppGC.MarkOnAllocation": {
+      "count": 91,
+      "ph": {
+        "X": 91
+      }
+    },
+    "V8.GC_MINOR_MS_SWEEP": {
+      "count": 78,
+      "ph": {
+        "X": 26,
+        "s": 26,
+        "f": 26
+      }
+    },
+    "CppGC.MarkProcessRetraceWorklist": {
+      "count": 66,
+      "ph": {
+        "X": 66
+      }
+    },
+    "GlobalMemoryDump": {
+      "count": 64,
+      "ph": {
+        "b": 32,
+        "e": 32
+      }
+    },
+    "CppGC.MarkVisitNotFullyConstructedObjects": {
+      "count": 42,
+      "ph": {
+        "X": 42
+      }
+    },
+    "V8.GC_MC_COMPLETE_SWEEP_ARRAY_BUFFERS": {
+      "count": 39,
+      "ph": {
+        "X": 39
+      }
+    },
+    "V8.GC_MC_MARK_WEAK_CLOSURE_EPHEMERON_LINEAR": {
+      "count": 37,
+      "ph": {
+        "X": 37
+      }
+    },
+    "V8.GCEnsureMinimumRemainingAllocationLimit": {
+      "count": 29,
+      "ph": {
+        "I": 29
+      }
+    },
+    "CppGC.ConcurrentMarkProcessEphemeronWorklist": {
+      "count": 29,
+      "ph": {
+        "X": 29
+      }
+    },
+    "V8.GC_YOUNG_ARRAY_BUFFER_SWEEP": {
+      "count": 26,
+      "ph": {
+        "X": 26
+      }
+    },
+    "CppGC.SweepFinish": {
+      "count": 19,
+      "ph": {
+        "X": 19
+      }
+    },
+    "CppGC.MarkProcessNotFullyconstructedWorklist": {
+      "count": 4,
+      "ph": {
+        "X": 4
+      }
+    }
+  },
+  "b_memoryDumps": {
+    "events": 0,
+    "filesWithDumps": 0,
+    "allocators": {},
+    "v8PeakLikeAttributes": {}
+  },
+  "c_cppgcSizeArgs": {},
+  "c_otherGcSizeArgs": {
+    "MajorGC": [
+      "usedHeapSizeAfter",
+      "usedHeapSizeBefore"
+    ],
+    "MinorGC": [
+      "usedHeapSizeAfter",
+      "usedHeapSizeBefore"
+    ],
+    "V8.GCEvaluateOldSpaceLocalPretenuring": [
+      "value.size_of_objects_after_gc",
+      "value.size_of_objects_before_gc"
+    ]
+  },
+  "c_stringifiedSizeArgs": {
+    "V8.GCTraceGCNVP args.value": [
+      "allocated",
+      "allocation_throughput",
+      "average_survival_ratio",
+      "background.evacuate.copy",
+      "background.evacuate.update_pointers",
+      "background.mark",
+      "background.scavenge.parallel",
+      "background.sweep",
+      "clear",
+      "clear.dependent_code",
+      "clear.external_string_table",
+      "clear.join_filter_job",
+      "clear.join_job",
+      "clear.js_weak_references",
+      "clear.maps",
+      "clear.slots_buffer",
+      "clear.string_forwarding_table",
+      "clear.weak_collections",
+      "clear.weak_global_handles",
+      "clear.weak_lists",
+      "clear.weak_references_non_trivial",
+      "clear.weak_references_trivial",
+      "collector_reason",
+      "compaction_speed",
+      "complete.sweep_array_buffers",
+      "complete.sweeping",
+      "conservative_stack_scanning",
+      "during_sweeping",
+      "end_global_consumed_size",
+      "end_holes_size",
+      "end_memory_size",
+      "end_object_size",
+      "end_old_gen_consumed_size",
+      "epilogue",
+      "evacuate",
+      "evacuate.candidates",
+      "evacuate.clean_up",
+      "evacuate.copy",
+      "evacuate.epilogue",
+      "evacuate.pin_pages",
+      "evacuate.prologue",
+      "evacuate.rebalance",
+      "evacuate.update_pointers",
+      "evacuate.update_pointers.slots.main",
+      "evacuate.update_pointers.to_new_roots",
+      "evacuate.update_pointers.weak",
+      "finish",
+      "finish.sweep_array_buffers",
+      "gc",
+      "global_allocation_limit",
+      "heap.embedder_tracing_epilogue",
+      "heap.epilogue",
+      "heap.external.epilogue",
+      "heap.external.prologue",
+      "heap.external.weak_global_handles",
+      "heap.external_weak_global_handles",
+      "heap.prologue",
+      "incremental",
+      "incremental.embedder_tracing",
+      "incremental.finalize.external.epilogue",
+      "incremental.finalize.external.prologue",
+      "incremental.layout_change",
+      "incremental.steps_count",
+      "incremental.steps_took",
+      "incremental.sweep_array_buffers",
+      "incremental.sweeping",
+      "incremental_longest_step",
+      "incremental_marking_throughput",
+      "incremental_steps_count",
+      "incremental_walltime_duration",
+      "incremental_wrapper_tracing_longest_step",
+      "is_incremental",
+      "mark",
+      "mark.embedder_prologue",
+      "mark.embedder_tracing",
+      "mark.ephemeron.linear",
+      "mark.ephemeron.marking",
+      "mark.finish_incremental",
+      "mark.full_closure",
+      "mark.full_closure_parallel",
+      "mark.js_global_proxies",
+      "mark.roots",
+      "mutator",
+      "new_space_allocation_throughput",
+      "new_space_capacity",
+      "new_space_size",
+      "new_space_survive_rate",
+      "new_space_survived",
+      "nodes_copied_in_new",
+      "nodes_died_in_new",
+      "nodes_promoted",
+      "old_gen_allocation_limit",
+      "pause",
+      "pool_local_chunks",
+      "pool_shared_chunks",
+      "pool_total_chunks",
+      "prologue",
+      "promoted",
+      "promotion_rate",
+      "promotion_ratio",
+      "quarantined_pages",
+      "quarantined_size",
+      "reason",
+      "reduce_memory",
+      "scavenge",
+      "scavenge.free_remembered_set",
+      "scavenge.parallel",
+      "scavenge.pin_objects_conservative",
+      "scavenge.pin_objects_precise",
+      "scavenge.resize_new_space",
+      "scavenge.restore_pinned",
+      "scavenge.roots",
+      "scavenge.sweep_array_buffers",
+      "scavenge.weak",
+      "scavenge.weak_global_handles.identify",
+      "scavenge.weak_global_handles.process",
+      "scavenge_throughput",
+      "stack",
+      "start_global_consumed_size",
+      "start_holes_size",
+      "start_memory_size",
+      "start_object_size",
+      "start_old_gen_consumed_size",
+      "sweep",
+      "sweep.code",
+      "sweep.map",
+      "sweep.new",
+      "sweep.new_lo",
+      "sweep.old",
+      "sweep.start_jobs",
+      "time_to_safepoint",
+      "weakness_handling"
+    ],
+    "V8.GC_Heap_Stats args.stats": [
+      "external_memory",
+      "heap_size_limit",
+      "id",
+      "isolate",
+      "malloced_memory",
+      "peak_malloced_memory",
+      "spaces",
+      "spaces[].available_size",
+      "spaces[].name",
+      "spaces[].physical_size",
+      "spaces[].size",
+      "spaces[].used_size",
+      "time_ms",
+      "total_available_size",
+      "total_heap_size",
+      "total_heap_size_executable",
+      "total_physical_size",
+      "used_heap_size"
+    ]
+  },
+  "c_mainThreadHeapStatsMaxima": {
+    "chrome-dpr1-v2--e26-mixed-view-edit-10k_v2--r1--memory.json": {
+      "max": 26403704,
+      "samples": 326,
+      "maxMalloced": 10820184,
+      "maxPhysical": 269107200
+    },
+    "chrome-dpr1-v2--e26-mixed-view-edit-10k_v2--r2--memory.json": {
+      "max": 22728108,
+      "samples": 324,
+      "maxMalloced": 5484536,
+      "maxPhysical": 271519744
+    },
+    "chrome-dpr1-v2--e26-mixed-view-edit-10k_v2--r3--memory.json": {
+      "max": 26188424,
+      "samples": 324,
+      "maxMalloced": 7849612,
+      "maxPhysical": 272863232
+    },
+    "chrome-dpr1-v2--e26-mixed-view-edit-10k_v2--r4--memory.json": {
+      "max": 22834924,
+      "samples": 327,
+      "maxMalloced": 6473716,
+      "maxPhysical": 185335808
+    },
+    "chrome-dpr1-v2--e26-mixed-view-edit-10k_v2--r5--memory.json": {
+      "max": 23903740,
+      "samples": 324,
+      "maxMalloced": 11457428,
+      "maxPhysical": 272289792
+    },
+    "chrome-dpr1-v2--e26-simple-stress-10k_v2--r1--memory.json": {
+      "max": 7105132,
+      "samples": 183,
+      "maxMalloced": 2618036,
+      "maxPhysical": 141090816
+    },
+    "chrome-dpr1-v2--e26-simple-stress-10k_v2--r2--memory.json": {
+      "max": 7129704,
+      "samples": 183,
+      "maxMalloced": 2814640,
+      "maxPhysical": 140922880
+    },
+    "chrome-dpr1-v2--e26-simple-stress-10k_v2--r3--memory.json": {
+      "max": 7137900,
+      "samples": 183,
+      "maxMalloced": 3212980,
+      "maxPhysical": 141185024
+    },
+    "chrome-dpr1-v2--e26-simple-stress-10k_v2--r4--memory.json": {
+      "max": 7148136,
+      "samples": 183,
+      "maxMalloced": 2749104,
+      "maxPhysical": 141185024
+    },
+    "chrome-dpr1-v2--e26-simple-stress-10k_v2--r5--memory.json": {
+      "max": 7119468,
+      "samples": 183,
+      "maxMalloced": 2781872,
+      "maxPhysical": 140922880
+    },
+    "chrome-dpr2-v2--e26-mixed-view-edit-10k_v2--r1--memory.json": {
+      "max": 26380720,
+      "samples": 335,
+      "maxMalloced": 14640816,
+      "maxPhysical": 256409600
+    },
+    "chrome-dpr2-v2--e26-mixed-view-edit-10k_v2--r2--memory.json": {
+      "max": 27051264,
+      "samples": 336,
+      "maxMalloced": 4969608,
+      "maxPhysical": 256073728
+    },
+    "chrome-dpr2-v2--e26-mixed-view-edit-10k_v2--r3--memory.json": {
+      "max": 25532848,
+      "samples": 336,
+      "maxMalloced": 4272212,
+      "maxPhysical": 258269184
+    },
+    "chrome-dpr2-v2--e26-mixed-view-edit-10k_v2--r4--memory.json": {
+      "max": 25652232,
+      "samples": 335,
+      "maxMalloced": 11814632,
+      "maxPhysical": 253771776
+    },
+    "chrome-dpr2-v2--e26-mixed-view-edit-10k_v2--r5--memory.json": {
+      "max": 23399040,
+      "samples": 335,
+      "maxMalloced": 5110276,
+      "maxPhysical": 268185600
+    },
+    "chrome-dpr2-v2--e26-simple-stress-10k_v2--r1--memory.json": {
+      "max": 7086700,
+      "samples": 183,
+      "maxMalloced": 2781872,
+      "maxPhysical": 141185024
+    },
+    "chrome-dpr2-v2--e26-simple-stress-10k_v2--r2--memory.json": {
+      "max": 7096936,
+      "samples": 183,
+      "maxMalloced": 4435028,
+      "maxPhysical": 140566528
+    },
+    "chrome-dpr2-v2--e26-simple-stress-10k_v2--r3--memory.json": {
+      "max": 7086700,
+      "samples": 183,
+      "maxMalloced": 1480816,
+      "maxPhysical": 142004224
+    },
+    "chrome-dpr2-v2--e26-simple-stress-10k_v2--r4--memory.json": {
+      "max": 7096936,
+      "samples": 183,
+      "maxMalloced": 2585268,
+      "maxPhysical": 140828672
+    },
+    "chrome-dpr2-v2--e26-simple-stress-10k_v2--r5--memory.json": {
+      "max": 7096936,
+      "samples": 183,
+      "maxMalloced": 1673864,
+      "maxPhysical": 142004224
+    },
+    "edge-dpr1-v2--e26-mixed-view-edit-10k_v2--r1--memory.json": {
+      "max": 26040932,
+      "samples": 326,
+      "maxMalloced": 9776060,
+      "maxPhysical": 271675392
+    },
+    "edge-dpr1-v2--e26-mixed-view-edit-10k_v2--r2--memory.json": {
+      "max": 23537112,
+      "samples": 328,
+      "maxMalloced": 5446440,
+      "maxPhysical": 270934016
+    },
+    "edge-dpr1-v2--e26-mixed-view-edit-10k_v2--r3--memory.json": {
+      "max": 23027088,
+      "samples": 329,
+      "maxMalloced": 5702248,
+      "maxPhysical": 188932096
+    },
+    "edge-dpr1-v2--e26-mixed-view-edit-10k_v2--r4--memory.json": {
+      "max": 24558308,
+      "samples": 328,
+      "maxMalloced": 10896152,
+      "maxPhysical": 267292672
+    },
+    "edge-dpr1-v2--e26-mixed-view-edit-10k_v2--r5--memory.json": {
+      "max": 23487256,
+      "samples": 329,
+      "maxMalloced": 7265320,
+      "maxPhysical": 273453056
+    },
+    "edge-dpr1-v2--e26-simple-stress-10k_v2--r1--memory.json": {
+      "max": 7107172,
+      "samples": 183,
+      "maxMalloced": 1480816,
+      "maxPhysical": 142790656
+    },
+    "edge-dpr1-v2--e26-simple-stress-10k_v2--r2--memory.json": {
+      "max": 7107172,
+      "samples": 183,
+      "maxMalloced": 2527928,
+      "maxPhysical": 140660736
+    },
+    "edge-dpr1-v2--e26-simple-stress-10k_v2--r3--memory.json": {
+      "max": 7125604,
+      "samples": 183,
+      "maxMalloced": 4435028,
+      "maxPhysical": 141283328
+    },
+    "edge-dpr1-v2--e26-simple-stress-10k_v2--r4--memory.json": {
+      "max": 7111272,
+      "samples": 183,
+      "maxMalloced": 2519732,
+      "maxPhysical": 140922880
+    },
+    "edge-dpr1-v2--e26-simple-stress-10k_v2--r5--memory.json": {
+      "max": 7090800,
+      "samples": 183,
+      "maxMalloced": 2650800,
+      "maxPhysical": 140660736
+    },
+    "edge-dpr2-v2--e26-mixed-view-edit-10k_v2--r1--memory.json": {
+      "max": 25516472,
+      "samples": 333,
+      "maxMalloced": 12342848,
+      "maxPhysical": 289681408
+    },
+    "edge-dpr2-v2--e26-mixed-view-edit-10k_v2--r2--memory.json": {
+      "max": 26268760,
+      "samples": 340,
+      "maxMalloced": 11581128,
+      "maxPhysical": 250994688
+    },
+    "edge-dpr2-v2--e26-mixed-view-edit-10k_v2--r3--memory.json": {
+      "max": 26524152,
+      "samples": 336,
+      "maxMalloced": 7378120,
+      "maxPhysical": 272039936
+    },
+    "edge-dpr2-v2--e26-mixed-view-edit-10k_v2--r4--memory.json": {
+      "max": 26625776,
+      "samples": 335,
+      "maxMalloced": 9944172,
+      "maxPhysical": 277106688
+    },
+    "edge-dpr2-v2--e26-mixed-view-edit-10k_v2--r5--memory.json": {
+      "max": 26672828,
+      "samples": 331,
+      "maxMalloced": 11642316,
+      "maxPhysical": 269864960
+    },
+    "edge-dpr2-v2--e26-simple-stress-10k_v2--r1--memory.json": {
+      "max": 7115368,
+      "samples": 183,
+      "maxMalloced": 4367452,
+      "maxPhysical": 140660736
+    },
+    "edge-dpr2-v2--e26-simple-stress-10k_v2--r2--memory.json": {
+      "max": 7129704,
+      "samples": 183,
+      "maxMalloced": 3137592,
+      "maxPhysical": 142790656
+    },
+    "edge-dpr2-v2--e26-simple-stress-10k_v2--r3--memory.json": {
+      "max": 7125604,
+      "samples": 183,
+      "maxMalloced": 2683568,
+      "maxPhysical": 140828672
+    },
+    "edge-dpr2-v2--e26-simple-stress-10k_v2--r4--memory.json": {
+      "max": 7072368,
+      "samples": 183,
+      "maxMalloced": 2618036,
+      "maxPhysical": 140922880
+    },
+    "edge-dpr2-v2--e26-simple-stress-10k_v2--r5--memory.json": {
+      "max": 7158372,
+      "samples": 183,
+      "maxMalloced": 1415280,
+      "maxPhysical": 142426112
+    }
+  },
+  "d_nonXGcEvents": [
+    {
+      "file": "edge-dpr2-v2--e26-mixed-view-edit-10k_v2--r4--memory.json",
+      "name": "MajorGC",
+      "ph": "B",
+      "args": {
+        "type": "finalize incremental marking via task",
+        "usedHeapSizeBefore": 209134016
+      }
+    }
+  ],
+  "d_pairing": {
+    "chrome-dpr1-v2--e26-simple-stress-10k_v2--r1--memory.json": {
+      "mainThread": "5456:19680",
+      "byNamePh": {
+        "MinorGC ph=X": 182,
+        "V8.GC_Heap_Stats ph=I": 183,
+        "V8.GCIncrementalMarkingStart ph=X": 1,
+        "V8.GC_MC_INCREMENTAL_START ph=X": 1,
+        "V8.GC_MC_INCREMENTAL_START ph=s": 1,
+        "V8.GC_MC_INCREMENTAL_EXTERNAL_PROLOGUE ph=X": 1,
+        "CppGC.IncrementalMark ph=X": 75,
+        "CppGC.MarkIncrementalStart ph=X": 1,
+        "V8.GC_MC_INCREMENTAL_EXTERNAL_EPILOGUE ph=X": 1,
+        "V8.GCIncrementalMarking ph=X": 74,
+        "V8.GC_MC_INCREMENTAL ph=X": 74,
+        "V8.GC_MC_INCREMENTAL_START ph=f": 1,
+        "V8.GC_MC_INCREMENTAL ph=s": 74,
+        "V8.GC_MC_INCREMENTAL_EMBEDDER_TRACING ph=X": 74,
+        "V8.GC_MC_INCREMENTAL ph=f": 74,
+        "CppGC.MarkProcessMarkingWorklist ph=X": 7,
+        "MajorGC ph=X": 1,
+        "V8.GC_MC_MARK_FINISH_INCREMENTAL ph=X": 1,
+        "V8.GC_MC_MARK_WEAK_CLOSURE_EPHEMERON_MARKING ph=X": 4,
+        "V8.GCMarkCompactorMarkingSummary ph=I": 1,
+        "CppGC.IncrementalSweep ph=X": 7
+      },
+      "gcs": 183,
+      "majors": 1,
+      "statsEvents": 183,
+      "statsBeforeFirstGc": 0,
+      "statsPerGc": {
+        "0": 0,
+        "1": 183,
+        "more": 0
+      },
+      "statsInsideSpan": {
+        "inside": 183,
+        "after": 0
+      },
+      "incrementalNames": {
+        "V8.GCIncrementalMarkingStart": 1,
+        "V8.GC_MC_INCREMENTAL_START": 3,
+        "V8.GC_MC_INCREMENTAL_EXTERNAL_PROLOGUE": 1,
+        "CppGC.IncrementalMark": 75,
+        "CppGC.MarkIncrementalStart": 1,
+        "V8.GC_MC_INCREMENTAL_EXTERNAL_EPILOGUE": 1,
+        "V8.GCIncrementalMarking": 74,
+        "V8.GC_MC_INCREMENTAL": 222,
+        "V8.GC_MC_INCREMENTAL_EMBEDDER_TRACING": 74,
+        "CppGC.MarkProcessMarkingWorklist": 7,
+        "V8.GC_MC_MARK_FINISH_INCREMENTAL": 1,
+        "V8.GC_MC_MARK_WEAK_CLOSURE_EPHEMERON_MARKING": 4,
+        "V8.GCMarkCompactorMarkingSummary": 1,
+        "CppGC.IncrementalSweep": 7
+      },
+      "incrementalInsideMajorSpan": 10,
+      "incrementalOutsideMajorSpan": 462,
+      "otherThreadGcs": 0
+    },
+    "edge-dpr1-v2--e26-simple-stress-10k_v2--r1--memory.json": {
+      "mainThread": "30728:10732",
+      "byNamePh": {
+        "MinorGC ph=X": 182,
+        "V8.GC_Heap_Stats ph=I": 183,
+        "V8.GCIncrementalMarkingStart ph=X": 1,
+        "V8.GC_MC_INCREMENTAL_START ph=X": 1,
+        "V8.GC_MC_INCREMENTAL_START ph=s": 1,
+        "V8.GC_MC_INCREMENTAL_EXTERNAL_PROLOGUE ph=X": 1,
+        "CppGC.IncrementalMark ph=X": 73,
+        "CppGC.MarkIncrementalStart ph=X": 1,
+        "V8.GC_MC_INCREMENTAL_EXTERNAL_EPILOGUE ph=X": 1,
+        "V8.GCIncrementalMarking ph=X": 72,
+        "V8.GC_MC_INCREMENTAL ph=X": 72,
+        "V8.GC_MC_INCREMENTAL_START ph=f": 1,
+        "V8.GC_MC_INCREMENTAL ph=s": 72,
+        "V8.GC_MC_INCREMENTAL_EMBEDDER_TRACING ph=X": 72,
+        "V8.GC_MC_INCREMENTAL ph=f": 72,
+        "CppGC.MarkProcessMarkingWorklist ph=X": 5,
+        "MajorGC ph=X": 1,
+        "V8.GC_MC_MARK_FINISH_INCREMENTAL ph=X": 1,
+        "V8.GC_MC_MARK_WEAK_CLOSURE_EPHEMERON_MARKING ph=X": 4,
+        "V8.GCMarkCompactorMarkingSummary ph=I": 1,
+        "CppGC.IncrementalSweep ph=X": 7
+      },
+      "gcs": 183,
+      "majors": 1,
+      "statsEvents": 183,
+      "statsBeforeFirstGc": 0,
+      "statsPerGc": {
+        "0": 0,
+        "1": 183,
+        "more": 0
+      },
+      "statsInsideSpan": {
+        "inside": 183,
+        "after": 0
+      },
+      "incrementalNames": {
+        "V8.GCIncrementalMarkingStart": 1,
+        "V8.GC_MC_INCREMENTAL_START": 3,
+        "V8.GC_MC_INCREMENTAL_EXTERNAL_PROLOGUE": 1,
+        "CppGC.IncrementalMark": 73,
+        "CppGC.MarkIncrementalStart": 1,
+        "V8.GC_MC_INCREMENTAL_EXTERNAL_EPILOGUE": 1,
+        "V8.GCIncrementalMarking": 72,
+        "V8.GC_MC_INCREMENTAL": 216,
+        "V8.GC_MC_INCREMENTAL_EMBEDDER_TRACING": 72,
+        "CppGC.MarkProcessMarkingWorklist": 5,
+        "V8.GC_MC_MARK_FINISH_INCREMENTAL": 1,
+        "V8.GC_MC_MARK_WEAK_CLOSURE_EPHEMERON_MARKING": 4,
+        "V8.GCMarkCompactorMarkingSummary": 1,
+        "CppGC.IncrementalSweep": 7
+      },
+      "incrementalInsideMajorSpan": 9,
+      "incrementalOutsideMajorSpan": 449,
+      "otherThreadGcs": 0
+    }
+  },
+  "e_sizes": {
+    "chrome-dpr1-v2--e26-mixed-view-edit-10k_v2--r1--memory.json": 11604264,
+    "chrome-dpr1-v2--e26-mixed-view-edit-10k_v2--r2--memory.json": 11542203,
+    "chrome-dpr1-v2--e26-mixed-view-edit-10k_v2--r3--memory.json": 11649360,
+    "chrome-dpr1-v2--e26-mixed-view-edit-10k_v2--r4--memory.json": 12341882,
+    "chrome-dpr1-v2--e26-mixed-view-edit-10k_v2--r5--memory.json": 11569104,
+    "chrome-dpr1-v2--e26-simple-stress-10k_v2--r1--memory.json": 9324793,
+    "chrome-dpr1-v2--e26-simple-stress-10k_v2--r2--memory.json": 9324334,
+    "chrome-dpr1-v2--e26-simple-stress-10k_v2--r3--memory.json": 9328026,
+    "chrome-dpr1-v2--e26-simple-stress-10k_v2--r4--memory.json": 9361100,
+    "chrome-dpr1-v2--e26-simple-stress-10k_v2--r5--memory.json": 9343076,
+    "chrome-dpr2-v2--e26-mixed-view-edit-10k_v2--r1--memory.json": 11951988,
+    "chrome-dpr2-v2--e26-mixed-view-edit-10k_v2--r2--memory.json": 11945842,
+    "chrome-dpr2-v2--e26-mixed-view-edit-10k_v2--r3--memory.json": 12127538,
+    "chrome-dpr2-v2--e26-mixed-view-edit-10k_v2--r4--memory.json": 12186962,
+    "chrome-dpr2-v2--e26-mixed-view-edit-10k_v2--r5--memory.json": 11884299,
+    "chrome-dpr2-v2--e26-simple-stress-10k_v2--r1--memory.json": 9275028,
+    "chrome-dpr2-v2--e26-simple-stress-10k_v2--r2--memory.json": 9291478,
+    "chrome-dpr2-v2--e26-simple-stress-10k_v2--r3--memory.json": 9345215,
+    "chrome-dpr2-v2--e26-simple-stress-10k_v2--r4--memory.json": 9341194,
+    "chrome-dpr2-v2--e26-simple-stress-10k_v2--r5--memory.json": 9289471,
+    "edge-dpr1-v2--e26-mixed-view-edit-10k_v2--r1--memory.json": 11609772,
+    "edge-dpr1-v2--e26-mixed-view-edit-10k_v2--r2--memory.json": 11507380,
+    "edge-dpr1-v2--e26-mixed-view-edit-10k_v2--r3--memory.json": 12712251,
+    "edge-dpr1-v2--e26-mixed-view-edit-10k_v2--r4--memory.json": 11487740,
+    "edge-dpr1-v2--e26-mixed-view-edit-10k_v2--r5--memory.json": 11676347,
+    "edge-dpr1-v2--e26-simple-stress-10k_v2--r1--memory.json": 9373179,
+    "edge-dpr1-v2--e26-simple-stress-10k_v2--r2--memory.json": 8857766,
+    "edge-dpr1-v2--e26-simple-stress-10k_v2--r3--memory.json": 8881070,
+    "edge-dpr1-v2--e26-simple-stress-10k_v2--r4--memory.json": 8811614,
+    "edge-dpr1-v2--e26-simple-stress-10k_v2--r5--memory.json": 8883507,
+    "edge-dpr2-v2--e26-mixed-view-edit-10k_v2--r1--memory.json": 11786681,
+    "edge-dpr2-v2--e26-mixed-view-edit-10k_v2--r2--memory.json": 11971660,
+    "edge-dpr2-v2--e26-mixed-view-edit-10k_v2--r3--memory.json": 11828492,
+    "edge-dpr2-v2--e26-mixed-view-edit-10k_v2--r4--memory.json": 12222235,
+    "edge-dpr2-v2--e26-mixed-view-edit-10k_v2--r5--memory.json": 11681271,
+    "edge-dpr2-v2--e26-simple-stress-10k_v2--r1--memory.json": 9360481,
+    "edge-dpr2-v2--e26-simple-stress-10k_v2--r2--memory.json": 8865225,
+    "edge-dpr2-v2--e26-simple-stress-10k_v2--r3--memory.json": 8870973,
+    "edge-dpr2-v2--e26-simple-stress-10k_v2--r4--memory.json": 8843887,
+    "edge-dpr2-v2--e26-simple-stress-10k_v2--r5--memory.json": 8849260
+  }
+}

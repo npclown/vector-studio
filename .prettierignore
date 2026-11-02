@@ -99,7 +99,8 @@ docs/evidence/m6-s0/**/*.json
 docs/evidence/e26/**/*.json
 # Preserve the M9-U2 reference sitting records and result files byte-for-byte.
 docs/evidence/m9/**/*.json
-# Preserve the V20-U3 and PA-U4c main-PC sitting records byte-for-byte.
+# Preserve the V20-U3 and PA-U4c main-PC sitting records and scripts byte-for-byte.
 docs/evidence/viz-v20/**/*.json
 docs/evidence/pa-u4c/**/*.json
+docs/evidence/pa-u4c/**/*.mjs
 docs/benchmarks/results/*_m9_*.json

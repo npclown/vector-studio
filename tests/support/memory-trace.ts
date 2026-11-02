@@ -241,6 +241,11 @@ export type MemoryBlock = {
   exactSumBytes: number;
   /** Every category with a value, exact or not: an observation, never a verdict. */
   observedSumBytes: number;
+  /**
+   * A09-Q4 (a): the exact sum plus M1's floor, the largest committed heap size the trace or the
+   * end reading reports (a size the heap held). Above the bound, the run is FAIL.
+   */
+  floorSumBytes: number;
   verdict: 'PASS' | 'FAIL' | 'UNVERIFIED';
   unverified: string[];
 };
@@ -329,7 +334,13 @@ export function memoryBlock(
   const unverified = entries
     .filter(([, category]) => !exact.some(([, e]) => e === category))
     .map(([id]) => id);
+  // M2's and M7's readings are left out of the floor: M2 may include the WASM memories (contract
+  // 3.2, attribution open), and one floor is enough to read the case.
+  const m1Floor = unverified.includes('M1')
+    ? (largest(trace.maxTotalAfter, end.totalSize) ?? 0)
+    : 0;
+  const floorSumBytes = exactSumBytes + m1Floor;
   const verdict =
-    exactSumBytes > MEMORY_BOUND_BYTES ? 'FAIL' : unverified.length > 0 ? 'UNVERIFIED' : 'PASS';
-  return { categories, exactSumBytes, observedSumBytes, verdict, unverified };
+    floorSumBytes > MEMORY_BOUND_BYTES ? 'FAIL' : unverified.length > 0 ? 'UNVERIFIED' : 'PASS';
+  return { categories, exactSumBytes, observedSumBytes, floorSumBytes, verdict, unverified };
 }
