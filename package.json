@@ -67,6 +67,7 @@
     "e17:snap-model": "node tooling/run-e17-snap-model.mjs",
     "check:e26-u5a": "vitest run --config vitest.e26-u5a.config.ts",
     "check:e26-u5c": "vitest run --config vitest.e26-u5c.config.ts",
+    "check:e30": "vitest run --config vitest.e30.config.ts",
     "observe:m1-a13": "vitest run --config vitest.m1-a13.config.ts",
     "observe:m4-a13": "vitest run --config vitest.m4-a13.config.ts",
     "observe:m7-a10": "vitest run --config vitest.m7-a10.config.ts",
