@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import {
   MEMORY_TEXEL_BYTES,
@@ -43,6 +44,7 @@ function fakeScope() {
     Memory,
     Instance,
     instantiate: (source: unknown, imports?: object) => {
+      if (source === 'bad') return Promise.reject(new TypeError('bad source'));
       const instance = new Instance(source, imports);
       // Bytes resolve to {instance, module}; a module to the Instance itself.
       return Promise.resolve(source === 'module' ? instance : { instance, module: {} });
@@ -109,6 +111,10 @@ describe('PA-U4b GPU ledger (contract 3.3)', () => {
       mipLevelCount: 2,
     });
     expect(ledger.snapshot().gpu.liveBytes - volume).toBe(64 + 8);
+    // A 1d texture has height 1 whatever its size says.
+    const line = ledger.snapshot().gpu.liveBytes;
+    device.createTexture!({ size: [16, 9], format: 'rgba8unorm', dimension: '1d' });
+    expect(ledger.snapshot().gpu.liveBytes - line).toBe(16 * 4);
     // An odd size rounds down per mip, never below 1.
     const odd = ledger.snapshot().gpu.liveBytes;
     device.createTexture!({ size: [5, 1], format: 'r8unorm', mipLevelCount: 3 });
@@ -185,18 +191,32 @@ describe('PA-U4b canvas, WASM and IDB ledgers (contract 3.4, 3.5)', () => {
       bytes: (2 * 3 + 5) * 65536,
       instances: 4,
     });
+    // The wrapped constructors keep `instanceof`, and an Instance can import its memory.
+    expect(imported instanceof (wa.Memory as abstract new () => unknown)).toBe(true);
+    const shared = new (wa.Memory as new (pages: number) => { buffer: { byteLength: number } })(1);
+    const constructed = new (wa.Instance as new (...args: unknown[]) => object)('module', {
+      env: { memory: shared },
+    });
+    expect(constructed instanceof (wa.Instance as abstract new () => unknown)).toBe(true);
+    expect(ledger.snapshot().wasm.memories).toBe(5);
+    expect(ledger.snapshot().wasm.bytes).toBe((2 * 3 + 5 + 1) * 65536);
+    // A rejected instantiate still rejects.
+    await expect(instantiate('bad')).rejects.toThrow('bad source');
     // Memory only grows: a later growth is read at the snapshot.
     imported.buffer.byteLength = 7 * 65536;
-    expect(ledger.snapshot().wasm.bytes).toBe((2 * 3 + 7) * 65536);
+    expect(ledger.snapshot().wasm.bytes).toBe((2 * 3 + 7 + 1) * 65536);
   });
 
-  it('holds pending string puts until complete, error or abort', () => {
+  it('holds pending string puts until complete or abort, not a request error', () => {
     const { ledger, store } = fakeScope();
-    for (const type of ['complete', 'error', 'abort']) {
+    for (const type of ['complete', 'abort']) {
       const transaction = new FakeTransaction();
       const put = store(transaction);
       put('abcd');
       put('ef');
+      expect(ledger.snapshot().idb.liveBytes, type).toBe(12);
+      // A request error bubbles to the transaction, which may go on: the bytes stay pending.
+      transaction.dispatchEvent(new Event('error'));
       expect(ledger.snapshot().idb.liveBytes, type).toBe(12);
       transaction.dispatchEvent(new Event(type));
       transaction.dispatchEvent(new Event(type));
@@ -204,10 +224,35 @@ describe('PA-U4b canvas, WASM and IDB ledgers (contract 3.4, 3.5)', () => {
     }
     const idb = ledger.snapshot().idb;
     expect(idb.peakBytes).toBe(12);
-    expect(idb.puts).toBe(6);
+    expect(idb.puts).toBe(4);
     expect(idb.nonString).toBe(0);
     store(new FakeTransaction())({ text: 'x' });
     expect(ledger.snapshot().idb.nonString).toBe(1);
+  });
+
+  it('settles interleaved transactions separately', () => {
+    const { ledger, store } = fakeScope();
+    const first = new FakeTransaction();
+    const second = new FakeTransaction();
+    store(first)('aa');
+    store(second)('bbbb');
+    store(first)('c');
+    expect(ledger.snapshot().idb.liveBytes).toBe(14);
+    second.dispatchEvent(new Event('complete'));
+    expect(ledger.snapshot().idb.liveBytes).toBe(6);
+    first.dispatchEvent(new Event('abort'));
+    expect(ledger.snapshot().idb).toMatchObject({ liveBytes: 0, peakBytes: 14 });
+  });
+
+  it('runs from its own source text, as the init script does', () => {
+    // Playwright serializes the function: it must not need anything outside its body.
+    const context: Record<string, unknown> = { WebAssembly, Promise, Proxy, Reflect, Set, WeakMap };
+    runInNewContext(`(${installMemoryLedger.toString()})(undefined)`, context);
+    const ledger = context.__vsMemory as { snapshot(): { wasm: { memories: number } } };
+    expect(ledger.snapshot().wasm.memories).toBe(0);
+    const memory = new (context.WebAssembly as typeof WebAssembly).Memory({ initial: 1 });
+    expect(memory instanceof WebAssembly.Memory).toBe(true);
+    expect(ledger.snapshot().wasm.memories).toBe(1);
   });
 
   it('installs once', () => {
@@ -265,10 +310,41 @@ describe('PA-U4b GC trace (contract 3.1, 3.2)', () => {
     expect(summary.route2WithoutSlack).toBe(1800);
   });
 
-  it('leaves a GC unpaired when the next stats event does not match its used size', () => {
+  it('reads the renderer main thread and never pairs GCs across a gap', () => {
+    const summary = summarizeMemoryTrace([
+      { name: 'thread_name', ph: 'M', pid: 7, tid: 3, args: { name: 'CrRendererMain' } },
+      // A busier thread that is not the page's main thread.
+      gc('MinorGC', 1, 10, 5, 9),
+      gc('MinorGC', 2, 10, 5, 9),
+      gc('MinorGC', 3, 10, 5, 9),
+      gc('MinorGC', 10, 300, 100, 3),
+      heap(11, 100, 1000, 0, 3),
+      { name: 'MajorGC', ph: 'X', pid: 7, tid: 3, ts: 20, args: {} },
+      gc('MinorGC', 30, 700, 500, 3),
+      heap(31, 500, 900, 0, 3),
+      gc('MinorGC', 40, 800, 600, 3),
+    ]);
+    expect(summary.thread).toEqual({ pid: 7, tid: 3 });
+    expect(summary.otherThreads).toBe(1);
+    // Only GC 40 follows a sized GC: 900 + 800 - 500.
+    expect(summary.route2WithoutSlack).toBe(1200);
+  });
+
+  it('pairs a stats event with a slightly larger used size and counts the difference', () => {
     const summary = summarizeMemoryTrace([gc('MinorGC', 1, 10, 5), heap(2, 6, 100, 0)]);
-    expect(summary.unpaired).toBe(1);
-    expect(summary.samples[0]!.totalAfter).toBeNull();
+    expect([summary.unpaired, summary.usedMismatch]).toEqual([0, 1]);
+    expect(summary.samples[0]!.totalAfter).toBe(100);
+    // A GC with no stats event before the next GC is unpaired.
+    const gap = summarizeMemoryTrace([
+      gc('MinorGC', 1, 10, 5),
+      gc('MinorGC', 3, 20, 6),
+      heap(4, 6, 50, 0),
+    ]);
+    expect([gap.unpaired, gap.samples[0]!.totalAfter, gap.samples[1]!.totalAfter]).toEqual([
+      1,
+      null,
+      50,
+    ]);
     expect(summarizeMemoryTrace({ traceEvents: [] }).thread).toBeNull();
   });
 });

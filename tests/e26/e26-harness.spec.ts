@@ -715,7 +715,7 @@ for (const { scenario, variant } of runs) {
       };
       const slug = `${testInfo.project.name}--${scenario.id.replace(/[^a-z0-9-]+/gi, '_')}${
         variant === 'plain' ? '-plain' : ''
-      }--r${repetition}`;
+      }--r${repetition}${memoryVariant ? '--memory' : ''}`;
       test.skip(
         memoryVariant && variant !== 'frame',
         'the memory variant runs the frame runs only',
@@ -829,13 +829,32 @@ for (const { scenario, variant } of runs) {
         if (memoryVariant) {
           // The end of the window (contract section 1): one heap reading, the ledgers, the trace.
           const cdp = await page.context().newCDPSession(page);
-          const heap = (await cdp.send('Runtime.getHeapUsage')) as HeapUsage;
-          await cdp.detach();
+          let heap: HeapUsage;
+          try {
+            heap = await cdp.send('Runtime.getHeapUsage');
+          } finally {
+            await cdp.detach();
+          }
+          const installed = await page.evaluate(
+            () => (globalThis as { __vsMemory?: MemoryLedger }).__vsMemory !== undefined,
+          );
+          expect(installed, 'the memory ledger init script ran').toBe(true);
           const ledger = await page.evaluate(() =>
             (globalThis as { __vsMemory?: MemoryLedger }).__vsMemory!.snapshot(),
           );
           tracing = null;
-          const trace = summarizeMemoryTrace(JSON.parse((await browser.stopTracing()).toString()));
+          const raw = (await browser.stopTracing()).toString();
+          // The raw trace stays beside the records (not a record: a subdirectory), so PA-U4c can
+          // look for the M1 peak counter (memory-infra) and the Oilpan events (M7) in it.
+          const traces = path.join(resultsDirectory, 'memory-traces');
+          mkdirSync(traces, { recursive: true });
+          writeFileSync(path.join(traces, `${slug}.json`), raw);
+          const trace = summarizeMemoryTrace(JSON.parse(raw));
+          if (trace.gcs === 0 || trace.unpaired > 0)
+            testInfo.annotations.push({
+              type: 'memory',
+              description: `GC trace: ${trace.gcs} GCs, ${trace.unpaired} unpaired`,
+            });
           memory = {
             ...memoryBlock(ledger, trace, heap),
             ledger,
@@ -1116,6 +1135,7 @@ const isolationRuns =
 for (let repetition = 1; isolationRuns && repetition <= repetitions; repetition += 1) {
   test(`${E26_ISOLATION.id} r${repetition}`, async ({ page, browser }, testInfo) => {
     test.skip(v2Project(testInfo.project.name), 'a v1 scenario: v1 projects only');
+    test.skip(memoryVariant, 'the memory variant runs the frame runs only');
     if (!smoke)
       expect(dirty, 'a clean working tree, so the recorded commit is what ran').toBe(false);
     const dpr = testInfo.project.use.deviceScaleFactor ?? 1;
@@ -1298,6 +1318,7 @@ const geometryRuns =
 if (geometryRuns) {
   test('m9-ui-geometry', async ({ page }, testInfo) => {
     test.skip(!v2Project(testInfo.project.name), 'the 1600 x 1000 projects only');
+    test.skip(memoryVariant, 'the memory variant runs the frame runs only');
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(String(error)));
     const read = async (query: string) => {

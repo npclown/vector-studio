@@ -248,7 +248,9 @@ export function installMemoryLedger(target?: MemoryLedgerScope): void {
           pending.delete(transaction);
           idb.liveBytes -= held;
         };
-        for (const type of ['complete', 'error', 'abort'])
+        // Not `error`: a request error bubbles to the transaction and, if the product calls
+        // `preventDefault()`, the transaction goes on. A failed transaction always ends in `abort`.
+        for (const type of ['complete', 'abort'])
           transaction.addEventListener(type, settle, { once: true });
       }
       return request;

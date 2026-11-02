@@ -3,13 +3,20 @@
 // `usedHeapSizeBefore` and `usedHeapSizeAfter`; `V8.GC_Heap_Stats` (an instant event after each
 // GC) carries a JSON `stats` string with `isolate`, `total_heap_size`, `used_heap_size` and
 // `external_memory`. A cloud probe on headless Chromium 153 showed each GC's stats event follows
-// it on the same thread with `used_heap_size` equal to its `usedHeapSizeAfter`; the pairing below
-// checks that equality and counts the GCs it could not pair.
+// it on the same thread, before the next GC, with `used_heap_size` equal to its
+// `usedHeapSizeAfter` or slightly above it (bytes allocated between the GC's end and the stats
+// event, 1,508 bytes once in 13 GCs). The pairing takes that stats event and counts the
+// differences (`usedMismatch`); a GC with no stats event before the next GC is unpaired.
 
 export const MEMORY_TRACE_CATEGORIES = [
   'devtools.timeline',
   'v8',
   'disabled-by-default-v8.gc',
+  // Not read here: kept in the raw trace for PA-U4c's search for an M1 peak counter (route 1)
+  // and the Oilpan heap's events (M7, contract 3.6).
+  'disabled-by-default-memory-infra',
+  'cppgc',
+  'disabled-by-default-cppgc',
 ] as const;
 
 type TraceEvent = {
@@ -40,6 +47,8 @@ export type MemoryTraceSummary = {
   minor: number;
   major: number;
   unpaired: number;
+  /** Paired GCs whose stats `used_heap_size` differs from their `usedHeapSizeAfter`. */
+  usedMismatch: number;
   maxUsedBefore: number | null;
   maxTotalAfter: number | null;
   maxExternalAfter: number | null;
@@ -85,8 +94,21 @@ export function summarizeMemoryTrace(trace: unknown): MemoryTraceSummary {
     list.push(event);
     byThread.set(key, list);
   }
+  // The page's main thread is the renderer's `CrRendererMain`; without thread names (a test
+  // trace), the thread with the most GCs.
+  const main = new Set(
+    events
+      .filter(
+        (event) =>
+          event.ph === 'M' &&
+          event.name === 'thread_name' &&
+          (event.args as { name?: unknown } | undefined)?.name === 'CrRendererMain',
+      )
+      .map((event) => `${event.pid}:${event.tid}`),
+  );
   let chosen: { key: string; gcs: number } | null = null;
   for (const [key, list] of byThread) {
+    if (main.size > 0 && !main.has(key)) continue;
     const gcs = list.filter((event) => event.name !== 'V8.GC_Heap_Stats').length;
     if (gcs > 0 && (chosen === null || gcs > chosen.gcs)) chosen = { key, gcs };
   }
@@ -100,6 +122,7 @@ export function summarizeMemoryTrace(trace: unknown): MemoryTraceSummary {
     minor: 0,
     major: 0,
     unpaired: 0,
+    usedMismatch: 0,
     maxUsedBefore: null,
     maxTotalAfter: null,
     maxExternalAfter: null,
@@ -109,7 +132,11 @@ export function summarizeMemoryTrace(trace: unknown): MemoryTraceSummary {
   if (chosen === null) return empty;
   const list = [...byThread.get(chosen.key)!].sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
   const samples: GcSample[] = [];
+  // Route 2 pairs GC k with GC k-1 only: a GC without sizes breaks the chain.
+  const route2: number[] = [];
+  let previous: GcSample | null = null;
   let unpaired = 0;
+  let usedMismatch = 0;
   for (let index = 0; index < list.length; index += 1) {
     const event = list[index]!;
     if (event.name === 'V8.GC_Heap_Stats') continue;
@@ -117,38 +144,36 @@ export function summarizeMemoryTrace(trace: unknown): MemoryTraceSummary {
     const usedAfter = number(event.args?.usedHeapSizeAfter);
     if (usedBefore === null || usedAfter === null) {
       unpaired += 1;
+      previous = null;
       continue;
     }
-    // The stats event of this GC: the next stats event before the next GC, with equal used size.
+    // The stats event of this GC: the first readable stats event before the next GC.
     let stats: ReturnType<typeof heapStats> = null;
     for (let next = index + 1; next < list.length; next += 1) {
       const candidate = list[next]!;
       if (candidate.name !== 'V8.GC_Heap_Stats') break;
-      const parsed = heapStats(candidate);
-      if (parsed !== null && parsed.used === usedAfter) {
-        stats = parsed;
-        break;
-      }
+      stats = heapStats(candidate);
+      if (stats !== null) break;
     }
     if (stats === null) unpaired += 1;
-    samples.push({
+    else if (stats.used !== usedAfter) usedMismatch += 1;
+    const sample: GcSample = {
       kind: event.name as GcSample['kind'],
       ts: event.ts ?? 0,
       usedBefore,
       usedAfter,
       totalAfter: stats?.total ?? null,
       externalAfter: stats?.external ?? null,
-    });
+    };
+    if (previous?.totalAfter != null)
+      route2.push(previous.totalAfter + usedBefore - previous.usedAfter);
+    samples.push(sample);
+    previous = sample;
   }
   const max = (values: (number | null)[]) => {
     const present = values.filter((value): value is number => value !== null);
     return present.length === 0 ? null : Math.max(...present);
   };
-  const route2: (number | null)[] = samples.map((sample, index) => {
-    const previous = samples[index - 1];
-    if (previous === undefined || previous.totalAfter === null) return null;
-    return previous.totalAfter + sample.usedBefore - previous.usedAfter;
-  });
   const [pid, tid] = chosen.key.split(':').map(Number) as [number, number];
   return {
     thread: { pid, tid },
@@ -157,6 +182,7 @@ export function summarizeMemoryTrace(trace: unknown): MemoryTraceSummary {
     minor: samples.filter((sample) => sample.kind === 'MinorGC').length,
     major: samples.filter((sample) => sample.kind === 'MajorGC').length,
     unpaired,
+    usedMismatch,
     maxUsedBefore: max(samples.map((sample) => sample.usedBefore)),
     maxTotalAfter: max(samples.map((sample) => sample.totalAfter)),
     maxExternalAfter: max(samples.map((sample) => sample.externalAfter)),
