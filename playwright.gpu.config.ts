@@ -9,13 +9,25 @@ const webGpuArguments = ['--enable-unsafe-webgpu'];
 // A spec path on the command line does not override testIgnore. See docs/validation.md,
 // "Headed run tiers".
 const includeCorpus = process.env.VS_GPU_CORPUS === '1';
+// The E3 A04 readback spec's named cases take about 10 min per browser in one test. Like the
+// corpus they matter when the kernel or the renderer changes, so they run at tier 3 only
+// (VS_GPU_TIER=3, which `pnpm test:headed --tier 3` and `pnpm test:gpu:full` set); below tier 3
+// the spec checks its non-corpus cases. E3_A04_READBACK_NON_CORPUS_ONLY=0 forces the full check.
+// Set here, the default reaches the workers too, which load this config again.
+if (process.env.VS_GPU_TIER !== '3') process.env.E3_A04_READBACK_NON_CORPUS_ONLY ??= '1';
+const workers = headedWorkers();
 
 export default defineConfig({
   testDir: './tests/gpu',
   testIgnore: includeCorpus ? [] : ['**/viz-v4-a08-corpus.spec.ts'],
   outputDir: './test-results/gpu',
-  fullyParallel: false,
-  workers: headedWorkers(),
+  // With more than one worker, the tests of one file spread over workers too: p1-primitives and
+  // p4-clip-mask take about 10 min per browser each, longer than the rest of a parallel run's
+  // share. No gpu spec shares state between its tests. Most write their evidence under a run root
+  // named by the worker's process id (the corpus under VIZ_V4_RUN_ID, p1 under
+  // P1_EVIDENCE_OUTPUT_DIR when set), so one file's evidence can span several run roots.
+  fullyParallel: workers > 1,
+  workers,
   retries: 0,
   reporter: headedReporter,
   timeout: 30_000,
