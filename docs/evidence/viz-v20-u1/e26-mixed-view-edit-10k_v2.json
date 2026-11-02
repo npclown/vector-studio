@@ -4,7 +4,7 @@
   "document": "m9-v2",
   "steps": "drag",
   "stepCount": 32,
-  "commit": "fb1125393496522d7740fed5317c15eed30a6cdb",
+  "commit": "c84002ed7fec316acd2f100e7586e338f79fb38f",
   "dirty": true,
   "browser": "chromium 153.0.8010.12",
   "renderer": "error",
@@ -46,6 +46,7 @@
       "total": 32
     }
   },
+  "dragMoved": true,
   "pageErrors": [],
   "rawSteps": [
     {

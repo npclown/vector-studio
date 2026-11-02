@@ -109,6 +109,8 @@ for (const counted of COUNTED) {
     const status = page.getByTestId('status');
     await expect(status).toHaveAttribute('data-fixture', 'bench-loaded', { timeout: 120_000 });
     const renderer = await status.getAttribute('data-renderer');
+    // Snapping off for every scenario (the harness turns it off for the drag only); it runs before
+    // the first counted step, so it changes no count.
     await execute(page, [
       { type: 'setViewport', camera },
       { type: 'setSnapping', enabled: false },
@@ -122,6 +124,8 @@ for (const counted of COUNTED) {
     const ready = await step(page, []);
 
     const steps: (Step & { delta: Record<string, number> })[] = [];
+    /** The pressed node before and after the drag, so a missed press cannot pass as no renders. */
+    const dragged: { before: string | null; after: string | null } = { before: null, after: null };
     let previous = ready.renders;
     const record = (result: Step) => {
       steps.push({ ...result, delta: delta(result.renders, previous) });
@@ -145,6 +149,13 @@ for (const counted of COUNTED) {
         return { x: press.x + offset.x / camera.zoom, y: press.y + offset.y / camera.zoom };
       };
       await execute(page, [{ type: 'setSelection', ids: target.ids }]);
+      const pressed = target.ids[0];
+      const nodeJson = () =>
+        page.evaluate(
+          (id) => JSON.stringify(window.__e26Bench!.editor()!.query({ type: 'node', id })),
+          pressed,
+        );
+      dragged.before = await nodeJson();
       record(
         await step(page, [
           {
@@ -171,6 +182,7 @@ for (const counted of COUNTED) {
           },
         ]),
       );
+      dragged.after = await nodeJson();
     }
 
     const ids = [...new Set(steps.flatMap((entry) => Object.keys(entry.delta)))].sort();
@@ -206,6 +218,7 @@ for (const counted of COUNTED) {
       layerRows: configuration.m9.layerRows,
       mountedRows: { ready: ready.mountedRows, max: Math.max(...steps.map((s) => s.mountedRows)) },
       perStep,
+      dragMoved: counted.steps === 'drag' ? dragged.before !== dragged.after : null,
       pageErrors: errors,
       rawSteps: steps.map(({ delta: d, mountedRows }) => ({ delta: d, mountedRows })),
     };
@@ -215,6 +228,8 @@ for (const counted of COUNTED) {
       `${JSON.stringify(result, null, 2)}\n`,
     );
     expect(errors, 'page errors').toEqual([]);
+    if (counted.steps === 'drag')
+      expect(result.dragMoved, 'the drag moved the pressed node').toBe(true);
     expect(ready.mountedRows, 'rows mounted after the toggles').toBeGreaterThan(0);
   });
 }
