@@ -66,6 +66,14 @@ export function stages(tier) {
   ];
 }
 
+/**
+ * The pnpm arguments of one stage. No `--` before the extra arguments: pnpm 11 passes it through
+ * literally, and Playwright ignores everything after a `--`.
+ */
+export function stageArgs(stage, extra) {
+  return ['run', stage.script, ...extra];
+}
+
 function pnpm(args, env) {
   // As in run-viz-v4-gpu.mjs: under pnpm, npm_execpath is pnpm's entry point; elsewhere pnpm is
   // spawned by name, which Windows cannot do without a shell.
@@ -95,7 +103,7 @@ function main() {
   for (const stage of stages(tier)) {
     const stageStarted = Date.now();
     console.log(`\n=== ${stage.name}: pnpm ${stage.script} ===`);
-    const result = pnpm(['run', stage.script, ...(extra.length > 0 ? ['--', ...extra] : [])], {
+    const result = pnpm(stageArgs(stage, extra), {
       ...process.env,
       VS_HEADED_WORKERS: workers,
       VS_HEADED_TIMING_DIR: timingDirectory,

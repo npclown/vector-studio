@@ -65,7 +65,7 @@ export default defineConfig({
   testDir: './tests/m4-next-host',
   outputDir: './test-results/m4-next-host',
   fullyParallel: false,
-  workers: headedWorkers(),
+  workers: headedWorkers({ serial: true }),
   retries: 0,
   reporter: headedReporter,
   timeout: 300_000,

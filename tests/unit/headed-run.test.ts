@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { headedWorkers } from '../../tooling/headed-run.mjs';
-import { NEXT_HOST_SUITES, parse, stages } from '../../tooling/run-headed-tier.mjs';
+import { NEXT_HOST_SUITES, parse, stageArgs, stages } from '../../tooling/run-headed-tier.mjs';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -20,6 +20,10 @@ describe('headedWorkers', () => {
     vi.stubEnv('VS_HEADED_WORKERS', '3');
     expect(headedWorkers({ serial: true })).toBe(1);
   });
+  it('rejects a bad value for a serial suite too', () => {
+    vi.stubEnv('VS_HEADED_WORKERS', 'x');
+    expect(() => headedWorkers({ serial: true })).toThrow(/positive integer/u);
+  });
   it.each(['0', '-1', '2.5', 'x'])('rejects %j', (value) => {
     vi.stubEnv('VS_HEADED_WORKERS', value);
     expect(() => headedWorkers()).toThrow(/positive integer/u);
@@ -37,6 +41,15 @@ describe('run-headed-tier', () => {
     expect(() => parse([])).toThrow(/Usage/u);
     expect(() => parse(['--tier', '1'])).toThrow(/Usage/u);
     expect(() => parse(['--tier', '2', '--workers', '0'])).toThrow(/Usage/u);
+  });
+  it('passes the extra arguments to each stage without a separating --', () => {
+    expect(stageArgs({ script: 'test:gpu' }, ['--project', 'chrome'])).toEqual([
+      'run',
+      'test:gpu',
+      '--project',
+      'chrome',
+    ]);
+    expect(stageArgs({ script: 'test:gpu' }, [])).toEqual(['run', 'test:gpu']);
   });
   it('runs the corpus only at tier 3, first', () => {
     expect(stages(2).map((stage) => stage.script)[0]).toBe('test:gpu');
