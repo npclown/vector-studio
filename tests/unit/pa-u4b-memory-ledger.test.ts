@@ -404,6 +404,21 @@ describe('PA-U4b per-run verdict (contract section 1)', () => {
     expect(large.verdict).toBe('UNVERIFIED');
   });
 
+  it("takes the trace's committed size into the floor, never M1's upper-bound candidates", () => {
+    const exact = memoryBlock(ledger(), trace, end).exactSumBytes;
+    const traced = {
+      ...trace,
+      maxTotalAfter: 1000,
+      route2WithoutSlack: MEMORY_BOUND_BYTES,
+      maxUsedBefore: MEMORY_BOUND_BYTES,
+    };
+    const block = memoryBlock(ledger(), traced, end);
+    expect(block.categories.M1.bytes).toBe(MEMORY_BOUND_BYTES);
+    expect([block.floorSumBytes, block.verdict]).toEqual([exact + 1000, 'UNVERIFIED']);
+    const over = memoryBlock(ledger(), { ...traced, maxTotalAfter: MEMORY_BOUND_BYTES }, end);
+    expect(over.verdict).toBe('FAIL');
+  });
+
   it('is FAIL once the exact categories alone exceed the bound', () => {
     const block = memoryBlock(
       ledger({
