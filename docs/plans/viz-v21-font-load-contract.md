@@ -1,6 +1,6 @@
 # V-21 font-load re-projection contract (pre-alpha PA-U2)
 
-Status: DRAFT 2026-11-02, Full tier. This item changes product behavior in three packages: `packages/text-dom`, `packages/contracts` (an optional port member) and `packages/editor-core`. It changes when the editor learns of a new text layout generation, which cached layouts it drops, and how much of the page it re-projects. It amends M6a-L2, M6a-L3, M6c-P4 and E28's generation-obsolescence rule (section 4.4). It is visualization-track item [V-21](d9-visualization-track.md#status-index) and unit PA-U2 of the [pre-alpha gate plan](pre-alpha-gate-plan.md#4-units-and-order). Once the contract is approved, questions V21-Q1 to V21-Q4 (section 8) are adopted as recommended under the user's standing instruction of 2026-10-24 (추천안 자동 채택, recommended option auto-adopted).
+Status: DRAFT 2026-11-02, Full tier. This item changes product behavior in four packages: `packages/text-dom`, `packages/contracts` (an optional port member), `packages/editor-core` and `packages/renderer-core` (the atlas rule of section 4.4). It changes when the editor learns of a new text layout generation, which cached layouts it drops, and how much of the page it re-projects. It amends M6a-L2, M6a-L3, M6c-P4 and E28's generation-obsolescence rule (section 4.3). It is visualization-track item [V-21](d9-visualization-track.md#status-index) and unit PA-U2 of the [pre-alpha gate plan](pre-alpha-gate-plan.md#4-units-and-order). Once the contract is approved, questions V21-Q1 to V21-Q4 (section 8) are adopted as recommended under the user's standing instruction of 2026-10-24 (추천안 자동 채택, recommended option auto-adopted).
 
 Owners:
 
@@ -81,7 +81,7 @@ These are code facts. Whether they explain the tasks is the hypothesis V21-U1 me
   - It returns the families that the increments after `generation` can affect.
   - It returns null, meaning "all", for a DPR change, an unknown face, or a generation older than the port's log.
   - It is an addition, so `portVersion` stays 0. A port without the member behaves as "all".
-- **Family matching.** A result is affected when any family of its font list, fallbacks and `FONT_LIST_TAIL` included, matches a changed family after unquoting and ASCII case-folding (CSS matches family names ASCII case-insensitively). The families of a foreign `loadingdone` come from `FontFace.family` and are normalized the same way. A changed family that is in `FONT_LIST_TAIL` affects every result, so the cache drops everything.
+- **Family matching.** A result is affected when any family of its font list, fallbacks and `FONT_LIST_TAIL` included, matches a changed family after unquoting (undoing the CSS string escapes `quoteCssString` writes for `"`, `\` and line breaks) and ASCII case-folding (CSS matches family names ASCII case-insensitively). The families of a foreign `loadingdone` come from `FontFace.family` and are normalized the same way. A changed family that is in `FONT_LIST_TAIL` affects every result, so the cache drops everything.
 - **The cache.** `TextLayoutCache` drops only the affected results, at every place it syncs to the port's generation: `notify` and the lazy path in `lookup`. So a keystroke between an increment and its dispatch drops only the affected results, not the whole cache.
   - A kept result keeps its generation, and M6a-L2's "deep-equal results at one generation" still holds per result.
   - When `changedSince` returns null, the cache drops everything, as today.
@@ -91,15 +91,15 @@ These are code facts. Whether they explain the tasks is the hypothesis V21-U1 me
   - Other pages re-project their affected units on their page switch.
   - **An empty change list** (`[]`, for example a registered family that no text names) skips the relayout and the whole-page walk. The `textLayout` session event is still raised once per dispatch, so the host's state stays in step with the port.
 
-### 4.4 The atlas under mixed generations (E28 amendment)
+### 4.3 The atlas under mixed generations (E28 amendment)
 
 - **Today.** E28 treats every generation older than the newest one it sees as obsolete (`packages/renderer-core/src/text-atlas.ts`, `#observeGeneration`; [E28 contract](d9-e28-text-glyph-atlas-contract.md)). It deletes older `empty` and `failed` outcomes and older E28-D3 "already reported" keys, and it evicts older-generation pages first.
 - **Under L2.** Unaffected text stays on screen at an older generation. With that rule, kept text would re-rasterize its whitespace once and report E28-D3 again, which breaks "once per node, reason and layout generation". Its pages would also be the first evicted whenever a frame does not draw them, for example text just panned out of view.
-- **The amendment.** A generation counts as obsolete only when no node of the current scene carries it. Until then, its outcomes, its reported keys and its eviction rank are kept as for the newest generation.
+- **The amendment.** A generation counts as obsolete only when no node of the current scene carries it. The atlas gets that from a count of generations held by the scene's text leaves, kept current as the scene changes (off-screen text included), not from the per-frame requests. The obsolete check runs when the last node of a generation leaves the scene, as well as when a newer generation first appears. Until then, its outcomes, its reported keys and its eviction rank are kept as for the newest generation.
 - **Duplicates.** Text laid out again after the load at the same font list gets new-generation entries beside identical older ones. That costs atlas space only, and it is disclosed.
 - **Test.** V21-U2 adds a renderer unit test with two generations drawn in one scene: no repeated D3 notice, no re-raster of kept text, and older pages not evicted first while drawn.
 
-### 4.3 What a user sees
+### 4.4 What a user sees
 
 - Text waiting for a face keeps its fallback layout until the face settles, then changes once instead of up to three times.
 - A load longer than 3,000 ms dispatches at 3,000 ms and again at its settle.
@@ -160,4 +160,4 @@ V-21 is done when V21-A01 to A05 are met. A05 requires the record, not the targe
   - the bench font's being the fallback's file disclosed;
   - Q3 now holds the 3,000 ms cap, and Q4 reworded;
   - the out-of-scope long tasks named.
-- 2026-11-02: review r2 READY WITH FOLLOW-UPS, all eight applied: the E28 obsolescence amendment (4.4) with a renderer test; how the projector finds affected units; the CSS family-matching rule, tail included; `changedSince` on the cache's lazy path; an empty change list skips the relayout; the hold's reach and when the cap starts; Q3's reason; nits.
+- 2026-11-02: review r2 READY WITH FOLLOW-UPS, all eight applied: the E28 obsolescence amendment (4.3) with a renderer test; how the projector finds affected units; the CSS family-matching rule, tail included; `changedSince` on the cache's lazy path; an empty change list skips the relayout; the hold's reach and when the cap starts; Q3's reason; nits.
