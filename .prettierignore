@@ -101,6 +101,7 @@ docs/evidence/e26/**/*.json
 docs/evidence/m9/**/*.json
 # Preserve the V20-U3 and PA-U4c main-PC sitting records and scripts byte-for-byte.
 docs/evidence/viz-v20/**/*.json
+docs/evidence/viz-v21/**/*.json
 docs/evidence/pa-u4c/**/*.json
 docs/evidence/pa-u4c/**/*.mjs
 docs/benchmarks/results/*_m9_*.json
