@@ -232,8 +232,8 @@ M9 comes "after M1..M8" (MVP plan, section 7). M8 was accepted on 2026-11-01 (#4
 | --- | --- |
 | M9-U1 | Independent review r1 READY WITH FOLLOW-UPS, applied; notes below |
 | M9-U1b | Harness fixes and one product fix found by the U2 laptop pre-run; notes below |
-| M9-U2 | Main-PC sitting at `89393f1` done 2026-11-02 (284 passed); record [u2-89393f1.md](../evidence/m9/u2-89393f1.md); gate G1 next |
-| M9-U3 | Conditional on G1 |
+| M9-U2 | Main-PC sitting at `89393f1` done 2026-11-02 (284 passed); record [u2-89393f1.md](../evidence/m9/u2-89393f1.md) (#452) |
+| M9-U3 | Not run: G1 (a), 2026-11-02 (G1 notes below); diagnostic traces only ([u3a-trace-3fd3be9.md](../evidence/m9/u3a-trace-3fd3be9.md)) |
 | M9-U4 | Not started |
 | M9-U5 | Not started |
 
@@ -248,6 +248,14 @@ M9 comes "after M1..M8" (MVP plan, section 7). M8 was accepted on 2026-11-01 (#4
 - pointer-busy v2: the busy variant registers the second family 2.0 s after pointer down; the plain variant has no font-load change. Typing: keys go through `page.keyboard.press` on a 120 ms schedule without awaiting each, and the run asserts the final text.
 - Headless smoke in the container: `m9-ui-geometry` passes; every scenario run, v1 included, stops at `open()` with the renderer in `error` (SwiftShader), so no frame, latency or typing number exists before U2. An ad-hoc headless run checked the 655 rows, `enterTextEdit` at offset 60 with typed keys appended in order, and the font registration with its mark; `keyToWorkDoneMs` endpoints are covered by the unit test only.
 - Review r1 follow-ups: the typing run asserts 40 samples and no `no-change` key; a `doc=m9-v2` load fails unless the test font loaded, and `open()` asserts it; the `m9-font-load` measure ends after the text port's generation stops changing for two frames and the work is submitted, and the run asserts that the generation and the scene revision advanced; the layout recorder runs in one project only; the layout table hash covers the layouts only (generation zeroed), not the recording browser; `m9-ui-geometry` also checks that `?test=1&ui=1&doc=m9-v2` equals `?test=1`.
+
+### G1 notes
+
+- 2026-11-02 05:39Z: on the G1 card the user first chose (b), narrowed to the right column's cost and the font-load re-projection, with the renderer's share (E30) left disclosed.
+- 2026-11-02 05:57Z: the user then asked whether the remedy could wait. The reply set out that section 9 makes (a) a full exit path, and that the slow cases are 10,000-node documents with the column shown. On a second card the user chose to defer.
+- **G1 is (a): exit with the misses disclosed.** U3 does not run. The FAIL rows of section 2 go to the exit record (U5). The column cost becomes V-20 and the font-load re-projection V-21 in the [visualization track](d9-visualization-track.md#status-index). E30 keeps the renderer's share.
+- One diagnostic trace run on the main PC at `3fd3be9` points at the column re-rendering on camera-only changes and at its 10,000-row layout ([u3a-trace-3fd3be9.md](../evidence/m9/u3a-trace-3fd3be9.md)). It is not evidence. The opt-in `E26_TRACE` switch and `tooling/m9-trace-summary.mjs` stay for that work.
+- A reading note for V-20's re-measure: a frame of exactly two refresh intervals measures 33.3 or 33.4 ms, so under the no-rounding rule a stress scene that holds 30 fps can miss by 0.1 ms. If a remedy lands there, how to read the 33.3 ms ceiling goes to the user, as M9-Q2 did for 16.7 ms.
 
 ### M9-U1b notes
 
