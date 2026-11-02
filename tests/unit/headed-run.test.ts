@@ -78,6 +78,13 @@ describe('run-headed-tier', () => {
     expect(missingPrerequisite(false, { M8_N3_BASELINE: 'baseline.json' })).toBeNull();
     expect(missingPrerequisite(true, {})).toBeNull();
   });
+  it('runs the m6c typing spec alone after the rest of m6c', () => {
+    const m6c = stages(2).filter((stage) => stage.script === 'test:m6c-next-host');
+    expect(m6c).toEqual([
+      { name: 'm6c-next-host', script: 'test:m6c-next-host', env: { VS_M6C_PART: 'rest' } },
+      { name: 'm6c-typing', script: 'test:m6c-next-host', env: { VS_M6C_PART: 'typing' } },
+    ]);
+  });
   it('runs the corpus only at tier 3, first', () => {
     expect(stages(2).map((stage) => stage.script)[0]).toBe('test:gpu');
     expect(
