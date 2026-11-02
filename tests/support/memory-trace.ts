@@ -49,6 +49,12 @@ export type MemoryTraceSummary = {
   unpaired: number;
   /** Paired GCs whose stats `used_heap_size` differs from their `usedHeapSizeAfter`. */
   usedMismatch: number;
+  /**
+   * The smallest and largest `used_heap_size - usedHeapSizeAfter` over paired GCs. A positive
+   * value is allocation after the GC; a negative one would mean a wrong pairing.
+   */
+  usedDeltaMin: number | null;
+  usedDeltaMax: number | null;
   maxUsedBefore: number | null;
   maxTotalAfter: number | null;
   maxExternalAfter: number | null;
@@ -123,6 +129,8 @@ export function summarizeMemoryTrace(trace: unknown): MemoryTraceSummary {
     major: 0,
     unpaired: 0,
     usedMismatch: 0,
+    usedDeltaMin: null,
+    usedDeltaMax: null,
     maxUsedBefore: null,
     maxTotalAfter: null,
     maxExternalAfter: null,
@@ -137,6 +145,7 @@ export function summarizeMemoryTrace(trace: unknown): MemoryTraceSummary {
   let previous: GcSample | null = null;
   let unpaired = 0;
   let usedMismatch = 0;
+  const deltas: number[] = [];
   for (let index = 0; index < list.length; index += 1) {
     const event = list[index]!;
     if (event.name === 'V8.GC_Heap_Stats') continue;
@@ -156,7 +165,10 @@ export function summarizeMemoryTrace(trace: unknown): MemoryTraceSummary {
       if (stats !== null) break;
     }
     if (stats === null) unpaired += 1;
-    else if (stats.used !== usedAfter) usedMismatch += 1;
+    else {
+      deltas.push(stats.used - usedAfter);
+      if (stats.used !== usedAfter) usedMismatch += 1;
+    }
     const sample: GcSample = {
       kind: event.name as GcSample['kind'],
       ts: event.ts ?? 0,
@@ -183,6 +195,8 @@ export function summarizeMemoryTrace(trace: unknown): MemoryTraceSummary {
     major: samples.filter((sample) => sample.kind === 'MajorGC').length,
     unpaired,
     usedMismatch,
+    usedDeltaMin: deltas.length === 0 ? null : Math.min(...deltas),
+    usedDeltaMax: deltas.length === 0 ? null : Math.max(...deltas),
     maxUsedBefore: max(samples.map((sample) => sample.usedBefore)),
     maxTotalAfter: max(samples.map((sample) => sample.totalAfter)),
     maxExternalAfter: max(samples.map((sample) => sample.externalAfter)),

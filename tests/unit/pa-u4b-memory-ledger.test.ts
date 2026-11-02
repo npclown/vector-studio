@@ -246,11 +246,27 @@ describe('PA-U4b canvas, WASM and IDB ledgers (contract 3.4, 3.5)', () => {
 
   it('runs from its own source text, as the init script does', () => {
     // Playwright serializes the function: it must not need anything outside its body.
-    const context: Record<string, unknown> = { WebAssembly, Promise, Proxy, Reflect, Set, WeakMap };
+    // A copy, so the ledger patches it and not this worker's own WebAssembly. Vitest's
+    // transform is not Playwright's: this guards the source text, it does not prove Playwright's.
+    const wasm = {
+      Memory: WebAssembly.Memory,
+      Instance: WebAssembly.Instance,
+      instantiate: WebAssembly.instantiate,
+      instantiateStreaming: WebAssembly.instantiateStreaming,
+    };
+    const context: Record<string, unknown> = {
+      WebAssembly: wasm,
+      Promise,
+      Proxy,
+      Reflect,
+      Set,
+      WeakMap,
+    };
     runInNewContext(`(${installMemoryLedger.toString()})(undefined)`, context);
     const ledger = context.__vsMemory as { snapshot(): { wasm: { memories: number } } };
     expect(ledger.snapshot().wasm.memories).toBe(0);
-    const memory = new (context.WebAssembly as typeof WebAssembly).Memory({ initial: 1 });
+    const memory = new wasm.Memory({ initial: 1 });
+    expect(WebAssembly.Memory, 'the real WebAssembly is untouched').not.toBe(wasm.Memory);
     expect(memory instanceof WebAssembly.Memory).toBe(true);
     expect(ledger.snapshot().wasm.memories).toBe(1);
   });
@@ -333,6 +349,7 @@ describe('PA-U4b GC trace (contract 3.1, 3.2)', () => {
   it('pairs a stats event with a slightly larger used size and counts the difference', () => {
     const summary = summarizeMemoryTrace([gc('MinorGC', 1, 10, 5), heap(2, 6, 100, 0)]);
     expect([summary.unpaired, summary.usedMismatch]).toEqual([0, 1]);
+    expect([summary.usedDeltaMin, summary.usedDeltaMax]).toEqual([1, 1]);
     expect(summary.samples[0]!.totalAfter).toBe(100);
     // A GC with no stats event before the next GC is unpaired.
     const gap = summarizeMemoryTrace([

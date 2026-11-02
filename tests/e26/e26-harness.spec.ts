@@ -843,13 +843,14 @@ for (const { scenario, variant } of runs) {
             (globalThis as { __vsMemory?: MemoryLedger }).__vsMemory!.snapshot(),
           );
           tracing = null;
-          const raw = (await browser.stopTracing()).toString();
+          const raw = await browser.stopTracing();
           // The raw trace stays beside the records (not a record: a subdirectory), so PA-U4c can
-          // look for the M1 peak counter (memory-infra) and the Oilpan events (M7) in it.
+          // look for the M1 peak counter (memory-infra) and the Oilpan events (M7) in it. It is
+          // written before it is decoded, so a trace too long for one string is still kept.
           const traces = path.join(resultsDirectory, 'memory-traces');
           mkdirSync(traces, { recursive: true });
           writeFileSync(path.join(traces, `${slug}.json`), raw);
-          const trace = summarizeMemoryTrace(JSON.parse(raw));
+          const trace = summarizeMemoryTrace(JSON.parse(raw.toString()));
           if (trace.gcs === 0 || trace.unpaired > 0)
             testInfo.annotations.push({
               type: 'memory',
