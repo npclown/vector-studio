@@ -2,7 +2,7 @@ import { execSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Page } from '@playwright/test';
 import {
   canonicalJson,
   configurationHash,
@@ -104,6 +104,25 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const resultsDirectory = process.env.E26_RESULTS_DIR ?? path.join(root, 'test-results/e26-runs');
 const smoke = process.env.E26_CHROMIUM !== undefined;
 const repetitions = Number(process.env.E26_REPETITIONS ?? (smoke ? 1 : 5));
+// M9-U3a diagnostic (not evidence): with `E26_TRACE=<directory>`, each run records a Chrome
+// performance trace (timeline and V8 CPU samples) to `<directory>/<slug>.json`, from the probe's
+// install to the end of the test. Tracing slows the page, so a traced run's numbers are not a
+// measurement; it only shows where the main thread's time goes.
+const traceDirectory = process.env.E26_TRACE;
+const TRACE_CATEGORIES = [
+  'devtools.timeline',
+  'disabled-by-default-devtools.timeline',
+  'v8.execute',
+  'disabled-by-default-v8.cpu_profiler',
+  'blink.user_timing',
+];
+let tracing: { browser: Browser } | null = null;
+test.afterEach(async () => {
+  if (tracing === null) return;
+  const { browser } = tracing;
+  tracing = null;
+  await browser.stopTracing();
+});
 const filter = (process.env.E26_SCENARIOS ?? '')
   .split(',')
   .map((entry) => entry.trim())
@@ -672,6 +691,15 @@ for (const { scenario, variant } of runs) {
         variant === 'plain' ? '-plain' : ''
       }--r${repetition}`;
       const { errors, consoleErrors } = await installProbe(page);
+      if (traceDirectory !== undefined) {
+        mkdirSync(traceDirectory, { recursive: true });
+        await browser.startTracing(page, {
+          path: path.join(traceDirectory, `${slug}.json`),
+          screenshots: false,
+          categories: TRACE_CATEGORIES,
+        });
+        tracing = { browser };
+      }
 
       if (variant === 'typing') {
         await typingRun(page, {
@@ -709,7 +737,7 @@ for (const { scenario, variant } of runs) {
         }
         const start = await presence(page);
         const run = await page.evaluate(
-          async ({ driver, warmUpMs, windowEndMs }) => {
+          async ({ driver, warmUpMs, windowEndMs, mark }) => {
             const hook = window.__e26Bench!;
             const backend = hook.backend()!;
             const until = (time: number) =>
@@ -721,6 +749,7 @@ for (const { scenario, variant } of runs) {
             hook.setDriver({ ...(driver as object), t0 });
             await until(t0 + warmUpMs);
             const windowStartMs = performance.now();
+            if (mark) performance.mark('e26-window-start');
             const steps = hook.driverSteps();
             const revisions = hook.latencies.length;
             const submitted = backend.getStatistics().framesSubmitted;
@@ -728,6 +757,7 @@ for (const { scenario, variant } of runs) {
             await until(t0 + windowEndMs);
             const measurements = backend.stopFrameMeasurements();
             const windowEndAtMs = performance.now();
+            if (mark) performance.mark('e26-window-end');
             hook.setDriver(null);
             backend.setMode('on-demand');
             return {
@@ -747,7 +777,12 @@ for (const { scenario, variant } of runs) {
               ),
             };
           },
-          { driver, warmUpMs: E26_DRIVERS.warmUpMs, windowEndMs: E26_DRIVERS.windowEndMs },
+          {
+            driver,
+            warmUpMs: E26_DRIVERS.warmUpMs,
+            windowEndMs: E26_DRIVERS.windowEndMs,
+            mark: traceDirectory !== undefined,
+          },
         );
         if (scenario.interaction === 'edit-drag') await page.mouse.up();
         const end = await presence(page);
