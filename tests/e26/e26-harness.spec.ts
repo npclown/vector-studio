@@ -990,8 +990,8 @@ for (const { scenario, variant } of runs) {
       // Canvas presses only (tests/e26/probe.ts): the layer toggles are the only other presses.
       expect(probe.downs.length, 'one press').toBe(1);
       expect(probe.ups.length, 'one release').toBe(1);
-      expect(probe.otherDowns.length, 'presses outside the canvas: the layer toggles').toBe(
-        layers?.expanded.length ?? 0,
+      expect(probe.otherDowns, 'presses outside the canvas: the layer toggles').toEqual(
+        (layers?.expanded ?? []).map((id) => `layer-toggle-${id}`),
       );
       expect(state.mode).toBe('on-demand');
       expect(result.failed).toBe(0);

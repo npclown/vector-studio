@@ -58,7 +58,11 @@ export function installPageProbe(): void {
     const element = target as { tagName?: string; getAttribute?(name: string): string | null };
     return element?.getAttribute?.('data-testid') ?? element?.tagName ?? 'unknown';
   };
-  const onCanvas = (event: Event) => event.target instanceof HTMLCanvasElement;
+  // The editor's canvas is the one inside next-host's canvas host; a canvas elsewhere (a panel's)
+  // is not an editor press.
+  const onCanvas = (event: Event) =>
+    event.target instanceof HTMLCanvasElement &&
+    (event.target.closest?.('[data-testid="canvas-host"]') ?? null) !== null;
   window.addEventListener(
     'pointerdown',
     (event) => {

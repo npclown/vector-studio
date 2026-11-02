@@ -6,7 +6,7 @@
 // default-lane update pending. With moves queued behind a busy main thread (the laptop's
 // font-load change; every run in the container's SwiftShader page), more than 50 such commits
 // came in a row, and React threw error #185, "Maximum update depth exceeded". An ad-hoc headless
-// run of the pointer-busy v2 drag with `ui=1` reproduced it in 4 of 4 runs before the fix and in
+// run of the pointer-busy v2 drag with `ui=1` reproduced it in 8 of 8 runs (4 busy, 4 plain) before the fix and in
 // 0 of 6 after it.
 //
 // The tests' React has no DOM renderer, so this checks the source: no effect in the field, and

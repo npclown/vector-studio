@@ -12,8 +12,12 @@ const root = path.resolve(import.meta.dirname, '../..');
 
 type Listener = (event: unknown) => void;
 class StubCanvas {
+  constructor(private readonly inHost = true) {}
   getAttribute() {
     return null;
+  }
+  closest(selector: string) {
+    return this.inHost && selector === '[data-testid="canvas-host"]' ? {} : null;
   }
   readonly tagName = 'CANVAS';
 }
@@ -69,6 +73,10 @@ describe('M9-U1: the harness probe counts canvas presses only', () => {
     // A target without a test ID is named by its tag.
     dispatch('pointerdown', { target: new StubButton(null), timeStamp: 11_100 });
     expect(probe.otherDowns.at(-1)).toBe('BUTTON');
+    // A canvas outside next-host's canvas host (a panel's) is not an editor press.
+    dispatch('pointerdown', { target: new StubCanvas(false), timeStamp: 11_200 });
+    expect(probe.downs).toHaveLength(2);
+    expect(probe.otherDowns.at(-1)).toBe('CANVAS');
   });
 
   it('records page errors with their stack and page time', () => {
@@ -89,7 +97,7 @@ describe('M9-U1: the harness probe counts canvas presses only', () => {
     // No second probe: the old inline listener is gone.
     expect(spec).not.toMatch(/addEventListener\(\s*'pointerdown'/u);
     expect(spec).toContain("expect(probe.downs.length, 'one press').toBe(1);");
-    expect(spec).toContain('layers?.expanded.length ?? 0');
+    expect(spec).toContain('(layers?.expanded ?? []).map((id) => `layer-toggle-${id}`)');
     // The probe's function is self-contained (Playwright serializes its source).
     const source = installPageProbe.toString();
     expect(source).not.toMatch(/\b(?:import|require)\b/u);
