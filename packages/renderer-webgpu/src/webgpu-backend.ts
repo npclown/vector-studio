@@ -120,6 +120,28 @@ export interface WebGpuFrameMeasurements {
 }
 
 const DEFAULT_MEASUREMENT_CAPACITY = 4096;
+/**
+ * E30 contract, section 3: while frame measurement is active, the parts of a primitive frame are
+ * User Timing measures, read by the bench through a PerformanceObserver. `vs-gpu` (submit to
+ * `onSubmittedWorkDone`, a proxy of GPU time) is taken for every eighth submitted frame. Not
+ * exported: the names are the bench's contract, not a root export member (E30-Q1 (a)).
+ */
+const E30_FRAME_MEASURES = Object.freeze({
+  prepare: 'vs-prepare',
+  submit: 'vs-submit',
+  acknowledge: 'vs-acknowledge',
+  gpu: 'vs-gpu',
+} as const);
+const E30_GPU_MEASURE_EVERY = 8;
+
+function frameMeasure(name: string, start: number, end: number): void {
+  try {
+    globalThis.performance?.measure(name, { start, end });
+  } catch {
+    // A host without User Timing, or a clock outside its timebase: the bench records the
+    // measure as missing.
+  }
+}
 const DEFAULT_CAPTURE_TIMEOUT_MS = 5000;
 /** E10 contract, section 3.2: the canvas usage that a frame capture needs. */
 const CAPTURE_CANVAS_USAGE = 0x10 | 0x01;
@@ -187,6 +209,9 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   #recoveryAttempts = 0;
   #staleGenerationSubmissions = 0;
   #measurementActive = false;
+  #gpuMeasureCount = 0;
+  /** Advances on every start, stop and reset of frame measurement (E30-U1a). */
+  #measurementWindow = 0;
   #measurementCapacity = DEFAULT_MEASUREMENT_CAPACITY;
   #measurementStartedAtMs: number | undefined;
   #measurementEndedAtMs: number | undefined;
@@ -495,6 +520,8 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
 
   #resetFrameMeasurementState(): void {
     this.#measurementActive = false;
+    this.#measurementWindow += 1;
+    this.#gpuMeasureCount = 0;
     this.#measurementCapacity = DEFAULT_MEASUREMENT_CAPACITY;
     this.#measurementStartedAtMs = undefined;
     this.#measurementEndedAtMs = undefined;
@@ -1331,8 +1358,11 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         const target = this.#primitiveTarget();
         scene.setTarget(target);
         let packet;
+        const measuring = this.#measurementActive;
+        const prepareStart = measuring ? this.#now() : 0;
         try {
           packet = source.prepare(target);
+          if (measuring) frameMeasure(E30_FRAME_MEASURES.prepare, prepareStart, this.#now());
         } catch (error: unknown) {
           this.#emit(
             DIAGNOSTIC_CODES.RENDER_SUBMISSION_FAILED,
@@ -1376,7 +1406,34 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
           return;
         }
         if (armed !== undefined) this.#handCapture(scene, armed);
+        const submitStart = measuring ? this.#now() : 0;
         const submission = scene.submitPrimitivePacket(packet);
+        if (measuring) {
+          const submitEnd = this.#now();
+          frameMeasure(E30_FRAME_MEASURES.submit, submitStart, submitEnd);
+          if (submission.status === 'submitted' && this.#device !== undefined) {
+            if (this.#gpuMeasureCount % E30_GPU_MEASURE_EVERY === 0) {
+              // A wait that settles after the window ends, the device changes or a new
+              // generation starts is dropped, so the reader never sees it in another window.
+              const device = this.#device;
+              const window = this.#measurementWindow;
+              device.waitForSubmittedWork().then(
+                () => {
+                  if (
+                    this.#measurementActive &&
+                    this.#measurementWindow === window &&
+                    this.#device === device &&
+                    this.#generation === generation
+                  ) {
+                    frameMeasure(E30_FRAME_MEASURES.gpu, submitEnd, this.#now());
+                  }
+                },
+                () => undefined,
+              );
+            }
+            this.#gpuMeasureCount += 1;
+          }
+        }
         // E28-D1: a page that could not be created leaves text undrawn for the generation.
         if (scene.textPageAllocationFailed === true && this.#generation === generation) {
           this.#emitTextUnavailable('page-allocation', generation);
@@ -1393,7 +1450,11 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         ) {
           return;
         }
+        const acknowledgeStart = measuring ? this.#now() : 0;
         source.acknowledge(submission.receipt);
+        if (measuring) {
+          frameMeasure(E30_FRAME_MEASURES.acknowledge, acknowledgeStart, this.#now());
+        }
       } else {
         this.#scene?.render(this.#context);
       }
