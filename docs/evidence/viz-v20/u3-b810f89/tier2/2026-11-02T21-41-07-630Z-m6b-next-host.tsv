@@ -1,0 +1,39 @@
+file	project	title	status	ms	worker
+tests/m6b-next-host/m6b-next-host.spec.ts	chrome	M6b-A12: caret segments and selection rectangles match the measured clusters	passed	2027	0
+tests/m6b-next-host/m6b-next-host.spec.ts	chrome	M6b-A12: a click places the caret, a double-click selects the word, focus stays	passed	4579	0
+tests/m6b-next-host/m6b-next-host.spec.ts	chrome	M6b-A12: Up and Down move by lines at the goal x	passed	1849	0
+tests/m6b-next-host/m6b-next-host.spec.ts	chrome	M6b-A13: real keys follow rules 1 to 6, Tab keeps focus, the clipboard chords run	passed	1908	0
+tests/m6b-next-host/m6b-next-host.spec.ts	chrome	M6b-A13: a DOM paste of text/plain with HTML reads the plain text, in and outside edit mode	passed	917	0
+tests/m6b-next-host/m6b-next-host.spec.ts	chrome	M6b-A13: presses in edit mode keep focus on the textarea, which sits at the caret	passed	1467	0
+tests/m6b-next-host/m6b-next-host.spec.ts	chrome	M6b-A13: trace 01-syllable-space-punctuation.json replays through CDP (A syllable, then a space, then a punctuation mark)	passed	890	0
+tests/m6b-next-host/m6b-next-host.spec.ts	chrome	M6b-A13: trace 02a-enter-keydown.json replays through CDP (Enter during a composition: compositionend, then a non-229 Enter keydown)	passed	850	0
+tests/m6b-next-host/m6b-next-host.spec.ts	chrome	M6b-A13: trace 02b-enter-linebreak.json replays through CDP (Enter during a composition: compositionend, then insertLineBreak with no second keydown)	passed	779	0
+tests/m6b-next-host/m6b-next-host.spec.ts	chrome	M6b-A13: trace 03a-arrow-keydown.json replays through CDP (An arrow during a composition: compositionend, then a non-229 ArrowLeft keydown)	passed	885	0
+tests/m6b-next-host/m6b-next-host.spec.ts	chrome	M6b-A13: trace 03b-arrow-commit-only.json replays through CDP (An arrow during a composition: compositionend and no second keydown)	passed	822	0
+tests/m6b-next-host/m6b-next-host.spec.ts	chrome	M6b-A13: trace 04-backspace-jamo-and-after-commit.json replays through CDP (Backspace inside a composition (jamo), then in the empty textarea after the commit)	passed	955	0
+tests/m6b-next-host/m6b-next-host.spec.ts	chrome	M6b-A13: trace 06a-empty-end-empty-range.json replays through CDP (An empty compositionend over an empty range)	passed	718	0
+tests/m6b-next-host/m6b-next-host.spec.ts	chrome	M6b-A13: trace 06b-empty-end-selection.json replays through CDP (An empty compositionend over a selection)	passed	803	0
+tests/m6b-next-host/m6b-next-host.spec.ts	chrome	M6b-A13: trace 08a-click-focus-kept.json replays through CDP (A click during a composition with focus kept (pointerdown prevented))	passed	807	0
+tests/m6b-next-host/m6b-next-host.spec.ts	chrome	M6b-A13: trace 08b-click-focus-moved.json replays through CDP (A click during a composition with focus moved)	passed	833	0
+tests/m6b-next-host/m6b-next-host.spec.ts	chrome	M6b-A13: trace 08c-blur-to-panel.json replays through CDP (An element blur to a panel input during a composition)	passed	856	0
+tests/m6b-next-host/m6b-next-host.spec.ts	chrome	M6b-A13: trace 09a-pending-commit.json replays through CDP (A first composition on a pending node, committed)	passed	876	0
+tests/m6b-next-host/m6b-next-host.spec.ts	chrome	M6b-A13: trace 09b-pending-cancel.json replays through CDP (A first composition on a pending node, cancelled)	passed	875	0
+tests/m6b-next-host/m6b-next-host.spec.ts	edge	M6b-A12: caret segments and selection rectangles match the measured clusters	passed	2325	1
+tests/m6b-next-host/m6b-next-host.spec.ts	edge	M6b-A12: a click places the caret, a double-click selects the word, focus stays	passed	4441	1
+tests/m6b-next-host/m6b-next-host.spec.ts	edge	M6b-A12: Up and Down move by lines at the goal x	passed	1778	1
+tests/m6b-next-host/m6b-next-host.spec.ts	edge	M6b-A13: real keys follow rules 1 to 6, Tab keeps focus, the clipboard chords run	passed	1806	1
+tests/m6b-next-host/m6b-next-host.spec.ts	edge	M6b-A13: a DOM paste of text/plain with HTML reads the plain text, in and outside edit mode	passed	856	1
+tests/m6b-next-host/m6b-next-host.spec.ts	edge	M6b-A13: presses in edit mode keep focus on the textarea, which sits at the caret	passed	1438	1
+tests/m6b-next-host/m6b-next-host.spec.ts	edge	M6b-A13: trace 01-syllable-space-punctuation.json replays through CDP (A syllable, then a space, then a punctuation mark)	passed	951	1
+tests/m6b-next-host/m6b-next-host.spec.ts	edge	M6b-A13: trace 02a-enter-keydown.json replays through CDP (Enter during a composition: compositionend, then a non-229 Enter keydown)	passed	872	1
+tests/m6b-next-host/m6b-next-host.spec.ts	edge	M6b-A13: trace 02b-enter-linebreak.json replays through CDP (Enter during a composition: compositionend, then insertLineBreak with no second keydown)	passed	780	1
+tests/m6b-next-host/m6b-next-host.spec.ts	edge	M6b-A13: trace 03a-arrow-keydown.json replays through CDP (An arrow during a composition: compositionend, then a non-229 ArrowLeft keydown)	passed	846	1
+tests/m6b-next-host/m6b-next-host.spec.ts	edge	M6b-A13: trace 03b-arrow-commit-only.json replays through CDP (An arrow during a composition: compositionend and no second keydown)	passed	773	1
+tests/m6b-next-host/m6b-next-host.spec.ts	edge	M6b-A13: trace 04-backspace-jamo-and-after-commit.json replays through CDP (Backspace inside a composition (jamo), then in the empty textarea after the commit)	passed	920	1
+tests/m6b-next-host/m6b-next-host.spec.ts	edge	M6b-A13: trace 06a-empty-end-empty-range.json replays through CDP (An empty compositionend over an empty range)	passed	739	1
+tests/m6b-next-host/m6b-next-host.spec.ts	edge	M6b-A13: trace 06b-empty-end-selection.json replays through CDP (An empty compositionend over a selection)	passed	737	1
+tests/m6b-next-host/m6b-next-host.spec.ts	edge	M6b-A13: trace 08a-click-focus-kept.json replays through CDP (A click during a composition with focus kept (pointerdown prevented))	passed	780	1
+tests/m6b-next-host/m6b-next-host.spec.ts	edge	M6b-A13: trace 08b-click-focus-moved.json replays through CDP (A click during a composition with focus moved)	passed	868	1
+tests/m6b-next-host/m6b-next-host.spec.ts	edge	M6b-A13: trace 08c-blur-to-panel.json replays through CDP (An element blur to a panel input during a composition)	passed	839	1
+tests/m6b-next-host/m6b-next-host.spec.ts	edge	M6b-A13: trace 09a-pending-commit.json replays through CDP (A first composition on a pending node, committed)	passed	865	1
+tests/m6b-next-host/m6b-next-host.spec.ts	edge	M6b-A13: trace 09b-pending-cancel.json replays through CDP (A first composition on a pending node, cancelled)	passed	764	1

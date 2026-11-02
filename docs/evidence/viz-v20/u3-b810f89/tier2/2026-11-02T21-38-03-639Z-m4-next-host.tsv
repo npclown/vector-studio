@@ -1,0 +1,11 @@
+file	project	title	status	ms	worker
+tests/m4-next-host/m4-next-host.spec.ts	chrome	DPR 1 > M4-A12: H1 to H9 against the E23, E24 and E25 oracles at DPR 1	passed	6255	0
+tests/m4-next-host/m4-next-host.spec.ts	chrome	DPR 2 > M4-A12: H1 to H9 against the E23, E24 and E25 oracles at DPR 2	passed	10578	0
+tests/m4-next-host/m4-next-host.spec.ts	chrome	M4-A12: every panel control once, one undo step each	passed	5989	0
+tests/m4-next-host/m4-next-host.spec.ts	chrome	M4-A12: a ?persist=1 reload keeps the appearance	passed	8736	0
+tests/m4-next-host/m4-next-host.spec.ts	chrome	M4-A13: frame time of 10,000 stroked rectangles (observation)	passed	19446	0
+tests/m4-next-host/m4-next-host.spec.ts	edge	DPR 1 > M4-A12: H1 to H9 against the E23, E24 and E25 oracles at DPR 1	passed	6545	1
+tests/m4-next-host/m4-next-host.spec.ts	edge	DPR 2 > M4-A12: H1 to H9 against the E23, E24 and E25 oracles at DPR 2	passed	11044	1
+tests/m4-next-host/m4-next-host.spec.ts	edge	M4-A12: every panel control once, one undo step each	passed	6491	1
+tests/m4-next-host/m4-next-host.spec.ts	edge	M4-A12: a ?persist=1 reload keeps the appearance	passed	9864	1
+tests/m4-next-host/m4-next-host.spec.ts	edge	M4-A13: frame time of 10,000 stroked rectangles (observation)	passed	20407	1

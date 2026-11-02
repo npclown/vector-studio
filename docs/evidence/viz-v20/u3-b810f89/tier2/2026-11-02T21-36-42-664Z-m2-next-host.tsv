@@ -1,0 +1,11 @@
+file	project	title	status	ms	worker
+tests/m2-next-host/m2-next-host.spec.ts	chrome	M2-A13 section 7: every default chord reaches the editor	passed	5509	0
+tests/m2-next-host/m2-next-host.spec.ts	chrome	M2-A13: frame entry by double-click, the scope indicator and the toolbar ungroup	passed	3913	0
+tests/m2-next-host/m2-next-host.spec.ts	chrome	M2-A13: Alt-drag duplicates and Alt-click cycles an overlapping stack	passed	4219	0
+tests/m2-next-host/m2-next-host.spec.ts	chrome	M2-A13: copy, cut and paste through the system clipboard, also in a second tab	passed	7147	0
+tests/m2-next-host/m2-next-host.spec.ts	chrome	M2-A13 host: zoom controls, snap overlay and the rotate cursor	passed	4661	0
+tests/m2-next-host/m2-next-host.spec.ts	edge	M2-A13 section 7: every default chord reaches the editor	passed	5790	1
+tests/m2-next-host/m2-next-host.spec.ts	edge	M2-A13: frame entry by double-click, the scope indicator and the toolbar ungroup	passed	4363	1
+tests/m2-next-host/m2-next-host.spec.ts	edge	M2-A13: Alt-drag duplicates and Alt-click cycles an overlapping stack	passed	4625	1
+tests/m2-next-host/m2-next-host.spec.ts	edge	M2-A13: copy, cut and paste through the system clipboard, also in a second tab	passed	8147	1
+tests/m2-next-host/m2-next-host.spec.ts	edge	M2-A13 host: zoom controls, snap overlay and the rotate cursor	passed	5203	1

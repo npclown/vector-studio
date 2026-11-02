@@ -1,0 +1,24 @@
+{
+  "schema": "headed-timing-v1",
+  "config": "playwright.m3-next-host.config.ts",
+  "startedUtc": "2026-11-02T21:37:42.142Z",
+  "status": "passed",
+  "workers": 4,
+  "wallMilliseconds": 20378,
+  "tests": 2,
+  "testMilliseconds": 33490,
+  "specs": [
+    {
+      "file": "tests/m3-next-host/m3-next-host.spec.ts",
+      "project": "chrome",
+      "tests": 1,
+      "milliseconds": 16794
+    },
+    {
+      "file": "tests/m3-next-host/m3-next-host.spec.ts",
+      "project": "edge",
+      "tests": 1,
+      "milliseconds": 16696
+    }
+  ]
+}
