@@ -1,0 +1,89 @@
+{
+  "schema": "m9-u2-result/1",
+  "scenario": "m9-ui-geometry",
+  "browser": "chrome",
+  "machine": "reference",
+  "runId": "20261102T011837Z-89393f1",
+  "commits": [
+    "89393f13eeb465063d0b24f5c3137d88adf9f6d5"
+  ],
+  "rows": [
+    {
+      "scenario": "m9-ui-geometry",
+      "variant": "geometry",
+      "project": "chrome-dpr1-v2",
+      "repetitions": 1,
+      "commits": [
+        "89393f13eeb465063d0b24f5c3137d88adf9f6d5"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        null
+      ],
+      "adapter": null,
+      "idleRafMedianMs": [
+        null
+      ],
+      "kind": "geometry",
+      "perRunP95Ms": [],
+      "maxPerRunP95Ms": null,
+      "origin": [
+        {
+          "x": 1,
+          "y": 74
+        }
+      ],
+      "size": [
+        {
+          "width": 1280,
+          "height": 720
+        }
+      ],
+      "pass": true
+    },
+    {
+      "scenario": "m9-ui-geometry",
+      "variant": "geometry",
+      "project": "chrome-dpr2-v2",
+      "repetitions": 1,
+      "commits": [
+        "89393f13eeb465063d0b24f5c3137d88adf9f6d5"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        null
+      ],
+      "adapter": null,
+      "idleRafMedianMs": [
+        null
+      ],
+      "kind": "geometry",
+      "perRunP95Ms": [],
+      "maxPerRunP95Ms": null,
+      "origin": [
+        {
+          "x": 1,
+          "y": 74
+        }
+      ],
+      "size": [
+        {
+          "width": 1280,
+          "height": 720
+        }
+      ],
+      "pass": true
+    }
+  ],
+  "intervalsOverOneAndHalfRefresh": null,
+  "records": [
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr1-v2--m9-ui-geometry.json",
+      "sha256": "e786dff7c102107f8f11c180806eed938ce7f9f2a7e32cb63297ec9431edad7f"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr2-v2--m9-ui-geometry.json",
+      "sha256": "b847f5f4f1e6b882a99455c4d7efd8e3abf9350ff750e2c9a92f62036cdefde6"
+    }
+  ]
+}

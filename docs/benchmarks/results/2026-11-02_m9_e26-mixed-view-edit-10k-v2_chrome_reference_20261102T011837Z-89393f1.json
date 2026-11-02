@@ -1,0 +1,270 @@
+{
+  "schema": "m9-u2-result/1",
+  "scenario": "e26-mixed-view-edit-10k/v2",
+  "browser": "chrome",
+  "machine": "reference",
+  "runId": "20261102T011837Z-89393f1",
+  "commits": [
+    "89393f13eeb465063d0b24f5c3137d88adf9f6d5"
+  ],
+  "rows": [
+    {
+      "scenario": "e26-mixed-view-edit-10k/v2",
+      "variant": "frame",
+      "project": "chrome-dpr1-v2",
+      "repetitions": 5,
+      "commits": [
+        "89393f13eeb465063d0b24f5c3137d88adf9f6d5"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "ab08fe2a7c9253b22612b24013e7fe3d3eb548f63a80ad27b233734f58fe508b"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 16.7,
+      "perRunMedianMs": [
+        33.3,
+        33.3,
+        33.3,
+        33.3,
+        33.3
+      ],
+      "perRunP95Ms": [
+        33.4,
+        33.4,
+        33.4,
+        33.4,
+        33.4
+      ],
+      "perRunP99Ms": [
+        33.5,
+        50,
+        33.5,
+        49.9,
+        33.5
+      ],
+      "maxPerRunP95Ms": 33.4,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        12.3,
+        13.6,
+        12.8,
+        13.2,
+        13.2
+      ],
+      "longTasksOver50": [
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "frames": [
+        366,
+        354,
+        355,
+        361,
+        347
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ]
+    },
+    {
+      "scenario": "e26-mixed-view-edit-10k/v2",
+      "variant": "frame",
+      "project": "chrome-dpr2-v2",
+      "repetitions": 5,
+      "commits": [
+        "89393f13eeb465063d0b24f5c3137d88adf9f6d5"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "526c742bdef5d8ed86dee77b1ad8992f4cc944e75530ffcb7a57813fd1ba7bc3"
+      ],
+      "browser": "chromium 156.0.8078.74",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 16.7,
+      "perRunMedianMs": [
+        33.3,
+        33.3,
+        33.3,
+        33.3,
+        33.3
+      ],
+      "perRunP95Ms": [
+        33.4,
+        33.4,
+        33.4,
+        33.4,
+        33.4
+      ],
+      "perRunP99Ms": [
+        49.9,
+        33.5,
+        33.5,
+        33.4,
+        49.9
+      ],
+      "maxPerRunP95Ms": 33.4,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        12.1,
+        12,
+        12.5,
+        12.4,
+        12.3
+      ],
+      "longTasksOver50": [
+        2,
+        2,
+        2,
+        1,
+        2
+      ],
+      "frames": [
+        363,
+        375,
+        361,
+        372,
+        365
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ]
+    }
+  ],
+  "intervalsOverOneAndHalfRefresh": {
+    "chrome-dpr1-v2": [
+      {
+        "over": 229,
+        "intervals": 366,
+        "share": 0.6257
+      },
+      {
+        "over": 237,
+        "intervals": 354,
+        "share": 0.6695
+      },
+      {
+        "over": 240,
+        "intervals": 355,
+        "share": 0.6761
+      },
+      {
+        "over": 233,
+        "intervals": 361,
+        "share": 0.6454
+      },
+      {
+        "over": 246,
+        "intervals": 347,
+        "share": 0.7089
+      }
+    ],
+    "chrome-dpr2-v2": [
+      {
+        "over": 231,
+        "intervals": 363,
+        "share": 0.6364
+      },
+      {
+        "over": 222,
+        "intervals": 375,
+        "share": 0.592
+      },
+      {
+        "over": 234,
+        "intervals": 361,
+        "share": 0.6482
+      },
+      {
+        "over": 227,
+        "intervals": 372,
+        "share": 0.6102
+      },
+      {
+        "over": 228,
+        "intervals": 365,
+        "share": 0.6247
+      }
+    ]
+  },
+  "records": [
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr1-v2--e26-mixed-view-edit-10k_v2--r1.json",
+      "sha256": "bdc7cccdddb2a5ac9cf2c8dfc16a3c10d5932a47abdd96e97f83da05d3eabb4f"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr1-v2--e26-mixed-view-edit-10k_v2--r2.json",
+      "sha256": "c722a9aa35524a7c6bbb65b7263e5b6a5b1205fe4dc9e8805a986dd8c8fc14b1"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr1-v2--e26-mixed-view-edit-10k_v2--r3.json",
+      "sha256": "8009e5bb2449887a622469eaff26b1d1a1600b83636e1b062c6466b2ea338304"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr1-v2--e26-mixed-view-edit-10k_v2--r4.json",
+      "sha256": "2757426f843d2627769dcc5d36fc6a17b4327bb2e5f5c41cded5192240af499d"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr1-v2--e26-mixed-view-edit-10k_v2--r5.json",
+      "sha256": "a84c7b9b70986e9a7b1183f91be519be47df0737fdc6f0a569fa167504f5cae6"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr2-v2--e26-mixed-view-edit-10k_v2--r1.json",
+      "sha256": "7098c95e60e2d07361d4b588bccf29478d39814a3c701169a6f0ace40b47e4c2"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr2-v2--e26-mixed-view-edit-10k_v2--r2.json",
+      "sha256": "6dfcca63ac3731814197cf9e4d64d7b1e2c848507e58dbe5fd535c5f7cc4bb48"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr2-v2--e26-mixed-view-edit-10k_v2--r3.json",
+      "sha256": "3ced9dbd3fb9062026575e304e5ad7beab251a5eedd613f34dced5fb42df71a2"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr2-v2--e26-mixed-view-edit-10k_v2--r4.json",
+      "sha256": "fc54a7b3c1479cb70d802941be831ddb76295955b89d4d33887047ef00c5a8dc"
+    },
+    {
+      "file": "docs/evidence/m9/u2-89393f1/runs/chrome-dpr2-v2--e26-mixed-view-edit-10k_v2--r5.json",
+      "sha256": "87d46958a3b00b81dcea52d8be34238e0bd45e68814c6d6a9ee86812b4d5d3ee"
+    }
+  ]
+}
