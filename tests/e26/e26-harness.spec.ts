@@ -2,6 +2,13 @@ import { execSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { installMemoryLedger, type MemoryLedger } from '../support/memory-ledger.js';
+import {
+  MEMORY_TRACE_CATEGORIES,
+  memoryBlock,
+  summarizeMemoryTrace,
+  type HeapUsage,
+} from '../support/memory-trace.js';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import {
   canonicalJson,
@@ -118,6 +125,13 @@ const TRACE_CATEGORIES = [
   'disabled-by-default-v8.cpu_profiler',
   'blink.user_timing',
 ];
+// PA-U4b (A09 memory method, docs/plans/pa-u4-a09-memory-method.md): with `E26_MEMORY=1`, each
+// frame run installs the page ledgers before navigation, records the V8 GC events from before
+// navigation to the end of the run and writes a `memory` block. Such a run is never timed
+// evidence (A09-A03): its record carries `memoryVariant: true` and the summarizer skips it.
+const memoryVariant = process.env.E26_MEMORY === '1';
+if (memoryVariant && traceDirectory !== undefined)
+  throw new Error('E26_MEMORY and E26_TRACE record different traces: set one');
 let tracing: { browser: Browser } | null = null;
 test.afterEach(async () => {
   if (tracing === null) return;
@@ -697,11 +711,24 @@ for (const { scenario, variant } of runs) {
         visibility: visibility(document.bounds, camera, dpr),
         // A traced run is a diagnostic, never evidence (M9-U3a): its record says so.
         ...(traceDirectory === undefined ? {} : { traced: true }),
+        ...(memoryVariant ? { memoryVariant: true } : {}),
       };
       const slug = `${testInfo.project.name}--${scenario.id.replace(/[^a-z0-9-]+/gi, '_')}${
         variant === 'plain' ? '-plain' : ''
       }--r${repetition}`;
+      test.skip(
+        memoryVariant && variant !== 'frame',
+        'the memory variant runs the frame runs only',
+      );
       const { errors, consoleErrors } = await installProbe(page);
+      if (memoryVariant) {
+        await page.addInitScript(installMemoryLedger);
+        await browser.startTracing(page, {
+          screenshots: false,
+          categories: [...MEMORY_TRACE_CATEGORIES],
+        });
+        tracing = { browser };
+      }
       if (traceDirectory !== undefined) {
         mkdirSync(traceDirectory, { recursive: true });
         await browser.startTracing(page, {
@@ -798,6 +825,25 @@ for (const { scenario, variant } of runs) {
         if (scenario.interaction === 'edit-drag') await page.mouse.up();
         const end = await presence(page);
         const pageErrors = await page.evaluate(() => window.__e26Probe!.pageErrors);
+        let memory: unknown;
+        if (memoryVariant) {
+          // The end of the window (contract section 1): one heap reading, the ledgers, the trace.
+          const cdp = await page.context().newCDPSession(page);
+          const heap = (await cdp.send('Runtime.getHeapUsage')) as HeapUsage;
+          await cdp.detach();
+          const ledger = await page.evaluate(() =>
+            (globalThis as { __vsMemory?: MemoryLedger }).__vsMemory!.snapshot(),
+          );
+          tracing = null;
+          const trace = summarizeMemoryTrace(JSON.parse((await browser.stopTracing()).toString()));
+          memory = {
+            ...memoryBlock(ledger, trace, heap),
+            ledger,
+            heapUsageAtEnd: heap,
+            gc: { ...trace, samples: undefined },
+            gcSamples: trace.samples,
+          };
+        }
         const intervals = run.measurements.frameIntervalsMs;
         record(slug, {
           ...base,
@@ -813,6 +859,7 @@ for (const { scenario, variant } of runs) {
           // Each interval should end in a submission: intervals + 1 against submissions.
           intervalsPlusOne: intervals.length + 1,
           run,
+          ...(memory === undefined ? {} : { memory }),
         });
         expectValidRun(run, {
           errors,
