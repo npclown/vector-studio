@@ -105,3 +105,5 @@ docs/evidence/viz-v21/**/*.json
 docs/evidence/pa-u4c/**/*.json
 docs/evidence/pa-u4c/**/*.mjs
 docs/benchmarks/results/*_m9_*.json
+# Preserve the E30-U2 main-PC sitting records and result files byte-for-byte.
+docs/evidence/e30/**/*.json

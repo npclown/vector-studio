@@ -1,0 +1,159 @@
+$ playwright test --config playwright.e26.config.ts "--project" "chrome-dpr1-v2" "--project" "chrome-dpr2-v2" "--project" "edge-dpr1-v2" "--project" "edge-dpr2-v2"
+
+Running 120 tests using 1 worker
+
+[1/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r1
+[2/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r2
+[3/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r3
+[4/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r4
+[5/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r5
+[6/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r1
+[7/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r2
+[8/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r3
+[9/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r4
+[10/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r5
+[11/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r1
+[12/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r2
+[13/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r3
+[14/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r4
+[15/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r5
+[16/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r1
+[17/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r2
+[18/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r3
+[19/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r4
+[20/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r5
+[21/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r1
+[22/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r2
+[23/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r3
+[24/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r4
+[25/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r5
+[26/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r1
+[27/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r2
+[28/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r3
+[29/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r4
+[30/120] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r5
+[31/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r1
+[32/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r2
+[33/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r3
+[34/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r4
+[35/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r5
+[36/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r1
+[37/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r2
+[38/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r3
+[39/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r4
+[40/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r5
+[41/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r1
+[42/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r2
+[43/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r3
+[44/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r4
+[45/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r5
+[46/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r1
+[47/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r2
+[48/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r3
+[49/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r4
+[50/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r5
+[51/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r1
+[52/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r2
+[53/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r3
+[54/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r4
+[55/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r5
+[56/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r1
+[57/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r2
+[58/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r3
+[59/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r4
+[60/120] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r5
+[61/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r1
+[62/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r2
+[63/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r3
+[64/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r4
+[65/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r5
+[66/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r1
+  1) [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r1 ───────────
+
+    Error: expect(locator).toHaveAttribute(expected) failed
+
+    Locator: getByTestId('status')
+    Expected: "bench-loaded"
+    Timeout: 90000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toHaveAttribute" with timeout 90000ms
+      - waiting for getByTestId('status')
+
+
+      439 |   await page.goto(`/?bench=1&${query}${ui ? '&ui=1' : ''}`);
+      440 |   const status = page.getByTestId('status');
+    > 441 |   await expect(status).toHaveAttribute('data-fixture', 'bench-loaded', { timeout: 90_000 });
+          |                        ^
+      442 |   await expect(status).toHaveAttribute('data-renderer', 'ready', { timeout: 90_000 });
+      443 |   expect(errors).toEqual([]);
+      444 |   // M8-N3 (M8-U6): the layout budget against the 17a2b0a measurement of this project. M9-U1:
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:441:24)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:850:9
+
+    Error Context: test-results\e26\e26-harness-e26-mixed-all-edit-10k-v2-r1-edge-dpr1-v2\error-context.md
+
+
+[67/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r2
+[68/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r3
+[69/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r4
+[70/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r5
+[71/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r1
+[72/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r2
+[73/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r3
+[74/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r4
+[75/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r5
+[76/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r1
+[77/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r2
+[78/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r3
+[79/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r4
+[80/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r5
+[81/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r1
+[82/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r2
+[83/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r3
+[84/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r4
+[85/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r5
+[86/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r1
+[87/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r2
+[88/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r3
+[89/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r4
+[90/120] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r5
+[91/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r1
+[92/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r2
+[93/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r3
+[94/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r4
+[95/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-view-edit-10k/v2 r5
+[96/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r1
+[97/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r2
+[98/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r3
+[99/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r4
+[100/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r5
+[101/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r1
+[102/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r2
+[103/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r3
+[104/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r4
+[105/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-pan-10k/v2 r5
+[106/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r1
+[107/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r2
+[108/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r3
+[109/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r4
+[110/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-simple-stress-10k/v2 r5
+[111/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r1
+[112/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r2
+[113/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r3
+[114/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r4
+[115/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 r5
+[116/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r1
+[117/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r2
+[118/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r3
+[119/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r4
+[120/120] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-pointer-busy-10k/v2 (plain) r5
+  Slow test file: [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts (15.8m)
+  Slow test file: [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts (15.4m)
+  Slow test file: [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts (15.1m)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  1 failed
+    [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r1 ────────────
+  119 passed (1.1h)
+[ELIFECYCLE] Command failed with exit code 1.

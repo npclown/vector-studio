@@ -1,0 +1,6 @@
+$ playwright test --config playwright.e26.config.ts "--project" "edge-dpr1-v2" "--grep" "e26-mixed-all-edit-10k/v2 r1$"
+
+Running 1 test using 1 worker
+
+[1/1] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:757:5 › e26-mixed-all-edit-10k/v2 r1
+  1 passed (1.1m)

@@ -1,0 +1,42 @@
+E30-U2 main-PC sitting — machine facts and run log
+
+Machine: DESKTOP-DKVUSAV
+Repo HEAD: c6762299a61fb5af606ee6f609dc0478944f9f9e (main, fast-forwarded from b6e9343c)
+Worktree: no tracked changes; pre-existing untracked user files left in place
+  (.claude/launch.json, artifacts/, docs/evidence/e3-a04-readback-2026-10-24/)
+OS: Windows 11 Pro 10.0.26200
+GPU: NVIDIA GeForce GTX 1660 SUPER, driver 32.0.16.1088
+Display: one monitor, 1920x1080 at 60 Hz
+Power plan: Balanced (381b4222-f694-41f0-9685-ff5bb260df2e)
+Chrome: 156.0.8078.80
+Edge: 156.0.4314.58
+Node: v24.22.1
+Other open apps during the sittings: Claude desktop, VS Code, Notepad, Calculator,
+  Windows Settings, TeamViewer (minimized), Telegram, Windows Terminal, and one
+  unrelated Codex background node daemon (PID 23376, running since 2026-10-30).
+  No Chrome/Edge windows were open before the run.
+
+Prep (2026-11-03T05:10:04Z - 05:33:03Z, log in prep.log)
+- pnpm install --frozen-lockfile: PASS
+- pnpm test:geometry: PASS — Rust 526 passed / 0 failed / 69 ignored (plus 1+1 filtered
+  single-test runs passed); vitest 72 files passed / 4 skipped, 1217 tests passed / 6 skipped
+- pnpm build: PASS
+
+Split-ON sitting (on/)
+- Main run: 2026-11-03T05:33:33Z - 06:36:48Z. 120 tests: 119 passed, 1 failed.
+  (times log line for the main run says exit=0 by a logging slip; pnpm exited 1)
+- Failure: [edge-dpr1-v2] e26-mixed-all-edit-10k/v2 r1 —
+  expect(getByTestId('status')).toHaveAttribute('data-fixture', 'bench-loaded') timed out
+  after 90000 ms: element(s) not found (page load, tests/e26/e26-harness.spec.ts:441).
+  No record was written for that attempt; its error context is kept at
+  on/attempt1/edge-dpr1-v2-mixed-all-edit-r1-error-context.md.
+- Retry once: 2026-11-03T06:43:40Z - 06:44:47Z, same env, --project edge-dpr1-v2
+  --grep "e26-mixed-all-edit-10k/v2 r1$": 1 passed (on/retry-console.log).
+- runs/: 120 records. summary.json / summary.md from tooling/e26-summarize.mjs.
+
+Split-OFF sitting (off/, E26_SPLIT=0)
+- 2026-11-03T06:44:59Z - 07:22:20Z. 80 tests: 80 passed, 0 failed.
+- runs/: 80 records. summary.json / summary.md from tooling/e26-summarize.mjs.
+
+check:e30 (NODE_OPTIONS=--max-old-space-size=8000)
+- 2026-11-03T07:22:36Z - 07:23:57Z. 1 file / 1 test passed. Output in check-e30.txt.
