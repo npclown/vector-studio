@@ -1,0 +1,94 @@
+file	project	title	status	ms	worker
+tests/gpu/e10-test-hooks.spec.ts	chrome	E10-A7 controls at 1x, DPR 1.5	passed	3132	1
+tests/gpu/e10-test-hooks.spec.ts	chrome	E10-A7 controls at 4x, DPR 1	passed	3222	3
+tests/gpu/e10-test-hooks.spec.ts	chrome	E10-A7 controls at 1x, DPR 1	passed	3426	0
+tests/gpu/e10-test-hooks.spec.ts	chrome	E10-A7 controls at 1x, DPR 2	passed	3508	2
+tests/gpu/e17-write-once.spec.ts	chrome	E17-A5 reset path: 511 mesh draws, rectangle A at ordinals 0, 255 and 510, at 1x	passed	1681	2
+tests/gpu/e10-test-hooks.spec.ts	chrome	E10-A7 controls at 4x, DPR 1.5	passed	2638	1
+tests/gpu/e10-test-hooks.spec.ts	chrome	E10-A7 controls at 4x, DPR 2	passed	2675	3
+tests/gpu/e17-write-once.spec.ts	chrome	E17-A5 reset path: 511 mesh draws, rectangle A at ordinals 0, 255 and 510, at 4x	passed	1773	2
+tests/gpu/e23-gradient-paint.spec.ts	chrome	E23-A04 premultiplied ramp and hard stop at DPR 1	passed	3475	3
+tests/gpu/e23-gradient-paint.spec.ts	chrome	E23-A03 G1 to G8 against the oracle at DPR 1	passed	6637	1
+tests/gpu/e23-gradient-paint.spec.ts	chrome	E23-A04 premultiplied ramp and hard stop at DPR 2	passed	3564	3
+tests/gpu/e23-gradient-paint.spec.ts	chrome	E23-A05 and A06: invalidation and batching counters	passed	3731	1
+tests/gpu/e23-gradient-paint.spec.ts	chrome	E23-A09 paint resources in accounting, after removal, device loss and disposal	passed	3511	3
+tests/gpu/e23-gradient-paint.spec.ts	chrome	E23-A03 G1 to G8 against the oracle at DPR 2	passed	11329	2
+tests/gpu/e24-stroke-dash.spec.ts	chrome	E24-A05 D7 dash ends agree across zooms at DPR 1	passed	11924	3
+tests/gpu/e24-stroke-dash.spec.ts	chrome	E24-A05 D7 dash ends agree across zooms at DPR 2	passed	14742	3
+tests/gpu/e24-stroke-dash.spec.ts	chrome	E24-A05 D1 to D9 against the oracle at DPR 1	passed	32040	1
+tests/gpu/e24-stroke-dash.spec.ts	chrome	E24-A04 GPU part: invalidation counters	passed	5731	3
+tests/gpu/e17-write-once.spec.ts	chrome	E17-A5 fixtures: count at most 1, covered pixels counted once, 4x equals 1x	passed	47744	0
+tests/gpu/e24-stroke-dash.spec.ts	chrome	E24-A03 note: the real kernel at 4,096 dashes on D8 geometry	passed	3215	1
+tests/gpu/e25-isolated-opacity.spec.ts	chrome	E25-A03 O1 to O8 against the oracle at 4x, DPR 1	passed	8862	3
+tests/gpu/e25-isolated-opacity.spec.ts	chrome	E25-A03 O1 to O8 against the oracle at 1x, DPR 1	passed	10425	1
+tests/gpu/e25-isolated-opacity.spec.ts	chrome	E25-A05 O8 tile seams on a 2100 x 1300 surface at 4x	passed	9494	1
+tests/gpu/e25-isolated-opacity.spec.ts	chrome	E25-A05 O8 tile seams on a 2100 x 1300 surface at 1x	passed	9252	1
+tests/gpu/e25-isolated-opacity.spec.ts	chrome	E25-A03 O7 opacity 0 and opacity 1	passed	5693	1
+tests/gpu/e25-isolated-opacity.spec.ts	chrome	E25-A03 O1 to O8 against the oracle at 4x, DPR 2	passed	36794	0
+tests/gpu/e25-isolated-opacity.spec.ts	chrome	E25-A04 opacity edits, visibility, pan and layer passes	passed	4344	0
+tests/gpu/e25-isolated-opacity.spec.ts	chrome	E25-A03 O1 to O8 against the oracle at 1x, DPR 2	passed	35262	3
+tests/gpu/e25-isolated-opacity.spec.ts	chrome	E25-A06 layer resources in accounting, after removal, device loss and disposal	passed	4595	0
+tests/gpu/e25-isolated-opacity.spec.ts	chrome	E25-A07 O9 layer budget on a 3840 x 2160 surface at 4x	passed	17917	1
+tests/gpu/e25-isolated-opacity.spec.ts	chrome	E25 shared-edge observation at DPR 1	passed	14226	3
+tests/gpu/e25-isolated-opacity.spec.ts	chrome	E25 shared-edge observation at DPR 2	passed	13801	0
+tests/gpu/e28-text-atlas.spec.ts	chrome	E28-A03 T1 to T7 against the oracle at 4x, DPR 1	passed	8839	1
+tests/gpu/e28-text-atlas.spec.ts	chrome	E28-A03 T1 to T7 against the oracle at 1x, DPR 1	passed	9025	0
+tests/gpu/e28-text-atlas.spec.ts	chrome	E28-A04 edits, pans, zoom and generation on the raster counters	passed	4632	0
+tests/gpu/e28-text-atlas.spec.ts	chrome	E28-A03 T1 to T7 against the oracle at 4x, DPR 2	passed	20287	3
+tests/gpu/e28-text-atlas.spec.ts	chrome	E28-A05 atlas pages and sampler in accounting, resize, removal, device loss	passed	5234	0
+tests/gpu/e28-text-atlas.spec.ts	chrome	E28-A03 T1 to T7 against the oracle at 1x, DPR 2	passed	19631	1
+tests/gpu/e28-text-atlas.spec.ts	chrome	T8 atlas pressure: eviction, over-limit notice and convergence (E28-A06)	passed	7194	3
+tests/gpu/e28-text-atlas.spec.ts	chrome	T8 raster budget convergence and the 32 MiB atlas bound (E28-A06)	passed	6536	0
+tests/gpu/e28-text-atlas.spec.ts	chrome	T8 eviction order: an older-generation page goes before the least recent (E28-A06)	passed	5595	1
+tests/gpu/e28-text-atlas.spec.ts	chrome	T9 generation 2 never draws generation 1 bitmaps (E28-A08)	passed	5360	3
+tests/gpu/e28-text-atlas.spec.ts	chrome	E28 M6c per-cluster readback and raster cost at DPR 1	passed	5220	3
+tests/gpu/e28-text-atlas.spec.ts	chrome	E28-A08 the canvas port: identity, empty, too-large, unavailable, bearings, two pages	passed	9007	1
+tests/gpu/e3-a04-readback.spec.ts	chrome	E3-U4 GPU model check and E3-PC12	passed	1216	1
+tests/gpu/e24-stroke-dash.spec.ts	chrome	E24-A05 D1 to D9 against the oracle at DPR 2	passed	131313	2
+tests/gpu/e28-text-atlas.spec.ts	chrome	E28 M6c per-cluster readback and raster cost at DPR 2	passed	5557	3
+tests/gpu/p1-primitives.spec.ts	chrome	P1 visual samples1 dpr1	passed	6873	1
+tests/gpu/p1-primitives.spec.ts	chrome	P1 visual samples1 dpr1.5	passed	9871	3
+tests/gpu/e28-text-atlas.spec.ts	chrome	E28-A07 scenes without text are identical with text=none and text=atlas	passed	30670	0
+tests/gpu/p1-primitives.spec.ts	chrome	P1 visual samples1 dpr2	passed	12876	3
+tests/gpu/p1-primitives.spec.ts	chrome	P1 latest-scene recovery samples1	passed	4095	3
+tests/gpu/p1-primitives.spec.ts	chrome	P1 visual samples4 dpr1	passed	7172	3
+tests/gpu/p1-primitives.spec.ts	chrome	P1 precision samples1 dpr1	passed	53825	2
+tests/gpu/p1-primitives.spec.ts	chrome	P1 visual samples4 dpr1.5	passed	9798	2
+tests/gpu/p1-primitives.spec.ts	chrome	P1 precision samples4 dpr1	passed	56867	3
+tests/gpu/p1-primitives.spec.ts	chrome	P1 visual samples4 dpr2	passed	13326	3
+tests/gpu/p1-primitives.spec.ts	chrome	P1 precision samples1 dpr1.5	passed	104043	1
+tests/gpu/p1-primitives.spec.ts	chrome	P1 latest-scene recovery samples4	passed	4056	1
+tests/gpu/p3-b2-strokes.spec.ts	chrome	DPR 1 > P3 B2 stroke page screenshots at DPR 1 (UNVERIFIED precision)	passed	11016	1
+tests/gpu/p3-b2-strokes.spec.ts	chrome	DPR 2 > P3 B2 stroke page screenshots at DPR 2 (UNVERIFIED precision)	passed	6047	1
+tests/gpu/p3-b2-strokes.spec.ts	chrome	DPR 3 > P3 B2 stroke page screenshots at DPR 3 (UNVERIFIED precision)	passed	5543	1
+tests/gpu/p3-st-u6-stroke.spec.ts	chrome	P3 ST-U6 stroke fixtures samples1 (UNVERIFIED precision)	passed	6810	1
+tests/gpu/p3-st-u6-stroke.spec.ts	chrome	P3 ST-U6 stroke fixtures samples4 (UNVERIFIED precision)	passed	7193	1
+tests/gpu/p1-primitives.spec.ts	chrome	P1 precision samples1 dpr2	passed	141247	0
+tests/gpu/p1-primitives.spec.ts	chrome	P1 precision samples4 dpr1.5	passed	104883	2
+tests/gpu/p3-st-u7-joint.spec.ts	chrome	P3 ST-U7 joint fixtures samples1 (UNVERIFIED precision)	passed	17548	1
+tests/gpu/p3-st-u7-joint.spec.ts	chrome	P3 ST-U7 joint fixtures samples4 (UNVERIFIED precision)	passed	16023	0
+tests/gpu/p3-st-u7-joint.spec.ts	chrome	P3 ST-U7 seeded defects fail their checks (UNVERIFIED precision)	passed	9702	2
+tests/gpu/p3-v4-paths.spec.ts	chrome	P3 V4 path page screenshots (UNVERIFIED precision)	passed	3386	2
+tests/gpu/p3-v3-mesh-smoke.spec.ts	chrome	P3 V3c mesh smoke samples1 (UNVERIFIED precision)	passed	16570	1
+tests/gpu/p3-v3-mesh-smoke.spec.ts	chrome	P3 V3c mesh smoke samples4 (UNVERIFIED precision)	passed	15629	0
+tests/gpu/p4-clip-mask.spec.ts	chrome	P4 U5 images (P4-A02 to A05, A10), 4x, DPR 1	passed	28718	1
+tests/gpu/p4-clip-mask.spec.ts	chrome	P4 U5 images (P4-A02 to A05, A10), 1x, DPR 1	passed	34831	2
+tests/gpu/p4-clip-mask.spec.ts	chrome	P4 U5 images (P4-A02 to A05, A10), 1x, DPR 2	passed	28766	0
+tests/gpu/p4-clip-mask.spec.ts	chrome	P4 U5 mask texture budget (P4-A08), 1x	passed	5852	0
+tests/gpu/p4-clip-mask.spec.ts	chrome	P4 U5 invalidation, culling, batching and resources (P4-A06 to A08), 4x, DPR 1	passed	16732	2
+tests/gpu/p4-clip-mask.spec.ts	chrome	P4 U5 frame-time observation (P4-A11), 4x	passed	8708	0
+tests/gpu/p4-clip-mask.spec.ts	chrome	P4 U5 frame-time observation (P4-A11), 1x	passed	8650	2
+tests/gpu/p4-clip-mask.spec.ts	chrome	P4 U5 images (P4-A02 to A05, A10), 4x, DPR 2	passed	28699	1
+tests/gpu/viz-v1-appearance.spec.ts	chrome	DPR 1 > V-1 path appearance page at DPR 1 (UNVERIFIED precision)	passed	28725	2
+tests/gpu/viz-v1-appearance.spec.ts	chrome	DPR 2 > V-1 path appearance page at DPR 2 (UNVERIFIED precision)	passed	30023	1
+tests/gpu/p1-primitives.spec.ts	chrome	P1 precision samples4 dpr2	passed	169113	3
+tests/gpu/viz-v2-path-data.spec.ts	chrome	DPR 1 > V-2 path-data page at DPR 1 (UNVERIFIED precision)	passed	33397	2
+tests/gpu/viz-v2-path-data.spec.ts	chrome	DPR 2 > V-2 path-data page at DPR 2 (UNVERIFIED precision)	passed	34232	1
+tests/gpu/foundation-experiments.spec.ts	chrome	camera triangle at DPR 1 > preserves camera, shared-buffer, and pipeline-cache evidence through recovery	passed	2114	4
+tests/gpu/foundation-experiments.spec.ts	chrome	camera triangle at DPR 1.5 > preserves camera, shared-buffer, and pipeline-cache evidence through recovery	passed	1806	4
+tests/gpu/foundation-experiments.spec.ts	chrome	camera triangle at DPR 2 > preserves camera, shared-buffer, and pipeline-cache evidence through recovery	passed	1696	4
+tests/gpu/playground-dashboard.spec.ts	chrome	captures a functional dashboard smoke artifact	passed	1584	4
+tests/gpu/webgpu-recovery.spec.ts	chrome	surfaces validation error and recovers once after deliberate device destruction	passed	1257	4
+tests/gpu/viz-v3-integration.spec.ts	chrome	DPR 1 > V-3 A07 integration page at DPR 1 (UNVERIFIED precision)	passed	50411	3
+tests/gpu/viz-v3-integration.spec.ts	chrome	DPR 2 > V-3 A07 integration page at DPR 2 (UNVERIFIED precision)	passed	51502	2
+tests/gpu/p4-clip-mask.spec.ts	chrome	E22 U3 tiled mask passes at 3840 x 2160 (E22-A5), 4x, DPR 2	passed	383709	0

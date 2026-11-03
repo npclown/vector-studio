@@ -757,6 +757,94 @@ describe('V-21 family-scoped relayout (V-21 contract, section 4.2)', () => {
   });
 });
 
+describe('V21-A03: a scoped relayout equals a whole-page relayout after a metrics change', () => {
+  /**
+   * The fake port, where a load of `family` doubles the advances of every run naming it (a face
+   * that changes the metrics). With `scoped`, it reports the family through `changedSince`;
+   * without, as "all", so the editor drops and lays out everything.
+   */
+  const widening = (family: string, scoped: boolean) => {
+    const base = createFakeTextLayout({ changedSince: true });
+    let wide = false;
+    const port: TextLayoutPort = {
+      portVersion: 0,
+      get generation() {
+        return base.generation;
+      },
+      ...(scoped ? { changedSince: (since: number) => base.changedSince!(since) } : {}),
+      layout(request) {
+        const result = base.layout(request);
+        const named = request.runs.map((entry) => foldFamily(entry.family) === foldFamily(family));
+        if (!wide || !named.some(Boolean)) return result;
+        return {
+          ...result,
+          clusters: result.clusters.map((cluster) =>
+            named[cluster.run] === true
+              ? { ...cluster, x: cluster.x * 2, advance: cluster.advance * 2 }
+              : cluster,
+          ),
+        };
+      },
+      subscribe: (listener) => base.subscribe(listener),
+    };
+    const load = (raw: string) => {
+      wide = true;
+      base.bump([raw]);
+    };
+    return { port, load };
+  };
+  /** The text leaves the renderer holds, without their generation. */
+  const texts = (renderer: RecordingRenderer) =>
+    renderer.mirror
+      .readRetainedScene()!
+      .nodes.filter((node) => node.kind === 'text')
+      .map((node) => ({ ...node, generation: null }))
+      .sort((left, right) => left.id.localeCompare(right.id));
+  const runOf = (value: string, family: string): TextRun => ({
+    text: value,
+    family,
+    size: 10,
+    color: black,
+  });
+
+  it('on text, case and quoting variants of the family, instances and overrides', () => {
+    const fixtures: [DocumentV6, string, string][] = [
+      [
+        doc([
+          text('a', f(0, 0, 40, 10), [runOf('ab', 'Test')]),
+          text('b', f(0, 20, 40, 10), [runOf('bc', 'Other Face')]),
+          text('c', f(0, 40, 40, 10), [runOf('cd', 'other face'), runOf('de', 'Test')]),
+          text('d', f(0, 60, 40, 10), [runOf('ef', 'Say "Hi"')]),
+        ]),
+        'Other Face',
+        'OTHER FACE',
+      ],
+      [
+        doc([
+          text('d', f(0, 60, 40, 10), [runOf('ef', 'Say "Hi"')]),
+          text('a', f(0, 0, 40, 10), [runOf('ab', 'Test')]),
+        ]),
+        'Say "Hi"',
+        'say "hi"',
+      ],
+      [symbols(), 'Test', 'test'],
+    ];
+    for (const [document, family, raw] of fixtures) {
+      const scoped = widening(family, true);
+      const whole = widening(family, false);
+      const left = attached(document, scoped.port).renderer;
+      const right = attached(document, whole.port).renderer;
+      const before = texts(left);
+      scoped.load(raw);
+      whole.load(raw);
+      const after = texts(left);
+      expect(after).toEqual(texts(right));
+      // The metrics changed for the text naming the family, so the check is not vacuous.
+      expect(after).not.toEqual(before);
+    }
+  });
+});
+
 describe('V-21 the cache keeps unaffected results (V-21 contract, section 4.2)', () => {
   const node = (id: string, family: string) =>
     text(id, f(0, 0, 10, 10), [

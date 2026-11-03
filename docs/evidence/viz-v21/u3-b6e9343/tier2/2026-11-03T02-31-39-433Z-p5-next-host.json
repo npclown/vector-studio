@@ -1,0 +1,24 @@
+{
+  "schema": "headed-timing-v1",
+  "config": "playwright.p5-next-host.config.ts",
+  "startedUtc": "2026-11-03T02:31:39.433Z",
+  "status": "passed",
+  "workers": 4,
+  "wallMilliseconds": 13913,
+  "tests": 4,
+  "testMilliseconds": 19038,
+  "specs": [
+    {
+      "file": "tests/p5-next-host/p5-next-host.spec.ts",
+      "project": "edge",
+      "tests": 2,
+      "milliseconds": 9622
+    },
+    {
+      "file": "tests/p5-next-host/p5-next-host.spec.ts",
+      "project": "chrome",
+      "tests": 2,
+      "milliseconds": 9416
+    }
+  ]
+}

@@ -1,0 +1,101 @@
+file	project	title	status	ms	worker
+tests/m6c-next-host/m6c-scene.spec.ts	chrome	M6c-A05 (structure): the scene page overlaps, clips, masks and instances its text	passed	5639	2
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome	M6c-A06 (structure): each agreement fixture keeps its committed line starts	passed	5815	0
+tests/m6c-next-host/m6c-next-host.spec.ts	chrome	M6c-A04: ?fixture=text draws ink inside each text leaf's cluster bounds	passed	6338	1
+tests/m6c-next-host/m6c-agreement.spec.ts	edge	M6c-A06 (structure): each agreement fixture keeps its committed line starts	passed	6370	3
+tests/m6c-next-host/m6c-next-host.spec.ts	chrome	M6c-A04: ?fixture=text-edit draws ink inside each text leaf's cluster bounds	passed	5253	1
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome	M6c-A06: kerning agrees with the port and the browser's paint (section 6.1 split)	passed	10988	0
+tests/m6c-next-host/m6c-agreement.spec.ts	edge	M6c-A06: kerning agrees with the port and the browser's paint (section 6.1 split)	passed	10814	3
+tests/m6c-next-host/m6c-next-host.spec.ts	chrome	M6c-A04: ?fixture=text-gpu draws ink inside each text leaf's cluster bounds	passed	6073	1
+tests/m6c-next-host/m6c-scene.spec.ts	chrome	M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 1	passed	12553	2
+tests/m6c-next-host/m6c-next-host.spec.ts	chrome	M6c-A04: the cluster probe draws a projected cluster through the host options	passed	5796	1
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome	M6c-A06: hangul agrees with the port and the browser's paint (section 6.1 split)	passed	8805	0
+tests/m6c-next-host/m6c-agreement.spec.ts	edge	M6c-A06: hangul agrees with the port and the browser's paint (section 6.1 split)	passed	8400	3
+tests/m6c-next-host/m6c-scene.spec.ts	chrome	M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 0.5	passed	10926	2
+tests/m6c-next-host/m6c-agreement.spec.ts	edge	M6c-A06: mixed-sizes agrees with the port and the browser's paint (section 6.1 split)	passed	6957	3
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome	M6c-A06: mixed-sizes agrees with the port and the browser's paint (section 6.1 split)	passed	7612	0
+tests/m6c-next-host/m6c-next-host.spec.ts	chrome	M6c-A04 (smoke half): each text fixture loads with the test font and lays out	passed	14098	1
+tests/m6c-next-host/m6c-scene.spec.ts	chrome	M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 2	passed	13631	2
+tests/m6c-next-host/m6c-agreement.spec.ts	edge	M6c-A06: hangul-in-latin agrees with the port and the browser's paint (section 6.1 split)	passed	10462	3
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome	M6c-A06: hangul-in-latin agrees with the port and the browser's paint (section 6.1 split)	passed	10501	0
+tests/m6c-next-host/m6c-next-host.spec.ts	edge	M6c-A04: ?fixture=text draws ink inside each text leaf's cluster bounds	passed	6107	4
+tests/m6c-next-host/m6c-next-host.spec.ts	edge	M6c-A04: ?fixture=text-edit draws ink inside each text leaf's cluster bounds	passed	4986	4
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome	M6c-A06: two-families agrees with the port and the browser's paint (section 6.1 split)	passed	10934	0
+tests/m6c-next-host/m6c-scene.spec.ts	chrome	M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 8	passed	12225	2
+tests/m6c-next-host/m6c-agreement.spec.ts	edge	M6c-A06: two-families agrees with the port and the browser's paint (section 6.1 split)	passed	12232	3
+tests/m6c-next-host/m6c-next-host.spec.ts	edge	M6c-A04: ?fixture=text-gpu draws ink inside each text leaf's cluster bounds	passed	6020	4
+tests/m6c-next-host/m6c-next-host.spec.ts	edge	M6c-A04: the cluster probe draws a projected cluster through the host options	passed	5673	4
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome	M6c-A06: spacing-tight agrees with the port and the browser's paint (section 6.1 split)	passed	9993	0
+tests/m6c-next-host/m6c-agreement.spec.ts	edge	M6c-A06: spacing-tight agrees with the port and the browser's paint (section 6.1 split)	passed	10739	3
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome	M6c-A06: spacing-wide agrees with the port and the browser's paint (section 6.1 split)	passed	8568	0
+tests/m6c-next-host/m6c-next-host.spec.ts	edge	M6c-A04 (smoke half): each text fixture loads with the test font and lays out	passed	12552	4
+tests/m6c-next-host/m6c-agreement.spec.ts	edge	M6c-A06: spacing-wide agrees with the port and the browser's paint (section 6.1 split)	passed	9536	3
+tests/m6c-next-host/m6c-scene.spec.ts	edge	M6c-A05 (structure): the scene page overlaps, clips, masks and instances its text	passed	4661	4
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome	M6c-A06: small-12 agrees with the port and the browser's paint (section 6.1 split)	passed	7889	0
+tests/m6c-next-host/m6c-agreement.spec.ts	edge	M6c-A06: small-12 agrees with the port and the browser's paint (section 6.1 split)	passed	8347	3
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome	M6c-A06: small-9 agrees with the port and the browser's paint (section 6.1 split)	passed	6099	0
+tests/m6c-next-host/m6c-scene.spec.ts	edge	M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 1	passed	11065	4
+tests/m6c-next-host/m6c-agreement.spec.ts	edge	M6c-A06: small-9 agrees with the port and the browser's paint (section 6.1 split)	passed	6698	3
+tests/m6c-next-host/m6c-scene.spec.ts	edge	M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 0.5	passed	10414	4
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome	M6c-A06: wrapped agrees with the port and the browser's paint (section 6.1 split)	passed	19342	0
+tests/m6c-next-host/m6c-agreement.spec.ts	edge	M6c-A06: wrapped agrees with the port and the browser's paint (section 6.1 split)	passed	19423	3
+tests/m6c-next-host/m6c-scene.spec.ts	edge	M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 2	passed	12870	4
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome	M6c-A06: align-center agrees with the port and the browser's paint (section 6.1 split)	passed	7317	0
+tests/m6c-next-host/m6c-agreement.spec.ts	edge	M6c-A06: align-center agrees with the port and the browser's paint (section 6.1 split)	passed	8249	3
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome	M6c-A06: align-right agrees with the port and the browser's paint (section 6.1 split)	passed	7196	0
+tests/m6c-next-host/m6c-scene.spec.ts	chrome	M6c-A05: a generation change rasterizes every drawn key again and never draws an older bitmap	failed	68731	2
+tests/m6c-next-host/m6c-scene.spec.ts	edge	M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 8	passed	11574	4
+tests/m6c-next-host/m6c-agreement.spec.ts	edge	M6c-A06: align-right agrees with the port and the browser's paint (section 6.1 split)	passed	8534	3
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome-dpr2	M6c-A06 (structure): each agreement fixture keeps its committed line starts	passed	4558	5
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome	M6c-A07: a web font that loads after the first draw re-projects and draws its face	passed	13861	0
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome-dpr2	M6c-A06: kerning agrees with the port and the browser's paint (section 6.1 split)	passed	10976	5
+tests/m6c-next-host/m6c-agreement.spec.ts	edge	M6c-A07: a web font that loads after the first draw re-projects and draws its face	passed	14835	3
+tests/m6c-next-host/m6c-next-host.spec.ts	chrome-dpr2	M6c-A04: ?fixture=text draws ink inside each text leaf's cluster bounds	passed	5469	6
+tests/m6c-next-host/m6c-next-host.spec.ts	chrome-dpr2	M6c-A04: ?fixture=text-edit draws ink inside each text leaf's cluster bounds	passed	4957	6
+tests/m6c-next-host/m6c-scene.spec.ts	chrome-dpr2	M6c-A05 (structure): the scene page overlaps, clips, masks and instances its text	passed	4393	7
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome-dpr2	M6c-A06: hangul agrees with the port and the browser's paint (section 6.1 split)	passed	9384	5
+tests/m6c-next-host/m6c-next-host.spec.ts	chrome-dpr2	M6c-A04: ?fixture=text-gpu draws ink inside each text leaf's cluster bounds	passed	5893	6
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome-dpr2	M6c-A06: mixed-sizes agrees with the port and the browser's paint (section 6.1 split)	passed	6995	5
+tests/m6c-next-host/m6c-next-host.spec.ts	chrome-dpr2	M6c-A04: the cluster probe draws a projected cluster through the host options	passed	5557	6
+tests/m6c-next-host/m6c-scene.spec.ts	chrome-dpr2	M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 1	passed	15155	7
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome-dpr2	M6c-A06: hangul-in-latin agrees with the port and the browser's paint (section 6.1 split)	passed	11186	5
+tests/m6c-next-host/m6c-next-host.spec.ts	chrome-dpr2	M6c-A04 (smoke half): each text fixture loads with the test font and lays out	passed	12257	6
+tests/m6c-next-host/m6c-scene.spec.ts	chrome-dpr2	M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 0.5	passed	11287	7
+tests/m6c-next-host/m6c-agreement.spec.ts	edge-dpr2	M6c-A06 (structure): each agreement fixture keeps its committed line starts	passed	4899	8
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome-dpr2	M6c-A06: two-families agrees with the port and the browser's paint (section 6.1 split)	passed	10983	5
+tests/m6c-next-host/m6c-agreement.spec.ts	edge-dpr2	M6c-A06: kerning agrees with the port and the browser's paint (section 6.1 split)	passed	11202	8
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome-dpr2	M6c-A06: spacing-tight agrees with the port and the browser's paint (section 6.1 split)	passed	10035	5
+tests/m6c-next-host/m6c-scene.spec.ts	edge	M6c-A05: a generation change rasterizes every drawn key again and never draws an older bitmap	failed	69147	4
+tests/m6c-next-host/m6c-agreement.spec.ts	edge-dpr2	M6c-A06: hangul agrees with the port and the browser's paint (section 6.1 split)	passed	9221	8
+tests/m6c-next-host/m6c-scene.spec.ts	chrome-dpr2	M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 2	passed	23375	7
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome-dpr2	M6c-A06: spacing-wide agrees with the port and the browser's paint (section 6.1 split)	passed	10626	5
+tests/m6c-next-host/m6c-next-host.spec.ts	edge-dpr2	M6c-A04: ?fixture=text draws ink inside each text leaf's cluster bounds	passed	6077	9
+tests/m6c-next-host/m6c-agreement.spec.ts	edge-dpr2	M6c-A06: mixed-sizes agrees with the port and the browser's paint (section 6.1 split)	passed	8539	8
+tests/m6c-next-host/m6c-next-host.spec.ts	edge-dpr2	M6c-A04: ?fixture=text-edit draws ink inside each text leaf's cluster bounds	passed	5493	9
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome-dpr2	M6c-A06: small-12 agrees with the port and the browser's paint (section 6.1 split)	passed	9268	5
+tests/m6c-next-host/m6c-next-host.spec.ts	edge-dpr2	M6c-A04: ?fixture=text-gpu draws ink inside each text leaf's cluster bounds	passed	5546	9
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome-dpr2	M6c-A06: small-9 agrees with the port and the browser's paint (section 6.1 split)	passed	6927	5
+tests/m6c-next-host/m6c-agreement.spec.ts	edge-dpr2	M6c-A06: hangul-in-latin agrees with the port and the browser's paint (section 6.1 split)	passed	12924	8
+tests/m6c-next-host/m6c-next-host.spec.ts	edge-dpr2	M6c-A04: the cluster probe draws a projected cluster through the host options	passed	6144	9
+tests/m6c-next-host/m6c-scene.spec.ts	chrome-dpr2	M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 8	passed	29360	7
+tests/m6c-next-host/m6c-agreement.spec.ts	edge-dpr2	M6c-A06: two-families agrees with the port and the browser's paint (section 6.1 split)	passed	13185	8
+tests/m6c-next-host/m6c-next-host.spec.ts	edge-dpr2	M6c-A04 (smoke half): each text fixture loads with the test font and lays out	passed	13539	9
+tests/m6c-next-host/m6c-scene.spec.ts	edge-dpr2	M6c-A05 (structure): the scene page overlaps, clips, masks and instances its text	passed	4745	9
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome-dpr2	M6c-A06: wrapped agrees with the port and the browser's paint (section 6.1 split)	passed	22432	5
+tests/m6c-next-host/m6c-agreement.spec.ts	edge-dpr2	M6c-A06: spacing-tight agrees with the port and the browser's paint (section 6.1 split)	passed	10408	8
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome-dpr2	M6c-A06: align-center agrees with the port and the browser's paint (section 6.1 split)	passed	7721	5
+tests/m6c-next-host/m6c-agreement.spec.ts	edge-dpr2	M6c-A06: spacing-wide agrees with the port and the browser's paint (section 6.1 split)	passed	10785	8
+tests/m6c-next-host/m6c-scene.spec.ts	edge-dpr2	M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 1	passed	15925	9
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome-dpr2	M6c-A06: align-right agrees with the port and the browser's paint (section 6.1 split)	passed	7750	5
+tests/m6c-next-host/m6c-agreement.spec.ts	edge-dpr2	M6c-A06: small-12 agrees with the port and the browser's paint (section 6.1 split)	passed	8609	8
+tests/m6c-next-host/m6c-scene.spec.ts	edge-dpr2	M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 0.5	passed	12230	9
+tests/m6c-next-host/m6c-agreement.spec.ts	edge-dpr2	M6c-A06: small-9 agrees with the port and the browser's paint (section 6.1 split)	passed	6744	8
+tests/m6c-next-host/m6c-agreement.spec.ts	chrome-dpr2	M6c-A07: a web font that loads after the first draw re-projects and draws its face	passed	14943	5
+tests/m6c-next-host/m6c-scene.spec.ts	edge-dpr2	M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 2	passed	21817	9
+tests/m6c-next-host/m6c-agreement.spec.ts	edge-dpr2	M6c-A06: wrapped agrees with the port and the browser's paint (section 6.1 split)	passed	20358	8
+tests/m6c-next-host/m6c-scene.spec.ts	chrome-dpr2	M6c-A05: a generation change rasterizes every drawn key again and never draws an older bitmap	failed	68404	7
+tests/m6c-next-host/m6c-agreement.spec.ts	edge-dpr2	M6c-A06: align-center agrees with the port and the browser's paint (section 6.1 split)	passed	7646	8
+tests/m6c-next-host/m6c-agreement.spec.ts	edge-dpr2	M6c-A06: align-right agrees with the port and the browser's paint (section 6.1 split)	passed	7335	8
+tests/m6c-next-host/m6c-scene.spec.ts	edge-dpr2	M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 8	passed	25221	9
+tests/m6c-next-host/m6c-agreement.spec.ts	edge-dpr2	M6c-A07: a web font that loads after the first draw re-projects and draws its face	passed	14344	8
+tests/m6c-next-host/m6c-scene.spec.ts	edge-dpr2	M6c-A05: a generation change rasterizes every drawn key again and never draws an older bitmap	failed	66336	9

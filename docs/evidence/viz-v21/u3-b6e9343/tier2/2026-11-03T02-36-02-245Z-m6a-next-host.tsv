@@ -1,0 +1,23 @@
+file	project	title	status	ms	worker
+tests/m6a-next-host/m6a-next-host.spec.ts	chrome	M6a-A11: the test font registers and the fixture lays out its committed structure	passed	1078	0
+tests/m6a-next-host/m6a-next-host.spec.ts	edge	M6a-A11: the test font registers and the fixture lays out its committed structure	passed	1137	1
+tests/m6a-next-host/m6a-next-host.spec.ts	chrome	M6a-A11: a face loading after the first layout re-lays out with no document event	passed	779	0
+tests/m6a-next-host/m6a-next-host.spec.ts	edge	M6a-A11: a face loading after the first layout re-lays out with no document event	passed	854	1
+tests/m6a-next-host/m6a-next-host.spec.ts	chrome	M6a-A11: a missing family and Hangul in a Latin-only family fall back	passed	702	0
+tests/m6a-next-host/m6a-next-host.spec.ts	edge	M6a-A11: a missing family and Hangul in a Latin-only family fall back	passed	796	1
+tests/m6a-next-host/m6a-next-host.spec.ts	chrome	M6a-A11: every fixture agrees with an unprobed reference block	passed	1134	0
+tests/m6a-next-host/m6a-next-host.spec.ts	edge	M6a-A11: every fixture agrees with an unprobed reference block	passed	1158	1
+tests/m6a-next-host/m6a-next-host.spec.ts	chrome	M6a-A11 (A05's Chrome half): grapheme segmentation in Chrome equals Node's	passed	652	0
+tests/m6a-next-host/m6a-next-host.spec.ts	edge	M6a-A11 (A05's Chrome half): grapheme segmentation in Chrome equals Node's	passed	769	1
+tests/m6a-next-host/m6a-next-host.spec.ts	chrome	M6a-A11 (carry list f): a 128-DEL family registers and lays out	passed	729	0
+tests/m6a-next-host/m6a-next-host.spec.ts	edge	M6a-A11 (carry list f): a 128-DEL family registers and lays out	passed	819	1
+tests/m6a-next-host/m6a-next-host.spec.ts	chrome	M6a-A11: sizes 0.5 and 4096 lay out, with no minimum font size clamp at 0.5	passed	738	0
+tests/m6a-next-host/m6a-next-host.spec.ts	edge	M6a-A11: sizes 0.5 and 4096 lay out, with no minimum font size clamp at 0.5	passed	722	1
+tests/m6a-next-host/m6a-next-host.spec.ts	chrome	M6a-A11: the measurement block is isolated from the page's direction	passed	758	0
+tests/m6a-next-host/m6a-next-host.spec.ts	edge	M6a-A11: the measurement block is isolated from the page's direction	passed	801	1
+tests/m6a-next-host/m6a-next-host.spec.ts	chrome	M6a-A11 (carry list h): a registered-font cluster draws through the atlas renderer	passed	3503	0
+tests/m6a-next-host/m6a-next-host.spec.ts	edge	M6a-A11 (carry list h): a registered-font cluster draws through the atlas renderer	passed	3479	1
+tests/m6a-next-host/m6a-next-host.spec.ts	chrome	M6a-A12: DPR 1, 1.25, 1.5 and 2 by emulation give the same layout and bump the generation	passed	1494	0
+tests/m6a-next-host/m6a-next-host.spec.ts	edge	M6a-A12: DPR 1, 1.25, 1.5 and 2 by emulation give the same layout and bump the generation	passed	1531	1
+tests/m6a-next-host/m6a-next-host.spec.ts	chrome	M6a-A12: size linearity, s and 4s at width 4w, within a quarter pixel	passed	967	0
+tests/m6a-next-host/m6a-next-host.spec.ts	edge	M6a-A12: size linearity, s and 4s at width 4w, within a quarter pixel	passed	950	1
