@@ -16,7 +16,7 @@
 // cache lookups miss in the usual case, up to 32 when failed ranges split, so 0 means no path
 // was tessellated); bucket computations, geometry builds, P1 record writes (the mesh packer's
 // and text uploads are not counted), the bytes the packet's P1 and mesh writes carry (text
-// uploads not counted; a still frame's must be 0, which shows every packet was acknowledged),
+// uploads not counted; a still frame's must be 0, which shows the source's acknowledgements take effect),
 // and the packet's primitive and mesh draws and text glyph instances, the items each pass walks.
 // Each packet is acknowledged with a receipt that has the text part the v2 page's packets carry
 // (one backend page incarnation per atlas page index, kept while the page exists): without it the
@@ -246,7 +246,7 @@ it('E30: prepare at the fitted camera of the profiled page', async () => {
   for (const kind of ['first', ...KINDS]) {
     expect(Math.min(...afresh(kind)), `${kind}: afresh paths`).toBeGreaterThanOrEqual(0);
   }
-  // Every packet was acknowledged: a still frame writes nothing.
+  // The acknowledgements take effect: a still frame writes nothing.
   expect(rank(counts.still!.writtenBytes, 1), 'a still frame writes no record').toBe(0);
   process.stdout.write(
     `${JSON.stringify({
