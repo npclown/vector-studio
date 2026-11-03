@@ -51,9 +51,21 @@ for (const record of records) {
   if (!groups.has(key)) groups.set(key, []);
   groups.get(key).push(record);
 }
+// E30-U1c: a split-on and a split-off sitting are different runs (U2's overhead check).
+for (const [key, group] of groups) {
+  if (new Set(group.map((record) => record.splitEnabled !== false)).size > 1)
+    throw new Error(`${key} mixes E26_SPLIT on and off records: summarize each sitting alone`);
+}
 
 const round = (value) =>
   value === null || value === undefined ? null : Math.round(value * 100) / 100;
+/** One statistic of each part of a run's E30 split, or null for a run without one. */
+const splitOf = (run, statistic) =>
+  run.split == null
+    ? null
+    : Object.fromEntries(
+        Object.entries(run.split).map(([key, value]) => [key, round(value[statistic])]),
+      );
 const max = (values) => (values.some((value) => value === null) ? null : Math.max(...values));
 const min = (values) => (values.some((value) => value === null) ? null : Math.min(...values));
 
@@ -139,6 +151,14 @@ const rows = [...groups.values()].map((runs) => {
       maxPerRunP95Ms: round(worst),
       pass: worst !== null && worst <= first.ceilingMs,
       encodeAndSubmitP95Ms: runs.map((run) => round(run.encodeAndSubmitMs.p95)),
+      // E30-U1c: the frame part split per run, only when a run has one, so a summary of
+      // records from before E30-U1c (or all with E26_SPLIT=0) is unchanged byte for byte.
+      ...(runs.some((run) => run.split != null)
+        ? {
+            splitMedianMs: runs.map((run) => splitOf(run, 'median')),
+            splitP95Ms: runs.map((run) => splitOf(run, 'p95')),
+          }
+        : {}),
       longTasksOver50: runs.map(
         (run) => run.run.longTasks.filter((task) => task.durationMs > 50).length,
       ),

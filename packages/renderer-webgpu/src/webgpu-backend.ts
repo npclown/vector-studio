@@ -122,7 +122,7 @@ export interface WebGpuFrameMeasurements {
 const DEFAULT_MEASUREMENT_CAPACITY = 4096;
 /**
  * E30 contract, section 3: while frame measurement is active, the parts of a primitive frame are
- * User Timing measures, read by the bench through a PerformanceObserver. `vs-gpu` (submit to
+ * User Timing measures, read by the bench and the E26 harness. `vs-gpu` (submit to
  * `onSubmittedWorkDone`, a proxy of GPU time) is taken for every eighth submitted frame. Not
  * exported: the names are the bench's contract, not a root export member (E30-Q1 (a)).
  */

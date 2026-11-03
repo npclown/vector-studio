@@ -130,6 +130,24 @@ const TRACE_CATEGORIES = [
 // navigation to the end of the run and writes a `memory` block. Such a run is never timed
 // evidence (A09-A03): its record carries `memoryVariant: true` and the summarizer skips it.
 const memoryVariant = process.env.E26_MEMORY === '1';
+// E30-U1c (E30 contract, section 3): frame runs collect the renderer's frame part measures
+// (`vs-*` User Timing measures, E30-U1a) over the window into `split`. `E26_SPLIT=0` turns the
+// measure calls into no-ops in the page, for U2's on/off overhead check, and records no split.
+const splitEnabled = process.env.E26_SPLIT !== '0';
+const SPLIT_MEASURES = Object.freeze({
+  prepareMs: 'vs-prepare',
+  submitMs: 'vs-submit',
+  acknowledgeMs: 'vs-acknowledge',
+  gpuMs: 'vs-gpu',
+});
+/** Runs in the page before any script: `vs-*` measures become no-ops (E26_SPLIT=0). */
+function disableFrameMeasures() {
+  const measure = performance.measure.bind(performance);
+  performance.measure = ((name: string, ...rest: unknown[]) =>
+    name.startsWith('vs-')
+      ? undefined
+      : (measure as (...args: unknown[]) => PerformanceMeasure)(name, ...rest)) as never;
+}
 if (memoryVariant && traceDirectory !== undefined)
   throw new Error('E26_MEMORY and E26_TRACE record different traces: set one');
 let tracing: { browser: Browser } | null = null;
@@ -717,12 +735,13 @@ for (const { scenario, variant } of runs) {
       };
       const slug = `${testInfo.project.name}--${scenario.id.replace(/[^a-z0-9-]+/gi, '_')}${
         variant === 'plain' ? '-plain' : ''
-      }--r${repetition}${memoryVariant ? '--memory' : ''}`;
+      }--r${repetition}${memoryVariant ? '--memory' : ''}${splitEnabled ? '' : '--nosplit'}`;
       test.skip(
         memoryVariant && variant !== 'frame',
         'the memory variant runs the frame runs only',
       );
       const { errors, consoleErrors } = await installProbe(page);
+      if (!splitEnabled) await page.addInitScript(disableFrameMeasures);
       if (memoryVariant) {
         await page.addInitScript(installMemoryLedger);
         await browser.startTracing(page, {
@@ -777,7 +796,7 @@ for (const { scenario, variant } of runs) {
         }
         const start = await presence(page);
         const run = await page.evaluate(
-          async ({ driver, warmUpMs, windowEndMs, mark }) => {
+          async ({ driver, warmUpMs, windowEndMs, mark, splitNames }) => {
             const hook = window.__e26Bench!;
             const backend = hook.backend()!;
             const until = (time: number) =>
@@ -793,9 +812,18 @@ for (const { scenario, variant } of runs) {
             const steps = hook.driverSteps();
             const revisions = hook.latencies.length;
             const submitted = backend.getStatistics().framesSubmitted;
+            for (const name of Object.values(splitNames)) performance.clearMeasures(name);
             backend.startFrameMeasurements(8192);
             await until(t0 + windowEndMs);
             const measurements = backend.stopFrameMeasurements();
+            // A vs-gpu wait still pending at stop is dropped by the backend; the rest are all here.
+            const split = Object.fromEntries(
+              Object.entries(splitNames).map(([key, name]) => [
+                key,
+                performance.getEntriesByName(name, 'measure').map((entry) => entry.duration),
+              ]),
+            ) as Record<keyof typeof splitNames, number[]>;
+            for (const name of Object.values(splitNames)) performance.clearMeasures(name);
             const windowEndAtMs = performance.now();
             if (mark) performance.mark('e26-window-end');
             hook.setDriver(null);
@@ -811,6 +839,7 @@ for (const { scenario, variant } of runs) {
               lifecycle: backend.getStatistics().lifecycle,
               recoveryAttempts: backend.getStatistics().recoveryAttempts,
               measurements,
+              split,
               longTasksAvailable: hook.longTasksAvailable,
               longTasks: hook.longTasks.filter(
                 (task) => task.startMs >= windowStartMs && task.startMs < windowEndAtMs,
@@ -822,6 +851,7 @@ for (const { scenario, variant } of runs) {
             warmUpMs: E26_DRIVERS.warmUpMs,
             windowEndMs: E26_DRIVERS.windowEndMs,
             mark: traceDirectory !== undefined,
+            splitNames: SPLIT_MEASURES,
           },
         );
         if (scenario.interaction === 'edit-drag') await page.mouse.up();
@@ -877,6 +907,15 @@ for (const { scenario, variant } of runs) {
           ...(layers === null ? {} : { layers }),
           rafCallbackIntervalMs: summary(intervals),
           encodeAndSubmitMs: summary(run.measurements.encodeAndSubmitMs),
+          splitEnabled,
+          split: splitEnabled
+            ? {
+                prepareMs: summary(run.split.prepareMs),
+                submitMs: summary(run.split.submitMs),
+                acknowledgeMs: summary(run.split.acknowledgeMs),
+                gpuMs: summary(run.split.gpuMs),
+              }
+            : null,
           ceilingMs: scenario.frameCeilingMs,
           // Each interval should end in a submission: intervals + 1 against submissions.
           intervalsPlusOne: intervals.length + 1,
