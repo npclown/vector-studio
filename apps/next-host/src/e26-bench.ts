@@ -217,7 +217,7 @@ export type BenchFontPort = Readonly<{
   /** Registers the committed test font under `family`. */
   register(family: string): Promise<string>;
   generation(): number;
-  /** Runs `listener` after each generation increase; returns the unsubscribe function. */
+  /** Runs `listener` on each port dispatch (since V-21, once per batch of increases); returns the unsubscribe function. */
   subscribe(listener: () => void): () => void;
 }>;
 
