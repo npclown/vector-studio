@@ -48,8 +48,8 @@ import {
 // the same scene and camera must draw the same things.
 
 // Counts the packing assessments while keeping the real functions; `failing.on` makes every
-// assessment exceed the budget (and the U5d bound decline), so a frame throws as a far jump at a
-// high zoom would.
+// assessment exceed the budget (and the U5d and E30-U3b bounds decline), so a frame throws as a
+// far jump at a high zoom would.
 const failing = vi.hoisted(() => ({ on: false }));
 vi.mock('../../packages/renderer-core/src/primitive-packing.js', async (original) => {
   const actual =
@@ -65,10 +65,15 @@ vi.mock('../../packages/renderer-core/src/primitive-packing.js', async (original
       (...args: Parameters<typeof actual.primitivePackingWithinBudget>) =>
         !failing.on && actual.primitivePackingWithinBudget(...args),
     ),
+    primitivePackingBoundOver: vi.fn(
+      (...args: Parameters<typeof actual.primitivePackingBoundOver>) =>
+        failing.on ? null : actual.primitivePackingBoundOver(...args),
+    ),
   };
 });
 const assessments = vi.mocked(packing.assessPrimitivePacking);
 const bounds = vi.mocked(packing.primitivePackingWithinBudget);
+const rangeBounds = vi.mocked(packing.primitivePackingBoundOver);
 
 function runDifferential(seed: number, frames: number, limits?: Partial<PathMeshLimits>) {
   const rng = random(seed);
@@ -128,10 +133,17 @@ function runDifferential(seed: number, frames: number, limits?: Partial<PathMesh
                   : { ...camera, x: rng() < 0.5 ? -3000 : 3000, y: (rng() - 0.5) * 4000 };
       // The new camera's assessments fail on some frames; both sources must throw the same. A
       // zoom at its bound leaves the camera, and so the memo's inputs, unchanged: the injected
-      // failure would then break the assessment's purity, which the memo relies on.
-      failing.on =
-        rng() < 0.25 &&
-        (camera.x !== before.x || camera.y !== before.y || camera.zoom !== before.zoom);
+      // failure would then break the assessment's purity, which the memo relies on. E30-U3b: so
+      // would a failure at a camera inside the packing range the source holds (zoom within 1/16
+      // and positions within a quarter viewport of the camera it was taken at), so failures are
+      // injected only on moves that leave it: a zoom step of at least 1.2, or a far jump.
+      const ratio = camera.zoom / before.zoom;
+      const far =
+        ratio > 1.2 ||
+        ratio < 1 / 1.2 ||
+        Math.abs(camera.x - before.x) > 1000 ||
+        Math.abs(camera.y - before.y) > 1000;
+      failing.on = rng() < 0.25 && far;
     }
     // Otherwise a frame with no change.
     for (const set of sets) {
@@ -534,20 +546,22 @@ describe('E26-U5c derivation paths', () => {
       incremental.mirror.setCamera({ position: { x, y: 0 }, zoom: 1 });
       assessments.mockClear();
       bounds.mockClear();
+      rangeBounds.mockClear();
       const packet = incremental.source.prepare(next)!;
       incremental.source.acknowledge(receiptOf(packet));
-      // U5d: the unclipped bound decides these primitives, so none reaches the assessment.
+      // U5d and E30-U3b: the bounds decide these primitives, so none reaches the assessment.
       expect(assessments.mock.calls.length).toBe(0);
-      return bounds.mock.calls.length;
+      return bounds.mock.calls.length + rangeBounds.mock.calls.length;
     };
     const visible = frame(0);
     expect(visible).toBeGreaterThan(0);
     expect(frame(0)).toBe(0);
-    // A camera move, a new target and a return to the first camera each assess again.
-    expect(frame(10)).toBe(visible);
+    // E30-U3b: a camera move inside the packing range checks nothing; a new target and a return
+    // to the first target each check again.
+    expect(frame(10)).toBe(0);
     expect(frame(10, { ...target, width: 600 })).toBeGreaterThan(0);
     expect(frame(0)).toBeGreaterThan(0);
-    // The oracle assesses every visible primitive twice, as before U5c, without the bound.
+    // The oracle assesses every visible primitive twice, as before U5c, without the bounds.
     const oracle = twin(true);
     oracle.mirror.replaceSnapshot({
       identity,
@@ -559,9 +573,10 @@ describe('E26-U5c derivation paths', () => {
     oracle.source.acknowledge(receiptOf(oracle.source.prepare(target)!));
     assessments.mockClear();
     bounds.mockClear();
+    rangeBounds.mockClear();
     oracle.source.prepare(target);
     expect(assessments.mock.calls.length).toBe(2 * visible);
-    expect(bounds.mock.calls.length).toBe(0);
+    expect(bounds.mock.calls.length + rangeBounds.mock.calls.length).toBe(0);
   });
 });
 

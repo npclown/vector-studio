@@ -276,6 +276,128 @@ export function primitivePackingWithinBudget(
   return quantization + geometryError + bookkeeping <= limit && arithmetic + bookkeeping <= limit;
 }
 
+/**
+ * E30 contract, U3 (section 4.1, condition 4): an upper bound, over every camera of a range
+ * (positions in a box, zooms in an interval, the origin, DPR and target fixed), of the two
+ * measures `assessPrimitivePacking` returns, or null where it declines (a singular or collapsing
+ * quad, a magnitude outside the range where the rounding model below holds). The measures
+ * compare the f32 vertex chain with the exact reference at the quad's four vertices, so each is
+ * bounded by first-order rounding analysis: every f32 rounding adds at most u = 2^-24 (taken as
+ * 2^-24 (1 + 1e-6)) times the magnitude it rounds, and every magnitude is bounded over the range
+ * by an affine function's extremes over the camera box and the quad's corners, whose guard is
+ * largest at the interval's lowest zoom. The bound is the camera-independent analogue of
+ * `primitivePackingWithinBudget`: where it is within the budget, so is the assessment at every
+ * camera in the range (unit-tested against the assessment at sampled cameras).
+ */
+export function primitivePackingBoundOver(
+  world: SceneAffine,
+  localBounds: SceneBounds,
+  origin: Readonly<{ x: number; y: number }>,
+  range: Readonly<{
+    zoomMin: number;
+    zoomMax: number;
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+  }>,
+  devicePixelRatio: number,
+  physicalWidth: number,
+  physicalHeight: number,
+  node?: PrimitiveNode,
+): Readonly<{ quantization: number; arithmetic: number }> | null {
+  const u = 2 ** -24 * (1 + 1e-6);
+  const { zoomMin, zoomMax } = range;
+  if (!(zoomMin > 0 && zoomMax >= zoomMin && Number.isFinite(zoomMax))) return null;
+  const cameraX = [range.minX, range.maxX];
+  const cameraY = [range.minY, range.maxY];
+  if (!cameraX.every(Number.isFinite) || !cameraY.every(Number.isFinite)) return null;
+  const l0 = f(world[0]),
+    l1 = f(world[1]),
+    l2 = f(world[2]),
+    l3 = f(world[3]);
+  const determinant = f(f(l0 * l3) - f(l1 * l2));
+  const dpr = f(devicePixelRatio);
+  if (!Number.isFinite(l0 + l1 + l2 + l3 + determinant + dpr) || determinant === 0 || dpr <= 0) {
+    return null;
+  }
+  if (Math.abs(dpr - devicePixelRatio) > u * devicePixelRatio) return null;
+  // The guard is largest at the lowest zoom; its f32 chain (four roundings) is covered by 8u.
+  const guardMax = (2 / (zoomMin * devicePixelRatio)) * (1 + 8 * u);
+  const g0 = ((guardMax * (Math.abs(l3) + Math.abs(l2))) / Math.abs(determinant)) * (1 + 4 * u);
+  const g1 = ((guardMax * (Math.abs(l1) + Math.abs(l0))) / Math.abs(determinant)) * (1 + 4 * u);
+  const stored = storedLocalBounds(localBounds, node);
+  // The quad's corners lie in these intervals at every zoom of the range (the guard only grows
+  // as the zoom falls, and the rounded corner is within u of the exact one).
+  const pxs = [(stored.minX - g0) * (1 + 0), (stored.maxX + g0) * 1];
+  const pys = [(stored.minY - g1) * 1, (stored.maxY + g1) * 1];
+  const width = stored.maxX - stored.minX;
+  const height = stored.maxY - stored.minY;
+  const pMax = Math.max(Math.abs(pxs[0]!), Math.abs(pxs[1]!)) * (1 + 2 * u);
+  const qMax = Math.max(Math.abs(pys[0]!), Math.abs(pys[1]!)) * (1 + 2 * u);
+  // The quad must not collapse at any zoom: its width exceeds the corners' rounding.
+  if (!(width > 8 * u * pMax && height > 8 * u * qMax)) return null;
+  const t = [world[4] - origin.x, world[5] - origin.y];
+  const tAbs = [Math.abs(t[0]!) * (1 + u), Math.abs(t[1]!) * (1 + u)];
+  const oMax = [
+    Math.max(...cameraX.map((x) => Math.abs(origin.x - x))) * (1 + u),
+    Math.max(...cameraY.map((y) => Math.abs(origin.y - y))) * (1 + u),
+  ];
+  const linear = [
+    Math.abs(l0) * pMax + Math.abs(l2) * qMax,
+    Math.abs(l1) * pMax + Math.abs(l3) * qMax,
+  ];
+  // |B|: the exact world offset of a corner from the camera, an affine function of the corner
+  // and the camera, at its extremes.
+  const reachOf = (axis: 0 | 1) => {
+    let reach = 0;
+    for (const px of pxs)
+      for (const py of pys)
+        for (const camera of axis === 0 ? cameraX : cameraY) {
+          const value =
+            axis === 0
+              ? world[0] * px + world[2] * py + (world[4] - camera)
+              : world[1] * px + world[3] * py + (world[5] - camera);
+          reach = Math.max(reach, Math.abs(value));
+        }
+    // The corners' own rounding moves B by at most u times the linear part.
+    return reach * (1 + 8 * Number.EPSILON) + u * linear[axis]!;
+  };
+  const scale = zoomMax * devicePixelRatio * (1 + 3 * u);
+  let quantization = 0;
+  let arithmetic = 0;
+  let reach = 1;
+  for (const axis of [0, 1] as const) {
+    const b = reachOf(axis);
+    const m1 = linear[axis]! + tAbs[axis]! + oMax[axis]!;
+    // s - r = (A - B) z d + B (z d - zoom dpr): the inputs' roundings, then the scale's.
+    const q = u * m1 * scale + 2.0001 * u * b * scale;
+    // p - s: the f32 chain's six roundings over its partial sums.
+    const chain =
+      u * scale * (2 * linear[axis]! + (linear[axis]! + tAbs[axis]!) + 3 * m1) * (1 + 8 * u);
+    const sMax = (b + u * m1) * scale;
+    const pMaxAbs = sMax + chain;
+    const extent = axis === 0 ? physicalWidth : physicalHeight;
+    // v - p: the NDC division and offset, and their inverse in Float64.
+    const ndc = u * (2 * pMaxAbs + extent / 2) * (1 + 4 * u);
+    quantization = Math.max(quantization, q);
+    arithmetic = Math.max(arithmetic, chain + ndc);
+    reach = Math.max(reach, b * zoomMax * devicePixelRatio);
+  }
+  const geometryError =
+    Math.max(Math.abs(world[0]) + Math.abs(world[2]), Math.abs(world[1]) + Math.abs(world[3])) *
+    geometryStorageError(localBounds, node) *
+    zoomMax *
+    devicePixelRatio;
+  const bookkeeping = 64 * Number.EPSILON * reach;
+  const result = {
+    quantization: quantization + geometryError + bookkeeping,
+    arithmetic: arithmetic + bookkeeping,
+  };
+  if (!Number.isFinite(result.quantization + result.arithmetic) || reach > 2 ** 100) return null;
+  return Object.freeze(result);
+}
+
 function clipErrorPolygon(
   polygon: readonly ErrorVertex[],
   axis: 0 | 1,

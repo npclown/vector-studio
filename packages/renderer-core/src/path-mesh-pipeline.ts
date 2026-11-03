@@ -534,6 +534,15 @@ export class PathMeshPipeline {
   }> | null = null;
   /** Entries, variants and overlays removed by eviction, trimming and sweeps, so far. */
   #removals = 0;
+  /**
+   * E30-U3b: bumped on every change to the resident cache (entries, fringe variants, overlays,
+   * dash entries), so the per-frame passes over it (bytes, resident ids, the overlay sweep) are
+   * taken once per cache state, not once per frame.
+   */
+  #shape = 0;
+  #bytesAt: Readonly<{ shape: number; bytes: number }> | null = null;
+  #residentAt: Readonly<{ shape: number; ids: ReadonlySet<symbol> }> | null = null;
+  #sweptAt = -1;
 
   static {
     injectNoReuse = (pipeline) => {
@@ -1050,6 +1059,8 @@ export class PathMeshPipeline {
 
   /** Identities of every resident cache entry and of each entry's built fringe variants. */
   public getResidentIds(): ReadonlySet<symbol> {
+    const kept = this.#residentAt;
+    if (kept !== null && kept.shape === this.#shape) return kept.ids;
     const ids = new Set<symbol>();
     for (const paint of PAINTS) {
       for (const nodeCache of this.#cache[paint].values()) {
@@ -1064,6 +1075,7 @@ export class PathMeshPipeline {
         }
       }
     }
+    this.#residentAt = Object.freeze({ shape: this.#shape, ids });
     return ids;
   }
 
@@ -1133,6 +1145,7 @@ export class PathMeshPipeline {
   public dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
+    this.#shape += 1;
     for (const paint of PAINTS) {
       this.#cache[paint].clear();
       this.#bounds[paint].clear();
@@ -1188,6 +1201,7 @@ export class PathMeshPipeline {
       for (const [nodeId, nodeCache] of this.#cache[paint]) {
         if (!reachable(paint, nodeId, nodeCache.revision, nodeCache.key, nodeCache.operationId)) {
           this.#cache[paint].delete(nodeId);
+          this.#shape += 1;
         }
       }
     }
@@ -1207,6 +1221,7 @@ export class PathMeshPipeline {
         !dashesEqual(key.dash, entry.dash)
       ) {
         this.#dashes.delete(nodeId);
+        this.#shape += 1;
       }
     }
     for (const map of [
@@ -1256,6 +1271,7 @@ export class PathMeshPipeline {
     const bytes =
       result.status === 'ok' ? result.path.verbs.length + 8 * result.path.points.length : 0;
     this.#dashes.set(nodeId, Object.freeze({ revision, dash, result, bytes }));
+    this.#shape += 1;
     return result;
   }
 
@@ -1462,6 +1478,7 @@ export class PathMeshPipeline {
     }
     const mesh = result?.mesh ?? null;
     const packed = mesh === null ? null : packOffsets(mesh);
+    this.#shape += 1;
     nodeCache.entries.set(request.e, {
       id: Symbol(`path-${request.key.paint}-mesh-${request.nodeId}`),
       e: request.e,
@@ -1593,6 +1610,7 @@ export class PathMeshPipeline {
           })
         : ('unsupported' as const);
     entry.variants.set(item.f, variant);
+    this.#shape += 1;
     while (entry.variants.size > this.#limits.fringeVariantsPerEntry) {
       const farthest = [...entry.variants.keys()]
         .filter((f) => f !== item.f)
@@ -1671,6 +1689,7 @@ export class PathMeshPipeline {
         lastServed: now,
       };
       fillEntry.overlays.push(overlay);
+      this.#shape += 1;
       this.#trimOverlays(nodeId, overlay);
       if (overlay.built === null)
         this.#enqueue(nodeId, 'renderer', 'overlay-unsupported', null, null);
@@ -1699,6 +1718,7 @@ export class PathMeshPipeline {
       if (victim === undefined) return;
       victim.entry.overlays = victim.entry.overlays.filter((overlay) => overlay !== victim.overlay);
       this.#removals += 1;
+      this.#shape += 1;
     }
   }
 
@@ -1708,6 +1728,9 @@ export class PathMeshPipeline {
    * Returns the bytes dropped.
    */
   #sweepOverlays(): number {
+    // Reachability is a function of the resident cache alone: a state already swept has no
+    // unreachable overlay.
+    if (this.#sweptAt === this.#shape) return 0;
     let dropped = 0;
     for (const [nodeId, fillCache] of this.#cache.fill) {
       const strokeEntries = this.#cache.stroke.get(nodeId)?.entries;
@@ -1735,9 +1758,13 @@ export class PathMeshPipeline {
           if (!reachable) dropped += overlay.built?.bytes ?? 0;
           return reachable;
         });
-        if (entry.overlays.length !== before) this.#removals += 1;
+        if (entry.overlays.length !== before) {
+          this.#removals += 1;
+          this.#shape += 1;
+        }
       }
     }
+    this.#sweptAt = this.#shape;
     return dropped;
   }
 
@@ -1758,6 +1785,8 @@ export class PathMeshPipeline {
   }
 
   #totalBytes(): number {
+    const kept = this.#bytesAt;
+    if (kept !== null && kept.shape === this.#shape) return kept.bytes;
     let bytes = 0;
     for (const paint of PAINTS) {
       for (const nodeCache of this.#cache[paint].values()) {
@@ -1765,6 +1794,7 @@ export class PathMeshPipeline {
       }
     }
     for (const entry of this.#dashes.values()) bytes += entry.bytes;
+    this.#bytesAt = Object.freeze({ shape: this.#shape, bytes });
     return bytes;
   }
 
@@ -1784,6 +1814,7 @@ export class PathMeshPipeline {
           if (victim === undefined) break;
           nodeCache.entries.delete(victim.e);
           this.#removals += 1;
+          this.#shape += 1;
           this.#evictions += 1;
         }
       }
@@ -1815,6 +1846,7 @@ export class PathMeshPipeline {
       nodeCache.entries.delete(entry.e);
       if (nodeCache.entries.size === 0) this.#cache[paint].delete(nodeId);
       this.#removals += 1;
+      this.#shape += 1;
       bytes -= entryBytes(entry);
       this.#evictions += 1;
       // Evicting a stroke parent evicts the overlays that reference it (ST-U7, section 4.6).
