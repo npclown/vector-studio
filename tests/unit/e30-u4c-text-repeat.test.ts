@@ -1,4 +1,7 @@
+import type { RenderNodeSnapshot } from '@vector-studio/contracts';
 import { describe, expect, it } from 'vitest';
+import type { PrimitiveTarget } from '../../packages/renderer-core/src/primitive-packet.js';
+import { packingCountsForTesting } from '../../packages/renderer-core/src/primitive-scene-source.js';
 import {
   GlyphAtlasPlan,
   type AtlasFrame,
@@ -6,7 +9,14 @@ import {
   type TextReceiptPart,
 } from '../../packages/renderer-core/src/text-atlas.js';
 import { FakeRaster } from '../support/e28-text-harness.js';
-import { random } from '../support/e26-twin-scene.js';
+import {
+  identity,
+  normalizer,
+  random,
+  target,
+  textReceipts,
+  twin,
+} from '../support/e26-twin-scene.js';
 
 // E30 contract (docs/plans/d9-e30-renderer-cost-contract.md), section 4.2, U4c: a text frame with
 // the same requests as the last one repeats the atlas frame when the atlas shows that planning
@@ -150,5 +160,143 @@ describe('E30-U4c text frame repeat', () => {
     // Acknowledged, but another frame was planned since.
     atlas.plan(1, requests.slice(1), true, scene);
     expect(atlas.repeat(third, scene)).toBeNull();
+  });
+});
+
+/** A text leaf of `count` clusters, 8 units apart from x = `x`. */
+function line(id: string, x: number, count: number): RenderNodeSnapshot {
+  return {
+    id,
+    parentId: null,
+    transform: [1, 0, 0, 1, x, 100],
+    visible: true,
+    opacity: 1,
+    kind: 'text',
+    generation: 0,
+    lang: 'en',
+    runs: [
+      {
+        fontList: 'sans-serif',
+        size: 12,
+        color: { r: 0, g: 0, b: 0, a: 1 },
+        clusters: Array.from({ length: count }, (_, index) => ({
+          text: TEXTS[index % 26]!,
+          x: index * 8,
+          y: 10,
+          advance: 8,
+        })),
+      },
+    ],
+  };
+}
+
+/** The twin sources (E26-U5c) with text receipts: the incremental source and the oracle. */
+function sources(nodes: RenderNodeSnapshot[]) {
+  const pair = { incremental: twin(false), oracle: twin(true) };
+  const receipts = { incremental: textReceipts(), oracle: textReceipts() };
+  const normalize = { incremental: normalizer(), oracle: normalizer() };
+  let revision = 1;
+  for (const { mirror } of [pair.incremental, pair.oracle]) {
+    mirror.replaceSnapshot({
+      identity,
+      revision,
+      nodes,
+      rootOrder: nodes.filter((n) => n.parentId === null).map((n) => n.id),
+    });
+    mirror.setCamera({ position: { x: 0, y: 0 }, zoom: 1 });
+  }
+  const frame = (frameTarget: PrimitiveTarget = target) => {
+    const before = packingCountsForTesting(pair.incremental.source).text;
+    const left = pair.incremental.source.prepare(frameTarget)!;
+    const right = pair.oracle.source.prepare(frameTarget)!;
+    expect(normalize.incremental(left)).toBe(normalize.oracle(right));
+    pair.incremental.source.acknowledge(receipts.incremental.receipt(left));
+    pair.oracle.source.acknowledge(receipts.oracle.receipt(right));
+    const after = packingCountsForTesting(pair.incremental.source).text;
+    return {
+      repeated: after.repeated - before.repeated,
+      planned: after.planned - before.planned,
+      pages: left.text?.pageCount ?? 0,
+      instances: left.text?.instances,
+    };
+  };
+  const apply = (set: {
+    updated?: RenderNodeSnapshot[];
+    removed?: string[];
+    rootOrder?: string[];
+  }) => {
+    revision += 1;
+    for (const { mirror } of [pair.incremental, pair.oracle]) {
+      const status = mirror.applyChanges({
+        identity,
+        revision,
+        baseRevision: revision - 1,
+        inserted: [],
+        updated: set.updated ?? [],
+        removed: set.removed ?? [],
+        orders: set.rootOrder === undefined ? [] : [{ parentId: null, children: set.rootOrder }],
+      }).status;
+      expect(status).toBe('applied');
+    }
+  };
+  const pan = (x: number) => {
+    for (const { mirror } of [pair.incremental, pair.oracle]) {
+      mirror.setCamera({ position: { x, y: 0 }, zoom: 1 });
+    }
+  };
+  return { frame, apply, pan };
+}
+
+describe('E30-U4c source text frames', () => {
+  it('plans again when the target size or DPR changes under the same drawn leaves', () => {
+    // A line across the view's right edge: the leaf stays drawn, its clusters do not.
+    const { frame } = sources([line('t', 0, 80)]);
+    frame();
+    frame();
+    const still = frame();
+    expect(still).toMatchObject({ repeated: 1, planned: 0 });
+    // No two packets share one record buffer.
+    expect(still.instances).not.toBe(frame().instances);
+    const wider = { ...target, surfaceRevision: 2, width: 800 };
+    expect(frame(wider)).toMatchObject({ repeated: 0, planned: 1 });
+    expect(frame(wider)).toMatchObject({ repeated: 1, planned: 0 });
+    const sharper = { ...wider, surfaceRevision: 3, devicePixelRatio: 1 };
+    expect(frame(sharper)).toMatchObject({ repeated: 0, planned: 1 });
+    expect(frame(sharper)).toMatchObject({ repeated: 1, planned: 0 });
+  });
+
+  it('releases the pages when the scene stops holding text, with nothing drawn before', () => {
+    // A half-opaque container makes a layer, whose pass interns the drawn leaves: the empty
+    // array is the same object before and after the text node goes.
+    const group: RenderNodeSnapshot = {
+      id: 'g',
+      parentId: null,
+      transform: [1, 0, 0, 1, 0, 0],
+      visible: true,
+      opacity: 0.5,
+      kind: 'container',
+      clip: null,
+      children: ['r'],
+    };
+    const rect: RenderNodeSnapshot = {
+      id: 'r',
+      parentId: 'g',
+      transform: [1, 0, 0, 1, 5_010, 300],
+      visible: true,
+      opacity: 1,
+      kind: 'primitive',
+      geometry: { kind: 'rectangle', width: 20, height: 20, cornerRadii: [0, 0, 0, 0] },
+      style: { fill: { r: 1, g: 0, b: 0, a: 1 }, stroke: null },
+    };
+    const { frame, apply, pan } = sources([line('t', 0, 20), group, rect]);
+    frame();
+    expect(frame().pages).toBeGreaterThan(0);
+    // Out of view: nothing is drawn, the pages are kept.
+    pan(5_000);
+    frame();
+    expect(frame()).toMatchObject({ repeated: 1 });
+    // No text node left: the same (empty) drawn leaves, but the pages are released.
+    apply({ removed: ['t'], rootOrder: ['g'] });
+    expect(frame()).toMatchObject({ repeated: 0, planned: 1, pages: 0 });
   });
 });

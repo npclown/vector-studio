@@ -340,6 +340,8 @@ export class GlyphAtlasPlan {
     const frame = this.#frame;
     if (!holdsText) {
       this.#outcomes.clear();
+      // E30-U4c: a release frame is planned too, so no earlier frame repeats after it.
+      this.#lastPlanned = null;
       return Object.freeze({
         rendererGeneration,
         frame,

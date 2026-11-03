@@ -1562,11 +1562,6 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   }
 
   /**
-   * V-21 (contract, section 4.3): the layout generations the scene's text leaves carry, hidden and
-   * off-screen ones included. The same set object is returned until the generations change, so
-   * the atlas re-checks obsolescence only then.
-   */
-  /**
    * E28 contract, U2: the atlas plan over the drawn text leaves. E30 contract, section 4.2 (U4c):
    * a frame with the same drawn leaves, camera and target as the last one repeats its atlas frame
    * when the atlas shows that planning would find every cluster where it was.
@@ -1610,6 +1605,11 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     return frame;
   }
 
+  /**
+   * V-21 (contract, section 4.3): the layout generations the scene's text leaves carry, hidden and
+   * off-screen ones included. The same set object is returned until the generations change, so
+   * the atlas re-checks obsolescence only then.
+   */
   #sceneGenerations(texts: DerivedTexts): ReadonlySet<number> {
     const known = this.#generations;
     if (known !== null && known.texts === texts) return known.set;
