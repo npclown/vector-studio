@@ -227,12 +227,13 @@ function innermostMask(levels: readonly ClipLevel[]): number {
   return -1;
 }
 
-/** The rect records of `levels[start..end)`, outermost first. */
+/** E30-U3b: each chain's rect records and their JSON, by level range. */
 const CHAIN_RECTS = new WeakMap<
   ClipChain,
   Map<string, Readonly<{ rects: ReturnType<typeof rectRecords>; rectsJson: string }>>
 >();
 
+/** The rect records of `levels[start..end)`, outermost first, kept per chain. */
 function chainRects(
   chain: ClipChain,
   start: number,
@@ -253,6 +254,7 @@ function chainRects(
   return kept;
 }
 
+/** The rect records of `levels[start..end)`, outermost first. */
 function rectRecords(levels: readonly ClipLevel[], start: number, end: number) {
   return Object.freeze(
     levels

@@ -190,6 +190,8 @@ describe('E30-U3a camera ranges of kept path outcomes', () => {
     // range.
     expect(cull.ranges).toBe(cull.culls);
     expect(cull.kept).toBeGreaterThan(cull.culls);
+    // Measured 705; a range that shrank back to a point would keep far fewer.
+    expect(cull.kept).toBeGreaterThanOrEqual(600);
   }, 120_000);
 
   it('agrees on paths whose bounds sit within the cull guard of a clip edge', () => {

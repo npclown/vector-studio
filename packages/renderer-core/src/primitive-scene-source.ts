@@ -1495,10 +1495,6 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   }
 
   /**
-   * The visible primitives and text leaves. E26 contract, U5c: kept while the derivation's leaves,
-   * the camera and the target size stay the same.
-   */
-  /**
    * V-21 (contract, section 4.3): the layout generations the scene's text leaves carry, hidden and
    * off-screen ones included. The same set object is returned until the generations change, so
    * the atlas re-checks obsolescence only then.
@@ -1553,6 +1549,11 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     return items;
   }
 
+  /**
+   * The visible primitives and text leaves. E26 contract, U5c, and E30-U3b: kept while the
+   * derivation's leaves and the target size stay the same and the camera stays in the range over
+   * which every cull decision holds.
+   */
   #cull(
     derivation: Derivation,
     camera: Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>,
