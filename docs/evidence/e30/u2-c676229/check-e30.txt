@@ -1,0 +1,11 @@
+$ vitest run --config vitest.e30.config.ts
+
+ RUN  v4.1.11 D:/GIT/vector-studio
+
+{"page":"m1-a13","camera":"fitted","devicePixelRatio":1,"profiled":null,"firstMs":49143,"stillMedianMs":14.6,"editMedianMs":23.6,"panMedianMs":42.9,"panP95Ms":49.1,"panMaxMs":87.2}
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  16:22:38
+   Duration  78.55s (transform 580ms, setup 0ms, import 732ms, tests 77.56s, environment 0ms)
+
