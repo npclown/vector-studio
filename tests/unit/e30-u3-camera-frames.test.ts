@@ -19,6 +19,7 @@ import {
 } from '../../packages/renderer-core/src/path-mesh-pipeline.js';
 import type { ClipChain } from '../../packages/renderer-core/src/clip-resolution.js';
 import type { PrimitiveTarget } from '../../packages/renderer-core/src/primitive-packet.js';
+import { packingCountsForTesting } from '../../packages/renderer-core/src/primitive-scene-source.js';
 import {
   Model,
   identity,
@@ -151,7 +152,12 @@ function runCameraDifferential(
       oracle.source.acknowledge(receiptOf(right.packet!));
     }
   }
-  return { errors, cameraOnly, reused: reusedPathsForTesting(kept.pipeline) };
+  return {
+    errors,
+    cameraOnly,
+    reused: reusedPathsForTesting(kept.pipeline),
+    packing: packingCountsForTesting(kept.source),
+  };
 }
 
 describe('E30-U3a camera ranges of kept path outcomes', () => {
@@ -159,16 +165,23 @@ describe('E30-U3a camera ranges of kept path outcomes', () => {
     let errors = 0;
     let cameraOnly = 0;
     const reused: number[] = [];
+    const packing = { ranges: 0, ranged: 0, perCamera: 0 };
     for (const seed of [11, 12, 13, 14]) {
       const result = runCameraDifferential(seed, 300);
       errors += result.errors;
       cameraOnly += result.cameraOnly;
       reused.push(result.reused);
+      packing.ranges += result.packing.ranges;
+      packing.ranged += result.packing.ranged;
+      packing.perCamera += result.packing.perCamera;
     }
     expect(cameraOnly).toBeGreaterThan(1000);
     // The far camera prepares in both sources (no frame throws in these seeds).
     expect(errors).toBe(0);
     expect(reused.every((count) => count > 2000)).toBe(true);
+    // E30-U3b: the packing range bound decides most primitive checks of these runs.
+    expect(packing.ranges).toBeGreaterThan(0);
+    expect(packing.ranged).toBeGreaterThan(4 * packing.perCamera);
   }, 120_000);
 
   it('agrees on paths whose bounds sit within the cull guard of a clip edge', () => {

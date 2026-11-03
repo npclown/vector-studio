@@ -26,6 +26,7 @@ import {
   PRIMITIVE_STRIDES,
   PrimitiveNumericPreparationError,
   assessPrimitivePacking,
+  primitivePackingBoundOver,
   primitivePackingWithinBudget,
   normalizeRectangleRadii,
   writePackedRecord,
@@ -39,6 +40,7 @@ import type {
   PathMeshStatistics,
 } from './path-mesh-pipeline.js';
 import { disablePathReuseForTesting } from './path-mesh-pipeline.js';
+import { rangeHolds, type CameraRange } from './camera-range.js';
 import {
   PathMeshPacker,
   meshFrameLanes,
@@ -168,6 +170,8 @@ const LAYER_NOTICES_PER_PACKET = 32;
 const IDENTITY: SceneAffine = [1, 0, 0, 1, 0, 0];
 /** P1 contract (position error): the packet v1 budget, in physical pixels, on both measures. */
 const PACKING_BUDGET_PX = 0.125;
+/** E30-U3b: the packing range's zoom ratio (zoom within a factor 1 + 1/16 of the camera's). */
+const PACKING_RANGE_ZOOM = 1 / 16;
 
 type DerivationCounts = Readonly<{
   /** Frames that kept the derivation unchanged. */
@@ -180,8 +184,25 @@ type DerivationCounts = Readonly<{
   leaves: number;
 }>;
 
+type PackingCounts = Readonly<{
+  /** Camera ranges the packing bound was taken over (E30-U3b). */
+  ranges: number;
+  /** Primitive checks the range bound decided, skipping the per-camera check. */
+  ranged: number;
+  /** Primitive checks that ran at the camera (the U5d bound, then the assessment). */
+  perCamera: number;
+}>;
+
+type PackingRange = Readonly<{
+  key: readonly number[];
+  range: CameraRange;
+  passed: WeakSet<DerivedPrimitive>;
+  declined: WeakSet<DerivedPrimitive>;
+}>;
+
 let injectFullDerivation: (source: PrimitiveSceneSource) => void;
 let readDerivationCounts: (source: PrimitiveSceneSource) => DerivationCounts;
+let readPackingCounts: (source: PrimitiveSceneSource) => PackingCounts;
 
 /**
  * Test seam (E26-U5c): prepare as before U5c, the oracle of its kept state: derive the whole
@@ -195,6 +216,11 @@ export function useFullDerivationForTesting(source: PrimitiveSceneSource): void 
 /** Test seam (E26-U5c): how this source derived its frames. Not exported from the package index. */
 export function derivationCountsForTesting(source: PrimitiveSceneSource): DerivationCounts {
   return readDerivationCounts(source);
+}
+
+/** Test seam (E30-U3b): how this source checked the packing budget. Not exported from the index. */
+export function packingCountsForTesting(source: PrimitiveSceneSource): PackingCounts {
+  return readPackingCounts(source);
 }
 
 export class PrimitiveSceneSource implements PrimitiveFrameSource {
@@ -239,6 +265,13 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   /** The inputs the primitives in `#assessed` passed the packing budget under. */
   #assessedKey: readonly number[] | null = null;
   #assessed = new WeakSet<DerivedPrimitive>();
+  /**
+   * E30 contract, U3b: a camera range around a recent camera, under fixed packing inputs (DPR,
+   * target, origin), and the primitives whose packing bound over the whole range is within the
+   * budget (`passed`) or not (`declined`, checked at each camera as before).
+   */
+  #packingRange: PackingRange | null = null;
+  #packingCounts = { ranges: 0, ranged: 0, perCamera: 0 };
 
   static {
     injectFullDerivation = (source) => {
@@ -247,6 +280,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       if (source.#pathMeshes !== undefined) disablePathReuseForTesting(source.#pathMeshes);
     };
     readDerivationCounts = (source) => Object.freeze({ ...source.#derivationCounts });
+    readPackingCounts = (source) => Object.freeze({ ...source.#packingCounts });
   }
   #packingKeys = new Map<string, PackingKeys>();
   #geometryBuilds = 0;
@@ -1582,8 +1616,37 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       this.#assessed = new WeakSet();
     }
     const assessed = this.#assessed;
+    const ranged = this.#fullDerivation ? null : this.#packingRangeAt(camera, target, origin);
     for (const primitive of primitives) {
       if (!this.#fullDerivation && assessed.has(primitive)) continue;
+      // E30 contract, U3b: a primitive whose bound over a range holding the camera is within the
+      // budget passes at this camera; the bound is taken once per primitive and range.
+      if (ranged !== null) {
+        if (ranged.passed.has(primitive)) {
+          this.#packingCounts.ranged += 1;
+          continue;
+        }
+        if (!ranged.declined.has(primitive)) {
+          const bound = primitivePackingBoundOver(
+            primitive.world,
+            primitive.localBounds,
+            origin,
+            ranged.range,
+            target.devicePixelRatio,
+            target.width,
+            target.height,
+            primitive.node,
+          );
+          const limit = PACKING_BUDGET_PX * (1 - 1e-9);
+          if (bound !== null && bound.quantization <= limit && bound.arithmetic <= limit) {
+            ranged.passed.add(primitive);
+            this.#packingCounts.ranged += 1;
+            continue;
+          }
+          ranged.declined.add(primitive);
+        }
+      }
+      this.#packingCounts.perCamera += 1;
       // E26 contract, U5d: the unclipped bound decides most primitives; the rest are assessed.
       if (
         !this.#fullDerivation &&
@@ -1622,6 +1685,44 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       }
       assessed.add(primitive);
     }
+  }
+
+  /**
+   * E30 contract, U3b: the packing range holding this camera under these packing inputs: the
+   * kept one while it holds, else a new one around the camera (zoom within 1/16 of it, positions
+   * within a quarter of the viewport), whose bounds are taken afresh.
+   */
+  #packingRangeAt(
+    camera: Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>,
+    target: PrimitiveTarget,
+    origin: Origin,
+  ): PackingRange | null {
+    const { zoom, position } = camera;
+    if (!(zoom > 0 && Number.isFinite(zoom + position.x + position.y))) return null;
+    const key = [target.devicePixelRatio, target.width, target.height, origin.x, origin.y];
+    const kept = this.#packingRange;
+    if (kept !== null && numericArraysEqual(kept.key, key) && rangeHolds(kept.range, camera)) {
+      return kept;
+    }
+    const spanX = target.width / target.devicePixelRatio / zoom / 4;
+    const spanY = target.height / target.devicePixelRatio / zoom / 4;
+    const range: CameraRange = Object.freeze({
+      zoomMin: zoom / (1 + PACKING_RANGE_ZOOM),
+      zoomMax: zoom * (1 + PACKING_RANGE_ZOOM),
+      minX: position.x - spanX,
+      maxX: position.x + spanX,
+      minY: position.y - spanY,
+      maxY: position.y + spanY,
+    });
+    if (!rangeHolds(range, camera)) return null;
+    this.#packingCounts.ranges += 1;
+    this.#packingRange = Object.freeze({
+      key,
+      range,
+      passed: new WeakSet(),
+      declined: new WeakSet(),
+    });
+    return this.#packingRange;
   }
 
   #ensureCapacities(primitiveDemand: number, orderDemand: number): boolean {
