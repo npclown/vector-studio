@@ -22,6 +22,7 @@ import {
   randomScene,
   randomSet,
   target,
+  textReceipts,
   transform,
   twin,
 } from '../support/e26-twin-scene.js';
@@ -96,6 +97,10 @@ function runDifferential(
   const incremental = twin(false, limits, port);
   const oracle = twin(true, limits, port);
   const normalize = { incremental: normalizer(), oracle: normalizer() };
+  // Text parts are acknowledged as a backend would; now and then a page is recreated in both
+  // backends, so its entries are lost and drawn again (a separate generator keeps the sets).
+  const receipts = { incremental: textReceipts(), oracle: textReceipts() };
+  const backend = random(seed + 1_000);
   for (const { mirror } of [incremental, oracle]) {
     expect(mirror.replaceSnapshot(model.snapshot()).status).toBe('applied');
   }
@@ -146,8 +151,12 @@ function runDifferential(
       comparable(oracle.pipeline),
     );
     if (left !== null && rng() < 0.9) {
-      incremental.source.acknowledge(receiptOf(left));
-      oracle.source.acknowledge(receiptOf(right!));
+      if (backend() < 0.03) {
+        receipts.incremental.recreate(0);
+        receipts.oracle.recreate(0);
+      }
+      incremental.source.acknowledge(receipts.incremental.receipt(left));
+      oracle.source.acknowledge(receipts.oracle.receipt(right!));
     }
   }
   return {
@@ -156,6 +165,7 @@ function runDifferential(
     derivation: derivationCountsForTesting(incremental.source),
     cull: packingCountsForTesting(incremental.source).cull,
     masks: packingCountsForTesting(incremental.source).masks,
+    text: packingCountsForTesting(incremental.source).text,
     evictions: incremental.pipeline.getStatistics().evictions,
   };
 }
@@ -202,6 +212,8 @@ describe('E30-U4 set frames', () => {
     // Frames with the kept mask plan's inputs keep the plan.
     expect(sum((result) => result.masks.kept)).toBeGreaterThan(100);
     expect(sum((result) => result.masks.planned)).toBeGreaterThan(100);
+    expect(sum((result) => result.text.repeated)).toBeGreaterThan(300);
+    expect(sum((result) => result.text.planned)).toBeGreaterThan(300);
     expect(results[2]!.evictions + results[3]!.evictions).toBeGreaterThan(20);
   }, 120_000);
 });
