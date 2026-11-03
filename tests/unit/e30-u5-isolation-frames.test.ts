@@ -196,5 +196,32 @@ describe('E30-U5 frames after an isolation', () => {
     }
     const fourth = mirror.readRetainedScene()!;
     expect([...new Set(fourth.changedSince(third.changeSerial))]).toEqual([path.id]);
+    // A leaf left out of the page is listed (removed), as the root order change is seen.
+    const [removal, reinsert] = isolationSets(model);
+    const dropped = model.rootOrder.find((id) => model.nodes.get(id)!.kind !== 'container')!;
+    model.nodes.delete(dropped);
+    model.rootOrder = model.rootOrder.filter((id) => id !== dropped);
+    for (const set of [
+      removal!,
+      {
+        ...reinsert!,
+        inserted: reinsert!.inserted.filter((node) => node.id !== dropped),
+        orders: [{ parentId: null, children: [...model.rootOrder] }],
+      },
+    ]) {
+      expect(mirror.applyChanges(set).status).toBe('applied');
+    }
+    const fifth = mirror.readRetainedScene()!;
+    expect([...new Set(fifth.changedSince(fourth.changeSerial))]).toEqual([dropped]);
+    // A view built between the removal and the insertion holds an empty page: every node is
+    // listed to a reader of the view before it.
+    const [emptied, refilled] = isolationSets(model);
+    expect(mirror.applyChanges(emptied!).status).toBe('applied');
+    const between = mirror.readRetainedScene()!;
+    expect(between.nodes).toHaveLength(0);
+    expect(mirror.applyChanges(refilled!).status).toBe('applied');
+    const sixth = mirror.readRetainedScene()!;
+    expect(new Set(sixth.changedSince(fifth.changeSerial)).size).toBe(model.nodes.size);
+    expect(new Set(sixth.changedSince(between.changeSerial)).size).toBe(model.nodes.size);
   });
 });

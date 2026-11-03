@@ -534,8 +534,8 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
 
   /**
    * E30-U5 (L4): the IDs written since the last view whose node and geometry revision equal the
-   * last view's, so a reader of that view or an earlier one skips them; null when the log no
-   * longer lists every ID written since the last view.
+   * last view's, so a reader of that view or an earlier one skips them; null when there is none
+   * or the log no longer lists every ID written since the last view.
    */
   #settled(
     scene: OwnedScene,
@@ -566,7 +566,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
               nodeEquals(before, after, revision === undefined));
       if (same) ids.add(id);
     }
-    return Object.freeze({ serial: last.serial, ids });
+    return ids.size === 0 ? null : Object.freeze({ serial: last.serial, ids });
   }
 
   /**
