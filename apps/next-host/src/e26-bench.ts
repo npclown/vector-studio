@@ -202,7 +202,10 @@ export type BenchFontLoad = {
   status: string | null;
   generationBefore: number;
   generationAfter: number | null;
-  /** Generation bumps of the port during the load, and the time of the last one. */
+  /**
+   * The port's listener dispatches during the load (since V-21 one per increment batch, not one
+   * per increment), and the time of the last one.
+   */
   bumps: number;
   lastBumpMs: number | null;
   revisionBefore: number;
@@ -285,8 +288,9 @@ export type BenchHook = Readonly<{
   renders: () => Readonly<Record<string, number>>;
   /**
    * V21-U1 (V-21 contract, U1): the text probe's records since the bench was installed, in
-   * order: text-dom's `port-bump` (source, generation, dispatch time) and the editor's
-   * `editor-dispatch` (the relayout's split), the editor's first for the same bump.
+   * order: text-dom's `port-bump` (each increment's source and generation), its
+   * `port-dispatch` (the increments it carries and its time) and the editor's `editor-dispatch`
+   * (the relayout's split), the editor's before the dispatch's own.
    */
   textDispatches: () => readonly Readonly<Record<string, unknown>>[];
 }>;
@@ -449,8 +453,9 @@ export class Bench {
 
   /**
    * M9-U1: the font-load change (`registerTestFont(family)`), marked `m9-font-load`. text-dom
-   * bumps its generation asynchronously (on `document.fonts` events) after the registration
-   * resolves, and the editor re-projects on each bump, so the measure runs from the call to the
+   * dispatches its listeners on a later task (since V-21, once after the face settles, or at its
+   * 3,000 ms cap and again at the settle), and the editor re-projects on each dispatch, so the
+   * measure runs from the call to the
    * first submitted work after the last bump: frames are awaited until two pass with no bump
    * (at least two after the registration settles, at most `FONT_SETTLE_MAX_FRAMES`), then the
    * backend's submitted work. It records the generation and the scene revision before and after.

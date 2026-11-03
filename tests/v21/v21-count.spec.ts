@@ -19,8 +19,8 @@ import {
 // The spec loads the v2 document through the bench page (`?bench=1&ui=1&doc=m9-v2`) with the
 // busy scenario's camera and layer toggles, then registers the test font under the second
 // family through `__e26Bench.registerTestFont`, as the M9 harness does. The bench's text probe
-// (`textDispatches()`) gives, in order, each text-dom bump (its source and its synchronous
-// dispatch time) and the editor's split of the dispatch it handled.
+// (`textDispatches()`) gives, in order, each text-dom increment and dispatch (since V21-U2a a
+// dispatch carries several increments) and the editor's split of the dispatch it handled.
 //
 //   - `idle`: the font load alone.
 //   - `busy`: the pointer-busy path's edit drag as `input` pointer events from the page (moves

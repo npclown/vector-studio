@@ -891,7 +891,7 @@ describe('V-21 one dispatch per registration (contract, section 4.1)', () => {
         await flush();
         // The add and the settle increment; this port's own loadingdone is redundant.
         expect(seen).toEqual([dom.generation]);
-        expect(dom.generation).toBeGreaterThan(before);
+        expect(dom.generation - before).toBe(2);
         dom.dispose();
       });
     }
@@ -934,6 +934,7 @@ describe('V-21 one dispatch per registration (contract, section 4.1)', () => {
 
   it('dispatches a foreign loadingdone on its own, and holds one during a pending load', async () => {
     const { dom, fonts, seen } = setup();
+    const before = dom.generation;
     const foreign = new ShimFontFace('UI', 'ui');
     fonts.dispatchEvent(event('loadingdone', [foreign]));
     await flush();
@@ -948,7 +949,57 @@ describe('V-21 one dispatch per registration (contract, section 4.1)', () => {
     await loaded;
     await flush();
     expect(seen).toEqual([seen[0], dom.generation]);
+    // Foreign, add, foreign, mixed (foreign), settle: five increments.
+    expect(dom.generation - before).toBe(5);
     dom.dispose();
+  });
+
+  it('holds a dispatch already scheduled when a hold starts (both orders)', async () => {
+    // A DPR change, then a registration in the same task.
+    const first = setup();
+    first.queries[0]!.dispatchEvent(new Event('change'));
+    const loaded = first.dom.registerFont({ family: 'F', source: { url: 'f' } });
+    await flush();
+    expect(first.seen).toEqual([]);
+    ShimFontFace.created[0]!.settle('loaded');
+    await loaded;
+    await flush();
+    expect(first.seen).toEqual([first.dom.generation]);
+    first.dom.dispose();
+    // A settled registration, then the next one at once: one dispatch for both.
+    const second = setup();
+    const a = second.dom.registerFont({ family: 'A', source: { url: 'a' } });
+    ShimFontFace.created[0]!.settle('loaded');
+    await a;
+    const b = second.dom.registerFont({ family: 'B', source: { url: 'b' } });
+    await flush();
+    expect(second.seen).toEqual([]);
+    ShimFontFace.created[1]!.settle('loaded');
+    await b;
+    await flush();
+    expect(second.seen).toEqual([second.dom.generation]);
+    second.dom.dispose();
+  });
+
+  it('runs the cap from the first add, and a new add after the cap starts a new one', () => {
+    vi.useFakeTimers();
+    try {
+      const { dom, seen } = setup();
+      void dom.registerFont({ family: 'A', source: { url: 'a' } });
+      vi.advanceTimersByTime(1_000);
+      void dom.registerFont({ family: 'B', source: { url: 'b' } });
+      vi.advanceTimersByTime(HOLD_CAP_MS - 1_000);
+      expect(seen).toHaveLength(1);
+      // A and B still pending, released by the cap; C starts a new hold and a new cap.
+      void dom.registerFont({ family: 'C', source: { url: 'c' } });
+      vi.advanceTimersByTime(HOLD_CAP_MS - 1);
+      expect(seen).toHaveLength(1);
+      vi.advanceTimersByTime(1);
+      expect(seen).toHaveLength(2);
+      dom.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('dispatches a DPR change alone, and holds one during a pending load', async () => {

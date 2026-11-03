@@ -160,10 +160,11 @@ export interface TextLayoutPort {
    */
   layout(request: TextLayoutRequest): TextLayoutResult;
   /**
-   * Listeners run synchronously after each generation increase, in registration order, and may
-   * call `layout`. As in `EventTarget` dispatch, a listener unsubscribed during a dispatch is not
-   * called later in it, and one subscribed during it first runs on the next increase. Returns the
-   * unsubscribe function.
+   * Listeners run in registration order and may call `layout`. Since V-21 (M6a-L3 amendment) they
+   * run on a task after the increase, once for all increases before that task, never inside the
+   * event that caused it; `generation` already has the new value in the gap. As in `EventTarget`
+   * dispatch, a listener unsubscribed during a dispatch is not called later in it, and one
+   * subscribed during it first runs on the next dispatch. Returns the unsubscribe function.
    */
   subscribe(listener: () => void): () => void;
 }

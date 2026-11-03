@@ -128,9 +128,8 @@ export function createTextDom(options: TextDomOptions): TextDom {
   // the last such face settles, at most HOLD_CAP_MS from the add that started the hold.
   /** Increments not yet dispatched, with their sources (for the bench's probe). */
   let undispatched: BumpSource[] = [];
-  /** Faces registered here whose `load()` has not settled. */
-  const pending = new Set<FontFace>();
-  /** Of those, the faces that still hold the dispatch (the cap releases them). */
+  /** Faces registered here whose `load()` has not settled and that still hold the dispatch
+   * (the cap releases them). */
   const holding = new Set<FontFace>();
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let capTimer: ReturnType<typeof setTimeout> | null = null;
@@ -142,7 +141,9 @@ export function createTextDom(options: TextDomOptions): TextDom {
 
   const flush = (): void => {
     flushTimer = null;
-    if (disposed || undispatched.length === 0) return;
+    // A dispatch scheduled before a hold started waits for it too (section 4.1); the release's
+    // increment or the cap dispatches it.
+    if (disposed || undispatched.length === 0 || holding.size > 0) return;
     const sources = undispatched;
     undispatched = [];
     // V21-U1: the bench's text probe, if installed, records the dispatch and its sources.
@@ -167,7 +168,6 @@ export function createTextDom(options: TextDomOptions): TextDom {
     request();
   };
   const hold = (face: FontFace): void => {
-    pending.add(face);
     holding.add(face);
     // The cap runs from the add that started the hold; later adds join it.
     capTimer ??= setTimeout(() => {
@@ -179,7 +179,6 @@ export function createTextDom(options: TextDomOptions): TextDom {
     }, HOLD_CAP_MS);
   };
   const release = (face: FontFace): void => {
-    pending.delete(face);
     holding.delete(face);
     if (holding.size === 0 && capTimer !== null) {
       clearTimeout(capTimer);
@@ -299,7 +298,6 @@ export function createTextDom(options: TextDomOptions): TextDom {
       flushTimer = null;
       capTimer = null;
       undispatched = [];
-      pending.clear();
       holding.clear();
       fonts?.removeEventListener('loadingdone', onLoadingDone);
       fonts?.removeEventListener('loadingerror', onLoadingError);
