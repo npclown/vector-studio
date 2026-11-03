@@ -3052,7 +3052,6 @@ function cullPrimitives(
   );
 }
 
-/** E28-K9: text leaves cull by their node bound and clip chain, with primitives' 2 px guard. */
 /** The kept cull (E26-U5c, E30-U3b). */
 type KeptCull = Readonly<{
   primitives: readonly DerivedPrimitive[];
@@ -3122,6 +3121,7 @@ function patchDrawn<T>(
   return result;
 }
 
+/** E28-K9: text leaves cull by their node bound and clip chain, with primitives' 2 px guard. */
 function cullTexts(
   texts: readonly DerivedText[],
   camera: Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>,

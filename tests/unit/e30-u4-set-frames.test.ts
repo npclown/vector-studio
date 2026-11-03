@@ -348,6 +348,80 @@ describe('E30-U4b cull counters', () => {
   });
 });
 
+describe('E30-U4b text cull patch', () => {
+  it('decides replaced text leaves and narrows the range by them', () => {
+    const text = (index: number, x: number, visible = true): RenderNodeSnapshot => ({
+      id: `t${String(index).padStart(2, '0')}`,
+      parentId: null,
+      transform: [1, 0, 0, 1, x, 200],
+      visible,
+      opacity: 1,
+      kind: 'text',
+      generation: 0,
+      lang: 'ko',
+      runs: [
+        {
+          fontList: '"Arial", sans-serif',
+          size: 14,
+          color: { r: 0, g: 0, b: 0, a: 1 },
+          clusters: [
+            { text: '\u4e00', x: 0, y: 10, advance: 8 },
+            { text: '\u4e01', x: 8, y: 10, advance: 8 },
+          ],
+        },
+      ],
+    });
+    const nodes = Array.from({ length: 10 }, (_, index) => text(index, 200 + index * 20));
+    const incremental = twin(false);
+    const oracle = twin(true);
+    const normalize = { incremental: normalizer(), oracle: normalizer() };
+    for (const { mirror } of [incremental, oracle]) {
+      mirror.replaceSnapshot({ identity, revision: 1, nodes, rootOrder: nodes.map((n) => n.id) });
+      mirror.setCamera({ position: { x: 0, y: 0 }, zoom: 1 });
+    }
+    let revision = 1;
+    const frame = (updated: RenderNodeSnapshot[], x?: number) => {
+      const before = packingCountsForTesting(incremental.source).cull;
+      for (const { mirror } of [incremental, oracle]) {
+        if (updated.length > 0) {
+          const set = {
+            identity,
+            revision: revision + 1,
+            baseRevision: revision,
+            inserted: [],
+            updated,
+            removed: [],
+            orders: [],
+          };
+          expect(mirror.applyChanges(set).status).toBe('applied');
+        }
+        if (x !== undefined) mirror.setCamera({ position: { x, y: 0 }, zoom: 1 });
+      }
+      if (updated.length > 0) revision += 1;
+      const left = incremental.source.prepare(target)!;
+      const right = oracle.source.prepare(target)!;
+      expect(normalize.incremental(left)).toBe(normalize.oracle(right));
+      incremental.source.acknowledge(receiptOf(left));
+      oracle.source.acknowledge(receiptOf(right));
+      const after = packingCountsForTesting(incremental.source).cull;
+      return { culls: after.culls - before.culls, patched: after.patched - before.patched };
+    };
+    frame([]);
+    frame([]);
+    // Hidden by the set: the patch must not draw it.
+    expect(frame([text(0, 200, false)])).toEqual({ culls: 0, patched: 1 });
+    // Moved out of the view and back.
+    expect(frame([text(1, 5_000)])).toEqual({ culls: 0, patched: 1 });
+    expect(frame([text(1, 220)])).toEqual({ culls: 0, patched: 1 });
+    // Moved to just inside the view's right edge (its bound reaches 14 units left of its origin):
+    // a pan of 8 units, which the other leaves' decisions allow, takes it out, so the patch must
+    // narrow the range by it.
+    const right = target.width / target.devicePixelRatio;
+    expect(frame([text(1, right + 10)])).toEqual({ culls: 0, patched: 1 });
+    expect(frame([], -8)).toEqual({ culls: 1, patched: 0 });
+  });
+});
+
 describe('E30-U4b kept mask plan', () => {
   it('keeps the mask plan only under the same inputs, with mask levels drawn', () => {
     const rect = (id: string, parentId: string | null, x: number, y: number, size: number) =>
