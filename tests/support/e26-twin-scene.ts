@@ -21,7 +21,7 @@ import {
 import { RetainedSceneMirror } from '../../packages/renderer-core/src/scene-mirror.js';
 import { FakeRaster } from './e28-text-harness.js';
 import { ScriptedStrokeMeshPort } from './st-u6-stroke-harness.js';
-import { createCountingPort } from './v3a-path-harness.js';
+import { createCountingPort, type ScriptedFillMeshPort } from './v3a-path-harness.js';
 
 // The seeded scenes, sets and twin sources of the E26-U5c differential
 // (tests/unit/e26-u5c-incremental-derivation.test.ts), shared with E30-U3's camera-only
@@ -282,7 +282,11 @@ export type Twin = Readonly<{
   pipeline: PathMeshPipeline;
 }>;
 
-export function twin(full: boolean, limits?: Partial<PathMeshLimits>): Twin {
+export function twin(
+  full: boolean,
+  limits?: Partial<PathMeshLimits>,
+  port: () => ScriptedFillMeshPort = createCountingPort,
+): Twin {
   const mirror = new RetainedSceneMirror(undefined, {
     pathNodes: 'supported',
     pathFills: 'supported',
@@ -294,7 +298,7 @@ export function twin(full: boolean, limits?: Partial<PathMeshLimits>): Twin {
     textNodes: 'supported',
   });
   const pipeline = new PathMeshPipeline({
-    port: createCountingPort(),
+    port: port(),
     strokePort: new ScriptedStrokeMeshPort(),
     fringeBuilder: buildPathFringe,
     ...(limits === undefined ? {} : { limits }),
