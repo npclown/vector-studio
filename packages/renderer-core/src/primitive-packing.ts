@@ -380,6 +380,8 @@ export function primitivePackingBoundOver(
     pMax,
     qMax,
     guardMax,
+    zoomMax,
+    zoomMax * devicePixelRatio,
     ...sums,
     ...sums.map((sum) => guardMax * sum * (1 + 2 * u)),
   );
@@ -393,7 +395,7 @@ export function primitivePackingBoundOver(
       u * scale * (2 * linear[axis]! + (linear[axis]! + tAbs[axis]!) + 3 * m1) * (1 + 8 * u);
     const sMax = (b + u * m1) * scale;
     const pMaxAbs = sMax + chain;
-    magnitude = Math.max(magnitude, m1, m1 * scale, 2 * pMaxAbs);
+    magnitude = Math.max(magnitude, m1, m1 * zoomMax * (1 + 2 * u), m1 * scale, 2 * pMaxAbs);
     const extent = axis === 0 ? physicalWidth : physicalHeight;
     // v - p: the NDC division and offset, and their inverse in Float64.
     const ndc = u * (2 * pMaxAbs + extent / 2) * (1 + 4 * u);

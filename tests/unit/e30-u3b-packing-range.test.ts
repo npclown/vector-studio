@@ -164,8 +164,11 @@ describe('E30-U3b packing range bound', () => {
     // The guard's product before its division by the determinant passes it.
     { scale: 1e15, extent: 1e11, zoom: 2e-25 },
     { scale: 1e15, extent: 1e11, zoom: 1e-26 },
+    // The zoom itself passes it, for a primitive small enough that nothing else grows.
+    { scale: 1, extent: 1e-34, zoom: 1e39 },
+    { scale: 1, extent: 1e-35, zoom: 1e39 },
   ])(
-    'declines where the vertex chain overflows float32 at a tiny zoom (%o)',
+    'declines where the vertex chain overflows float32 at an extreme zoom (%o)',
     ({ scale, extent, zoom }) => {
       const node = primitive(random(3), [scale, 0, 0, scale, 0, 0]);
       const bounds = { minX: 0, minY: 0, maxX: extent, maxY: extent };
@@ -212,7 +215,7 @@ describe('E30-U3b packing range bound', () => {
         (rng() - 0.5) * 10 ** (rng() * 80 - 20),
       ];
       const bounds = { minX: 0, minY: 0, maxX: extent, maxY: extent * (0.5 + rng()) };
-      const zoom = 2 ** (rng() * 240 - 120);
+      const zoom = 2 ** (rng() * 280 - 140);
       const camera = { x: world[4] - 400 / zoom, y: world[5] - 300 / zoom };
       const span = 800 / zoom / 4;
       const range = {
