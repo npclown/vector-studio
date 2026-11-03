@@ -40,16 +40,20 @@ export type TextDispatchRecord = {
 };
 
 /**
- * text-dom's record of the bump that caused a dispatch (its own type there, kept in step by
- * hand; the editor only passes the editor's records).
+ * text-dom's records (its own types there, kept in step by hand; the editor only passes its
+ * own): each increment, and each dispatch with the increments it carries (V-21, section 4.1).
  */
-export type PortBumpRecord = {
-  kind: 'port-bump';
-  atMs: number;
-  source: 'add' | 'settle' | 'settle-error' | 'loadingdone' | 'loadingerror' | 'resolution';
-  generation: number;
-  dispatchMs: number;
-};
+export type PortBumpSource =
+  'add' | 'settle' | 'settle-error' | 'loadingdone' | 'loadingerror' | 'resolution';
+export type PortBumpRecord =
+  | { kind: 'port-bump'; atMs: number; source: PortBumpSource; generation: number }
+  | {
+      kind: 'port-dispatch';
+      atMs: number;
+      sources: readonly PortBumpSource[];
+      generation: number;
+      dispatchMs: number;
+    };
 
 export type TextProbeRecord = TextDispatchRecord | PortBumpRecord;
 

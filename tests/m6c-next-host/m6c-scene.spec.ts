@@ -44,9 +44,9 @@ import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 // - Instances: the override's text and the non-overridden instance's source text are projected
 //   and drawn (they are judged as every other leaf).
 // - A generation change: every text node of the page is restyled to a family registered later
-//   with the test font's bytes, held, then released (the load bumps twice: the face's `load()`
-//   and `document.fonts`' `loadingdone`; each bump waits until the generation holds and every
-//   leaf is at it). The host service's raster port calls are logged with the generation each
+//   with the test font's bytes, held, then released (before V-21 the load dispatched twice: the
+//   face's `load()` and `document.fonts`' `loadingdone`; since V-21 (section 4.1) it dispatches
+//   once after the settle; each step waits until the generation holds and every leaf is at it). The host service's raster port calls are logged with the generation each
 //   was made at (`glyphRasterLog`, src/renderer-options.ts): at the new generation every key
 //   E28 requests on the target (white space included, recomputed apart from the renderer) is
 //   rasterized exactly once and nothing else, and no call is at an older generation (E28-K10;
@@ -826,9 +826,9 @@ test('M6c-A05: a generation change rasterizes every drawn key again and never dr
       ...(window.__nextHostRenderer as unknown as LogHook).glyphRasterLog.entries,
     ]);
   /**
-   * Review S1: a load bumps twice (the face's `load()` and `document.fonts`' `loadingdone`, a
-   * separate task), so wait until the generation rose past `above`, holds for two reads 500 ms
-   * apart and every leaf is at it.
+   * Review S1: a load used to bump twice (the face's `load()` and `document.fonts`'
+   * `loadingdone`, a separate task; once since V-21), so wait until the generation rose past
+   * `above`, holds for two reads 500 ms apart and every leaf is at it.
    */
   const stableGeneration = async (above: number) => {
     let previous = -1;
