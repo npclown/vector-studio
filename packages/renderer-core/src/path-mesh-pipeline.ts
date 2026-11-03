@@ -747,9 +747,10 @@ export class PathMeshPipeline {
     }
     // E30-U4: a frame whose paths are the kept frame's but for a few replaced ones evaluates
     // those alone; every other path keeps its part of the kept frame, as in the reuse above.
-    const changedIds = new Set(
-      changed === null ? [] : changed.map((index) => input.paths[index]!.id),
-    );
+    const changedIds =
+      changed === null || changed.length === 0
+        ? new Set<string>()
+        : new Set(changed.map((index) => input.paths[index]!.id));
     const delta =
       this.#reuse &&
       last !== null &&
@@ -1088,16 +1089,16 @@ export class PathMeshPipeline {
     let frameFailures: readonly PathFrame[] = failures;
     let held = 0;
     if (delta) {
-      const kept = last;
+      const keptFrame = last;
       const replaced = new Set(changed);
-      const parts = [...kept.segments];
+      const parts = [...keptFrame.segments];
       for (const index of changed) parts[index] = segmentOf(input.paths[index]!, segments);
       const assembled: PathMeshDraw[] = [];
       parts.forEach((part, index) => {
         if (part === null) return;
         held += 1;
         if (!replaced.has(index)) {
-          if (kept.segments[index] !== null) this.#reusedPaths += 1;
+          if (keptFrame.segments[index] !== null) this.#reusedPaths += 1;
           for (const entry of part.entries) {
             entry.lastServed = now;
             working.add(entry);
@@ -1112,10 +1113,10 @@ export class PathMeshPipeline {
       frameSegments = parts;
       frameDraws = assembled;
       frameFailures = [
-        ...kept.failures.filter((failure) => !changedIds.has(failure.path.id)),
+        ...keptFrame.failures.filter((failure) => !changedIds.has(failure.path.id)),
         ...failures,
       ];
-      frameRange = kept.range;
+      frameRange = keptFrame.range;
     }
 
     const removals = this.#removals;
@@ -1376,6 +1377,7 @@ export class PathMeshPipeline {
         }
       }
     }
+    // The memo is capped (`memoCapacity`), so this scan is bounded.
     for (const [key, entry] of this.#memo) {
       const node = present.get(entry.nodeId);
       if (node === undefined) continue;

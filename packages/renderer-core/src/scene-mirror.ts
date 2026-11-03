@@ -719,6 +719,8 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
   #resetChangeLog(): void {
     this.#changeFloor += this.#changeLog.length + 1;
     this.#changeLog = [];
+    // E30-U4: the last view's layers cannot be built on any more; free them.
+    this.#lastView = null;
   }
 
   #invalidate(): void {
