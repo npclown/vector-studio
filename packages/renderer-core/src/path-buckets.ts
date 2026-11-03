@@ -252,6 +252,44 @@ export function bucketsHoldAt(hint: BucketHint, zoom: number, devicePixelRatio: 
   );
 }
 
+/**
+ * E30 contract, U3 (section 4.1, condition 2): a zoom interval inside [zoomMin, zoomMax] that
+ * holds `zoom`, over which the hint's buckets hold at this DPR. The caller passes a hint whose
+ * buckets are the exact buckets at `zoom` (computed there, or checked there by
+ * `bucketsHoldAt`). The zooms at which a lanes' exact buckets are (e, f) form one interval:
+ * each bucket is an interval of s^2 sigma^2, and s = DPR * zoom grows with the zoom. So the
+ * buckets hold between `zoom` and any zoom at which `bucketsHoldAt` holds. The interval's ends
+ * are estimated from the bucket ranges, narrowed by 1e-9, and then checked with `bucketsHoldAt`;
+ * an end that fails the check is `zoom` itself.
+ */
+export function bucketZoomRange(
+  hint: BucketHint,
+  zoom: number,
+  devicePixelRatio: number,
+  zoomMin: number,
+  zoomMax: number,
+): readonly [number, number] {
+  const { e, f } = hint.buckets;
+  const { frobenius, determinantSquared } = hint;
+  const root = Math.sqrt(Math.max(0, frobenius * frobenius - 4 * determinantSquared));
+  const sigmaMax = (frobenius + root) / 2;
+  const sigmaMin = determinantSquared / sigmaMax;
+  // Ranges of s^2 from section c's bucket intervals with the hint's margin.
+  const upper = Math.min(
+    2 ** (-6 - 2 * e) / (sigmaMax * (1 + HINT_MARGIN)),
+    2 ** (4 - 2 * f) / (sigmaMin * (1 + HINT_MARGIN)),
+  );
+  const lower = Math.max(
+    2 ** (-8 - 2 * e) / (sigmaMax * (1 - HINT_MARGIN)),
+    2 ** (2 - 2 * f) / (sigmaMin * (1 - HINT_MARGIN)),
+  );
+  let low = Math.max(zoomMin, (Math.sqrt(lower) / devicePixelRatio) * (1 + 1e-9));
+  let high = Math.min(zoomMax, (Math.sqrt(upper) / devicePixelRatio) * (1 - 1e-9));
+  if (!(low < zoom) || !bucketsHoldAt(hint, low, devicePixelRatio)) low = zoom;
+  if (!(high > zoom) || !bucketsHoldAt(hint, high, devicePixelRatio)) high = zoom;
+  return [low, high];
+}
+
 /** A dyadic in Float64 within 1 ulp: a 2^-60 truncation, then one rounding. */
 function dyadicToNumber(value: Dyadic): number {
   if (value.n === 0n) return 0;
