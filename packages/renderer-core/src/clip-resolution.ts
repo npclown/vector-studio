@@ -228,6 +228,31 @@ function innermostMask(levels: readonly ClipLevel[]): number {
 }
 
 /** The rect records of `levels[start..end)`, outermost first. */
+const CHAIN_RECTS = new WeakMap<
+  ClipChain,
+  Map<string, Readonly<{ rects: ReturnType<typeof rectRecords>; rectsJson: string }>>
+>();
+
+function chainRects(
+  chain: ClipChain,
+  start: number,
+  end: number,
+): Readonly<{ rects: ReturnType<typeof rectRecords>; rectsJson: string }> {
+  let byRange = CHAIN_RECTS.get(chain);
+  if (byRange === undefined) {
+    byRange = new Map();
+    CHAIN_RECTS.set(chain, byRange);
+  }
+  const key = `${start}:${end}`;
+  let kept = byRange.get(key);
+  if (kept === undefined) {
+    const rects = rectRecords(chain.levels, start, end);
+    kept = Object.freeze({ rects, rectsJson: JSON.stringify(rects) });
+    byRange.set(key, kept);
+  }
+  return kept;
+}
+
 function rectRecords(levels: readonly ClipLevel[], start: number, end: number) {
   return Object.freeze(
     levels
@@ -378,6 +403,7 @@ function sameSource(left: MaskSourceResult, right: MaskSourceResult): boolean {
 export class MaskPlan {
   readonly #input: MaskPlanInput;
   readonly #levels = new Map<string, MaskLevelRecord | null>();
+  readonly #admitted = new Map<ClipChain, boolean>();
   readonly #order: MaskLevelRecord[] = [];
   readonly #notices: MaskBudgetNotice[] = [];
   #resident = 0;
@@ -392,6 +418,16 @@ export class MaskPlan {
   /** Plans the chain's levels if needed; true when content under the chain may draw. */
   public admit(chain: ClipChain | null): boolean {
     if (chain === null) return true;
+    // E30-U3b: a chain's answer is fixed once its levels are planned (a level is planned once per
+    // plan), and most content shares a few chains.
+    const known = this.#admitted.get(chain);
+    if (known !== undefined) return known;
+    const admitted = this.#admit(chain);
+    this.#admitted.set(chain, admitted);
+    return admitted;
+  }
+
+  #admit(chain: ClipChain): boolean {
     let parent: MaskLevelRecord | null = null;
     let parentIndex = -1;
     for (const [index, level] of chain.levels.entries()) {
@@ -474,7 +510,9 @@ export class MaskPlan {
           ];
     const reused = memo?.reuse(level.containerId, chain, index, parent, source, lanes) ?? null;
     if (reused !== null) return reused;
-    const rects = rectRecords(chain.levels, parentIndex + 1, index);
+    // E30-U3b: a level's rects and their JSON are a function of its chain alone, so they are
+    // kept per chain; the key is the JSON of the same array, assembled from its parts.
+    const { rects, rectsJson } = chainRects(chain, parentIndex + 1, index);
     const device = Object.freeze({ x: minX, y: minY, width, height });
     const record: MaskLevelRecord = Object.freeze({
       id: level.containerId,
@@ -482,17 +520,14 @@ export class MaskPlan {
       rects,
       device,
       source: source.source,
-      key: JSON.stringify([
-        parent?.key ?? null,
-        rects,
-        device,
+      key: `[${JSON.stringify(parent?.key ?? null)},${rectsJson},${JSON.stringify(device)},${JSON.stringify(
         source.key,
-        camera,
+      )},${JSON.stringify(camera)},${JSON.stringify([
         target.devicePixelRatio,
         target.width,
         target.height,
         target.sampleCount,
-      ]),
+      ]).slice(1, -1)}]`,
     });
     memo?.keep(level.containerId, Object.freeze({ chain, index, parent, source, lanes, record }));
     return record;

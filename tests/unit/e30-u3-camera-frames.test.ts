@@ -166,6 +166,7 @@ describe('E30-U3a camera ranges of kept path outcomes', () => {
     let cameraOnly = 0;
     const reused: number[] = [];
     const packing = { ranges: 0, ranged: 0, perCamera: 0 };
+    const cull = { kept: 0, culls: 0, ranges: 0 };
     for (const seed of [11, 12, 13, 14]) {
       const result = runCameraDifferential(seed, 300);
       errors += result.errors;
@@ -174,6 +175,9 @@ describe('E30-U3a camera ranges of kept path outcomes', () => {
       packing.ranges += result.packing.ranges;
       packing.ranged += result.packing.ranged;
       packing.perCamera += result.packing.perCamera;
+      cull.kept += result.packing.cull.kept;
+      cull.culls += result.packing.cull.culls;
+      cull.ranges += result.packing.cull.ranges;
     }
     expect(cameraOnly).toBeGreaterThan(1000);
     // The far camera prepares in both sources (no frame throws in these seeds).
@@ -182,6 +186,10 @@ describe('E30-U3a camera ranges of kept path outcomes', () => {
     // E30-U3b: the packing range bound decides most primitive checks of these runs.
     expect(packing.ranges).toBeGreaterThan(0);
     expect(packing.ranged).toBeGreaterThan(4 * packing.perCamera);
+    // E30-U3b: most camera-only frames keep the cull (705 of 1,200 here); each cull takes a new
+    // range.
+    expect(cull.ranges).toBe(cull.culls);
+    expect(cull.kept).toBeGreaterThan(cull.culls);
   }, 120_000);
 
   it('agrees on paths whose bounds sit within the cull guard of a clip edge', () => {

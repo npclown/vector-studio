@@ -40,7 +40,7 @@ import type {
   PathMeshStatistics,
 } from './path-mesh-pipeline.js';
 import { disablePathReuseForTesting } from './path-mesh-pipeline.js';
-import { rangeHolds, type CameraRange } from './camera-range.js';
+import { decisionRange, pointRange, rangeHolds, type CameraRange } from './camera-range.js';
 import {
   PathMeshPacker,
   meshFrameLanes,
@@ -191,6 +191,8 @@ type PackingCounts = Readonly<{
   ranged: number;
   /** Primitive checks that ran at the camera (the U5d bound, then the assessment). */
   perCamera: number;
+  /** E30-U3b: frames that kept the cull, frames that culled, and cull ranges taken. */
+  cull: Readonly<{ kept: number; culls: number; ranges: number }>;
 }>;
 
 type PackingRange = Readonly<{
@@ -256,10 +258,40 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   #culled: Readonly<{
     primitives: readonly DerivedPrimitive[];
     leaves: readonly DerivedText[];
+    /** The target size and DPR the decisions were taken under. */
     key: readonly number[];
+    /** E30-U3b: the cameras at which every cull decision is the kept one. */
+    range: CameraRange;
     visible: DerivedPrimitive[];
     texts: DerivedText[];
   }> | null = null;
+  #cullCounts = { kept: 0, ranges: 0, culls: 0 };
+  /**
+   * E30-U3b: camera-independent per-frame results kept by the identity of their inputs: the
+   * layers' content bounds, the mask plan's paint-order content, and the arrays a frame filters
+   * (the same items keep the kept array, so the passes keyed by it keep their work).
+   */
+  #layerContent: Readonly<{
+    inputs: readonly unknown[];
+    content: ReadonlyMap<LayerScope, readonly SceneBounds[]>;
+  }> | null = null;
+  #maskContent: Readonly<{
+    inputs: readonly unknown[];
+    content: readonly Readonly<{ sequence: number; chain: ClipChain | null }>[];
+  }> | null = null;
+  #interned = new Map<string, readonly unknown[]>();
+  #meshPartDraws = new WeakMap<
+    PathMeshDraw,
+    Readonly<{ sequence: number; draw: Omit<MeshFillDraw, 'position'> }>
+  >();
+  #meshFillDraws: readonly Readonly<{
+    source: object;
+    position: number;
+    clipState: number;
+    gradient: number;
+    strokeGradient: number;
+    draw: MeshFillDraw;
+  }>[] = [];
   #pathMaps = new WeakMap<readonly DerivedPath[], ReadonlyMap<string, DerivedPath>>();
   #pathClipMaps = new WeakMap<readonly DerivedPath[], ReadonlyMap<string, ClipChain | null>>();
   /** The inputs the primitives in `#assessed` passed the packing budget under. */
@@ -280,7 +312,8 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       if (source.#pathMeshes !== undefined) disablePathReuseForTesting(source.#pathMeshes);
     };
     readDerivationCounts = (source) => Object.freeze({ ...source.#derivationCounts });
-    readPackingCounts = (source) => Object.freeze({ ...source.#packingCounts });
+    readPackingCounts = (source) =>
+      Object.freeze({ ...source.#packingCounts, cull: Object.freeze({ ...source.#cullCounts }) });
   }
   #packingKeys = new Map<string, PackingKeys>();
   #geometryBuilds = 0;
@@ -453,10 +486,19 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       const drawn = layerPlan.indices;
       const inDrawn = (layer: LayerScope | null | undefined) =>
         layer === null || layer === undefined || drawn.has(layer);
-      visible = visible.filter((primitive) => inDrawn(primitive.layer));
-      texts = texts.filter((text) => inDrawn(text.layer));
-      pathDraws = pathDraws.filter(
-        (draw) => draw.maskSource === true || inDrawn(pathLayers.get(draw.nodeId)),
+      visible = this.#intern(
+        'layer-visible',
+        visible.filter((primitive) => inDrawn(primitive.layer)),
+      );
+      texts = this.#intern(
+        'layer-texts',
+        texts.filter((text) => inDrawn(text.layer)),
+      );
+      pathDraws = this.#intern(
+        'layer-paths',
+        pathDraws.filter(
+          (draw) => draw.maskSource === true || inDrawn(pathLayers.get(draw.nodeId)),
+        ),
       );
     } else if (this.#layersOverBudget.size > 0) {
       this.#layersOverBudget = new Set();
@@ -472,19 +514,16 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     if (clipSeen.value) {
       masks = this.#planMasks(scene, derived, pathDraws, cameraState.camera, target);
       const plan = masks;
-      const content = [
-        ...visible.map((primitive) => ({ sequence: primitive.sequence, chain: primitive.clip })),
-        ...pathDraws
-          .filter((draw) => draw.maskSource !== true)
-          .map((draw) => ({
-            sequence: pathSequences.get(draw.nodeId)!,
-            chain: pathClips.get(draw.nodeId) ?? null,
-          })),
-        ...texts.map((text) => ({ sequence: text.sequence, chain: text.clip })),
-      ].sort((left, right) => left.sequence - right.sequence);
+      const content = this.#maskContentOf(visible, pathDraws, texts, pathSequences, pathClips);
       for (const entry of content) plan.admit(entry.chain);
-      visible = visible.filter((primitive) => plan.admit(primitive.clip));
-      texts = texts.filter((text) => plan.admit(text.clip));
+      visible = this.#intern(
+        'mask-visible',
+        visible.filter((primitive) => plan.admit(primitive.clip)),
+      );
+      texts = this.#intern(
+        'mask-texts',
+        texts.filter((text) => plan.admit(text.clip)),
+      );
       const used = new Set(
         plan.levels.flatMap((level) => (level.source.kind === 'mesh' ? [level.source.nodeId] : [])),
       );
@@ -497,10 +536,13 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       if (sourceSlots.size > 0) {
         assessed = [...visible, ...derived.filter((primitive) => sourceSlots.has(primitive.slot))];
       }
-      pathDraws = pathDraws.filter((draw) =>
-        draw.maskSource === true
-          ? used.has(draw.nodeId)
-          : plan.admit(pathClips.get(draw.nodeId) ?? null),
+      pathDraws = this.#intern(
+        'mask-paths',
+        pathDraws.filter((draw) =>
+          draw.maskSource === true
+            ? used.has(draw.nodeId)
+            : plan.admit(pathClips.get(draw.nodeId) ?? null),
+        ),
       );
     }
     let origin = this.#selectOrigin(cameraState.camera, assessed, target);
@@ -741,15 +783,42 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
         };
       }
     });
-    const meshFillDraws = (mesh?.draws ?? []).map((draw, index) =>
-      Object.freeze({
-        position: meshPositions[index]!,
+    // E30-U3b: a mesh draw whose inputs are the kept draw's keeps the kept draw object.
+    const keptMeshDraws = this.#fullDerivation ? [] : this.#meshFillDraws;
+    const meshFillDraws = (mesh?.draws ?? []).map((draw, index) => {
+      const position = meshPositions[index]!;
+      const clipState = meshStates[index] ?? 0;
+      const gradient = meshGradients[index]!;
+      const strokeGradient = strokeGradients[index]!;
+      const kept = keptMeshDraws[index];
+      if (
+        kept !== undefined &&
+        kept.source === draw.draw &&
+        kept.position === position &&
+        kept.clipState === clipState &&
+        kept.gradient === gradient &&
+        kept.strokeGradient === strokeGradient
+      ) {
+        return kept.draw;
+      }
+      return Object.freeze<MeshFillDraw>({
+        position,
         ...draw.draw,
-        ...((meshStates[index] ?? 0) === 0 ? {} : { clipState: meshStates[index]! }),
-        ...(meshGradients[index] === 0 ? {} : { gradient: meshGradients[index]! }),
-        ...(strokeGradients[index] === 0 ? {} : { strokeGradient: strokeGradients[index]! }),
-      }),
-    );
+        ...(clipState === 0 ? {} : { clipState }),
+        ...(gradient === 0 ? {} : { gradient }),
+        ...(strokeGradient === 0 ? {} : { strokeGradient }),
+      });
+    });
+    if (!this.#fullDerivation) {
+      this.#meshFillDraws = meshFillDraws.map((draw, index) => ({
+        source: mesh!.draws[index]!.draw,
+        position: meshPositions[index]!,
+        clipState: meshStates[index] ?? 0,
+        gradient: meshGradients[index]!,
+        strokeGradient: strokeGradients[index]!,
+        draw,
+      }));
+    }
     const meshTargets =
       layered === null
         ? null
@@ -758,6 +827,17 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       meshTargets === null
         ? meshFillDraws
         : meshFillDraws.filter((_, index) => meshTargets[index] === -1);
+    // Each layer's mesh draws, in one pass over the draws.
+    const meshByLayer = new Map<number, (typeof meshFillDraws)[number][]>();
+    if (meshTargets !== null) {
+      meshFillDraws.forEach((draw, index) => {
+        const layer = meshTargets[index]!;
+        if (layer === -1) return;
+        const list = meshByLayer.get(layer);
+        if (list === undefined) meshByLayer.set(layer, [draw]);
+        else list.push(draw);
+      });
+    }
     const layerNotices = this.#layerNotices.slice(0, LAYER_NOTICES_PER_PACKET);
     const layersPart: LayerPacketPart | null =
       layered === null && layerNotices.length === 0
@@ -772,9 +852,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
                   bound: layerPlan!.bounds.get(layer)!,
                   parent: layerPlan!.indexOf(layer.parent),
                   draws: Object.freeze(layered?.layers[index] ?? []),
-                  meshDraws: Object.freeze(
-                    meshFillDraws.filter((_, draw) => meshTargets?.[draw] === index),
-                  ),
+                  meshDraws: Object.freeze(meshByLayer.get(index) ?? []),
                 }),
               ),
             ),
@@ -995,21 +1073,14 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     });
   }
 
-  /**
-   * E25 contract, section 4: the frame's drawn layers. Bounds (E25-K5) are built bottom-up over
-   * the drawn content, then clamped top-down to the parent's bound; a layer with an empty bound,
-   * or inside one, is not drawn. Layer trees then pass the budget in paint order.
-   */
-  #planLayers(
-    scopes: readonly LayerScope[],
+  /** E25-K5: the world bounds of each layer's drawn content (camera-independent). */
+  #layerContentOf(
     visible: readonly DerivedPrimitive[],
     texts: readonly DerivedText[],
     pathDraws: readonly PathMeshDraw[],
     paths: ReadonlyMap<string, DerivedPath>,
     pathLayers: ReadonlyMap<string, LayerScope>,
-    camera: Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>,
-    target: PrimitiveTarget,
-  ): DrawnLayers {
+  ): ReadonlyMap<LayerScope, readonly SceneBounds[]> {
     const content = new Map<LayerScope, SceneBounds[]>();
     const add = (layer: LayerScope | null | undefined, bounds: SceneBounds | null) => {
       if (layer === null || layer === undefined || bounds === null) return;
@@ -1034,6 +1105,33 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
         if (stroke !== null) add(layer, transformSceneBounds(stroke, path.world));
       }
     }
+    return content;
+  }
+
+  /**
+   * E25 contract, section 4: the frame's drawn layers. Bounds (E25-K5) are built bottom-up over
+   * the drawn content, then clamped top-down to the parent's bound; a layer with an empty bound,
+   * or inside one, is not drawn. Layer trees then pass the budget in paint order.
+   */
+  #planLayers(
+    scopes: readonly LayerScope[],
+    visible: readonly DerivedPrimitive[],
+    texts: readonly DerivedText[],
+    pathDraws: readonly PathMeshDraw[],
+    paths: ReadonlyMap<string, DerivedPath>,
+    pathLayers: ReadonlyMap<string, LayerScope>,
+    camera: Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>,
+    target: PrimitiveTarget,
+  ): DrawnLayers {
+    const inputs = [visible, texts, pathDraws, paths, pathLayers];
+    const keptContent = this.#layerContent;
+    const content =
+      !this.#fullDerivation &&
+      keptContent !== null &&
+      keptContent.inputs.every((input, index) => input === inputs[index])
+        ? keptContent.content
+        : this.#layerContentOf(visible, texts, pathDraws, paths, pathLayers);
+    if (!this.#fullDerivation) this.#layerContent = Object.freeze({ inputs, content });
     const view = { x: camera.position.x, y: camera.position.y, zoom: camera.zoom };
     // Scopes are in pre-order, so the reverse visits every layer after the layers nested in it.
     const unclamped = new Map<LayerScope, DeviceRect>();
@@ -1366,8 +1464,20 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
           const placement = (
             draw.paint === 'stroke' ? output.strokePlacements : output.placements
           ).get(draw.nodeId)!;
-          return Object.freeze({
-            sequence: sequences.get(draw.nodeId)!,
+          const sequence = sequences.get(draw.nodeId)!;
+          // E30-U3b: a draw with the kept placement and sequence keeps its kept objects, so the
+          // passes after it keep theirs.
+          const kept = this.#fullDerivation ? undefined : this.#meshPartDraws.get(draw);
+          if (
+            kept !== undefined &&
+            kept.sequence === sequence &&
+            kept.draw.firstTriangle === placement.firstTriangle &&
+            kept.draw.triangleCount === placement.triangleCount
+          ) {
+            return kept;
+          }
+          const made = Object.freeze({
+            sequence,
             draw: Object.freeze({
               instance: draw.slot,
               firstTriangle: placement.firstTriangle,
@@ -1376,6 +1486,8 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
               ...(draw.composite === undefined ? {} : { composite: draw.composite }),
             }),
           });
+          if (!this.#fullDerivation) this.#meshPartDraws.set(draw, made);
+          return made;
         }),
       ),
       expected: output.expected,
@@ -1401,46 +1513,109 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     return this.#generations.set;
   }
 
+  /** P4 contract, U4: the drawn content's clip chains in paint order (camera-independent). */
+  #maskContentOf(
+    visible: readonly DerivedPrimitive[],
+    pathDraws: readonly PathMeshDraw[],
+    texts: readonly DerivedText[],
+    pathSequences: ReadonlyMap<string, number>,
+    pathClips: ReadonlyMap<string, ClipChain | null>,
+  ): readonly Readonly<{ sequence: number; chain: ClipChain | null }>[] {
+    const inputs = [visible, pathDraws, texts, pathSequences, pathClips];
+    const kept = this.#maskContent;
+    if (
+      !this.#fullDerivation &&
+      kept !== null &&
+      kept.inputs.every((input, index) => input === inputs[index])
+    ) {
+      return kept.content;
+    }
+    const content = [
+      ...visible.map((primitive) => ({ sequence: primitive.sequence, chain: primitive.clip })),
+      ...pathDraws
+        .filter((draw) => draw.maskSource !== true)
+        .map((draw) => ({
+          sequence: pathSequences.get(draw.nodeId)!,
+          chain: pathClips.get(draw.nodeId) ?? null,
+        })),
+      ...texts.map((text) => ({ sequence: text.sequence, chain: text.clip })),
+    ].sort((left, right) => left.sequence - right.sequence);
+    if (!this.#fullDerivation) this.#maskContent = Object.freeze({ inputs, content });
+    return content;
+  }
+
+  /** E30-U3b: the kept array for this name when it holds the same items, else this one. */
+  #intern<T>(name: string, items: T[]): T[] {
+    if (this.#fullDerivation) return items;
+    const kept = this.#interned.get(name) as T[] | undefined;
+    if (kept !== undefined && sameItems(kept, items)) return kept;
+    this.#interned.set(name, items);
+    return items;
+  }
+
   #cull(
     derivation: Derivation,
     camera: Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>,
     target: PrimitiveTarget,
   ): Readonly<{ visible: DerivedPrimitive[]; texts: DerivedText[] }> {
-    const key = [
-      camera.position.x,
-      camera.position.y,
-      camera.zoom,
-      target.width,
-      target.height,
-      target.devicePixelRatio,
-    ];
+    const key = [target.width, target.height, target.devicePixelRatio];
     const kept = this.#culled;
+    // E30 contract, section 4.1, condition 1: the kept decisions hold over their camera range.
     if (
       !this.#fullDerivation &&
       kept !== null &&
       kept.primitives === derivation.primitives &&
       kept.leaves === derivation.texts.leaves &&
-      numericArraysEqual(kept.key, key)
+      numericArraysEqual(kept.key, key) &&
+      rangeHolds(kept.range, camera)
     ) {
+      this.#cullCounts.kept += 1;
       return kept;
     }
-    const visible = cullPrimitives(
-      derivation.primitives.filter(
-        (entry) => !entry.hidden && !entry.omitted && entry.clip?.empty !== true,
-      ),
-      camera,
-      target,
+    this.#cullCounts.culls += 1;
+    const candidates = derivation.primitives.filter(
+      (entry) => !entry.hidden && !entry.omitted && entry.clip?.empty !== true,
     );
+    let visible = cullPrimitives(candidates, camera, target);
     // E28-K9: text leaves cull by their node bound and clip chain as primitives do.
-    const texts = cullTexts(
-      derivation.texts.leaves.filter((text) => !text.hidden && text.clip?.empty !== true),
-      camera,
-      target,
+    const textCandidates = derivation.texts.leaves.filter(
+      (text) => !text.hidden && text.clip?.empty !== true,
     );
+    let texts = cullTexts(textCandidates, camera, target);
+    let range = pointRange(camera);
+    if (!this.#fullDerivation) {
+      // The same decisions keep the kept arrays, so the passes keyed by them keep their work.
+      if (
+        kept !== null &&
+        kept.primitives === derivation.primitives &&
+        kept.leaves === derivation.texts.leaves
+      ) {
+        if (sameItems(kept.visible, visible)) visible = kept.visible;
+        if (sameItems(kept.texts, texts)) texts = kept.texts;
+      }
+      const drawnPrimitives = new Set(visible);
+      const drawnTexts = new Set(texts);
+      const items: { bounds: SceneBounds; clip: ClipChain | null; drawn: boolean }[] = [];
+      for (const primitive of candidates) {
+        items.push({
+          bounds: primitive.worldBounds,
+          clip: primitive.clip,
+          drawn: drawnPrimitives.has(primitive),
+        });
+      }
+      for (const text of textCandidates) {
+        // A leaf without a bound is never drawn, at any camera.
+        if (text.worldBounds === null) continue;
+        items.push({ bounds: text.worldBounds, clip: text.clip, drawn: drawnTexts.has(text) });
+      }
+      range = decisionRange(camera, target, undefined, items);
+      this.#cullCounts.ranges += 1;
+    }
     this.#culled = Object.freeze({
       primitives: derivation.primitives,
       leaves: derivation.texts.leaves,
       key,
+      range,
       visible,
       texts,
     });
@@ -2719,6 +2894,10 @@ function assertPackedTransform(world: SceneAffine, origin: Origin): void {
   if (!Number.isFinite(determinant) || (cpuDeterminant !== 0 && determinant === 0)) {
     throw new PrimitiveNumericPreparationError('transform is singular in packet v1');
   }
+}
+
+function sameItems<T>(left: readonly T[], right: readonly T[]): boolean {
+  return left.length === right.length && left.every((item, index) => item === right[index]);
 }
 
 function cullPrimitives(

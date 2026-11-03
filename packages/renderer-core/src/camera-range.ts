@@ -120,43 +120,37 @@ export function cullRange(
     }
     if (clip !== null && !meetsClipChain(bounds, clip, guardLarge)) continue;
     if (clip !== null && !meetsClipChain(bounds, clip, guardSmall)) return null;
-    // Culled by the viewport alone: past one side at every zoom in the interval.
-    const sides = [
-      // Left of the viewport: maxX < x - g, so x > maxX + g(zoomMin).
-      {
-        slack: x - (bounds.maxX + guardLarge),
-        apply: () => {
-          const bound = bounds.maxX + guardLarge;
-          minX = Math.max(minX, bound + margin(bound, guardLarge));
-        },
-      },
-      // Right of it: minX > x + W / z + g, so x < minX - W / zoomMin - g(zoomMin).
-      {
-        slack: bounds.minX - widthLarge - guardLarge - x,
-        apply: () => {
-          const bound = bounds.minX - widthLarge - guardLarge;
-          maxX = Math.min(maxX, bound - margin(bound, widthLarge + guardLarge));
-        },
-      },
-      {
-        slack: y - (bounds.maxY + guardLarge),
-        apply: () => {
-          const bound = bounds.maxY + guardLarge;
-          minY = Math.max(minY, bound + margin(bound, guardLarge));
-        },
-      },
-      {
-        slack: bounds.minY - heightLarge - guardLarge - y,
-        apply: () => {
-          const bound = bounds.minY - heightLarge - guardLarge;
-          maxY = Math.min(maxY, bound - margin(bound, heightLarge + guardLarge));
-        },
-      },
-    ];
-    let best = sides[0]!;
-    for (const side of sides) if (side.slack > best.slack) best = side;
-    if (!(best.slack > 0)) return null;
-    best.apply();
+    // Culled by the viewport alone: past one side at every zoom in the interval. Of the four
+    // sides (left of the viewport: maxX < x - g, so x > maxX + g(zoomMin); right of it:
+    // minX > x + W / z + g, so x < minX - W / zoomMin - g(zoomMin); and the same in y), the one
+    // with the most room is kept.
+    const left = bounds.maxX + guardLarge;
+    const right = bounds.minX - widthLarge - guardLarge;
+    const top = bounds.maxY + guardLarge;
+    const bottom = bounds.minY - heightLarge - guardLarge;
+    const slackLeft = x - left;
+    const slackRight = right - x;
+    const slackTop = y - top;
+    const slackBottom = bottom - y;
+    let side = 0;
+    let slack = slackLeft;
+    if (slackRight > slack) {
+      side = 1;
+      slack = slackRight;
+    }
+    if (slackTop > slack) {
+      side = 2;
+      slack = slackTop;
+    }
+    if (slackBottom > slack) {
+      side = 3;
+      slack = slackBottom;
+    }
+    if (!(slack > 0)) return null;
+    if (side === 0) minX = Math.max(minX, left + margin(left, guardLarge));
+    else if (side === 1) maxX = Math.min(maxX, right - margin(right, widthLarge + guardLarge));
+    else if (side === 2) minY = Math.max(minY, top + margin(top, guardLarge));
+    else maxY = Math.min(maxY, bottom - margin(bottom, heightLarge + guardLarge));
   }
   if (!(minX <= x && x <= maxX && minY <= y && y <= maxY)) return null;
   return Object.freeze({ zoomMin, zoomMax, minX, maxX, minY, maxY });
