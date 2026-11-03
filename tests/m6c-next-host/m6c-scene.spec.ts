@@ -46,12 +46,15 @@ import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 // - A generation change: every text node of the page is restyled to a family registered later
 //   with the test font's bytes, held, then released (before V-21 the load dispatched twice: the
 //   face's `load()` and `document.fonts`' `loadingdone`; since V-21 (section 4.1) it dispatches
-//   once after the settle; each step waits until the generation holds and every leaf is at it). The host service's raster port calls are logged with the generation each
+//   once after the settle; each step waits until the generation holds and every leaf naming the
+//   family is at it). The host service's raster port calls are logged with the generation each
 //   was made at (`glyphRasterLog`, src/renderer-options.ts): at the new generation every key
 //   E28 requests on the target (white space included, recomputed apart from the renderer) is
 //   rasterized exactly once and nothing else, and no call is at an older generation (E28-K10;
 //   bump 1 changes no face, so a reused older bitmap would make no call); the uploads cover
-//   every non-space key. Every leaf ends at the port's generation; the converged frame after
+//   every non-space key. Every leaf naming the family ends at the port's generation; since V-21
+//   (L2) the others (the instance override, whose text override carries its own runs) keep
+//   theirs and make no call; the converged frame after
 //   the load equals the frame before the restyle, since the face is the same font, and differs
 //   from the fallback's. Frames while a generation converges are not judged: a deferred cluster
 //   may legally draw a same-generation bitmap of another bucket or phase (E28 fallback).
@@ -829,8 +832,8 @@ test('M6c-A05: a generation change rasterizes every drawn key again and never dr
    * Review S1: a load used to bump twice (the face's `load()` and `document.fonts`'
    * `loadingdone`, a separate task; once since V-21), so wait until the generation rose past
    * `above`, holds for two reads 500 ms apart and every leaf naming the family is at it. Since
-   * V-21 (L2) the leaves that do not name it, the instance texts of masters this test does not
-   * restyle, keep their older generation.
+   * V-21 (L2) the leaves that do not name it keep their older generation: the instance override's
+   * text, whose override carries its own runs.
    */
   const stableGeneration = async (above: number) => {
     let previous = -1;
