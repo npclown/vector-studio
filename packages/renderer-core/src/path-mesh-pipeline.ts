@@ -1,3 +1,11 @@
+import {
+  ANY_CAMERA,
+  decisionRange,
+  intersectRanges,
+  pointRange,
+  rangeHolds,
+  type CameraRange,
+} from './camera-range.js';
 import { meetsClipChain, type ClipChain } from './clip-resolution.js';
 import {
   DIAGNOSTIC_CODES,
@@ -367,6 +375,11 @@ type PathFrame = Readonly<{
   path: DerivedPath;
   revision: number;
   frameKey: string;
+  /**
+   * E30-U3 (section 4.1, conditions 1 and 2): the cameras at which the outcome's cull decision
+   * and buckets are its evaluation's; the frame key holds the other frame inputs.
+   */
+  range: CameraRange;
   /** Null for a culled path. */
   drawn: Readonly<{
     items: readonly Evaluated[];
@@ -510,6 +523,8 @@ export class PathMeshPipeline {
     paths: readonly DerivedPath[];
     readingsKey: string;
     frameKey: string;
+    /** E30-U3: the intersection of every kept outcome's range. */
+    range: CameraRange;
     draws: readonly PathMeshDraw[];
     entries: readonly MeshEntry[];
     overlays: readonly OverlayVariant[];
@@ -603,13 +618,11 @@ export class PathMeshPipeline {
     const evaluated: EvaluatedPath[] = [];
     const missing: Record<PathPaint, PendingRequest[]> = { fill: [], stroke: [] };
     const frameStates = new Map<string, StateFailure | null>();
+    // E30-U3: the camera is not in the key; each outcome holds over its own range of cameras.
     const frameKey = [
-      zoom,
       devicePixelRatio,
       input.target.width,
       input.target.height,
-      input.camera.position.x,
-      input.camera.position.y,
       input.packing.origin.x,
       input.packing.origin.y,
       input.packing.frameFinite,
@@ -623,6 +636,7 @@ export class PathMeshPipeline {
       last.paths === input.paths &&
       last.readingsKey === readingsKey &&
       last.frameKey === frameKey &&
+      rangeHolds(last.range, input.camera) &&
       last.failures.every((failure) =>
         this.#failsAgain(failure.path, failure.revision, failure.failed!, readings, now),
       )
@@ -637,10 +651,26 @@ export class PathMeshPipeline {
     }
     let allKept = true;
     let keptCount = 0;
+    let frameRange = ANY_CAMERA;
     const failures: PathFrame[] = [];
-    const culled = (path: DerivedPath, revision: number) => {
+    // E30-U3: an outcome's range from its paints' cull decisions and, when it was bucketed, the
+    // buckets' hint at this zoom (null declines to the current camera alone).
+    const ranges = new Map<string, CameraRange>();
+    const rangeOf = (path: DerivedPath, hint: BucketHint | null | undefined) => {
+      const range = this.#reuse
+        ? decisionRange(input.camera, input.target, hint, cullItems)
+        : pointRange(input.camera);
+      ranges.set(path.id, range);
+      return range;
+    };
+    let cullItems: { bounds: SceneBounds; clip: ClipChain | null; drawn: boolean }[] = [];
+    const culled = (path: DerivedPath, revision: number, hint?: null) => {
       if (this.#reuse) {
-        this.#pathFrames.set(path.id, Object.freeze({ path, revision, frameKey, drawn: null }));
+        const range = rangeOf(path, hint);
+        this.#pathFrames.set(
+          path.id,
+          Object.freeze({ path, revision, frameKey, range, drawn: null }),
+        );
       }
     };
     for (const path of input.paths) {
@@ -656,6 +686,7 @@ export class PathMeshPipeline {
         kept.path === path &&
         kept.revision === revision &&
         kept.frameKey === frameKey &&
+        rangeHolds(kept.range, input.camera) &&
         (kept.failed !== undefined
           ? this.#failsAgain(path, revision, kept.failed, readings, now)
           : kept.drawn === null || this.#resident(path.id, kept.drawn))
@@ -664,6 +695,7 @@ export class PathMeshPipeline {
         // frame under other inputs set since (a port-version, say); a culled one records none.
         this.#reusedPaths += 1;
         keptCount += 1;
+        frameRange = intersectRanges(frameRange, kept.range);
         if (kept.failed !== undefined) {
           frameStates.set(stateKey(path.id, null), null);
           for (const item of kept.failed) frameStates.set(stateKey(path.id, item.paint), null);
@@ -684,14 +716,16 @@ export class PathMeshPipeline {
       // B2 section 9.2: the fill is V3's drawable paint; the stroke is drawable with a stroke,
       // width > 0 and stroke world bounds meeting the viewport. A path is culled only when
       // neither paint's bounds meet it.
+      cullItems = [];
       const drawable = PAINTS.filter((paint) => {
         if (this.#channels[paint] === undefined || pathPaintKey(path, paint) === null) return false;
         const worldBounds = this.#worldBounds(path, revision, paint);
-        return (
-          worldBounds !== null &&
-          meetsViewport(worldBounds, viewport) &&
-          meetsClipChain(worldBounds, path.clip ?? null, clipGuard)
-        );
+        if (worldBounds === null) return false;
+        const clip = path.clip ?? null;
+        const drawn =
+          meetsViewport(worldBounds, viewport) && meetsClipChain(worldBounds, clip, clipGuard);
+        cullItems.push({ bounds: worldBounds, clip, drawn });
+        return drawn;
       });
       if (drawable.length === 0) {
         culled(path, revision);
@@ -699,9 +733,10 @@ export class PathMeshPipeline {
       }
       const buckets = this.#bucketsFor(path, zoom, devicePixelRatio);
       if (buckets.singular) {
-        culled(path, revision);
+        culled(path, revision, null);
         continue;
       }
+      const hint = this.#buckets.get(path.id)?.hint ?? null;
 
       // The node-level state, one key per node: port-version of either drawable paint's port.
       // It notifies once per (node, code) transition. ST-U7 removed the interim composition state:
@@ -795,6 +830,7 @@ export class PathMeshPipeline {
             path,
             revision,
             frameKey,
+            range: rangeOf(path, hint),
             drawn: null,
             failed: Object.freeze(items),
           });
@@ -805,6 +841,7 @@ export class PathMeshPipeline {
         continue;
       }
       for (const request of requests) missing[request.key.paint].push(request);
+      if (this.#reuse) rangeOf(path, hint);
       evaluated.push(Object.freeze({ path, items: Object.freeze(items) }));
     }
 
@@ -837,6 +874,7 @@ export class PathMeshPipeline {
           path,
           revision: revisions.get(path.id)!,
           frameKey,
+          range: ranges.get(path.id)!,
           drawn: Object.freeze({ items, entries, draws: Object.freeze([...pathDraws]), overlay }),
         }),
       );
@@ -919,6 +957,7 @@ export class PathMeshPipeline {
         paths: input.paths,
         readingsKey,
         frameKey,
+        range: frameRange,
         draws: served,
         entries: Object.freeze([...working]),
         overlays: Object.freeze(overlays),
