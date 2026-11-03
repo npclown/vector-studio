@@ -15,8 +15,12 @@
 // from a kept outcome; fill and stroke port calls (tessellation: one call per prepare whose
 // cache lookups miss in the usual case, up to 32 when failed ranges split, so 0 means no path
 // was tessellated); bucket computations, geometry builds, P1 record writes (the mesh packer's
-// and text uploads are not counted), and the packet's primitive and mesh draws and text glyph
-// instances, the items each pass walks.
+// and text uploads are not counted), the bytes the packet's P1 and mesh writes carry (text
+// uploads not counted; a still frame's must be 0, which shows every packet was acknowledged),
+// and the packet's primitive and mesh draws and text glyph instances, the items each pass walks.
+// Each packet is acknowledged with a receipt that has the text part the v2 page's packets carry
+// (one backend page incarnation per atlas page index, kept while the page exists): without it the
+// source refuses every receipt, and each frame re-sends every unacknowledged record.
 // E30_DPR (default 1) sets the target's DPR at 1280 x 720 CSS. E30_PROFILE=still|edit|pan with
 // E30_OUT=<file> also writes the top 30 self-time functions of that kind's sampled frames (V8
 // sampling profiler at 100 us); those frames are then not timed. It needs the release kernel
@@ -35,6 +39,10 @@ import {
   PathMeshPipeline,
   reusedPathsForTesting,
 } from '../../packages/renderer-core/src/path-mesh-pipeline.js';
+import type {
+  PrimitivePacket,
+  PrimitiveReceipt,
+} from '../../packages/renderer-core/src/primitive-packet.js';
 import { PrimitiveSceneSource } from '../../packages/renderer-core/src/primitive-scene-source.js';
 import { RetainedSceneMirror } from '../../packages/renderer-core/src/scene-mirror.js';
 import { FakeRaster } from '../support/e28-text-harness.js';
@@ -109,6 +117,19 @@ it('E30: prepare at the fitted camera of the profiled page', async () => {
       node.kind === 'primitive' || node.kind === 'path',
   );
   let revision = 1;
+  // The backend's atlas pages: one incarnation per page index, kept while the page exists.
+  const pages: symbol[] = [];
+  const receipt = (packet: PrimitivePacket): PrimitiveReceipt => {
+    const base = receiptOf(packet);
+    const part = packet.text;
+    if (part === undefined) return base;
+    while (pages.length < part.pageCount) pages.push(Symbol('page'));
+    pages.length = part.pageCount;
+    return {
+      ...base,
+      text: { pages: [...pages], clears: part.clears.length, uploads: part.uploads.length },
+    };
+  };
   const timings: Record<string, number[]> = { first: [], still: [], edit: [], pan: [] };
   const COUNTERS = [
     'fillPortCalls',
@@ -116,6 +137,7 @@ it('E30: prepare at the fitted camera of the profiled page', async () => {
     'bucketComputations',
     'geometryBuilds',
     'recordWrites',
+    'writtenBytes',
     'pathsReused',
     'primitiveDraws',
     'meshDraws',
@@ -176,8 +198,14 @@ it('E30: prepare at the fitted camera of the profiled page', async () => {
       row.primitiveDraws.push(packet!.draws.length);
       row.meshDraws.push(packet!.mesh?.draws.length ?? 0);
       row.textDraws.push((packet!.text?.instances.length ?? 0) / 16);
+      row.writtenBytes.push(
+        [...packet!.writes, ...(packet!.mesh?.writes ?? [])].reduce(
+          (sum, write) => sum + write.bytes.byteLength,
+          0,
+        ),
+      );
     }
-    source.acknowledge(receiptOf(packet!));
+    source.acknowledge(receipt(packet!));
   };
   frame('first', 0);
   const session = new Session();
@@ -218,6 +246,8 @@ it('E30: prepare at the fitted camera of the profiled page', async () => {
   for (const kind of ['first', ...KINDS]) {
     expect(Math.min(...afresh(kind)), `${kind}: afresh paths`).toBeGreaterThanOrEqual(0);
   }
+  // Every packet was acknowledged: a still frame writes nothing.
+  expect(rank(counts.still!.writtenBytes, 1), 'a still frame writes no record').toBe(0);
   process.stdout.write(
     `${JSON.stringify({
       page,
