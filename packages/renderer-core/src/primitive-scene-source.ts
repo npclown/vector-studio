@@ -40,7 +40,13 @@ import type {
   PathMeshStatistics,
 } from './path-mesh-pipeline.js';
 import { disablePathReuseForTesting } from './path-mesh-pipeline.js';
-import { decisionRange, pointRange, rangeHolds, type CameraRange } from './camera-range.js';
+import {
+  decisionRange,
+  intersectRanges,
+  pointRange,
+  rangeHolds,
+  type CameraRange,
+} from './camera-range.js';
 import {
   PathMeshPacker,
   meshFrameLanes,
@@ -191,8 +197,13 @@ type PackingCounts = Readonly<{
   ranged: number;
   /** Primitive checks that ran at the camera (the U5d bound, then the assessment). */
   perCamera: number;
-  /** E30-U3b: frames that kept the cull, frames that culled, and cull ranges taken. */
-  cull: Readonly<{ kept: number; culls: number; ranges: number }>;
+  /**
+   * E30-U3b: frames that kept the cull, frames that culled, and cull ranges taken; E30-U4b:
+   * frames that decided only the leaves a set replaced.
+   */
+  cull: Readonly<{ kept: number; culls: number; ranges: number; patched: number }>;
+  /** E30-U4b: frames that kept the last mask plan, and frames that planned afresh. */
+  masks: Readonly<{ kept: number; planned: number }>;
 }>;
 
 type PackingRange = Readonly<{
@@ -255,17 +266,16 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   #slotSerial: number | null = null;
   #fullDerivation = false;
   #derivationCounts = { reused: 0, patched: 0, full: 0, leaves: 0 };
-  #culled: Readonly<{
-    primitives: readonly DerivedPrimitive[];
-    leaves: readonly DerivedText[];
-    /** The target size and DPR the decisions were taken under. */
-    key: readonly number[];
-    /** E30-U3b: the cameras at which every cull decision is the kept one. */
-    range: CameraRange;
-    visible: DerivedPrimitive[];
-    texts: DerivedText[];
-  }> | null = null;
-  #cullCounts = { kept: 0, ranges: 0, culls: 0 };
+  #culled: KeptCull | null = null;
+  /** E30-U4b: the last mask plan with its inputs, all of its content admitted. */
+  #keptMaskPlan: Readonly<{ inputs: readonly unknown[]; plan: MaskPlan }> | null = null;
+  #maskPlanCounts = { kept: 0, planned: 0 };
+  /** E30-U4b: each derived path's layer content bounds (`#pathContentBounds`). */
+  #contentBounds = new WeakMap<
+    DerivedPath,
+    Readonly<{ fill: SceneBounds | null; stroke: SceneBounds | null }>
+  >();
+  #cullCounts = { kept: 0, ranges: 0, culls: 0, patched: 0 };
   /**
    * E30-U3b: camera-independent per-frame results kept by the identity of their inputs: the
    * layers' content bounds, the mask plan's paint-order content, and the arrays a frame filters
@@ -313,7 +323,11 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     };
     readDerivationCounts = (source) => Object.freeze({ ...source.#derivationCounts });
     readPackingCounts = (source) =>
-      Object.freeze({ ...source.#packingCounts, cull: Object.freeze({ ...source.#cullCounts }) });
+      Object.freeze({
+        ...source.#packingCounts,
+        cull: Object.freeze({ ...source.#cullCounts }),
+        masks: Object.freeze({ ...source.#maskPlanCounts }),
+      });
   }
   #packingKeys = new Map<string, PackingKeys>();
   #geometryBuilds = 0;
@@ -512,10 +526,38 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     let assessed = visible;
     const pathClips = this.#pathClips(paths);
     if (clipSeen.value) {
-      masks = this.#planMasks(scene, derived, pathDraws, cameraState.camera, target);
-      const plan = masks;
       const content = this.#maskContentOf(visible, pathDraws, texts, pathSequences, pathClips);
-      for (const entry of content) plan.admit(entry.chain);
+      // E30-U4b: a frame with the kept plan's inputs (the same derivation, path draws, content,
+      // camera and target) keeps the plan, whose levels and admissions are then the same.
+      const camera = cameraState.camera;
+      const inputs = [
+        derived,
+        derivation.paths,
+        pathDraws,
+        content,
+        camera.position.x,
+        camera.position.y,
+        camera.zoom,
+        target.width,
+        target.height,
+        target.devicePixelRatio,
+        target.sampleCount,
+      ];
+      const keptPlan = this.#keptMaskPlan;
+      if (
+        !this.#fullDerivation &&
+        keptPlan !== null &&
+        keptPlan.inputs.every((input, index) => Object.is(input, inputs[index]))
+      ) {
+        masks = keptPlan.plan;
+        this.#maskPlanCounts.kept += 1;
+      } else {
+        masks = this.#planMasks(scene, derived, pathDraws, camera, target);
+        for (const entry of content) masks.admit(entry.chain);
+        this.#maskPlanCounts.planned += 1;
+        if (!this.#fullDerivation) this.#keptMaskPlan = Object.freeze({ inputs, plan: masks });
+      }
+      const plan = masks;
       visible = this.#intern(
         'mask-visible',
         visible.filter((primitive) => plan.admit(primitive.clip)),
@@ -1095,17 +1137,32 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       if (draw.maskSource === true) continue;
       const layer = pathLayers.get(draw.nodeId);
       if (layer === undefined) continue;
-      const path = paths.get(draw.nodeId)!;
-      const points = path.node.geometry.points;
-      const local = draw.paint === 'stroke' ? null : getPathLocalPointBounds(points);
-      if (local !== null) add(layer, transformSceneBounds(local, path.world));
+      const bounds = this.#pathContentBounds(paths.get(draw.nodeId)!);
+      if (draw.paint !== 'stroke') add(layer, bounds.fill);
       // A joint fill draw also covers its stroke (ST-U7 addendum).
-      if (draw.paint === 'stroke' || draw.composite === 'joint-fill') {
-        const stroke = getPathLocalStrokeBounds(points, path.node.style.stroke);
-        if (stroke !== null) add(layer, transformSceneBounds(stroke, path.world));
-      }
+      if (draw.paint === 'stroke' || draw.composite === 'joint-fill') add(layer, bounds.stroke);
     }
     return content;
+  }
+
+  /**
+   * A derived path's fill and stroke world bounds for layer content; E30-U4b: kept per derived
+   * path object, which a set replaces whenever it writes the path.
+   */
+  #pathContentBounds(
+    path: DerivedPath,
+  ): Readonly<{ fill: SceneBounds | null; stroke: SceneBounds | null }> {
+    const kept = this.#fullDerivation ? undefined : this.#contentBounds.get(path);
+    if (kept !== undefined) return kept;
+    const points = path.node.geometry.points;
+    const fill = getPathLocalPointBounds(points);
+    const stroke = getPathLocalStrokeBounds(points, path.node.style.stroke);
+    const bounds = Object.freeze({
+      fill: fill === null ? null : transformSceneBounds(fill, path.world),
+      stroke: stroke === null ? null : transformSceneBounds(stroke, path.world),
+    });
+    if (!this.#fullDerivation) this.#contentBounds.set(path, bounds);
+    return bounds;
   }
 
   /**
@@ -1573,6 +1630,20 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       this.#cullCounts.kept += 1;
       return kept;
     }
+    // E30 contract, section 4.2 (U4b): after a leaf-only set, the replaced leaves are decided
+    // alone at this camera; every other leaf keeps its decision, which holds over the range.
+    const patched =
+      this.#fullDerivation ||
+      kept === null ||
+      !numericArraysEqual(kept.key, key) ||
+      !rangeHolds(kept.range, camera)
+        ? null
+        : this.#patchCull(kept, derivation, camera, target);
+    if (patched !== null) {
+      this.#cullCounts.patched += 1;
+      this.#culled = patched;
+      return patched;
+    }
     this.#cullCounts.culls += 1;
     const candidates = derivation.primitives.filter(
       (entry) => !entry.hidden && !entry.omitted && entry.clip?.empty !== true,
@@ -1621,6 +1692,63 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       texts,
     });
     return this.#culled;
+  }
+
+  /**
+   * E30-U4b: the kept cull with the replaced leaves decided afresh, or null when the leaves
+   * differ in more than a few entries replaced by leaves with the same IDs. The range narrows to
+   * the replaced leaves' decisions; the kept arrays are kept when no replaced leaf is drawn
+   * before or after.
+   */
+  #patchCull(
+    kept: KeptCull,
+    derivation: Derivation,
+    camera: Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>,
+    target: PrimitiveTarget,
+  ): KeptCull | null {
+    const primitiveChanges = replacedEntries(kept.primitives, derivation.primitives);
+    if (primitiveChanges === null) return null;
+    const textChanges = replacedEntries(kept.leaves, derivation.texts.leaves);
+    if (textChanges === null) return null;
+    const items: { bounds: SceneBounds; clip: ClipChain | null; drawn: boolean }[] = [];
+    const visible = patchDrawn(
+      kept.primitives,
+      derivation.primitives,
+      kept.visible,
+      primitiveChanges,
+      (primitive) => {
+        if (primitive.hidden || primitive.omitted || primitive.clip?.empty === true) return false;
+        const drawn = cullPrimitives([primitive], camera, target).length === 1;
+        items.push({ bounds: primitive.worldBounds, clip: primitive.clip, drawn });
+        return drawn;
+      },
+    );
+    const texts = patchDrawn(
+      kept.leaves,
+      derivation.texts.leaves,
+      kept.texts,
+      textChanges,
+      (text) => {
+        if (text.hidden || text.clip?.empty === true) return false;
+        const drawn = cullTexts([text], camera, target).length === 1;
+        if (text.worldBounds !== null) {
+          items.push({ bounds: text.worldBounds, clip: text.clip, drawn });
+        }
+        return drawn;
+      },
+    );
+    const range =
+      items.length === 0
+        ? kept.range
+        : intersectRanges(kept.range, decisionRange(camera, target, undefined, items));
+    return Object.freeze({
+      primitives: derivation.primitives,
+      leaves: derivation.texts.leaves,
+      key: kept.key,
+      range,
+      visible,
+      texts,
+    });
   }
 
   /** The derived paths by ID, built once per paths array (E26-U5c). */
@@ -2925,6 +3053,75 @@ function cullPrimitives(
 }
 
 /** E28-K9: text leaves cull by their node bound and clip chain, with primitives' 2 px guard. */
+/** The kept cull (E26-U5c, E30-U3b). */
+type KeptCull = Readonly<{
+  primitives: readonly DerivedPrimitive[];
+  leaves: readonly DerivedText[];
+  /** The target size and DPR the decisions were taken under. */
+  key: readonly number[];
+  /** E30-U3b: the cameras at which every cull decision is the kept one. */
+  range: CameraRange;
+  visible: DerivedPrimitive[];
+  texts: DerivedText[];
+}>;
+
+/**
+ * E30-U4b: the indices at which `next` replaces entries of `previous` by entries with the same
+ * IDs, ascending; null when the lengths or an ID differ, or more than a few entries changed.
+ */
+function replacedEntries<T extends Readonly<{ id: string }>>(
+  previous: readonly T[],
+  next: readonly T[],
+): number[] | null {
+  if (previous === next) return [];
+  if (previous.length !== next.length) return null;
+  const limit = Math.max(64, next.length >> 3);
+  const indices: number[] = [];
+  for (let index = 0; index < next.length; index += 1) {
+    const before = previous[index]!;
+    const after = next[index]!;
+    if (before === after) continue;
+    if (before.id !== after.id || indices.length === limit) return null;
+    indices.push(index);
+  }
+  return indices;
+}
+
+/**
+ * E30-U4b: the drawn subsequence of `next` (in its order) from the kept drawn subsequence of
+ * `previous`, with the entries at `replaced` decided by `decide`. The kept array is returned when
+ * no replaced entry is drawn before or after.
+ */
+function patchDrawn<T>(
+  previous: readonly T[],
+  next: readonly T[],
+  drawn: T[],
+  replaced: readonly number[],
+  decide: (entry: T) => boolean,
+): T[] {
+  if (replaced.length === 0) return drawn;
+  const decisions = new Map<number, boolean>();
+  for (const index of replaced) decisions.set(index, decide(next[index]!));
+  // Whether each replaced entry was drawn: the kept drawn entries are a subsequence of `previous`.
+  const before = new Set<number>();
+  let position = 0;
+  for (let index = 0; index < previous.length && position < drawn.length; index += 1) {
+    if (drawn[position] !== previous[index]) continue;
+    if (decisions.has(index)) before.add(index);
+    position += 1;
+  }
+  if (before.size === 0 && [...decisions.values()].every((value) => !value)) return drawn;
+  const result: T[] = [];
+  position = 0;
+  for (let index = 0; index < next.length; index += 1) {
+    const wasDrawn = position < drawn.length && drawn[position] === previous[index];
+    if (wasDrawn) position += 1;
+    const decision = decisions.get(index);
+    if (decision === undefined ? wasDrawn : decision) result.push(next[index]!);
+  }
+  return result;
+}
+
 function cullTexts(
   texts: readonly DerivedText[],
   camera: Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>,

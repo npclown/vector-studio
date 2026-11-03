@@ -6,7 +6,10 @@ import {
   reusedPathsForTesting,
   type PathMeshLimits,
 } from '../../packages/renderer-core/src/path-mesh-pipeline.js';
-import { derivationCountsForTesting } from '../../packages/renderer-core/src/primitive-scene-source.js';
+import {
+  derivationCountsForTesting,
+  packingCountsForTesting,
+} from '../../packages/renderer-core/src/primitive-scene-source.js';
 import { createFailingPort, type ScriptedFillMeshPort } from '../support/v3a-path-harness.js';
 import { receiptOf } from '../support/v3b-mesh-harness.js';
 import {
@@ -151,6 +154,8 @@ function runDifferential(
     kinds,
     reconcile: reconcileCountsForTesting(incremental.pipeline),
     derivation: derivationCountsForTesting(incremental.source),
+    cull: packingCountsForTesting(incremental.source).cull,
+    masks: packingCountsForTesting(incremental.source).masks,
     evictions: incremental.pipeline.getStatistics().evictions,
   };
 }
@@ -192,6 +197,11 @@ describe('E30-U4 set frames', () => {
     expect(sum((result) => result.reconcile.changed)).toBeGreaterThan(1_000);
     expect(sum((result) => result.reconcile.full)).toBeGreaterThan(100);
     expect(sum((result) => result.derivation.patched)).toBeGreaterThan(150);
+    // Leaf sets inside the cull range decide only the replaced leaves.
+    expect(sum((result) => result.cull.patched)).toBeGreaterThan(100);
+    // Frames with the kept mask plan's inputs keep the plan.
+    expect(sum((result) => result.masks.kept)).toBeGreaterThan(100);
+    expect(sum((result) => result.masks.planned)).toBeGreaterThan(100);
     expect(results[2]!.evictions + results[3]!.evictions).toBeGreaterThan(20);
   }, 120_000);
 });
@@ -271,6 +281,165 @@ describe('E30-U4 counters', () => {
         changed: 0,
       });
     }
+  });
+});
+
+describe('E30-U4b cull counters', () => {
+  it('decides only the primitives a set replaced, inside the kept range', () => {
+    const nodes: RenderNodeSnapshot[] = Array.from({ length: 200 }, (_, index) => ({
+      id: `r${String(index).padStart(3, '0')}`,
+      parentId: null,
+      transform: [1, 0, 0, 1, (index % 20) * 30, Math.floor(index / 20) * 30],
+      visible: true,
+      opacity: 1,
+      kind: 'primitive',
+      geometry: { kind: 'rectangle', width: 20, height: 20, cornerRadii: [0, 0, 0, 0] },
+      style: { fill: { r: 0, g: 0, b: 1, a: 1 }, stroke: null },
+    }));
+    const incremental = twin(false);
+    const oracle = twin(true);
+    const normalize = { incremental: normalizer(), oracle: normalizer() };
+    for (const { mirror } of [incremental, oracle]) {
+      mirror.replaceSnapshot({ identity, revision: 1, nodes, rootOrder: nodes.map((n) => n.id) });
+      mirror.setCamera({ position: { x: 0, y: 0 }, zoom: 1 });
+    }
+    const current = new Map(nodes.map((node) => [node.id, node]));
+    let revision = 1;
+    const frame = (updated: RenderNodeSnapshot[]) => {
+      const before = packingCountsForTesting(incremental.source).cull;
+      if (updated.length > 0) {
+        revision += 1;
+        for (const node of updated) current.set(node.id, node);
+        for (const { mirror } of [incremental, oracle]) {
+          const set = {
+            identity,
+            revision,
+            baseRevision: revision - 1,
+            inserted: [],
+            updated,
+            removed: [],
+            orders: [],
+          };
+          expect(mirror.applyChanges(set).status).toBe('applied');
+        }
+      }
+      const left = incremental.source.prepare(target)!;
+      const right = oracle.source.prepare(target)!;
+      expect(normalize.incremental(left)).toBe(normalize.oracle(right));
+      incremental.source.acknowledge(receiptOf(left));
+      oracle.source.acknowledge(receiptOf(right));
+      const after = packingCountsForTesting(incremental.source).cull;
+      return { culls: after.culls - before.culls, patched: after.patched - before.patched };
+    };
+    const moved = (count: number, dx: number) =>
+      [...current.values()].slice(0, count).map((node) => ({
+        ...node,
+        transform: [1, 0, 0, 1, node.transform[4] + dx, node.transform[5]] as const,
+      })) as RenderNodeSnapshot[];
+    frame([]);
+    frame([]);
+    for (const count of [1, 8, 64]) {
+      // A small move keeps each primitive in view; the others keep their decisions.
+      expect(frame(moved(count, 1)), `${count} primitives`).toEqual({ culls: 0, patched: 1 });
+    }
+    // A move out of the view changes the drawn set, still by the replaced primitives alone.
+    expect(frame(moved(4, 5_000))).toEqual({ culls: 0, patched: 1 });
+    expect(frame(moved(4, -5_000))).toEqual({ culls: 0, patched: 1 });
+  });
+});
+
+describe('E30-U4b kept mask plan', () => {
+  it('keeps the mask plan only under the same inputs, with mask levels drawn', () => {
+    const rect = (id: string, parentId: string | null, x: number, y: number, size: number) =>
+      ({
+        id,
+        parentId,
+        transform: [1, 0, 0, 1, x, y],
+        visible: true,
+        opacity: 1,
+        kind: 'primitive',
+        geometry: { kind: 'rectangle', width: size, height: size, cornerRadii: [0, 0, 0, 0] },
+        style: { fill: { r: 0, g: 1, b: 0, a: 1 }, stroke: null },
+      }) as RenderNodeSnapshot;
+    const nodes: RenderNodeSnapshot[] = [];
+    const rootOrder: string[] = [];
+    for (let mask = 0; mask < 4; mask += 1) {
+      const id = `m${mask}`;
+      const children = [`m${mask}s`, ...Array.from({ length: 6 }, (_, i) => `m${mask}c${i}`)];
+      nodes.push({
+        id,
+        parentId: null,
+        transform: [1, 0, 0, 1, mask * 70, 20],
+        visible: true,
+        opacity: 1,
+        kind: 'container',
+        clip: { kind: 'mask' },
+        children,
+      });
+      rootOrder.push(id);
+      nodes.push(rect(`m${mask}s`, id, 5, 5, 50));
+      for (let i = 0; i < 6; i += 1) nodes.push(rect(`m${mask}c${i}`, id, i * 9, i * 7, 20));
+    }
+    const incremental = twin(false);
+    const oracle = twin(true);
+    const normalize = { incremental: normalizer(), oracle: normalizer() };
+    for (const { mirror } of [incremental, oracle]) {
+      expect(mirror.replaceSnapshot({ identity, revision: 1, nodes, rootOrder }).status).toBe(
+        'applied',
+      );
+    }
+    const rng = random(0xe30b6);
+    const current = new Map(nodes.map((node) => [node.id, node]));
+    let revision = 1;
+    let camera = { x: 0, y: 0, zoom: 1 };
+    let drawnMasks = 0;
+    for (let frame = 0; frame < 200; frame += 1) {
+      const step = rng();
+      if (step < 0.3) {
+        camera = { ...camera, x: camera.x + (rng() - 0.5) * 6, y: camera.y + (rng() - 0.5) * 6 };
+      } else if (step < 0.4) {
+        camera = { ...camera, zoom: camera.zoom * (rng() < 0.5 ? 0.9 : 1.1) };
+      } else if (step < 0.7) {
+        // Content leaves moved; now and then a mask source.
+        const ids = [...current.keys()].filter((id) => id.includes('c') || rng() < 0.05);
+        const updated = Array.from(
+          { length: 1 + Math.floor(rng() * 3) },
+          (): RenderNodeSnapshot => {
+            const node = current.get(ids[Math.floor(rng() * ids.length)]!)!;
+            const [a, b, c, d, e, f] = node.transform;
+            return { ...node, transform: [a, b, c, d, e + (rng() - 0.5) * 8, f] };
+          },
+        );
+        const unique = [...new Map(updated.map((node) => [node.id, node])).values()];
+        revision += 1;
+        for (const node of unique) current.set(node.id, node);
+        for (const { mirror } of [incremental, oracle]) {
+          const set = {
+            identity,
+            revision,
+            baseRevision: revision - 1,
+            inserted: [],
+            updated: unique,
+            removed: [],
+            orders: [],
+          };
+          expect(mirror.applyChanges(set).status).toBe('applied');
+        }
+      }
+      for (const { mirror } of [incremental, oracle]) {
+        mirror.setCamera({ position: { x: camera.x, y: camera.y }, zoom: camera.zoom });
+      }
+      const left = incremental.source.prepare(target)!;
+      const right = oracle.source.prepare(target)!;
+      expect(normalize.incremental(left), `frame ${frame}`).toBe(normalize.oracle(right));
+      if ((left.clip?.masks.length ?? 0) > 0) drawnMasks += 1;
+      incremental.source.acknowledge(receiptOf(left));
+      oracle.source.acknowledge(receiptOf(right));
+    }
+    const counts = packingCountsForTesting(incremental.source).masks;
+    expect(drawnMasks).toBeGreaterThan(150);
+    expect(counts.kept).toBeGreaterThan(30);
+    expect(counts.planned).toBeGreaterThan(100);
   });
 });
 
