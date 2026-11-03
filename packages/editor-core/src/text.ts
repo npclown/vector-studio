@@ -38,7 +38,8 @@ export function layoutRequest(node: TextNode): TextLayoutRequest {
 /**
  * V-21 (contract, section 4.2): a family name as CSS matches it, unquoted (undoing the string
  * escapes text-dom's `quoteCssString` writes: `\"`, `\\` and hex escapes) and ASCII
- * case-folded. An unquoted name (a generic family, or a raw `FontFace.family`) is trimmed only.
+ * case-folded. An unquoted entry of a list (a generic family) is trimmed only. For the port's raw
+ * names, see `foldFamily`.
  */
 export function normalizeFamily(name: string): string {
   let value = name.trim();
@@ -61,7 +62,16 @@ export function normalizeFamily(name: string): string {
       }
     }
   }
-  return value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+  return foldFamily(value);
+}
+
+/**
+ * V-21: a raw family name as the port gives it (`FontFace.family`, a registered family), ASCII
+ * case-folded only. text-dom's font list quotes the raw name exactly, so unquoting it there
+ * (`normalizeFamily`) gives the same string; a raw name is never trimmed or unquoted.
+ */
+export function foldFamily(name: string): string {
+  return name.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 }
 
 /** The families of a CSS font-family list, normalized: commas outside double quotes split it. */
@@ -107,6 +117,12 @@ export class TextLayoutCache {
    */
   private dropped: Set<string> | null = new Set();
   /**
+   * V-21 review: whether the generation changed since the last `takeDropped`. While it has, a
+   * result stored at the new generation also marks its key, so a unit whose result was not
+   * held at the sync and is laid out again before the relayout is still re-projected.
+   */
+  private changedSinceTake = false;
+  /**
    * The last generation `notify` reported, kept apart from the results' generation so that a
    * layout call between a bump and the editor's listener (another listener laying out) cannot
    * swallow the editor's event.
@@ -136,13 +152,14 @@ export class TextLayoutCache {
     if (generation === this.generation) return;
     const changed = this.port.changedSince?.(this.generation) ?? null;
     this.generation = generation;
+    this.changedSinceTake = true;
     this.previous = this.split === null ? null : new Map(this.results);
     if (changed === null) {
       this.results = new Map();
       this.dropped = null;
       return;
     }
-    const families = new Set(changed.map(normalizeFamily));
+    const families = new Set(changed.map(foldFamily));
     if (families.size === 0) return;
     for (const [key, result] of this.results) {
       if (!affected(result, families)) continue;
@@ -153,11 +170,13 @@ export class TextLayoutCache {
 
   /**
    * V-21: for the relayout, whether `node`'s projected layout may be stale: its result was
-   * dropped since the last `takeDropped`, or is not held. Null from `takeDropped` means all.
+   * dropped or stored again since the generation changed after the last `takeDropped`, or is
+   * not held. Null from `takeDropped` means all.
    */
   takeDropped(): ((node: TextNode) => boolean) | null {
     const dropped = this.dropped;
     this.dropped = new Set();
+    this.changedSinceTake = false;
     if (dropped === null) return null;
     return (node) => {
       const key = this.keys.get(node) ?? JSON.stringify(layoutRequest(node));
@@ -220,6 +239,7 @@ export class TextLayoutCache {
     // holds; it is returned but not stored.
     if (this.port.generation !== generation) return result;
     this.results.set(key, result);
+    if (this.changedSinceTake) this.dropped?.add(key);
     if (this.results.size > TEXT_LAYOUT_CACHE_SIZE) {
       this.results.delete(this.results.keys().next().value!);
     }

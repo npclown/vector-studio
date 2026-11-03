@@ -27,6 +27,7 @@ import {
 import {
   TextLayoutCache,
   fontListFamilies,
+  foldFamily,
   normalizeFamily,
   type TextLayouter,
 } from '../../packages/editor-core/src/text.js';
@@ -784,6 +785,38 @@ describe('V-21 the cache keeps unaffected results (V-21 contract, section 4.2)',
     cache.notify();
     expect(cache.takeDropped()).toBeNull();
     expect(cache.size).toBe(0);
+  });
+
+  it('marks a unit laid out again after the change although its result was not held', () => {
+    const port = createFakeTextLayout({ changedSince: true });
+    const cache = new TextLayoutCache(port);
+    const a = node('a', 'Other');
+    cache.takeDropped();
+    // 'a' is projected but its result is not held (fell out of the LRU, say); the change
+    // syncs lazily through another node, then the same request is laid out again.
+    port.bump(['Other']);
+    cache.layout(node('z', 'Test'));
+    cache.layout(node('a', 'Other'));
+    cache.notify();
+    expect(cache.takeDropped()!(a)).toBe(true);
+    // Laid out after the take: not marked again.
+    cache.layout(node('y', 'Other'));
+    expect(cache.takeDropped()!(node('y', 'Other'))).toBe(false);
+  });
+
+  it('matches a raw family exactly, case aside: spaces and quotes are part of it', () => {
+    const port = createFakeTextLayout({ changedSince: true });
+    const cache = new TextLayoutCache(port);
+    const spaced = node('s', ' Foo');
+    const quoted = node('q', '"Foo"');
+    const plain = node('p', 'Foo');
+    for (const each of [spaced, quoted, plain]) cache.layout(each);
+    cache.takeDropped();
+    port.bump([' FOO', '"foo"']);
+    cache.notify();
+    const stale = cache.takeDropped()!;
+    expect([stale(spaced), stale(quoted), stale(plain)]).toEqual([true, true, false]);
+    expect(foldFamily(' "Foo" ')).toBe(' "foo" ');
   });
 });
 
