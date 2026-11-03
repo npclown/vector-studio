@@ -213,6 +213,11 @@ it('E30: prepare at the fitted camera of the profiled page', async () => {
   // number its per-path pass evaluated afresh (the path set's size is the same in every kind).
   const evaluable = rank(counts.still!.pathsReused, 1)!;
   const afresh = (kind: string) => counts[kind]!.pathsReused.map((reused) => evaluable - reused);
+  // The derivation holds only if every still frame took the whole-frame reuse.
+  expect(rank(counts.still!.pathsReused, 0), 'every still frame reuses every path').toBe(evaluable);
+  for (const kind of ['first', ...KINDS]) {
+    expect(Math.min(...afresh(kind)), `${kind}: afresh paths`).toBeGreaterThanOrEqual(0);
+  }
   process.stdout.write(
     `${JSON.stringify({
       page,
