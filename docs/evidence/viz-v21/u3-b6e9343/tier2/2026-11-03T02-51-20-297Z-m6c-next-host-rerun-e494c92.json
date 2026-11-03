@@ -1,0 +1,84 @@
+{
+  "schema": "headed-timing-v1",
+  "config": "playwright.m6c-next-host.config.ts",
+  "startedUtc": "2026-11-03T02:51:20.297Z",
+  "status": "passed",
+  "workers": 4,
+  "wallMilliseconds": 314448,
+  "tests": 100,
+  "testMilliseconds": 1083859,
+  "specs": [
+    {
+      "file": "tests/m6c-next-host/m6c-agreement.spec.ts",
+      "project": "chrome-dpr2",
+      "tests": 14,
+      "milliseconds": 155631
+    },
+    {
+      "file": "tests/m6c-next-host/m6c-agreement.spec.ts",
+      "project": "edge-dpr2",
+      "tests": 14,
+      "milliseconds": 154098
+    },
+    {
+      "file": "tests/m6c-next-host/m6c-agreement.spec.ts",
+      "project": "edge",
+      "tests": 14,
+      "milliseconds": 151582
+    },
+    {
+      "file": "tests/m6c-next-host/m6c-agreement.spec.ts",
+      "project": "chrome",
+      "tests": 14,
+      "milliseconds": 135614
+    },
+    {
+      "file": "tests/m6c-next-host/m6c-scene.spec.ts",
+      "project": "chrome-dpr2",
+      "tests": 6,
+      "milliseconds": 102524
+    },
+    {
+      "file": "tests/m6c-next-host/m6c-scene.spec.ts",
+      "project": "edge-dpr2",
+      "tests": 6,
+      "milliseconds": 90978
+    },
+    {
+      "file": "tests/m6c-next-host/m6c-scene.spec.ts",
+      "project": "edge",
+      "tests": 6,
+      "milliseconds": 67751
+    },
+    {
+      "file": "tests/m6c-next-host/m6c-scene.spec.ts",
+      "project": "chrome",
+      "tests": 6,
+      "milliseconds": 66001
+    },
+    {
+      "file": "tests/m6c-next-host/m6c-next-host.spec.ts",
+      "project": "chrome-dpr2",
+      "tests": 5,
+      "milliseconds": 40549
+    },
+    {
+      "file": "tests/m6c-next-host/m6c-next-host.spec.ts",
+      "project": "edge",
+      "tests": 5,
+      "milliseconds": 40074
+    },
+    {
+      "file": "tests/m6c-next-host/m6c-next-host.spec.ts",
+      "project": "edge-dpr2",
+      "tests": 5,
+      "milliseconds": 40049
+    },
+    {
+      "file": "tests/m6c-next-host/m6c-next-host.spec.ts",
+      "project": "chrome",
+      "tests": 5,
+      "milliseconds": 39008
+    }
+  ]
+}

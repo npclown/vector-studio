@@ -1,0 +1,172 @@
+﻿node.exe : $ playwright test --config playwright.m6c-next-host.config.ts "--reporter=line,./tests/support/timing-report
+er.ts,json"
+At C:\Program Files\nodejs\pnpm.ps1:16 char:5
++     & "$basedir/node$exe"  "$basedir/node_modules/corepack/dist/pnpm. ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ($ playwright te...porter.ts,json":String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[WebServer] (node:26600) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:39756) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+
+Running 100 tests using 4 workers
+
+(node:32704) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+(node:12732) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+
+
+(node:3972) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:33224) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:324:1 › M6c-A06 (structure): each agreement fixture keeps its committed line starts
+[2/100] [chrome] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text draws ink inside each text leaf's cluster bounds
+[3/100] [chrome] › tests\m6c-next-host\m6c-scene.spec.ts:614:1 › M6c-A05 (structure): the scene page overlaps, clips, masks and instances its text
+[4/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:324:1 › M6c-A06 (structure): each agreement fixture keeps its committed line starts
+[5/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: kerning agrees with the port and the browser's paint (section 6.1 split)
+[6/100] [chrome] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 1
+[7/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: kerning agrees with the port and the browser's paint (section 6.1 split)
+[8/100] [chrome] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text-edit draws ink inside each text leaf's cluster bounds
+[9/100] [chrome] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text-gpu draws ink inside each text leaf's cluster bounds
+[10/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: hangul agrees with the port and the browser's paint (section 6.1 split)
+[11/100] [chrome] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 0.5
+[12/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: hangul agrees with the port and the browser's paint (section 6.1 split)
+[13/100] [chrome] › tests\m6c-next-host\m6c-next-host.spec.ts:369:1 › M6c-A04: the cluster probe draws a projected cluster through the host options
+[14/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: mixed-sizes agrees with the port and the browser's paint (section 6.1 split)
+[15/100] [chrome] › tests\m6c-next-host\m6c-next-host.spec.ts:478:1 › M6c-A04 (smoke half): each text fixture loads with the test font and lays out
+[16/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: mixed-sizes agrees with the port and the browser's paint (section 6.1 split)
+[17/100] [chrome] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 2
+[18/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: hangul-in-latin agrees with the port and the browser's paint (section 6.1 split)
+[19/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: hangul-in-latin agrees with the port and the browser's paint (section 6.1 split)
+[20/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: two-families agrees with the port and the browser's paint (section 6.1 split)
+(node:32396) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[21/100] [edge] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text draws ink inside each text leaf's cluster bounds
+[22/100] [chrome] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 8
+[23/100] [edge] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text-edit draws ink inside each text leaf's cluster bounds
+[24/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: two-families agrees with the port and the browser's paint (section 6.1 split)
+[25/100] [edge] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text-gpu draws ink inside each text leaf's cluster bounds
+[26/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: spacing-tight agrees with the port and the browser's paint (section 6.1 split)
+[27/100] [chrome] › tests\m6c-next-host\m6c-scene.spec.ts:744:1 › M6c-A05: a generation change rasterizes every drawn key again and never draws an older bitmap
+[28/100] [edge] › tests\m6c-next-host\m6c-next-host.spec.ts:369:1 › M6c-A04: the cluster probe draws a projected cluster through the host options
+[29/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: spacing-tight agrees with the port and the browser's paint (section 6.1 split)
+[30/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: spacing-wide agrees with the port and the browser's paint (section 6.1 split)
+[31/100] [edge] › tests\m6c-next-host\m6c-next-host.spec.ts:478:1 › M6c-A04 (smoke half): each text fixture loads with the test font and lays out
+(node:35920) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[32/100] [edge] › tests\m6c-next-host\m6c-scene.spec.ts:614:1 › M6c-A05 (structure): the scene page overlaps, clips, masks and instances its text
+[33/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: small-12 agrees with the port and the browser's paint (section 6.1 split)
+[34/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: spacing-wide agrees with the port and the browser's paint (section 6.1 split)
+[35/100] [edge] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 1
+[36/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: small-9 agrees with the port and the browser's paint (section 6.1 split)
+[37/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: small-12 agrees with the port and the browser's paint (section 6.1 split)
+(node:21660) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[38/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:324:1 › M6c-A06 (structure): each agreement fixture keeps its committed line starts
+[39/100] [edge] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 0.5
+[40/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: wrapped agrees with the port and the browser's paint (section 6.1 split)
+[41/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: kerning agrees with the port and the browser's paint (section 6.1 split)
+[42/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: small-9 agrees with the port and the browser's paint (section 6.1 split)
+[43/100] [edge] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 2
+[44/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: wrapped agrees with the port and the browser's paint (section 6.1 split)
+[45/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: hangul agrees with the port and the browser's paint (section 6.1 split)
+[46/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: align-center agrees with the port and the browser's paint (section 6.1 split)
+[47/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: mixed-sizes agrees with the port and the browser's paint (section 6.1 split)
+[48/100] [edge] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 8
+[49/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: align-right agrees with the port and the browser's paint (section 6.1 split)
+[50/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: hangul-in-latin agrees with the port and the browser's paint (section 6.1 split)
+[51/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: align-center agrees with the port and the browser's paint (section 6.1 split)
+[52/100] [chrome] › tests\m6c-next-host\m6c-agreement.spec.ts:474:1 › M6c-A07: a web font that loads after the first draw re-projects and draws its face
+[53/100] [edge] › tests\m6c-next-host\m6c-scene.spec.ts:744:1 › M6c-A05: a generation change rasterizes every drawn key again and never draws an older bitmap
+[54/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: two-families agrees with the port and the browser's paint (section 6.1 split)
+[55/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: align-right agrees with the port and the browser's paint (section 6.1 split)
+[56/100] [edge] › tests\m6c-next-host\m6c-agreement.spec.ts:474:1 › M6c-A07: a web font that loads after the first draw re-projects and draws its face
+(node:8648) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[57/100] [chrome-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text draws ink inside each text leaf's cluster bounds
+(node:29392) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[58/100] [chrome-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:614:1 › M6c-A05 (structure): the scene page overlaps, clips, masks and instances its text
+[59/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: spacing-tight agrees with the port and the browser's paint (section 6.1 split)
+[60/100] [chrome-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text-edit draws ink inside each text leaf's cluster bounds
+[61/100] [chrome-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 1
+[62/100] [chrome-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text-gpu draws ink inside each text leaf's cluster bounds
+[63/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: spacing-wide agrees with the port and the browser's paint (section 6.1 split)
+(node:38744) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[64/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:324:1 › M6c-A06 (structure): each agreement fixture keeps its committed line starts
+[65/100] [chrome-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:369:1 › M6c-A04: the cluster probe draws a projected cluster through the host options
+[66/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: kerning agrees with the port and the browser's paint (section 6.1 split)
+[67/100] [chrome-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 0.5
+[68/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: small-12 agrees with the port and the browser's paint (section 6.1 split)
+[69/100] [chrome-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:478:1 › M6c-A04 (smoke half): each text fixture loads with the test font and lays out
+[70/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: small-9 agrees with the port and the browser's paint (section 6.1 split)
+[71/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: hangul agrees with the port and the browser's paint (section 6.1 split)
+[72/100] [chrome-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 2
+(node:37204) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[73/100] [edge-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text draws ink inside each text leaf's cluster bounds
+[74/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: wrapped agrees with the port and the browser's paint (section 6.1 split)
+[75/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: mixed-sizes agrees with the port and the browser's paint (section 6.1 split)
+[76/100] [edge-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text-edit draws ink inside each text leaf's cluster bounds
+[77/100] [edge-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:312:3 › M6c-A04: ?fixture=text-gpu draws ink inside each text leaf's cluster bounds
+[78/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: hangul-in-latin agrees with the port and the browser's paint (section 6.1 split)
+[79/100] [edge-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:369:1 › M6c-A04: the cluster probe draws a projected cluster through the host options
+[80/100] [chrome-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 8
+[81/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: align-center agrees with the port and the browser's paint (section 6.1 split)
+[82/100] [edge-dpr2] › tests\m6c-next-host\m6c-next-host.spec.ts:478:1 › M6c-A04 (smoke half): each text fixture loads with the test font and lays out
+[83/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: two-families agrees with the port and the browser's paint (section 6.1 split)
+[84/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: align-right agrees with the port and the browser's paint (section 6.1 split)
+[85/100] [edge-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:614:1 › M6c-A05 (structure): the scene page overlaps, clips, masks and instances its text
+[86/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: spacing-tight agrees with the port and the browser's paint (section 6.1 split)
+[87/100] [chrome-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:474:1 › M6c-A07: a web font that loads after the first draw re-projects and draws its face
+[88/100] [edge-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 1
+[89/100] [chrome-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:744:1 › M6c-A05: a generation change rasterizes every drawn key again and never draws an older bitmap
+[90/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: spacing-wide agrees with the port and the browser's paint (section 6.1 split)
+[91/100] [edge-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 0.5
+[92/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: small-12 agrees with the port and the browser's paint (section 6.1 split)
+[93/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: small-9 agrees with the port and the browser's paint (section 6.1 split)
+[94/100] [edge-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 2
+[95/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: wrapped agrees with the port and the browser's paint (section 6.1 split)
+[96/100] [edge-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:663:3 › M6c-A05: text in paint order, clipped, masked, faded, rotated and instanced at zoom 8
+[97/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: align-center agrees with the port and the browser's paint (section 6.1 split)
+[98/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:358:3 › M6c-A06: align-right agrees with the port and the browser's paint (section 6.1 split)
+[99/100] [edge-dpr2] › tests\m6c-next-host\m6c-agreement.spec.ts:474:1 › M6c-A07: a web font that loads after the first draw re-projects and draws its face
+[100/100] [edge-dpr2] › tests\m6c-next-host\m6c-scene.spec.ts:744:1 › M6c-A05: a generation change rasterizes every drawn key again and never draws an older bitmap
+  100 passed (5.2m)
+
+headed timing: 100 tests, wall 5.2 min, 4 worker(s); D:\GIT\vector-studio\artifacts\headed-timing\m6c-rerun-e494c92\2026-11-03T02-51-20-297Z-m6c-next-host.json
+     2.6 min  chrome-dpr2  tests/m6c-next-host/m6c-agreement.spec.ts
+     2.6 min  edge-dpr2    tests/m6c-next-host/m6c-agreement.spec.ts
+     2.5 min  edge         tests/m6c-next-host/m6c-agreement.spec.ts
+     2.3 min  chrome       tests/m6c-next-host/m6c-agreement.spec.ts
+     1.7 min  chrome-dpr2  tests/m6c-next-host/m6c-scene.spec.ts
+     1.5 min  edge-dpr2    tests/m6c-next-host/m6c-scene.spec.ts
+     1.1 min  edge         tests/m6c-next-host/m6c-scene.spec.ts
+     1.1 min  chrome       tests/m6c-next-host/m6c-scene.spec.ts
