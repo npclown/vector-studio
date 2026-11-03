@@ -24,7 +24,12 @@ import {
   projectPage,
   type PageProjection,
 } from '../../packages/editor-core/src/projector.js';
-import { TextLayoutCache, type TextLayouter } from '../../packages/editor-core/src/text.js';
+import {
+  TextLayoutCache,
+  fontListFamilies,
+  normalizeFamily,
+  type TextLayouter,
+} from '../../packages/editor-core/src/text.js';
 import { createFakeTextLayout, type FakeTextLayout } from '../support/fake-text-layout.js';
 import { RecordingRenderer } from '../support/p5-recording-renderer.js';
 
@@ -667,6 +672,131 @@ describe('M6c-P3 no port: nothing projected, editor.text-unavailable once per at
     expect(events).toEqual([unavailable(['t'])]);
     target.attachRenderer(new RecordingRenderer('supported', FEATURES));
     expect(events).toEqual([unavailable(['t']), unavailable(['t'])]);
+  });
+});
+
+describe('V-21 family-scoped relayout (V-21 contract, section 4.2)', () => {
+  const runOf = (value: string, family: string): TextRun => ({
+    text: value,
+    family,
+    size: 10,
+    color: black,
+  });
+  const twoFamilies = () =>
+    doc([
+      text('a', f(0, 0, 10, 10), [runOf('a', 'Test')]),
+      text('b', f(0, 20, 10, 10), [runOf('b', 'Other')]),
+      text('c', f(0, 40, 10, 10), [runOf('c', 'other')]),
+      rect('r', f(0, 60, 10, 10)),
+    ]);
+  const lastSet = (renderer: RecordingRenderer, from: number) => {
+    const sets = renderer.calls.slice(from);
+    return sets;
+  };
+
+  it('re-projects only the text whose font list names a changed family', () => {
+    const port = createFakeTextLayout({ changedSince: true });
+    const { renderer, events } = attached(twoFamilies(), port);
+    const from = renderer.calls.length;
+    const before = port.layoutCalls;
+    events.length = 0;
+    // ASCII case-folded: "OTHER" matches the runs "Other" and "other".
+    port.bump(['OTHER']);
+    expect(events).toEqual([{ type: 'session', field: 'textLayout' }]);
+    expect(port.layoutCalls - before).toBe(2);
+    const sets = lastSet(renderer, from);
+    expect(sets).toHaveLength(1);
+    const call = sets[0]!;
+    if (call.method !== 'applyChanges') throw new Error(call.method);
+    expect(call.input.updated.map((node) => node.id).sort()).toEqual(['b', 'c']);
+    expect(call.input.updated.every((node) => node.kind === 'text' && node.generation === 1)).toBe(
+      true,
+    );
+  });
+
+  it('sends nothing for a change no text names, and still raises textLayout', () => {
+    const port = createFakeTextLayout({ changedSince: true });
+    const { renderer, events } = attached(twoFamilies(), port);
+    const from = renderer.calls.length;
+    const before = port.layoutCalls;
+    events.length = 0;
+    port.bump(['Nobody']);
+    port.bump([]);
+    expect(events).toEqual([
+      { type: 'session', field: 'textLayout' },
+      { type: 'session', field: 'textLayout' },
+    ]);
+    expect(port.layoutCalls).toBe(before);
+    expect(renderer.calls.length).toBe(from);
+  });
+
+  it('re-projects every text unit when the port reports "all" or has no changedSince', () => {
+    for (const port of [createFakeTextLayout({ changedSince: true }), createFakeTextLayout()]) {
+      const { renderer } = attached(twoFamilies(), port);
+      const from = renderer.calls.length;
+      port.bump(port.changedSince === undefined ? undefined : null);
+      const call = renderer.calls.slice(from)[0]!;
+      if (call.method !== 'applyChanges') throw new Error(call.method);
+      expect(call.input.updated.map((node) => node.id).sort()).toEqual(['a', 'b', 'c']);
+    }
+  });
+
+  it('re-projects affected instance text only, and keeps the rest at its generation', () => {
+    const port = createFakeTextLayout({ changedSince: true });
+    const { renderer } = attached(symbols(), port);
+    const from = renderer.calls.length;
+    port.bump(['Test']);
+    const call = renderer.calls.slice(from)[0]!;
+    if (call.method !== 'applyChanges') throw new Error(call.method);
+    // Every text of the fixture names `Test`: all leaves, as a full relayout.
+    expect(call.input.updated.length).toBe(9);
+    const second = renderer.calls.length;
+    port.bump(['Unrelated']);
+    expect(renderer.calls.length).toBe(second);
+  });
+});
+
+describe('V-21 the cache keeps unaffected results (V-21 contract, section 4.2)', () => {
+  const node = (id: string, family: string) =>
+    text(id, f(0, 0, 10, 10), [
+      { text: id, family, size: 10, color: black },
+    ]) as unknown as Parameters<TextLayoutCache['layout']>[0];
+
+  it('drops affected results on notify and on the lazy path, and reports them once', () => {
+    const port = createFakeTextLayout({ changedSince: true });
+    const cache = new TextLayoutCache(port);
+    const a = node('a', 'Test');
+    const b = node('b', 'Other');
+    const first = cache.layout(a);
+    cache.layout(b);
+    expect(cache.takeDropped()).not.toBeNull();
+    port.bump(['Other']);
+    // Lazy path: a layout call syncs before the listener's notify.
+    expect(cache.layout(a)).toBe(first);
+    expect(cache.layout(b).generation).toBe(1);
+    expect(cache.notify()).toBe(true);
+    const stale = cache.takeDropped()!;
+    expect(stale(a)).toBe(false);
+    expect(stale(b)).toBe(true);
+    // Taken: the next relayout sees nothing dropped.
+    expect(cache.takeDropped()!(b)).toBe(false);
+    port.bump(null);
+    cache.notify();
+    expect(cache.takeDropped()).toBeNull();
+    expect(cache.size).toBe(0);
+  });
+});
+
+describe('V-21 font-list family matching', () => {
+  it('unquotes, unescapes and ASCII-folds every family of a list, tail included', () => {
+    expect(
+      fontListFamilies(
+        '"My \\"Face\\"", "A\\\\B", "Line\\a Feed", "ÄBC", "Malgun Gothic", sans-serif',
+      ),
+    ).toEqual(['my "face"', 'a\\b', 'line\nfeed', 'Äbc', 'malgun gothic', 'sans-serif']);
+    expect(normalizeFamily('My "Face"')).toBe('my "face"');
+    expect(normalizeFamily('"Inter"')).toBe('inter');
+    expect(fontListFamilies('"a, b", c')).toEqual(['a, b', 'c']);
   });
 });
 

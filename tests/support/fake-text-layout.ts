@@ -15,13 +15,20 @@ import { SCENE_TEXT_MAX_CLUSTER_UNITS } from '@vector-studio/contracts';
 export const FAKE_TEXT_LAYOUT_LANG = 'ko';
 
 export interface FakeTextLayout extends TextLayoutPort {
-  /** Increases the generation by one, then runs the listeners in registration order. */
-  bump(): void;
+  /**
+   * Increases the generation by one, then runs the listeners in registration order. With the
+   * `changedSince` option, `families` is what the increase can affect (default: all, null).
+   */
+  bump(families?: readonly string[] | null): void;
   /** How many times `layout` ran, so cache tests can count calls. */
   readonly layoutCalls: number;
 }
 
-export type FakeTextLayoutOptions = Readonly<{ generation?: number }>;
+export type FakeTextLayoutOptions = Readonly<{
+  generation?: number;
+  /** V-21: implement the optional `changedSince` over every bump's families. */
+  changedSince?: boolean;
+}>;
 
 const MARK = /^\p{M}$/u;
 
@@ -256,7 +263,20 @@ export function createFakeTextLayout(options: FakeTextLayoutOptions = {}): FakeT
   }
   let layoutCalls = 0;
   const listeners: (() => void)[] = [];
+  const initial = generation;
+  const log: { after: number; families: readonly string[] | null }[] = [];
+  const changedSince = (since: number): readonly string[] | null => {
+    if (since < initial) return null;
+    const families = new Set<string>();
+    for (const entry of log) {
+      if (entry.after <= since) continue;
+      if (entry.families === null) return null;
+      entry.families.forEach((family) => families.add(family));
+    }
+    return [...families];
+  };
   return {
+    ...(options.changedSince === true ? { changedSince } : {}),
     portVersion: 0,
     get generation() {
       return generation;
@@ -277,8 +297,9 @@ export function createFakeTextLayout(options: FakeTextLayoutOptions = {}): FakeT
         if (index !== -1) listeners.splice(index, 1);
       };
     },
-    bump() {
+    bump(families = null) {
       generation += 1;
+      log.push({ after: generation, families });
       // As EventTarget: a listener removed during dispatch is skipped, one added is not run.
       for (const listener of [...listeners]) {
         if (listeners.includes(listener)) listener();

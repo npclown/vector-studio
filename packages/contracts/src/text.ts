@@ -155,6 +155,14 @@ export interface TextLayoutPort {
    */
   readonly generation: number;
   /**
+   * V-21 (contract, section 4.2): the font families that the increases after `generation` can
+   * affect, as raw family names, or null for "all" (a device pixel ratio change, an unknown face,
+   * or a generation older than the port's log). A result whose font list names none of them is
+   * unchanged at the new generation. Optional: a port without it behaves as "all", so
+   * `portVersion` stays 0.
+   */
+  changedSince?(generation: number): readonly string[] | null;
+  /**
    * M6a-L2: synchronous, never throws for a request built from a valid node, and deep-equal
    * results for deep-equal requests at one generation.
    */

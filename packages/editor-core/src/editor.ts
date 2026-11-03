@@ -988,11 +988,13 @@ class EditorCore implements Editor {
       timing.deferred = true;
       return timing;
     }
+    // V-21 (section 4.2): only the units whose layout the cache dropped are projected again.
+    const stale = cache.takeDropped();
     const diagnostics: EditorEvent[] = [];
     this.withProjector((projector) => {
       projector.split = split;
       try {
-        projector.relayout(this.document);
+        projector.relayout(this.document, stale);
       } finally {
         projector.split = null;
       }
@@ -2362,7 +2364,8 @@ class EditorCore implements Editor {
         for (; this.relayoutPending > 0; this.relayoutPending -= 1) {
           after.push({ type: 'session', field: 'textLayout' });
         }
-        this.withProjector((attached) => attached.relayout(this.document), after);
+        const stale = this.textLayouts?.takeDropped() ?? null;
+        this.withProjector((attached) => attached.relayout(this.document, stale), after);
         if (threw) after.forEach((event) => this.emit(event));
         else into.push(...after);
       }

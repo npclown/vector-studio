@@ -1206,15 +1206,18 @@ export class SceneProjector {
   }
 
   /**
-   * The text layout entry point (E26 contract, section 4.3): after a layout generation change,
-   * re-projects every text unit of the active page and every instance whose expansion holds
-   * text, past the identity-keyed memo (whose entries, and the instances' kept results, do not
-   * see the generation), in one whole-page set. An instance keeps its other expanded entries, so
-   * the set updates the text leaves only. The editor's port listener calls it (M6c-P4); other
-   * pages' entries go too, so they project from the new generation on their page switch.
+   * The text layout entry point (E26 contract, section 4.3; V-21 contract, section 4.2): after
+   * a layout generation change, re-projects the text units whose layout may have changed
+   * (`stale`; null for every one) and the instances whose expansion holds such text, past the
+   * identity-keyed memo (whose entries, and the instances' kept results, do not see the
+   * generation), in one whole-page set. Unaffected units keep their entries and scene nodes. An
+   * instance keeps its other expanded entries, so the set updates the text leaves only. The
+   * editor's port listener calls it (M6c-P4); other pages' entries go too, so they project from
+   * the new generation on their page switch. Returns false when no entry was affected, and then
+   * sends nothing.
    */
-  relayout(document: DocumentV6): void {
-    if (this.disposed) return;
+  relayout(document: DocumentV6, stale: ((node: TextNode) => boolean) | null = null): boolean {
+    if (this.disposed) return false;
     const holdsText = new Map<string, boolean>();
     const hasText = (id: string): boolean => {
       const known = holdsText.get(id);
@@ -1229,19 +1232,28 @@ export class SceneProjector {
       holdsText.set(id, found);
       return found;
     };
+    const affects = (node: NodeV6): boolean =>
+      node.type === 'text' && (stale === null || stale(node));
+    let changed = false;
     for (const [id, entry] of this.memo) {
       if (entry.node.type === 'text') {
         if (this.split !== null) this.split.textUnits += 1;
+        if (!affects(entry.node)) continue;
         this.memo.delete(id);
+        changed = true;
       } else if (entry.instance !== undefined && hasText(id)) {
         const expanded = new Map(
-          [...entry.instance.expanded].filter(([, held]) => held.node.type !== 'text'),
+          [...entry.instance.expanded].filter(([, held]) => !affects(held.node)),
         );
+        if (expanded.size === entry.instance.expanded.size && stale !== null) continue;
         this.memo.set(id, { ...entry, instance: { ...entry.instance, result: null, expanded } });
+        changed = true;
       }
     }
+    if (!changed && stale !== null) return false;
     this.scoped = false;
     this.change(document, this.page, []);
+    return true;
   }
 
   /** Sends one change set for a document change on `page` that touched `touched`. */
