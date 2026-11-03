@@ -166,8 +166,8 @@ describe('E30-U3a camera ranges of kept path outcomes', () => {
       reused.push(result.reused);
     }
     expect(cameraOnly).toBeGreaterThan(1000);
-    // Frames at the far camera throw in both sources or prepare the same packets.
-    expect(errors).toBeGreaterThanOrEqual(0);
+    // The far camera prepares in both sources (no frame throws in these seeds).
+    expect(errors).toBe(0);
     expect(reused.every((count) => count > 2000)).toBe(true);
   }, 120_000);
 
@@ -271,7 +271,7 @@ describe('E30-U3a counters', () => {
     expect(prepare(state, { x: 15.5, y: 0.5, zoom: 1.3 })).toBe(11);
   });
 
-  it('re-evaluates only the paths whose buckets a zoom crosses', () => {
+  it('re-evaluates the paths whose buckets a zoom crosses, and keeps most outcomes', () => {
     // Two scales: a zoom that crosses one path's tolerance bucket keeps the other's.
     const scaled = [
       pathNode('unit', 0, { transform: [1, 0, 0, 1, 100, 100] }),
@@ -282,6 +282,7 @@ describe('E30-U3a counters', () => {
     const lanes = (scale: number): PathLinearMap => [scale, 0, 0, scale];
     // Walk the zoom up in small steps; a frame re-evaluates a path only where its buckets change.
     let zoom = 1;
+    let total = 0;
     for (let index = 0; index < 120; index += 1) {
       const next = zoom * 1.006;
       const crossing = [1, 1.45].filter((scale) => {
@@ -296,7 +297,11 @@ describe('E30-U3a counters', () => {
       // A crossing path is evaluated afresh; the zoom ratio of a range may also end it early,
       // never more paths than the scene has.
       expect(reused).toBeLessThanOrEqual(2 - crossing);
+      total += reused;
     }
+    // 216 of 240 outcomes are kept over the walk (deterministic): a step re-evaluates only its
+    // crossing paths and the few whose zoom ratio ran out.
+    expect(total).toBeGreaterThanOrEqual(200);
   });
 });
 
