@@ -373,7 +373,16 @@ export function primitivePackingBoundOver(
   // units before the scale, physical pixels after it, the guard and corners included): the
   // rounding model holds only while every one stays far below float32's maximum, which the
   // assessment's own finiteness checks would otherwise catch at a camera of the range.
-  let magnitude = Math.max(g0, g1, pMax, qMax);
+  const sums = [Math.abs(l3) + Math.abs(l2), Math.abs(l1) + Math.abs(l0)];
+  let magnitude = Math.max(
+    g0,
+    g1,
+    pMax,
+    qMax,
+    guardMax,
+    ...sums,
+    ...sums.map((sum) => guardMax * sum * (1 + 2 * u)),
+  );
   for (const axis of [0, 1] as const) {
     const b = reachOf(axis);
     const m1 = linear[axis]! + tAbs[axis]! + oMax[axis]!;

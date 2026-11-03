@@ -158,32 +158,91 @@ describe('E30-U3b packing range bound', () => {
     expect(Math.max(bound!.quantization, bound!.arithmetic)).toBeLessThanOrEqual(BUDGET);
   });
 
-  it('declines where the vertex chain overflows float32 at a tiny zoom', () => {
+  it.each([
     // Physical pixels stay small while the world-unit values pass float32's maximum.
-    const node = primitive(random(3), [1e10, 0, 0, 1e10, 0, 0]);
-    const bounds = { minX: 0, minY: 0, maxX: 1e30, maxY: 1e30 };
-    const zoom = 1e-35;
-    const camera = { x: 0, y: 0 };
-    expect(() =>
-      assessPrimitivePacking(node.transform, bounds, camera, camera, zoom, 1, 800, 600),
-    ).toThrow();
-    const span = 800 / zoom / 4;
-    const bound = primitivePackingBoundOver(
-      node.transform,
-      bounds,
-      camera,
-      {
+    { scale: 1e10, extent: 1e30, zoom: 1e-35 },
+    // The guard's product before its division by the determinant passes it.
+    { scale: 1e15, extent: 1e11, zoom: 2e-25 },
+    { scale: 1e15, extent: 1e11, zoom: 1e-26 },
+  ])(
+    'declines where the vertex chain overflows float32 at a tiny zoom (%o)',
+    ({ scale, extent, zoom }) => {
+      const node = primitive(random(3), [scale, 0, 0, scale, 0, 0]);
+      const bounds = { minX: 0, minY: 0, maxX: extent, maxY: extent };
+      const camera = { x: 0, y: 0 };
+      expect(() =>
+        assessPrimitivePacking(node.transform, bounds, camera, camera, zoom, 1, 800, 600),
+      ).toThrow();
+      const span = 800 / zoom / 4;
+      const bound = primitivePackingBoundOver(
+        node.transform,
+        bounds,
+        camera,
+        {
+          zoomMin: zoom / (1 + 1 / 16),
+          zoomMax: zoom * (1 + 1 / 16),
+          minX: -span,
+          maxX: span,
+          minY: -span,
+          maxY: span,
+        },
+        1,
+        800,
+        600,
+      );
+      expect(bound).toBeNull();
+    },
+  );
+
+  it('declines wherever the assessment throws, over extreme magnitudes', () => {
+    // Scales, extents, translations and zooms far past the editor's, so that every f32 value of
+    // the chain can overflow or underflow: the bound is null wherever a sampled camera throws,
+    // and within it otherwise.
+    const rng = random(0xe30b4);
+    let throws = 0;
+    for (let index = 0; index < 4_000; index += 1) {
+      const scale = 10 ** (rng() * 40 - 20);
+      const extent = 10 ** (rng() * 80 - 40);
+      const world: [number, number, number, number, number, number] = [
+        scale,
+        (rng() - 0.5) * scale,
+        (rng() - 0.5) * scale,
+        scale,
+        (rng() - 0.5) * 10 ** (rng() * 80 - 20),
+        (rng() - 0.5) * 10 ** (rng() * 80 - 20),
+      ];
+      const bounds = { minX: 0, minY: 0, maxX: extent, maxY: extent * (0.5 + rng()) };
+      const zoom = 2 ** (rng() * 240 - 120);
+      const camera = { x: world[4] - 400 / zoom, y: world[5] - 300 / zoom };
+      const span = 800 / zoom / 4;
+      const range = {
         zoomMin: zoom / (1 + 1 / 16),
         zoomMax: zoom * (1 + 1 / 16),
-        minX: -span,
-        maxX: span,
-        minY: -span,
-        maxY: span,
-      },
-      1,
-      800,
-      600,
-    );
-    expect(bound).toBeNull();
-  });
+        minX: camera.x - span,
+        maxX: camera.x + span,
+        minY: camera.y - span,
+        maxY: camera.y + span,
+      };
+      const bound = primitivePackingBoundOver(world, bounds, camera, range, 1, 800, 600);
+      for (let sample = 0; sample < 6; sample += 1) {
+        const at = {
+          x: range.minX + rng() * (range.maxX - range.minX),
+          y: range.minY + rng() * (range.maxY - range.minY),
+        };
+        const sampledZoom = range.zoomMin * (range.zoomMax / range.zoomMin) ** rng();
+        let assessment: ReturnType<typeof assessPrimitivePacking>;
+        try {
+          assessment = assessPrimitivePacking(world, bounds, camera, at, sampledZoom, 1, 800, 600);
+        } catch {
+          throws += 1;
+          expect(bound, `case ${index}`).toBeNull();
+          continue;
+        }
+        if (bound === null) continue;
+        expect(assessment.quantizationPhysicalPixels).toBeLessThanOrEqual(bound.quantization);
+        expect(assessment.arithmeticPhysicalPixels).toBeLessThanOrEqual(bound.arithmetic);
+      }
+    }
+    expect(throws).toBeGreaterThan(1_000);
+  }, 30_000);
 });
