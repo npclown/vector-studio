@@ -79,17 +79,22 @@ function faceSource(source: unknown): string | ArrayBuffer {
 type BumpSource = 'add' | 'settle' | 'settle-error' | 'loadingdone' | 'loadingerror' | 'resolution';
 
 /**
- * V21-U1: one generation bump and its synchronous dispatch, reported to the bench's
- * `globalThis.__vsTextProbe` (`?bench=1` only). The editor's own record for the same dispatch
- * is reported inside `dispatchMs`, so it comes first.
+ * V21-U1: an increment and a dispatch, reported to the bench's `globalThis.__vsTextProbe`
+ * (`?bench=1` only). The editor's own record for a dispatch is reported inside `dispatchMs`, so
+ * it comes before the dispatch's record.
  */
-type PortBumpRecord = {
-  kind: 'port-bump';
-  atMs: number;
-  source: BumpSource;
-  generation: number;
-  dispatchMs: number;
-};
+type PortProbeRecord =
+  | { kind: 'port-bump'; atMs: number; source: BumpSource; generation: number }
+  | {
+      kind: 'port-dispatch';
+      atMs: number;
+      sources: readonly BumpSource[];
+      generation: number;
+      dispatchMs: number;
+    };
+
+/** V-21 (V21-Q3 (a)): how long a pending face of this port may hold a dispatch. */
+export const HOLD_CAP_MS = 3_000;
 
 export function createTextDom(options: TextDomOptions): TextDom {
   if (typeof options !== 'object' || options === null) {
@@ -117,24 +122,80 @@ export function createTextDom(options: TextDomOptions): TextDom {
   let fallbacks = 0;
   let disposed = false;
 
-  // M6a-L3: each event takes the realm counter's next value, then runs the listeners.
-  const bump = (source: BumpSource): void => {
-    if (disposed) return;
-    generation = nextGeneration();
-    // V21-U1: the bench's text probe, if installed, records each bump's source and dispatch.
-    const probe = (globalThis as { __vsTextProbe?: (record: PortBumpRecord) => void })
-      .__vsTextProbe;
-    if (probe === undefined) {
+  // M6a-L3 as amended by V-21 (contract, section 4.1): each event takes the realm counter's next
+  // value at once; the listeners run later, on a task of their own, once for every increment
+  // made before that task. While a face registered here is pending, the dispatch is held until
+  // the last such face settles, at most HOLD_CAP_MS from the add that started the hold.
+  /** Increments not yet dispatched, with their sources (for the bench's probe). */
+  let undispatched: BumpSource[] = [];
+  /** Faces registered here whose `load()` has not settled and that still hold the dispatch
+   * (the cap releases them). */
+  const holding = new Set<FontFace>();
+  let flushTimer: ReturnType<typeof setTimeout> | null = null;
+  let capTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const probe = (): ((record: PortProbeRecord) => void) | undefined =>
+    (globalThis as { __vsTextProbe?: (record: PortProbeRecord) => void }).__vsTextProbe;
+  const now = (): number =>
+    (globalThis as unknown as { performance: { now(): number } }).performance.now();
+
+  const flush = (): void => {
+    flushTimer = null;
+    // A dispatch scheduled before a hold started waits for it too (section 4.1); the release's
+    // increment or the cap dispatches it.
+    if (disposed || undispatched.length === 0 || holding.size > 0) return;
+    const sources = undispatched;
+    undispatched = [];
+    // V21-U1: the bench's text probe, if installed, records the dispatch and its sources.
+    const report = probe();
+    if (report === undefined) {
       listeners.dispatch();
       return;
     }
-    const clock = (globalThis as unknown as { performance: { now(): number } }).performance;
-    const atMs = clock.now();
+    const atMs = now();
     listeners.dispatch();
-    probe({ kind: 'port-bump', atMs, source, generation, dispatchMs: clock.now() - atMs });
+    report({ kind: 'port-dispatch', atMs, sources, generation, dispatchMs: now() - atMs });
   };
-  const onLoadingDone = (): void => bump('loadingdone');
-  const onLoadingError = (): void => bump('loadingerror');
+  const request = (): void => {
+    if (disposed || undispatched.length === 0 || holding.size > 0 || flushTimer !== null) return;
+    flushTimer = setTimeout(flush, 0);
+  };
+  const increment = (source: BumpSource): void => {
+    if (disposed) return;
+    generation = nextGeneration();
+    undispatched.push(source);
+    probe()?.({ kind: 'port-bump', atMs: now(), source, generation });
+    request();
+  };
+  const hold = (face: FontFace): void => {
+    holding.add(face);
+    // The cap runs from the add that started the hold; later adds join it.
+    capTimer ??= setTimeout(() => {
+      capTimer = null;
+      holding.clear();
+      // The cap's own task is the dispatch's.
+      if (flushTimer !== null) clearTimeout(flushTimer);
+      flush();
+    }, HOLD_CAP_MS);
+  };
+  const release = (face: FontFace): void => {
+    holding.delete(face);
+    if (holding.size === 0 && capTimer !== null) {
+      clearTimeout(capTimer);
+      capTimer = null;
+    }
+  };
+  /** A font-set event whose faces were all registered here is redundant with their settle. */
+  const foreign = (event: Event): boolean => {
+    const list = (event as { fontfaces?: readonly FontFace[] }).fontfaces;
+    return list === undefined || list.length === 0 || !list.every((face) => faces.has(face));
+  };
+  const onLoadingDone = (event: Event): void => {
+    if (foreign(event)) increment('loadingdone');
+  };
+  const onLoadingError = (event: Event): void => {
+    if (foreign(event)) increment('loadingerror');
+  };
 
   fonts?.addEventListener('loadingdone', onLoadingDone);
   fonts?.addEventListener('loadingerror', onLoadingError);
@@ -143,7 +204,7 @@ export function createTextDom(options: TextDomOptions): TextDom {
   let resolution: MediaQueryList | null = null;
   const onResolution = (): void => {
     arm();
-    bump('resolution');
+    increment('resolution');
   };
   const arm = (): void => {
     resolution?.removeEventListener('change', onResolution);
@@ -210,17 +271,20 @@ export function createTextDom(options: TextDomOptions): TextDom {
         return Promise.resolve('error');
       }
       faces.add(face);
-      bump('add'); // A registry change.
+      hold(face);
+      increment('add'); // A registry change.
       // The face settled; one still in flight at `dispose` resolves 'error', since dispose
       // removed it from `document.fonts` (review r1 N2).
       return face.load().then(
         () => {
           if (disposed) return 'error' as const;
-          bump('settle');
+          release(face);
+          increment('settle');
           return 'loaded' as const;
         },
         () => {
-          bump('settle-error');
+          release(face);
+          increment('settle-error');
           return 'error' as const;
         },
       );
@@ -229,6 +293,12 @@ export function createTextDom(options: TextDomOptions): TextDom {
       if (disposed) return;
       disposed = true;
       listeners.clear();
+      if (flushTimer !== null) clearTimeout(flushTimer);
+      if (capTimer !== null) clearTimeout(capTimer);
+      flushTimer = null;
+      capTimer = null;
+      undispatched = [];
+      holding.clear();
       fonts?.removeEventListener('loadingdone', onLoadingDone);
       fonts?.removeEventListener('loadingerror', onLoadingError);
       resolution?.removeEventListener('change', onResolution);

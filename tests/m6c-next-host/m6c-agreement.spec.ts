@@ -547,7 +547,9 @@ test('M6c-A07: a web font that loads after the first draw re-projects and draws 
   );
   await expect.poll(() => requests, { timeout: 30_000 }).toBeGreaterThan(0);
   // Held: adding the face bumps the generation (M6a-U4 note 6), and the node is laid out and
-  // drawn again with the fallback while the face loads.
+  // drawn again with the fallback while the face loads. Since V-21 (section 4.1) the add's
+  // dispatch is held while the face is pending, so this step passes at the 3,000 ms hold cap
+  // (`HOLD_CAP_MS`, well inside the 30 s poll).
   await expect
     .poll(
       async () => {

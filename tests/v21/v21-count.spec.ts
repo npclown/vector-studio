@@ -19,8 +19,8 @@ import {
 // The spec loads the v2 document through the bench page (`?bench=1&ui=1&doc=m9-v2`) with the
 // busy scenario's camera and layer toggles, then registers the test font under the second
 // family through `__e26Bench.registerTestFont`, as the M9 harness does. The bench's text probe
-// (`textDispatches()`) gives, in order, each text-dom bump (its source and its synchronous
-// dispatch time) and the editor's split of the dispatch it handled.
+// (`textDispatches()`) gives, in order, each text-dom increment and dispatch (since V21-U2a a
+// dispatch carries several increments) and the editor's split of the dispatch it handled.
 //
 //   - `idle`: the font load alone.
 //   - `busy`: the pointer-busy path's edit drag as `input` pointer events from the page (moves
@@ -88,13 +88,20 @@ function readBench(page: Page) {
   });
 }
 
-/** Per dispatch: the bump and the editor's record inside it (the editor reports first). */
+/**
+ * Per dispatch: text-dom's dispatch record and the editor's record inside it (the editor reports
+ * first). Since V21-U2 a dispatch carries the increments made before it (`sources`); before it,
+ * each `port-bump` was its own dispatch.
+ */
 function pairs(records: readonly Record[]) {
   const out: { bump: Record; editor: Record | null }[] = [];
   let pending: Record | null = null;
   for (const record of records) {
     if (record.kind === 'editor-dispatch') pending = record;
-    else if (record.kind === 'port-bump') {
+    else if (
+      record.kind === 'port-dispatch' ||
+      (record.kind === 'port-bump' && record.dispatchMs !== undefined)
+    ) {
       out.push({ bump: record, editor: pending });
       pending = null;
     }
@@ -104,7 +111,7 @@ function pairs(records: readonly Record[]) {
 
 function summary(records: readonly Record[]) {
   return pairs(records).map(({ bump, editor }) => ({
-    source: bump.source,
+    source: bump.kind === 'port-dispatch' ? (bump.sources as string[]).join('+') : bump.source,
     generation: bump.generation,
     atMs: bump.atMs,
     dispatchMs: bump.dispatchMs,

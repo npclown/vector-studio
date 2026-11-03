@@ -1,6 +1,7 @@
-// M6a-L3 listeners: run synchronously after each generation increase, in registration order.
-// As in `EventTarget` dispatch, a listener unsubscribed during a dispatch is not called later in
-// it, and one subscribed during it first runs on the next increase. A listener that throws does
+// M6a-L3 listeners: run in registration order when text-dom dispatches (since V-21, once per
+// task for the increases before it; text-dom.ts). As in `EventTarget` dispatch, a listener
+// unsubscribed during a dispatch is not called later in it, and one subscribed during it first
+// runs on the next dispatch. A listener that throws does
 // not stop the others; its error is reported as an uncaught error, as `EventTarget` does.
 
 export interface Listeners {

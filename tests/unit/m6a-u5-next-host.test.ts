@@ -330,7 +330,7 @@ function domShim() {
 }
 
 describe('M6a-U5 composition with the real text-dom', () => {
-  it("stops the discarded editor's text events once its instance is disposed", () => {
+  it("stops the discarded editor's text events once its instance is disposed", async () => {
     const { document, fonts } = domShim();
     const first = host.composeHost({ document, platform: 'other', createTextDom });
     const second = host.composeHost({ document, platform: 'other', createTextDom });
@@ -342,11 +342,14 @@ describe('M6a-U5 composition with the real text-dom', () => {
     const firstEvents = events(first);
     const secondEvents = events(second);
     fonts.dispatchEvent(new Event('loadingdone'));
+    // V-21 (section 4.1): the listeners run on a later task.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(firstEvents.map((event) => event.type)).toEqual(['session']);
     expect(secondEvents.map((event) => event.type)).toEqual(['session']);
     const generation = first.textDom.generation;
     first.dispose();
     fonts.dispatchEvent(new Event('loadingdone'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(firstEvents).toHaveLength(1);
     expect(first.textDom.generation).toBe(generation);
     expect(secondEvents).toHaveLength(2);

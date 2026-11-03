@@ -162,3 +162,11 @@ V-21 is done when V21-A01 to A05 are met. A05 requires the record, not the targe
   - the out-of-scope long tasks named.
 - 2026-11-02: review r2 READY WITH FOLLOW-UPS, all eight applied: the E28 obsolescence amendment (4.3) with a renderer test; how the projector finds affected units; the CSS family-matching rule, tail included; `changedSince` on the cache's lazy path; an empty change list skips the relayout; the hold's reach and when the cap starts; Q3's reason; nits.
 - 2026-11-02: V21-U1 counters and record ([U1 record](../evidence/viz-v21/u1-a428875.md), headless, SwiftShader): three whole-page dispatches per load (add, settle, then `loadingdone`), 207 layout calls each, all 207 equal to the previous generation's, 212 scene nodes updated each time; layouts are 81 to 87 % of a dispatch. V21-Q2 (a) applies: L3 is not taken, U2 is L1 and L2. A02's baseline is the measured 207 port calls. Pointer overlap stays with V21-U3.
+- 2026-11-03: V21-U2 split into U2a (L1, `packages/text-dom`, with the M6a-L3 amendment) and U2b (L2 and the E28 amendment), so each lands with its own review. U2a notes:
+  - Increments happen at once; one dispatch runs on a later task (`setTimeout` 0). A face registered through the port holds it until the last such face settles, capped at `HOLD_CAP_MS` (3,000 ms) from the add that started the hold; at the cap the held faces stop holding, and their settle dispatches again.
+  - A font-set event whose `fontfaces` are all this port's faces is skipped. An event with no `fontfaces` list, or an empty one, counts as foreign.
+  - The bench probe now records each increment (`port-bump`) and each dispatch with its sources (`port-dispatch`).
+  - Tests changed: `tests/unit/m6a-u4-text-dom.test.ts` (dispatch counts and timing; new V-21 suite), `tests/unit/m6a-u5-next-host.test.ts` (awaits the dispatch), `tests/m6c-next-host/m6c-scene.spec.ts` (comments only).
+  - Headless counters at the U2a head (not committed): idle, one dispatch per load (generation +2); busy, two, because the page's own move loop delayed the settle past the cap (3.7 s).
+  - `pnpm test:m6a-next-host --project chromium-smoke` 11 of 11. `test:m6c-next-host` chromium-smoke fails 23 of 27 with "the backend is failed" in this container on `main` too, so M6c-A05's generation check runs on the laptop or the PC with U2b.
+

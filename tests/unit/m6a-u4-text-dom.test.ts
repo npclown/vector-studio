@@ -22,6 +22,7 @@ import {
 import { nextGeneration } from '../../packages/text-dom/src/generation.js';
 import { createListeners } from '../../packages/text-dom/src/listeners.js';
 import { createTextDom } from '../../packages/text-dom/src/index.js';
+import { HOLD_CAP_MS } from '../../packages/text-dom/src/text-dom.js';
 import { checkRequest, isValidFamily, isValidLang } from '../../packages/text-dom/src/validate.js';
 
 // MVP M6a-U4 (docs/plans/mvp-m6a-text-model-contract.md, section 4, M6a-A04): the parts of
@@ -718,7 +719,7 @@ describe('M6a-U4 createTextDom options', () => {
 });
 
 describe('M6a-U4 generation sources (M6a-L3)', () => {
-  it('increases across instances and on font-set and resolution events', () => {
+  it('increases across instances and on font-set and resolution events', async () => {
     const { document, fonts, view, queries } = shim();
     const first = createTextDom({ document });
     const second = createTextDom({ document });
@@ -727,9 +728,17 @@ describe('M6a-U4 generation sources (M6a-L3)', () => {
     first.subscribe(() => calls.push(first.generation));
     const before = first.generation;
     fonts.dispatchEvent(new Event('loadingdone'));
+    const afterFirst = first.generation;
     fonts.dispatchEvent(new Event('loadingerror'));
+    // V-21 (section 4.1): both increment at once; one dispatch on a later task carries both.
+    expect(afterFirst).toBeGreaterThan(before);
+    expect(first.generation).toBeGreaterThan(afterFirst);
+    expect(calls).toHaveLength(0);
+    await flush();
+    expect(calls).toEqual([first.generation]);
+    fonts.dispatchEvent(new Event('loadingdone'));
+    await flush();
     expect(calls).toHaveLength(2);
-    expect(calls[0]!).toBeGreaterThan(before);
     expect(calls[1]!).toBeGreaterThan(calls[0]!);
     // Both instances listen; the realm counter keeps every value distinct.
     expect(second.generation).not.toBe(first.generation);
@@ -740,17 +749,20 @@ describe('M6a-U4 generation sources (M6a-L3)', () => {
     ]);
     view.devicePixelRatio = 1.25;
     queries[0]!.dispatchEvent(new Event('change'));
+    await flush();
     expect(calls).toHaveLength(3);
     expect(queries[2]!.media).toBe('(resolution: 1.25dppx)');
     queries[0]!.dispatchEvent(new Event('change'));
+    await flush();
     expect(calls).toHaveLength(3);
     queries[2]!.dispatchEvent(new Event('change'));
+    await flush();
     expect(calls).toHaveLength(4);
     first.dispose();
     second.dispose();
   });
 
-  it('registers a font: a registry bump, then a settle bump, resolving the status', async () => {
+  it('registers a font: a registry and a settle increment, one dispatch after the settle', async () => {
     const { document, fonts } = shim();
     const dom = createTextDom({ document });
     let bumps = 0;
@@ -762,22 +774,29 @@ describe('M6a-U4 generation sources (M6a-L3)', () => {
     expect(face.family).toBe('My "Face"');
     expect(face.source).toBe('url("a b\\".woff2")');
     expect(fonts.faces.has(face)).toBe(true);
-    expect(bumps).toBe(1);
+    // V-21 (section 4.1): the add increments at once; its dispatch waits for the settle.
+    const atAdd = dom.generation;
+    await flush();
+    expect(bumps).toBe(0);
     face.settle('loaded');
     await expect(loaded).resolves.toBe('loaded');
-    expect(bumps).toBe(2);
+    expect(dom.generation).toBeGreaterThan(atAdd);
+    await flush();
+    expect(bumps).toBe(1);
 
     const bytes = new ArrayBuffer(4);
     const failed = dom.registerFont({ family: 'Bytes', source: { bytes } });
     expect(ShimFontFace.created[1]!.source).toBe(bytes);
     ShimFontFace.created[1]!.settle('error');
     await expect(failed).resolves.toBe('error');
-    expect(bumps).toBe(4);
+    await flush();
+    expect(bumps).toBe(2);
 
     ShimFontFace.throwOnCreate = true;
     await expect(dom.registerFont({ family: 'Bad', source: { url: 'x' } })).resolves.toBe('error');
     ShimFontFace.throwOnCreate = false;
-    expect(bumps).toBe(4);
+    await flush();
+    expect(bumps).toBe(2);
 
     expect(() => dom.registerFont({ family: '', source: { url: 'x' } })).toThrow(TypeError);
     for (const source of [
@@ -805,7 +824,8 @@ describe('M6a-U4 dispose (section 4)', () => {
     ShimFontFace.created = [];
     const pending = dom.registerFont({ family: 'Late', source: { url: 'late.woff2' } });
     const pendingError = dom.registerFont({ family: 'Late2', source: { url: 'late2.woff2' } });
-    expect(bumps).toBe(2);
+    // Two increments, their dispatch held by the pending faces; dispose cancels it.
+    expect(bumps).toBe(0);
     const generation = dom.generation;
     dom.dispose();
     dom.dispose();
@@ -818,7 +838,7 @@ describe('M6a-U4 dispose (section 4)', () => {
     ShimFontFace.created[1]!.settle('error');
     await expect(pendingError).resolves.toBe('error');
     await flush();
-    expect(bumps).toBe(2);
+    expect(bumps).toBe(0);
     expect(dom.generation).toBe(generation);
     let thrown: unknown = null;
     try {
@@ -839,5 +859,188 @@ describe('M6a-U4 dispose (section 4)', () => {
     const next = createTextDom({ document });
     expect(next.generation).toBeGreaterThan(generation);
     next.dispose();
+  });
+});
+
+describe('V-21 one dispatch per registration (contract, section 4.1)', () => {
+  const event = (type: string, faces?: readonly ShimFontFace[]) =>
+    Object.assign(new Event(type), faces === undefined ? {} : { fontfaces: faces });
+
+  function setup() {
+    const env = shim();
+    const dom = createTextDom({ document: env.document });
+    const seen: number[] = [];
+    dom.subscribe(() => seen.push(dom.generation));
+    ShimFontFace.created = [];
+    return { ...env, dom, seen };
+  }
+
+  for (const source of [{ url: 'a.woff2' }, { bytes: new ArrayBuffer(4) }]) {
+    for (const order of ['settle-first', 'loadingdone-first'] as const) {
+      it(`dispatches once for a ${'url' in source ? 'URL' : 'bytes'} face, ${order}`, async () => {
+        const { dom, fonts, seen } = setup();
+        const before = dom.generation;
+        const loaded = dom.registerFont({ family: 'F', source });
+        const face = ShimFontFace.created[0]!;
+        const own = event('loadingdone', [face]);
+        if (order === 'loadingdone-first') fonts.dispatchEvent(own);
+        face.settle('loaded');
+        await loaded;
+        if (order === 'settle-first') fonts.dispatchEvent(own);
+        await flush();
+        await flush();
+        // The add and the settle increment; this port's own loadingdone is redundant.
+        expect(seen).toEqual([dom.generation]);
+        expect(dom.generation - before).toBe(2);
+        dom.dispose();
+      });
+    }
+  }
+
+  it('holds for two faces in flight until the last settles', async () => {
+    const { dom, seen } = setup();
+    const a = dom.registerFont({ family: 'A', source: { url: 'a' } });
+    const b = dom.registerFont({ family: 'B', source: { url: 'b' } });
+    ShimFontFace.created[0]!.settle('loaded');
+    await a;
+    await flush();
+    expect(seen).toEqual([]);
+    ShimFontFace.created[1]!.settle('error');
+    await b;
+    await flush();
+    expect(seen).toEqual([dom.generation]);
+    dom.dispose();
+  });
+
+  it('dispatches at the 3,000 ms cap, then again at the settle', async () => {
+    vi.useFakeTimers();
+    try {
+      const { dom, seen } = setup();
+      const loaded = dom.registerFont({ family: 'Slow', source: { url: 's' } });
+      vi.advanceTimersByTime(HOLD_CAP_MS - 1);
+      expect(seen).toEqual([]);
+      vi.advanceTimersByTime(1);
+      expect(seen).toHaveLength(1);
+      // The settle after the cap dispatches again.
+      ShimFontFace.created[0]!.settle('loaded');
+      await loaded;
+      vi.advanceTimersByTime(0);
+      expect(seen).toEqual([seen[0], dom.generation]);
+      dom.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('dispatches a foreign loadingdone on its own, and holds one during a pending load', async () => {
+    const { dom, fonts, seen } = setup();
+    const before = dom.generation;
+    const foreign = new ShimFontFace('UI', 'ui');
+    fonts.dispatchEvent(event('loadingdone', [foreign]));
+    await flush();
+    expect(seen).toHaveLength(1);
+    const loaded = dom.registerFont({ family: 'F', source: { url: 'f' } });
+    fonts.dispatchEvent(event('loadingdone', [foreign]));
+    // Mixed lists are foreign too.
+    fonts.dispatchEvent(event('loadingerror', [foreign, ShimFontFace.created.at(-1)!]));
+    await flush();
+    expect(seen).toHaveLength(1);
+    ShimFontFace.created.at(-1)!.settle('loaded');
+    await loaded;
+    await flush();
+    expect(seen).toEqual([seen[0], dom.generation]);
+    // Foreign, add, foreign, mixed (foreign), settle: five increments.
+    expect(dom.generation - before).toBe(5);
+    dom.dispose();
+  });
+
+  it('holds a dispatch already scheduled when a hold starts (both orders)', async () => {
+    // A DPR change, then a registration in the same task.
+    const first = setup();
+    first.queries[0]!.dispatchEvent(new Event('change'));
+    const loaded = first.dom.registerFont({ family: 'F', source: { url: 'f' } });
+    await flush();
+    expect(first.seen).toEqual([]);
+    ShimFontFace.created[0]!.settle('loaded');
+    await loaded;
+    await flush();
+    expect(first.seen).toEqual([first.dom.generation]);
+    first.dom.dispose();
+    // A settled registration, then the next one at once: one dispatch for both.
+    const second = setup();
+    const a = second.dom.registerFont({ family: 'A', source: { url: 'a' } });
+    ShimFontFace.created[0]!.settle('loaded');
+    await a;
+    const b = second.dom.registerFont({ family: 'B', source: { url: 'b' } });
+    await flush();
+    expect(second.seen).toEqual([]);
+    ShimFontFace.created[1]!.settle('loaded');
+    await b;
+    await flush();
+    expect(second.seen).toEqual([second.dom.generation]);
+    second.dom.dispose();
+  });
+
+  it('runs the cap from the first add, and a new add after the cap starts a new one', () => {
+    vi.useFakeTimers();
+    try {
+      const { dom, seen } = setup();
+      void dom.registerFont({ family: 'A', source: { url: 'a' } });
+      vi.advanceTimersByTime(1_000);
+      void dom.registerFont({ family: 'B', source: { url: 'b' } });
+      vi.advanceTimersByTime(HOLD_CAP_MS - 1_000);
+      expect(seen).toHaveLength(1);
+      // A and B still pending, released by the cap; C starts a new hold and a new cap.
+      void dom.registerFont({ family: 'C', source: { url: 'c' } });
+      vi.advanceTimersByTime(HOLD_CAP_MS - 1);
+      expect(seen).toHaveLength(1);
+      vi.advanceTimersByTime(1);
+      expect(seen).toHaveLength(2);
+      dom.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('dispatches a DPR change alone, and holds one during a pending load', async () => {
+    const { dom, queries, seen } = setup();
+    queries[0]!.dispatchEvent(new Event('change'));
+    await flush();
+    expect(seen).toHaveLength(1);
+    const loaded = dom.registerFont({ family: 'F', source: { url: 'f' } });
+    queries[1]!.dispatchEvent(new Event('change'));
+    await flush();
+    expect(seen).toHaveLength(1);
+    ShimFontFace.created[0]!.settle('loaded');
+    await loaded;
+    await flush();
+    expect(seen).toHaveLength(2);
+    dom.dispose();
+  });
+
+  it('cancels a held dispatch on dispose', () => {
+    vi.useFakeTimers();
+    try {
+      const { dom, seen } = setup();
+      void dom.registerFont({ family: 'F', source: { url: 'f' } });
+      dom.dispose();
+      vi.advanceTimersByTime(HOLD_CAP_MS * 2);
+      expect(seen).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('runs no listener inside an event, and reads the new generation in the gap', async () => {
+    const { dom, fonts, seen } = setup();
+    const before = dom.generation;
+    fonts.dispatchEvent(new Event('loadingdone'));
+    expect(seen).toEqual([]);
+    // `generation` read between the increment and its dispatch already has the new value.
+    const generation = dom.generation;
+    expect(generation).toBeGreaterThan(before);
+    await flush();
+    expect(seen).toEqual([generation]);
+    dom.dispose();
   });
 });
