@@ -12,6 +12,7 @@ import {
 } from '../../packages/renderer-core/src/path-mesh-pipeline.js';
 import type {
   PrimitivePacket,
+  PrimitiveReceipt,
   PrimitiveTarget,
 } from '../../packages/renderer-core/src/primitive-packet.js';
 import {
@@ -20,6 +21,7 @@ import {
 } from '../../packages/renderer-core/src/primitive-scene-source.js';
 import { RetainedSceneMirror } from '../../packages/renderer-core/src/scene-mirror.js';
 import { FakeRaster } from './e28-text-harness.js';
+import { receiptOf } from './v3b-mesh-harness.js';
 import { ScriptedStrokeMeshPort } from './st-u6-stroke-harness.js';
 import { createCountingPort, type ScriptedFillMeshPort } from './v3a-path-harness.js';
 
@@ -492,4 +494,36 @@ export function drawn(twinState: Twin, packet: PrimitivePacket | null) {
     masks: packet.clip?.masks.length ?? 0,
     text: packet.text === undefined ? 0 : packet.text.draws.length,
   };
+}
+
+/**
+ * E30-U4c: one backend's receipts with the text part (E28 section 4, Lifetime): one incarnation
+ * per page index, kept while the page exists; `recreate` gives a page a new incarnation, as a
+ * backend that lost it would.
+ */
+export function textReceipts(): Readonly<{
+  receipt: (packet: PrimitivePacket) => PrimitiveReceipt;
+  recreate: (page: number) => void;
+}> {
+  const incarnations: symbol[] = [];
+  return Object.freeze({
+    receipt: (packet: PrimitivePacket): PrimitiveReceipt => {
+      const base = receiptOf(packet);
+      const part = packet.text;
+      if (part === undefined) return base;
+      while (incarnations.length < part.pageCount) incarnations.push(Symbol('page'));
+      incarnations.length = part.pageCount;
+      return {
+        ...base,
+        text: {
+          pages: [...incarnations],
+          clears: part.clears.length,
+          uploads: part.uploads.length,
+        },
+      };
+    },
+    recreate: (page: number) => {
+      if (page < incarnations.length) incarnations[page] = Symbol('page');
+    },
+  });
 }

@@ -80,7 +80,9 @@ import {
   GlyphAtlasPlan,
   getTextLocalBounds,
   planTextFrame,
+  repeatTextFrame,
   type AtlasFrame,
+  type TextFrame,
 } from './text-atlas.js';
 import {
   layerBound,
@@ -204,6 +206,8 @@ type PackingCounts = Readonly<{
   cull: Readonly<{ kept: number; culls: number; ranges: number; patched: number }>;
   /** E30-U4b: frames that kept the last mask plan, and frames that planned afresh. */
   masks: Readonly<{ kept: number; planned: number }>;
+  /** E30-U4c: text frames that repeated the last atlas frame, and frames that planned it. */
+  text: Readonly<{ repeated: number; planned: number }>;
 }>;
 
 type PackingRange = Readonly<{
@@ -270,6 +274,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   /** E30-U4b: the last mask plan with its inputs, all of its content admitted. */
   #keptMaskPlan: Readonly<{ inputs: readonly unknown[]; plan: MaskPlan }> | null = null;
   #maskPlanCounts = { kept: 0, planned: 0 };
+  #textFrameCounts = { repeated: 0, planned: 0 };
   /** E30-U4b: each derived path's layer content bounds (`#pathContentBounds`). */
   #contentBounds = new WeakMap<
     DerivedPath,
@@ -327,6 +332,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
         ...source.#packingCounts,
         cull: Object.freeze({ ...source.#cullCounts }),
         masks: Object.freeze({ ...source.#maskPlanCounts }),
+        text: Object.freeze({ ...source.#textFrameCounts }),
       });
   }
   #packingKeys = new Map<string, PackingKeys>();
@@ -377,6 +383,16 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   readonly #atlas: GlyphAtlasPlan | null;
   /** V-21 (section 4.3): the scene's text generations, kept while the derived set is unchanged. */
   #generations: Readonly<{ texts: DerivedTexts; set: ReadonlySet<number> }> | null = null;
+  /**
+   * E30-U4c: the last text frame and what it was planned from: the drawn leaves, whether the
+   * scene holds text, the camera, and the target's generation, size and DPR.
+   */
+  #keptText: Readonly<{
+    texts: readonly DerivedText[];
+    held: boolean;
+    key: readonly number[];
+    frame: TextFrame;
+  }> | null = null;
   readonly #onTextDeferred: (() => void) | undefined;
   /** P3 V3 section f: true exactly when this source consumes a fill-mesh or stroke-mesh port. */
   public readonly requiresMeshPipeline: boolean;
@@ -729,14 +745,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     const textFrame =
       this.#atlas === null
         ? null
-        : planTextFrame(
-            this.#atlas,
-            texts,
-            derivedTexts.held,
-            cameraState.camera,
-            target,
-            this.#sceneGenerations(derivedTexts),
-          );
+        : this.#textFrame(texts, derivedTexts, cameraState.camera, target);
     const textItems =
       textFrame === null
         ? []
@@ -1458,6 +1467,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     this.#pathMeshes?.dispose();
     this.#meshPacker.dispose();
     this.#atlas?.reset();
+    this.#keptText = null;
   }
 
   /**
@@ -1556,6 +1566,50 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
    * off-screen ones included. The same set object is returned until the generations change, so
    * the atlas re-checks obsolescence only then.
    */
+  /**
+   * E28 contract, U2: the atlas plan over the drawn text leaves. E30 contract, section 4.2 (U4c):
+   * a frame with the same drawn leaves, camera and target as the last one repeats its atlas frame
+   * when the atlas shows that planning would find every cluster where it was.
+   */
+  #textFrame(
+    texts: readonly DerivedText[],
+    derivedTexts: DerivedTexts,
+    camera: Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>,
+    target: PrimitiveTarget,
+  ): TextFrame {
+    const atlas = this.#atlas!;
+    const scene = this.#sceneGenerations(derivedTexts);
+    const key = [
+      camera.position.x,
+      camera.position.y,
+      camera.zoom,
+      target.generation,
+      target.width,
+      target.height,
+      target.devicePixelRatio,
+    ];
+    const kept = this.#keptText;
+    if (
+      !this.#fullDerivation &&
+      kept !== null &&
+      derivedTexts.held &&
+      kept.held &&
+      kept.texts === texts &&
+      numericArraysEqual(kept.key, key)
+    ) {
+      const repeated = repeatTextFrame(atlas, kept.frame, scene);
+      if (repeated !== null) {
+        this.#textFrameCounts.repeated += 1;
+        this.#keptText = Object.freeze({ ...kept, frame: repeated });
+        return repeated;
+      }
+    }
+    this.#textFrameCounts.planned += 1;
+    const frame = planTextFrame(atlas, texts, derivedTexts.held, camera, target, scene);
+    this.#keptText = Object.freeze({ texts, held: derivedTexts.held, key, frame });
+    return frame;
+  }
+
   #sceneGenerations(texts: DerivedTexts): ReadonlySet<number> {
     const known = this.#generations;
     if (known !== null && known.texts === texts) return known.set;

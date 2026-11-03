@@ -267,6 +267,10 @@ export class GlyphAtlasPlan {
   #rasterCalls = 0;
   #uploads = 0;
   #evictions = 0;
+  /** E30-U4c: the last planned frame, the last acknowledged one, and each frame's requests. */
+  #lastPlanned: AtlasFrame | null = null;
+  #committed: AtlasFrame | null = null;
+  readonly #frameKeys = new WeakMap<AtlasFrame, readonly string[]>();
 
   public constructor(port: GlyphRasterPort, options: GlyphAtlasOptions = {}) {
     this.#port = port;
@@ -311,6 +315,8 @@ export class GlyphAtlasPlan {
   /** Drops every entry and page: device loss, release and dispose. */
   public reset(): void {
     this.#compactNext = null;
+    this.#lastPlanned = null;
+    this.#committed = null;
     this.#pages = [];
     this.#entries.clear();
     this.#bases.clear();
@@ -652,7 +658,7 @@ export class GlyphAtlasPlan {
     }
     if (omitted > 0) this.#overLimit = true;
     else if (deferred === 0) this.#overLimit = false;
-    return Object.freeze({
+    const planned: AtlasFrame = Object.freeze({
       rendererGeneration,
       frame,
       pageCount: pages.length,
@@ -669,6 +675,70 @@ export class GlyphAtlasPlan {
       compacted,
       compactNext,
     });
+    this.#lastPlanned = planned;
+    this.#frameKeys.set(planned, keys);
+    return planned;
+  }
+
+  /**
+   * E30 contract, section 4.2 (U4c): the frame `plan` would return for the same requests right
+   * after `previous`, or null when that cannot be shown without planning. It holds when
+   * `previous` is the last frame planned and was acknowledged, no compaction is pending, no
+   * cluster was deferred, omitted or drawn as a fallback, every entry it drew is still committed
+   * (so every lookup hits it again), and every empty or failed outcome is still kept: such a frame
+   * touches no page and allocates nothing.
+   * The caller gives the same requests (the same leaves, camera and target) and scene
+   * generations.
+   */
+  public repeat(
+    previous: AtlasFrame,
+    sceneGenerations: ReadonlySet<number> | null,
+  ): AtlasFrame | null {
+    if (previous !== this.#lastPlanned || previous !== this.#committed) return null;
+    if (previous.rendererGeneration !== this.#rendererGeneration) return null;
+    if (sceneGenerations !== this.#sceneGenerations) return null;
+    // A pending compaction is the plan's first step; it follows only a frame that deferred.
+    if (this.#compactNext !== null) return null;
+    const keys = this.#frameKeys.get(previous);
+    if (keys === undefined) return null;
+    const used = new Set<number>();
+    for (let index = 0; index < previous.resolutions.length; index += 1) {
+      const resolution = previous.resolutions[index]!;
+      if (resolution.kind === 'entry') {
+        const entry = resolution.entry;
+        if (resolution.fallback || this.#entries.get(entry.key) !== entry) return null;
+        used.add(entry.page);
+      } else if (resolution.kind === 'empty' || resolution.kind === 'failed') {
+        if (this.#outcomes.get(keys[index]!)?.status !== resolution.kind) return null;
+      } else {
+        // A deferred or omitted cluster would be tried again.
+        return null;
+      }
+    }
+    // The plan's side effects for these requests: the frame number. Their failures were reported
+    // by `previous` (the reported set shrinks only when the scene generations change, which
+    // declines), and nothing was omitted or deferred, so the over-limit state stays clear.
+    this.#frame += 1;
+    const repeated: AtlasFrame = Object.freeze({
+      rendererGeneration: previous.rendererGeneration,
+      frame: this.#frame,
+      pageCount: this.#pages.length,
+      clears: Object.freeze([]),
+      uploads: Object.freeze([]),
+      resolutions: previous.resolutions,
+      deferred: 0,
+      omitted: 0,
+      pages: Object.freeze([...this.#pages]),
+      added: new Map<string, AtlasEntry>(),
+      evicted: new Set<number>(),
+      used,
+      evictions: 0,
+      compacted: null,
+      compactNext: null,
+    });
+    this.#lastPlanned = repeated;
+    this.#frameKeys.set(repeated, keys);
+    return repeated;
   }
 
   /** True when the receipt's text part matches the frame: page count, clears and uploads. */
@@ -727,6 +797,7 @@ export class GlyphAtlasPlan {
     // A frame that compacted consumed the request; a fragmented frame makes a new one.
     if (frame.compacted !== null || frame.pageCount === 0) this.#compactNext = null;
     if (frame.compactNext !== null) this.#compactNext = frame.compactNext;
+    this.#committed = frame;
     return lost;
   }
 
@@ -737,6 +808,7 @@ export class GlyphAtlasPlan {
    */
   public replaced(frame: AtlasFrame): void {
     if (frame.rendererGeneration !== this.#rendererGeneration) return;
+    this.#committed = null;
     const written = new Set([
       ...frame.clears.map((clear) => clear.page),
       ...frame.uploads.map((upload) => upload.page),
@@ -1093,6 +1165,25 @@ export function planTextFrame(
     draws: Object.freeze(
       draws.map((list) => Object.freeze(list.map((draw) => Object.freeze(draw)))),
     ),
+  });
+}
+
+/**
+ * E30-U4c: `planTextFrame` for the same leaves, camera and target as `previous`, without placing
+ * a cluster or building a record, when the atlas can repeat its frame; else null. The records
+ * are copied, so no two packets share one buffer.
+ */
+export function repeatTextFrame(
+  atlas: GlyphAtlasPlan,
+  previous: TextFrame,
+  sceneGenerations: ReadonlySet<number> | null,
+): TextFrame | null {
+  const frame = atlas.repeat(previous.atlas, sceneGenerations);
+  if (frame === null) return null;
+  return Object.freeze({
+    atlas: frame,
+    instances: previous.instances.slice(),
+    draws: previous.draws,
   });
 }
 
