@@ -177,6 +177,14 @@ const rows = [...groups.values()].map((runs) => {
     maxPerRunP95Ms: round(worst),
     pass: worst !== null && worst < first.boundMs,
     samples: runs.map((run) => run.pointerToWorkDoneMs.count),
+    // E30-U1c: the latency split, only when a run has one (older records re-run unchanged).
+    ...(runs.some((run) => run.split != null)
+      ? {
+          splitMedianMs: runs.map((run) => splitOf(run, 'median')),
+          splitP95Ms: runs.map((run) => splitOf(run, 'p95')),
+          splitUnpaired: runs.map((run) => run.splitPairs?.unpaired ?? null),
+        }
+      : {}),
     noChange: runs.map((run) => run.noChange),
     movesSent: runs.map((run) => run.moves),
     longTasksOver50OutsideIsolation: runs.map(
