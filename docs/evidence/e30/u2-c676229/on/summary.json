@@ -1,0 +1,4053 @@
+{
+  "records": 120,
+  "rows": [
+    {
+      "scenario": "e26-mixed-view-edit-10k/v2",
+      "variant": "frame",
+      "project": "chrome-dpr1-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "ab08fe2a7c9253b22612b24013e7fe3d3eb548f63a80ad27b233734f58fe508b"
+      ],
+      "browser": "chromium 156.0.8078.80",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 16.7,
+      "perRunMedianMs": [
+        16.8,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "perRunP95Ms": [
+        33.4,
+        33.4,
+        33.4,
+        33.4,
+        33.4
+      ],
+      "perRunP99Ms": [
+        33.5,
+        33.5,
+        33.5,
+        33.4,
+        33.5
+      ],
+      "maxPerRunP95Ms": 33.4,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        13.5,
+        12.9,
+        13,
+        12.9,
+        13.2
+      ],
+      "splitMedianMs": [
+        {
+          "prepareMs": 6.7,
+          "submitMs": 4.2,
+          "acknowledgeMs": 0,
+          "gpuMs": 52.2
+        },
+        {
+          "prepareMs": 6.7,
+          "submitMs": 4.1,
+          "acknowledgeMs": 0,
+          "gpuMs": 50.9
+        },
+        {
+          "prepareMs": 6.6,
+          "submitMs": 4,
+          "acknowledgeMs": 0,
+          "gpuMs": 49.7
+        },
+        {
+          "prepareMs": 6.8,
+          "submitMs": 4.1,
+          "acknowledgeMs": 0,
+          "gpuMs": 51.4
+        },
+        {
+          "prepareMs": 6.5,
+          "submitMs": 3.9,
+          "acknowledgeMs": 0,
+          "gpuMs": 49.7
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "prepareMs": 9,
+          "submitMs": 5.3,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 59
+        },
+        {
+          "prepareMs": 8.5,
+          "submitMs": 5,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 55.7
+        },
+        {
+          "prepareMs": 8.5,
+          "submitMs": 5.3,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 57.2
+        },
+        {
+          "prepareMs": 8.8,
+          "submitMs": 5,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 58.3
+        },
+        {
+          "prepareMs": 8.6,
+          "submitMs": 5,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 57.8
+        }
+      ],
+      "longTasksOver50": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "frames": [
+        398,
+        411,
+        411,
+        408,
+        417
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ]
+    },
+    {
+      "scenario": "e26-mixed-view-edit-10k/v2",
+      "variant": "frame",
+      "project": "chrome-dpr2-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "526c742bdef5d8ed86dee77b1ad8992f4cc944e75530ffcb7a57813fd1ba7bc3"
+      ],
+      "browser": "chromium 156.0.8078.80",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 16.7,
+      "perRunMedianMs": [
+        16.8,
+        16.7,
+        16.7,
+        16.8,
+        16.7
+      ],
+      "perRunP95Ms": [
+        33.4,
+        33.4,
+        33.4,
+        33.4,
+        33.4
+      ],
+      "perRunP99Ms": [
+        33.5,
+        33.5,
+        33.5,
+        33.5,
+        33.5
+      ],
+      "maxPerRunP95Ms": 33.4,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        13.4,
+        13.3,
+        13,
+        13,
+        13.2
+      ],
+      "splitMedianMs": [
+        {
+          "prepareMs": 6.4,
+          "submitMs": 4,
+          "acknowledgeMs": 0,
+          "gpuMs": 52.2
+        },
+        {
+          "prepareMs": 6.5,
+          "submitMs": 4.1,
+          "acknowledgeMs": 0,
+          "gpuMs": 50.7
+        },
+        {
+          "prepareMs": 6.4,
+          "submitMs": 4,
+          "acknowledgeMs": 0,
+          "gpuMs": 49.8
+        },
+        {
+          "prepareMs": 6.7,
+          "submitMs": 4.1,
+          "acknowledgeMs": 0,
+          "gpuMs": 51.5
+        },
+        {
+          "prepareMs": 6.7,
+          "submitMs": 3.8,
+          "acknowledgeMs": 0,
+          "gpuMs": 49.2
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "prepareMs": 8.9,
+          "submitMs": 5.3,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 61.4
+        },
+        {
+          "prepareMs": 8.8,
+          "submitMs": 5.1,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 56.6
+        },
+        {
+          "prepareMs": 8.6,
+          "submitMs": 5.1,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 56.9
+        },
+        {
+          "prepareMs": 8.7,
+          "submitMs": 5,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 57.3
+        },
+        {
+          "prepareMs": 8.5,
+          "submitMs": 5,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 64
+        }
+      ],
+      "longTasksOver50": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "frames": [
+        397,
+        407,
+        415,
+        407,
+        411
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ]
+    },
+    {
+      "scenario": "e26-mixed-view-edit-10k/v2",
+      "variant": "frame",
+      "project": "edge-dpr1-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "ab08fe2a7c9253b22612b24013e7fe3d3eb548f63a80ad27b233734f58fe508b"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 16.7,
+      "perRunMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "perRunP95Ms": [
+        33.4,
+        33.4,
+        33.4,
+        33.4,
+        33.4
+      ],
+      "perRunP99Ms": [
+        33.5,
+        33.5,
+        33.5,
+        33.5,
+        33.5
+      ],
+      "maxPerRunP95Ms": 33.4,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        12,
+        11.8,
+        12,
+        11.8,
+        12
+      ],
+      "splitMedianMs": [
+        {
+          "prepareMs": 6,
+          "submitMs": 3.9,
+          "acknowledgeMs": 0,
+          "gpuMs": 47.3
+        },
+        {
+          "prepareMs": 5.9,
+          "submitMs": 3.9,
+          "acknowledgeMs": 0,
+          "gpuMs": 46.2
+        },
+        {
+          "prepareMs": 6.1,
+          "submitMs": 4,
+          "acknowledgeMs": 0,
+          "gpuMs": 48.4
+        },
+        {
+          "prepareMs": 6,
+          "submitMs": 3.9,
+          "acknowledgeMs": 0,
+          "gpuMs": 46.5
+        },
+        {
+          "prepareMs": 6,
+          "submitMs": 3.9,
+          "acknowledgeMs": 0,
+          "gpuMs": 46.9
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "prepareMs": 7.7,
+          "submitMs": 4.8,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 53.7
+        },
+        {
+          "prepareMs": 7.5,
+          "submitMs": 4.8,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 53.1
+        },
+        {
+          "prepareMs": 7.8,
+          "submitMs": 4.7,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 53
+        },
+        {
+          "prepareMs": 7.6,
+          "submitMs": 4.8,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 51.6
+        },
+        {
+          "prepareMs": 7.6,
+          "submitMs": 4.9,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 53
+        }
+      ],
+      "longTasksOver50": [
+        1,
+        1,
+        1,
+        0,
+        0
+      ],
+      "frames": [
+        438,
+        443,
+        437,
+        443,
+        440
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ]
+    },
+    {
+      "scenario": "e26-mixed-view-edit-10k/v2",
+      "variant": "frame",
+      "project": "edge-dpr2-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "526c742bdef5d8ed86dee77b1ad8992f4cc944e75530ffcb7a57813fd1ba7bc3"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 16.7,
+      "perRunMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "perRunP95Ms": [
+        33.4,
+        33.4,
+        33.4,
+        33.4,
+        33.4
+      ],
+      "perRunP99Ms": [
+        33.5,
+        33.5,
+        33.5,
+        33.5,
+        33.5
+      ],
+      "maxPerRunP95Ms": 33.4,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        11.8,
+        11.6,
+        11.7,
+        11.9,
+        12
+      ],
+      "splitMedianMs": [
+        {
+          "prepareMs": 6,
+          "submitMs": 3.9,
+          "acknowledgeMs": 0,
+          "gpuMs": 47.5
+        },
+        {
+          "prepareMs": 5.9,
+          "submitMs": 3.9,
+          "acknowledgeMs": 0,
+          "gpuMs": 46.4
+        },
+        {
+          "prepareMs": 5.9,
+          "submitMs": 3.9,
+          "acknowledgeMs": 0,
+          "gpuMs": 47.8
+        },
+        {
+          "prepareMs": 5.9,
+          "submitMs": 3.9,
+          "acknowledgeMs": 0,
+          "gpuMs": 47.6
+        },
+        {
+          "prepareMs": 5.9,
+          "submitMs": 3.9,
+          "acknowledgeMs": 0,
+          "gpuMs": 47.4
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "prepareMs": 7.6,
+          "submitMs": 4.7,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 51.4
+        },
+        {
+          "prepareMs": 7.5,
+          "submitMs": 4.8,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 51.3
+        },
+        {
+          "prepareMs": 7.5,
+          "submitMs": 4.7,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 52.1
+        },
+        {
+          "prepareMs": 7.8,
+          "submitMs": 4.6,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 52.2
+        },
+        {
+          "prepareMs": 7.6,
+          "submitMs": 4.8,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 55.6
+        }
+      ],
+      "longTasksOver50": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "frames": [
+        436,
+        445,
+        435,
+        438,
+        437
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ]
+    },
+    {
+      "scenario": "e26-mixed-all-edit-10k/v2",
+      "variant": "frame",
+      "project": "chrome-dpr1-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "3ef51975b4f90d5b952eccaa69a251477c88a858a1c6dfb95015ba659f344da3"
+      ],
+      "browser": "chromium 156.0.8078.80",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        66.7,
+        66.7,
+        66.7,
+        66.7,
+        66.7
+      ],
+      "perRunP95Ms": [
+        83.4,
+        83.3,
+        66.8,
+        83.4,
+        83.4
+      ],
+      "perRunP99Ms": [
+        99.9,
+        83.5,
+        83.4,
+        83.5,
+        83.4
+      ],
+      "maxPerRunP95Ms": 83.4,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        65.1,
+        60.3,
+        60,
+        63.3,
+        60.8
+      ],
+      "splitMedianMs": [
+        {
+          "prepareMs": 20.5,
+          "submitMs": 33.2,
+          "acknowledgeMs": 0,
+          "gpuMs": 135.2
+        },
+        {
+          "prepareMs": 19.5,
+          "submitMs": 33.1,
+          "acknowledgeMs": 0,
+          "gpuMs": 135.2
+        },
+        {
+          "prepareMs": 19.6,
+          "submitMs": 33.1,
+          "acknowledgeMs": 0,
+          "gpuMs": 136.1
+        },
+        {
+          "prepareMs": 20.3,
+          "submitMs": 36.2,
+          "acknowledgeMs": 0,
+          "gpuMs": 142.8
+        },
+        {
+          "prepareMs": 19.2,
+          "submitMs": 32.9,
+          "acknowledgeMs": 0,
+          "gpuMs": 133.2
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "prepareMs": 24.2,
+          "submitMs": 41.3,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 164.7
+        },
+        {
+          "prepareMs": 22.4,
+          "submitMs": 38,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 147.2
+        },
+        {
+          "prepareMs": 22.6,
+          "submitMs": 38.3,
+          "acknowledgeMs": 0.2,
+          "gpuMs": 145.3
+        },
+        {
+          "prepareMs": 22.6,
+          "submitMs": 40.9,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 151.4
+        },
+        {
+          "prepareMs": 22.7,
+          "submitMs": 39.6,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 155.6
+        }
+      ],
+      "longTasksOver50": [
+        146,
+        150,
+        150,
+        141,
+        150
+      ],
+      "frames": [
+        146,
+        150,
+        149,
+        141,
+        149
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ]
+    },
+    {
+      "scenario": "e26-mixed-all-edit-10k/v2",
+      "variant": "frame",
+      "project": "chrome-dpr2-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "35fa9c6934516545f51192473303ddbc41791a9b08f173ecf5366bc75b1884f7"
+      ],
+      "browser": "chromium 156.0.8078.80",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        66.7,
+        66.7,
+        66.7,
+        66.7,
+        66.7
+      ],
+      "perRunP95Ms": [
+        83.3,
+        83.3,
+        83.4,
+        83.4,
+        83.3
+      ],
+      "perRunP99Ms": [
+        83.4,
+        83.4,
+        100.1,
+        100,
+        83.4
+      ],
+      "maxPerRunP95Ms": 83.4,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        60.8,
+        59.1,
+        68.7,
+        68.8,
+        64.2
+      ],
+      "splitMedianMs": [
+        {
+          "prepareMs": 21.6,
+          "submitMs": 32.4,
+          "acknowledgeMs": 0,
+          "gpuMs": 135.1
+        },
+        {
+          "prepareMs": 21.9,
+          "submitMs": 33.4,
+          "acknowledgeMs": 0,
+          "gpuMs": 137.7
+        },
+        {
+          "prepareMs": 22,
+          "submitMs": 33.5,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 141.7
+        },
+        {
+          "prepareMs": 22.3,
+          "submitMs": 33.7,
+          "acknowledgeMs": 0,
+          "gpuMs": 143
+        },
+        {
+          "prepareMs": 21.9,
+          "submitMs": 34.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 143.4
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "prepareMs": 23.5,
+          "submitMs": 37.7,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 150.6
+        },
+        {
+          "prepareMs": 23.3,
+          "submitMs": 37.3,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 154.8
+        },
+        {
+          "prepareMs": 26.5,
+          "submitMs": 40.9,
+          "acknowledgeMs": 0.2,
+          "gpuMs": 180.5
+        },
+        {
+          "prepareMs": 26.3,
+          "submitMs": 46.6,
+          "acknowledgeMs": 0.2,
+          "gpuMs": 166.6
+        },
+        {
+          "prepareMs": 24.2,
+          "submitMs": 40.9,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 163.6
+        }
+      ],
+      "longTasksOver50": [
+        149,
+        147,
+        141,
+        139,
+        142
+      ],
+      "frames": [
+        148,
+        147,
+        140,
+        138,
+        141
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ]
+    },
+    {
+      "scenario": "e26-mixed-all-edit-10k/v2",
+      "variant": "frame",
+      "project": "edge-dpr1-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "3ef51975b4f90d5b952eccaa69a251477c88a858a1c6dfb95015ba659f344da3"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        66.7,
+        66.7,
+        66.7,
+        66.7,
+        66.7
+      ],
+      "perRunP95Ms": [
+        83.5,
+        66.8,
+        83.4,
+        83.4,
+        83.4
+      ],
+      "perRunP99Ms": [
+        100.1,
+        83.4,
+        100.1,
+        100,
+        83.4
+      ],
+      "maxPerRunP95Ms": 83.5,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        67.5,
+        57.6,
+        74.6,
+        64.5,
+        58.3
+      ],
+      "splitMedianMs": [
+        {
+          "prepareMs": 21.7,
+          "submitMs": 34.7,
+          "acknowledgeMs": 0,
+          "gpuMs": 146.9
+        },
+        {
+          "prepareMs": 19,
+          "submitMs": 32.3,
+          "acknowledgeMs": 0,
+          "gpuMs": 129.8
+        },
+        {
+          "prepareMs": 20.6,
+          "submitMs": 34,
+          "acknowledgeMs": 0,
+          "gpuMs": 141.4
+        },
+        {
+          "prepareMs": 19.8,
+          "submitMs": 33.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 140.7
+        },
+        {
+          "prepareMs": 19.5,
+          "submitMs": 34.1,
+          "acknowledgeMs": 0,
+          "gpuMs": 140.9
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "prepareMs": 25.6,
+          "submitMs": 44.9,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 159
+        },
+        {
+          "prepareMs": 21.3,
+          "submitMs": 36.6,
+          "acknowledgeMs": 0.2,
+          "gpuMs": 152
+        },
+        {
+          "prepareMs": 27.5,
+          "submitMs": 47.7,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 188.1
+        },
+        {
+          "prepareMs": 23.4,
+          "submitMs": 41.5,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 157.6
+        },
+        {
+          "prepareMs": 22.8,
+          "submitMs": 37,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 149.9
+        }
+      ],
+      "longTasksOver50": [
+        136,
+        155,
+        138,
+        143,
+        144
+      ],
+      "frames": [
+        136,
+        155,
+        138,
+        142,
+        144
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ]
+    },
+    {
+      "scenario": "e26-mixed-all-edit-10k/v2",
+      "variant": "frame",
+      "project": "edge-dpr2-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "35fa9c6934516545f51192473303ddbc41791a9b08f173ecf5366bc75b1884f7"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        66.7,
+        66.7,
+        66.7,
+        66.7,
+        66.7
+      ],
+      "perRunP95Ms": [
+        83.3,
+        83.3,
+        83.3,
+        83.3,
+        83.3
+      ],
+      "perRunP99Ms": [
+        100,
+        83.4,
+        83.4,
+        83.4,
+        83.4
+      ],
+      "maxPerRunP95Ms": 83.3,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        62.1,
+        60.7,
+        60,
+        59.6,
+        59.2
+      ],
+      "splitMedianMs": [
+        {
+          "prepareMs": 22.2,
+          "submitMs": 32.8,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 135.2
+        },
+        {
+          "prepareMs": 22,
+          "submitMs": 32.5,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 137
+        },
+        {
+          "prepareMs": 22.2,
+          "submitMs": 32.4,
+          "acknowledgeMs": 0,
+          "gpuMs": 135.7
+        },
+        {
+          "prepareMs": 21.7,
+          "submitMs": 32.5,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 135.2
+        },
+        {
+          "prepareMs": 21.8,
+          "submitMs": 32.2,
+          "acknowledgeMs": 0,
+          "gpuMs": 135.5
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "prepareMs": 24.7,
+          "submitMs": 38.4,
+          "acknowledgeMs": 0.2,
+          "gpuMs": 157
+        },
+        {
+          "prepareMs": 24,
+          "submitMs": 37.7,
+          "acknowledgeMs": 0.2,
+          "gpuMs": 147.9
+        },
+        {
+          "prepareMs": 24.1,
+          "submitMs": 36.7,
+          "acknowledgeMs": 0.2,
+          "gpuMs": 150.2
+        },
+        {
+          "prepareMs": 23.9,
+          "submitMs": 36.6,
+          "acknowledgeMs": 0.2,
+          "gpuMs": 144.3
+        },
+        {
+          "prepareMs": 23.9,
+          "submitMs": 36.4,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 146.4
+        }
+      ],
+      "longTasksOver50": [
+        146,
+        148,
+        148,
+        148,
+        150
+      ],
+      "frames": [
+        145,
+        147,
+        148,
+        148,
+        149
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ]
+    },
+    {
+      "scenario": "e26-mixed-all-pan-10k/v2",
+      "variant": "frame",
+      "project": "chrome-dpr1-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "166c6e3e17ef00044c4cbf2f98eddc86c806f72497f6009c79ccbba0cc41ba1a"
+      ],
+      "browser": "chromium 156.0.8078.80",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        83.3,
+        83.3,
+        66.8,
+        83.3,
+        66.7
+      ],
+      "perRunP95Ms": [
+        99.9,
+        83.5,
+        83.4,
+        83.5,
+        83.4
+      ],
+      "perRunP99Ms": [
+        100,
+        100.1,
+        99.8,
+        100.1,
+        83.5
+      ],
+      "maxPerRunP95Ms": 99.9,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        86.5,
+        84.9,
+        78.1,
+        85.2,
+        76.8
+      ],
+      "splitMedianMs": [
+        {
+          "prepareMs": 46.6,
+          "submitMs": 29.5,
+          "acknowledgeMs": 0,
+          "gpuMs": 235
+        },
+        {
+          "prepareMs": 47.1,
+          "submitMs": 29.7,
+          "acknowledgeMs": 0,
+          "gpuMs": 238.4
+        },
+        {
+          "prepareMs": 43,
+          "submitMs": 28.4,
+          "acknowledgeMs": 0,
+          "gpuMs": 223.2
+        },
+        {
+          "prepareMs": 43.6,
+          "submitMs": 28.9,
+          "acknowledgeMs": 0,
+          "gpuMs": 231.7
+        },
+        {
+          "prepareMs": 43.3,
+          "submitMs": 28,
+          "acknowledgeMs": 0,
+          "gpuMs": 222.6
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "prepareMs": 55.9,
+          "submitMs": 32.9,
+          "acknowledgeMs": 0.2,
+          "gpuMs": 266.7
+        },
+        {
+          "prepareMs": 54.3,
+          "submitMs": 33.3,
+          "acknowledgeMs": 0.2,
+          "gpuMs": 293.2
+        },
+        {
+          "prepareMs": 50.2,
+          "submitMs": 32.1,
+          "acknowledgeMs": 0.2,
+          "gpuMs": 279.5
+        },
+        {
+          "prepareMs": 53.9,
+          "submitMs": 34.2,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 245.3
+        },
+        {
+          "prepareMs": 49.3,
+          "submitMs": 31.7,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 237.2
+        }
+      ],
+      "longTasksOver50": [
+        123,
+        124,
+        133,
+        128,
+        134
+      ],
+      "frames": [
+        123,
+        123,
+        132,
+        127,
+        133
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ]
+    },
+    {
+      "scenario": "e26-mixed-all-pan-10k/v2",
+      "variant": "frame",
+      "project": "chrome-dpr2-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "f6ee3e5d6036e592f7eb9d2920f8aac16756c8f88e3e3d02dd8dc72cf2b14a47"
+      ],
+      "browser": "chromium 156.0.8078.80",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        66.8,
+        66.7,
+        66.8,
+        66.7,
+        83.2
+      ],
+      "perRunP95Ms": [
+        83.4,
+        100,
+        99.9,
+        100,
+        83.4
+      ],
+      "perRunP99Ms": [
+        216.7,
+        199.9,
+        216.7,
+        200,
+        216.6
+      ],
+      "maxPerRunP95Ms": 100,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        82.5,
+        87.3,
+        87.2,
+        85,
+        84.5
+      ],
+      "splitMedianMs": [
+        {
+          "prepareMs": 42.6,
+          "submitMs": 27.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 223.4
+        },
+        {
+          "prepareMs": 42.4,
+          "submitMs": 28,
+          "acknowledgeMs": 0,
+          "gpuMs": 218.6
+        },
+        {
+          "prepareMs": 43.3,
+          "submitMs": 27.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 225.4
+        },
+        {
+          "prepareMs": 42.7,
+          "submitMs": 27.7,
+          "acknowledgeMs": 0,
+          "gpuMs": 221.4
+        },
+        {
+          "prepareMs": 42.9,
+          "submitMs": 27.8,
+          "acknowledgeMs": 0,
+          "gpuMs": 221.8
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "prepareMs": 51.8,
+          "submitMs": 31.6,
+          "acknowledgeMs": 0.4,
+          "gpuMs": 301.9
+        },
+        {
+          "prepareMs": 51.9,
+          "submitMs": 35.6,
+          "acknowledgeMs": 0.4,
+          "gpuMs": 285.4
+        },
+        {
+          "prepareMs": 51.1,
+          "submitMs": 34.5,
+          "acknowledgeMs": 0.6,
+          "gpuMs": 344.1
+        },
+        {
+          "prepareMs": 50.8,
+          "submitMs": 34.9,
+          "acknowledgeMs": 0.5,
+          "gpuMs": 305.4
+        },
+        {
+          "prepareMs": 51.2,
+          "submitMs": 33,
+          "acknowledgeMs": 0.5,
+          "gpuMs": 370
+        }
+      ],
+      "longTasksOver50": [
+        129,
+        128,
+        129,
+        129,
+        129
+      ],
+      "frames": [
+        129,
+        128,
+        129,
+        129,
+        128
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ]
+    },
+    {
+      "scenario": "e26-mixed-all-pan-10k/v2",
+      "variant": "frame",
+      "project": "edge-dpr1-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "166c6e3e17ef00044c4cbf2f98eddc86c806f72497f6009c79ccbba0cc41ba1a"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        83.3,
+        83.4,
+        83.3,
+        83.3,
+        83.3
+      ],
+      "perRunP95Ms": [
+        100,
+        100.1,
+        100,
+        100,
+        100
+      ],
+      "perRunP99Ms": [
+        116.6,
+        116.6,
+        100.1,
+        100.1,
+        116.6
+      ],
+      "maxPerRunP95Ms": 100.1,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        94,
+        97.4,
+        95,
+        90.9,
+        92.9
+      ],
+      "splitMedianMs": [
+        {
+          "prepareMs": 50.4,
+          "submitMs": 30.1,
+          "acknowledgeMs": 0,
+          "gpuMs": 248.7
+        },
+        {
+          "prepareMs": 51,
+          "submitMs": 31,
+          "acknowledgeMs": 0,
+          "gpuMs": 247
+        },
+        {
+          "prepareMs": 51,
+          "submitMs": 31,
+          "acknowledgeMs": 0,
+          "gpuMs": 256.9
+        },
+        {
+          "prepareMs": 50.7,
+          "submitMs": 30,
+          "acknowledgeMs": 0,
+          "gpuMs": 246.3
+        },
+        {
+          "prepareMs": 51,
+          "submitMs": 30.7,
+          "acknowledgeMs": 0,
+          "gpuMs": 249.7
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "prepareMs": 60.7,
+          "submitMs": 36.7,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 287.3
+        },
+        {
+          "prepareMs": 62,
+          "submitMs": 40.7,
+          "acknowledgeMs": 0.2,
+          "gpuMs": 286.6
+        },
+        {
+          "prepareMs": 60.7,
+          "submitMs": 36.9,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 277.7
+        },
+        {
+          "prepareMs": 56.8,
+          "submitMs": 35.7,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 278.9
+        },
+        {
+          "prepareMs": 57.8,
+          "submitMs": 39.4,
+          "acknowledgeMs": 0.2,
+          "gpuMs": 299.3
+        }
+      ],
+      "longTasksOver50": [
+        118,
+        116,
+        116,
+        119,
+        119
+      ],
+      "frames": [
+        117,
+        116,
+        116,
+        119,
+        118
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ]
+    },
+    {
+      "scenario": "e26-mixed-all-pan-10k/v2",
+      "variant": "frame",
+      "project": "edge-dpr2-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "f6ee3e5d6036e592f7eb9d2920f8aac16756c8f88e3e3d02dd8dc72cf2b14a47"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        83.3,
+        66.8,
+        66.7,
+        83.3,
+        66.7
+      ],
+      "perRunP95Ms": [
+        83.5,
+        83.4,
+        83.4,
+        83.5,
+        83.4
+      ],
+      "perRunP99Ms": [
+        200,
+        200.1,
+        200,
+        200,
+        200
+      ],
+      "maxPerRunP95Ms": 83.5,
+      "pass": false,
+      "encodeAndSubmitP95Ms": [
+        88.5,
+        80.6,
+        85.4,
+        83.6,
+        84
+      ],
+      "splitMedianMs": [
+        {
+          "prepareMs": 43.1,
+          "submitMs": 27.5,
+          "acknowledgeMs": 0,
+          "gpuMs": 228
+        },
+        {
+          "prepareMs": 42.9,
+          "submitMs": 27.8,
+          "acknowledgeMs": 0,
+          "gpuMs": 223.6
+        },
+        {
+          "prepareMs": 42.6,
+          "submitMs": 27.3,
+          "acknowledgeMs": 0,
+          "gpuMs": 224.5
+        },
+        {
+          "prepareMs": 43.6,
+          "submitMs": 29.2,
+          "acknowledgeMs": 0,
+          "gpuMs": 235.9
+        },
+        {
+          "prepareMs": 42.6,
+          "submitMs": 27.3,
+          "acknowledgeMs": 0,
+          "gpuMs": 224.5
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "prepareMs": 53.2,
+          "submitMs": 34.6,
+          "acknowledgeMs": 0.3,
+          "gpuMs": 286.7
+        },
+        {
+          "prepareMs": 50.4,
+          "submitMs": 34.3,
+          "acknowledgeMs": 0.4,
+          "gpuMs": 290.2
+        },
+        {
+          "prepareMs": 53.6,
+          "submitMs": 34,
+          "acknowledgeMs": 0.4,
+          "gpuMs": 346.1
+        },
+        {
+          "prepareMs": 52.2,
+          "submitMs": 34.6,
+          "acknowledgeMs": 0.4,
+          "gpuMs": 309.7
+        },
+        {
+          "prepareMs": 51.4,
+          "submitMs": 33.5,
+          "acknowledgeMs": 0.4,
+          "gpuMs": 366.8
+        }
+      ],
+      "longTasksOver50": [
+        128,
+        129,
+        130,
+        126,
+        130
+      ],
+      "frames": [
+        127,
+        128,
+        129,
+        125,
+        129
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ]
+    },
+    {
+      "scenario": "e26-simple-stress-10k/v2",
+      "variant": "frame",
+      "project": "chrome-dpr1-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "ce0fab1e69a868c74efce7c77dbec160f1e2b6c1353f337e2b78c5c8ec62d9d9"
+      ],
+      "browser": "chromium 156.0.8078.80",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "perRunP95Ms": [
+        16.8,
+        16.8,
+        16.8,
+        16.8,
+        16.8
+      ],
+      "perRunP99Ms": [
+        16.9,
+        16.9,
+        16.9,
+        16.9,
+        16.9
+      ],
+      "maxPerRunP95Ms": 16.8,
+      "pass": true,
+      "encodeAndSubmitP95Ms": [
+        13.7,
+        13.6,
+        13.7,
+        13.6,
+        13.6
+      ],
+      "splitMedianMs": [
+        {
+          "prepareMs": 11.8,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 4.3
+        },
+        {
+          "prepareMs": 11.7,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 4.3
+        },
+        {
+          "prepareMs": 11.6,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 3.9
+        },
+        {
+          "prepareMs": 11.6,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 4
+        },
+        {
+          "prepareMs": 11.7,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 4
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "prepareMs": 13.1,
+          "submitMs": 0.8,
+          "acknowledgeMs": 0,
+          "gpuMs": 18.4
+        },
+        {
+          "prepareMs": 13,
+          "submitMs": 0.8,
+          "acknowledgeMs": 0,
+          "gpuMs": 18.6
+        },
+        {
+          "prepareMs": 13,
+          "submitMs": 0.8,
+          "acknowledgeMs": 0,
+          "gpuMs": 18.9
+        },
+        {
+          "prepareMs": 12.8,
+          "submitMs": 0.9,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 17.8
+        },
+        {
+          "prepareMs": 12.9,
+          "submitMs": 0.9,
+          "acknowledgeMs": 0,
+          "gpuMs": 18.3
+        }
+      ],
+      "longTasksOver50": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "frames": [
+        599,
+        599,
+        599,
+        599,
+        599
+      ],
+      "layerRows": [
+        10000,
+        10000,
+        10000,
+        10000,
+        10000
+      ]
+    },
+    {
+      "scenario": "e26-simple-stress-10k/v2",
+      "variant": "frame",
+      "project": "chrome-dpr2-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "025d863ef6c8d21bdcefb2d3605e4f4dc193a796a636f1a98c87138685ff9565"
+      ],
+      "browser": "chromium 156.0.8078.80",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "perRunP95Ms": [
+        16.8,
+        16.8,
+        16.8,
+        16.8,
+        16.8
+      ],
+      "perRunP99Ms": [
+        16.9,
+        16.9,
+        16.9,
+        16.9,
+        16.9
+      ],
+      "maxPerRunP95Ms": 16.8,
+      "pass": true,
+      "encodeAndSubmitP95Ms": [
+        11,
+        11.3,
+        10.9,
+        11.5,
+        10.9
+      ],
+      "splitMedianMs": [
+        {
+          "prepareMs": 9.8,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 4.3
+        },
+        {
+          "prepareMs": 9.8,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 4.1
+        },
+        {
+          "prepareMs": 9.9,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 4.2
+        },
+        {
+          "prepareMs": 9.8,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 3.8
+        },
+        {
+          "prepareMs": 9.6,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 4.2
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "prepareMs": 10.4,
+          "submitMs": 0.7,
+          "acknowledgeMs": 0,
+          "gpuMs": 5.8
+        },
+        {
+          "prepareMs": 10.7,
+          "submitMs": 0.7,
+          "acknowledgeMs": 0,
+          "gpuMs": 5.6
+        },
+        {
+          "prepareMs": 10.3,
+          "submitMs": 0.7,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 5.8
+        },
+        {
+          "prepareMs": 10.8,
+          "submitMs": 0.7,
+          "acknowledgeMs": 0,
+          "gpuMs": 16.9
+        },
+        {
+          "prepareMs": 10.2,
+          "submitMs": 0.7,
+          "acknowledgeMs": 0,
+          "gpuMs": 16.6
+        }
+      ],
+      "longTasksOver50": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "frames": [
+        599,
+        599,
+        599,
+        598,
+        599
+      ],
+      "layerRows": [
+        10000,
+        10000,
+        10000,
+        10000,
+        10000
+      ]
+    },
+    {
+      "scenario": "e26-simple-stress-10k/v2",
+      "variant": "frame",
+      "project": "edge-dpr1-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "ce0fab1e69a868c74efce7c77dbec160f1e2b6c1353f337e2b78c5c8ec62d9d9"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "perRunP95Ms": [
+        16.8,
+        16.8,
+        16.8,
+        16.8,
+        16.8
+      ],
+      "perRunP99Ms": [
+        16.8,
+        16.9,
+        16.8,
+        16.9,
+        16.8
+      ],
+      "maxPerRunP95Ms": 16.8,
+      "pass": true,
+      "encodeAndSubmitP95Ms": [
+        12.5,
+        10.9,
+        10.9,
+        10.8,
+        10.8
+      ],
+      "splitMedianMs": [
+        {
+          "prepareMs": 9.7,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 34.4
+        },
+        {
+          "prepareMs": 9.7,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 4
+        },
+        {
+          "prepareMs": 9.9,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 34.3
+        },
+        {
+          "prepareMs": 9.7,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 3.9
+        },
+        {
+          "prepareMs": 9.8,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 34.3
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "prepareMs": 11.8,
+          "submitMs": 0.7,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 34.9
+        },
+        {
+          "prepareMs": 10.2,
+          "submitMs": 0.7,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 4.9
+        },
+        {
+          "prepareMs": 10.2,
+          "submitMs": 0.7,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 35
+        },
+        {
+          "prepareMs": 10.1,
+          "submitMs": 0.7,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 5.1
+        },
+        {
+          "prepareMs": 10.2,
+          "submitMs": 0.7,
+          "acknowledgeMs": 0,
+          "gpuMs": 34.9
+        }
+      ],
+      "longTasksOver50": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "frames": [
+        599,
+        599,
+        599,
+        599,
+        599
+      ],
+      "layerRows": [
+        10000,
+        10000,
+        10000,
+        10000,
+        10000
+      ]
+    },
+    {
+      "scenario": "e26-simple-stress-10k/v2",
+      "variant": "frame",
+      "project": "edge-dpr2-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "025d863ef6c8d21bdcefb2d3605e4f4dc193a796a636f1a98c87138685ff9565"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "frame",
+      "ceilingMs": 33.3,
+      "perRunMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "perRunP95Ms": [
+        16.8,
+        16.8,
+        16.8,
+        16.8,
+        16.8
+      ],
+      "perRunP99Ms": [
+        16.8,
+        16.9,
+        16.9,
+        16.9,
+        16.8
+      ],
+      "maxPerRunP95Ms": 16.8,
+      "pass": true,
+      "encodeAndSubmitP95Ms": [
+        10.6,
+        10.7,
+        10.8,
+        10.7,
+        11.2
+      ],
+      "splitMedianMs": [
+        {
+          "prepareMs": 9.5,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 4.2
+        },
+        {
+          "prepareMs": 9.6,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 4.2
+        },
+        {
+          "prepareMs": 9.6,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 4.1
+        },
+        {
+          "prepareMs": 9.5,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 4.3
+        },
+        {
+          "prepareMs": 9.5,
+          "submitMs": 0.6,
+          "acknowledgeMs": 0,
+          "gpuMs": 4.3
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "prepareMs": 10,
+          "submitMs": 0.7,
+          "acknowledgeMs": 0,
+          "gpuMs": 5.1
+        },
+        {
+          "prepareMs": 10.1,
+          "submitMs": 0.7,
+          "acknowledgeMs": 0,
+          "gpuMs": 5.2
+        },
+        {
+          "prepareMs": 10.1,
+          "submitMs": 0.7,
+          "acknowledgeMs": 0.1,
+          "gpuMs": 5.2
+        },
+        {
+          "prepareMs": 10,
+          "submitMs": 0.7,
+          "acknowledgeMs": 0,
+          "gpuMs": 17.8
+        },
+        {
+          "prepareMs": 10.5,
+          "submitMs": 0.7,
+          "acknowledgeMs": 0,
+          "gpuMs": 6.1
+        }
+      ],
+      "longTasksOver50": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "frames": [
+        599,
+        599,
+        599,
+        599,
+        599
+      ],
+      "layerRows": [
+        10000,
+        10000,
+        10000,
+        10000,
+        10000
+      ]
+    },
+    {
+      "scenario": "e26-pointer-busy-10k/v2",
+      "variant": "busy",
+      "project": "chrome-dpr1-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "4244e7ba542e6ad4013b10c4d76971766fba2752ca855a2de35e5e332507c59c"
+      ],
+      "browser": "chromium 156.0.8078.80",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        140.8,
+        150.4,
+        139.6,
+        177,
+        139.8
+      ],
+      "perRunP95Ms": [
+        445.6,
+        366.7,
+        367.2,
+        439.7,
+        429
+      ],
+      "maxPerRunP95Ms": 445.6,
+      "pass": false,
+      "samples": [
+        228,
+        227,
+        227,
+        228,
+        229
+      ],
+      "splitMedianMs": [
+        {
+          "inputToDispatchMs": 10.4,
+          "handlerMs": 10.8,
+          "waitToPrepareMs": 11.6,
+          "prepareMs": 6.6,
+          "submitMs": 4.1,
+          "claimToDoneMs": 85.8
+        },
+        {
+          "inputToDispatchMs": 10.8,
+          "handlerMs": 11,
+          "waitToPrepareMs": 11.8,
+          "prepareMs": 6.5,
+          "submitMs": 4.1,
+          "claimToDoneMs": 93.9
+        },
+        {
+          "inputToDispatchMs": 10.9,
+          "handlerMs": 10.9,
+          "waitToPrepareMs": 11.8,
+          "prepareMs": 6.9,
+          "submitMs": 4.1,
+          "claimToDoneMs": 85.5
+        },
+        {
+          "inputToDispatchMs": 10.9,
+          "handlerMs": 11.2,
+          "waitToPrepareMs": 12.2,
+          "prepareMs": 6.9,
+          "submitMs": 4.1,
+          "claimToDoneMs": 119.7
+        },
+        {
+          "inputToDispatchMs": 10.6,
+          "handlerMs": 11,
+          "waitToPrepareMs": 11.9,
+          "prepareMs": 6.6,
+          "submitMs": 4.1,
+          "claimToDoneMs": 86.8
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "inputToDispatchMs": 23.3,
+          "handlerMs": 13,
+          "waitToPrepareMs": 36.4,
+          "prepareMs": 9.9,
+          "submitMs": 5,
+          "claimToDoneMs": 424.3
+        },
+        {
+          "inputToDispatchMs": 25.3,
+          "handlerMs": 13.1,
+          "waitToPrepareMs": 40,
+          "prepareMs": 10,
+          "submitMs": 5.1,
+          "claimToDoneMs": 306.6
+        },
+        {
+          "inputToDispatchMs": 23.6,
+          "handlerMs": 12.9,
+          "waitToPrepareMs": 38.2,
+          "prepareMs": 10.7,
+          "submitMs": 5.1,
+          "claimToDoneMs": 312.9
+        },
+        {
+          "inputToDispatchMs": 24.4,
+          "handlerMs": 12.6,
+          "waitToPrepareMs": 37.1,
+          "prepareMs": 9.8,
+          "submitMs": 4.7,
+          "claimToDoneMs": 382.8
+        },
+        {
+          "inputToDispatchMs": 23.9,
+          "handlerMs": 12.6,
+          "waitToPrepareMs": 36.5,
+          "prepareMs": 10.2,
+          "submitMs": 5,
+          "claimToDoneMs": 377
+        }
+      ],
+      "splitUnpaired": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        499,
+        500,
+        500,
+        500,
+        500
+      ],
+      "longTasksOver50OutsideIsolation": [
+        2,
+        2,
+        2,
+        2,
+        1
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        66,
+        73,
+        68,
+        67,
+        64
+      ],
+      "isolationMs": [
+        [
+          147.4
+        ],
+        [
+          147.2
+        ],
+        [
+          144.6
+        ],
+        [
+          144.5
+        ],
+        [
+          144.6
+        ]
+      ],
+      "writesDuringPress": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "firstWriteAfterUpMs": [
+        73.5,
+        74.1,
+        81.7,
+        76.4,
+        70.7
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ],
+      "fontLoadStatus": [
+        "loaded",
+        "loaded",
+        "loaded",
+        "loaded",
+        "loaded"
+      ],
+      "longTasksOver50DuringFontLoad": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "scenario": "e26-pointer-busy-10k/v2",
+      "variant": "busy",
+      "project": "chrome-dpr2-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "74f1b1e2f6fa80e93473da9af9dce3e5dfc3407d397451c90e83108fb7bc0f9f"
+      ],
+      "browser": "chromium 156.0.8078.80",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        216.8,
+        165.7,
+        179.8,
+        142.3,
+        158.3
+      ],
+      "perRunP95Ms": [
+        582.2,
+        485.9,
+        545.6,
+        408.3,
+        408.9
+      ],
+      "maxPerRunP95Ms": 582.2,
+      "pass": false,
+      "samples": [
+        232,
+        224,
+        232,
+        230,
+        227
+      ],
+      "splitMedianMs": [
+        {
+          "inputToDispatchMs": 10.2,
+          "handlerMs": 10.4,
+          "waitToPrepareMs": 10.8,
+          "prepareMs": 6.5,
+          "submitMs": 4,
+          "claimToDoneMs": 159.5
+        },
+        {
+          "inputToDispatchMs": 10.3,
+          "handlerMs": 10.6,
+          "waitToPrepareMs": 10.7,
+          "prepareMs": 6.1,
+          "submitMs": 4,
+          "claimToDoneMs": 115
+        },
+        {
+          "inputToDispatchMs": 10.3,
+          "handlerMs": 10.4,
+          "waitToPrepareMs": 10.7,
+          "prepareMs": 6.2,
+          "submitMs": 4,
+          "claimToDoneMs": 126
+        },
+        {
+          "inputToDispatchMs": 10.1,
+          "handlerMs": 10.4,
+          "waitToPrepareMs": 10.6,
+          "prepareMs": 6.2,
+          "submitMs": 4,
+          "claimToDoneMs": 85.4
+        },
+        {
+          "inputToDispatchMs": 10.4,
+          "handlerMs": 10.5,
+          "waitToPrepareMs": 10.8,
+          "prepareMs": 6.3,
+          "submitMs": 4,
+          "claimToDoneMs": 115.7
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "inputToDispatchMs": 22.3,
+          "handlerMs": 11.9,
+          "waitToPrepareMs": 32.4,
+          "prepareMs": 9.4,
+          "submitMs": 4.8,
+          "claimToDoneMs": 550.5
+        },
+        {
+          "inputToDispatchMs": 21.9,
+          "handlerMs": 12.4,
+          "waitToPrepareMs": 26.8,
+          "prepareMs": 9.1,
+          "submitMs": 4.7,
+          "claimToDoneMs": 454.5
+        },
+        {
+          "inputToDispatchMs": 22.2,
+          "handlerMs": 12.3,
+          "waitToPrepareMs": 25.1,
+          "prepareMs": 9.7,
+          "submitMs": 4.4,
+          "claimToDoneMs": 508.4
+        },
+        {
+          "inputToDispatchMs": 21.7,
+          "handlerMs": 12.3,
+          "waitToPrepareMs": 32.8,
+          "prepareMs": 9.5,
+          "submitMs": 5.1,
+          "claimToDoneMs": 370.2
+        },
+        {
+          "inputToDispatchMs": 22.7,
+          "handlerMs": 12.3,
+          "waitToPrepareMs": 24.4,
+          "prepareMs": 8,
+          "submitMs": 4.8,
+          "claimToDoneMs": 376.3
+        }
+      ],
+      "splitUnpaired": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        500,
+        500,
+        500,
+        500,
+        500
+      ],
+      "longTasksOver50OutsideIsolation": [
+        1,
+        1,
+        1,
+        1,
+        2
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        68,
+        73,
+        64,
+        61,
+        62
+      ],
+      "isolationMs": [
+        [
+          136.3
+        ],
+        [
+          139.5
+        ],
+        [
+          138.4
+        ],
+        [
+          142.2
+        ],
+        [
+          138.4
+        ]
+      ],
+      "writesDuringPress": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "firstWriteAfterUpMs": [
+        71.2,
+        74.9,
+        68.2,
+        71.9,
+        69.3
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ],
+      "fontLoadStatus": [
+        "loaded",
+        "loaded",
+        "loaded",
+        "loaded",
+        "loaded"
+      ],
+      "longTasksOver50DuringFontLoad": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "scenario": "e26-pointer-busy-10k/v2",
+      "variant": "busy",
+      "project": "edge-dpr1-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "4244e7ba542e6ad4013b10c4d76971766fba2752ca855a2de35e5e332507c59c"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        139.4,
+        145.2,
+        130.5,
+        140,
+        146.4
+      ],
+      "perRunP95Ms": [
+        269.9,
+        658.7,
+        455.9,
+        417.7,
+        405.7
+      ],
+      "maxPerRunP95Ms": 658.7,
+      "pass": false,
+      "samples": [
+        226,
+        228,
+        226,
+        226,
+        227
+      ],
+      "splitMedianMs": [
+        {
+          "inputToDispatchMs": 10.2,
+          "handlerMs": 10.6,
+          "waitToPrepareMs": 10.9,
+          "prepareMs": 6.4,
+          "submitMs": 4.1,
+          "claimToDoneMs": 91.4
+        },
+        {
+          "inputToDispatchMs": 10.5,
+          "handlerMs": 10.6,
+          "waitToPrepareMs": 11,
+          "prepareMs": 6.7,
+          "submitMs": 4.2,
+          "claimToDoneMs": 95.9
+        },
+        {
+          "inputToDispatchMs": 10.4,
+          "handlerMs": 10.6,
+          "waitToPrepareMs": 10.9,
+          "prepareMs": 6.7,
+          "submitMs": 4.2,
+          "claimToDoneMs": 82.1
+        },
+        {
+          "inputToDispatchMs": 10,
+          "handlerMs": 10.5,
+          "waitToPrepareMs": 11,
+          "prepareMs": 6.6,
+          "submitMs": 4.2,
+          "claimToDoneMs": 85.1
+        },
+        {
+          "inputToDispatchMs": 10.2,
+          "handlerMs": 10.7,
+          "waitToPrepareMs": 11,
+          "prepareMs": 6.6,
+          "submitMs": 4.1,
+          "claimToDoneMs": 98.8
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "inputToDispatchMs": 24.5,
+          "handlerMs": 13,
+          "waitToPrepareMs": 32.9,
+          "prepareMs": 11.3,
+          "submitMs": 6.2,
+          "claimToDoneMs": 219.3
+        },
+        {
+          "inputToDispatchMs": 24.3,
+          "handlerMs": 13.8,
+          "waitToPrepareMs": 35.4,
+          "prepareMs": 9.5,
+          "submitMs": 6.4,
+          "claimToDoneMs": 627.3
+        },
+        {
+          "inputToDispatchMs": 24.2,
+          "handlerMs": 12.5,
+          "waitToPrepareMs": 31.8,
+          "prepareMs": 11,
+          "submitMs": 6.2,
+          "claimToDoneMs": 431.5
+        },
+        {
+          "inputToDispatchMs": 23.7,
+          "handlerMs": 13.6,
+          "waitToPrepareMs": 34.8,
+          "prepareMs": 10.1,
+          "submitMs": 6.3,
+          "claimToDoneMs": 376.1
+        },
+        {
+          "inputToDispatchMs": 25.5,
+          "handlerMs": 13.4,
+          "waitToPrepareMs": 34,
+          "prepareMs": 11.1,
+          "submitMs": 6.4,
+          "claimToDoneMs": 366.8
+        }
+      ],
+      "splitUnpaired": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        499,
+        500,
+        500,
+        499,
+        500
+      ],
+      "longTasksOver50OutsideIsolation": [
+        2,
+        1,
+        2,
+        1,
+        2
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        74,
+        70,
+        73,
+        66,
+        69
+      ],
+      "isolationMs": [
+        [
+          168.6
+        ],
+        [
+          169.7
+        ],
+        [
+          164.6
+        ],
+        [
+          168.7
+        ],
+        [
+          169.8
+        ]
+      ],
+      "writesDuringPress": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "firstWriteAfterUpMs": [
+        74.5,
+        73.9,
+        79.5,
+        76,
+        70.7
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ],
+      "fontLoadStatus": [
+        "loaded",
+        "loaded",
+        "loaded",
+        "loaded",
+        "loaded"
+      ],
+      "longTasksOver50DuringFontLoad": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "scenario": "e26-pointer-busy-10k/v2",
+      "variant": "busy",
+      "project": "edge-dpr2-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "74f1b1e2f6fa80e93473da9af9dce3e5dfc3407d397451c90e83108fb7bc0f9f"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        130.9,
+        180.1,
+        127.5,
+        134,
+        168
+      ],
+      "perRunP95Ms": [
+        358.8,
+        520.8,
+        424.2,
+        390.1,
+        518.4
+      ],
+      "maxPerRunP95Ms": 520.8,
+      "pass": false,
+      "samples": [
+        232,
+        232,
+        232,
+        228,
+        234
+      ],
+      "splitMedianMs": [
+        {
+          "inputToDispatchMs": 10.1,
+          "handlerMs": 10.3,
+          "waitToPrepareMs": 10.5,
+          "prepareMs": 6.1,
+          "submitMs": 4,
+          "claimToDoneMs": 83.7
+        },
+        {
+          "inputToDispatchMs": 10.2,
+          "handlerMs": 10.4,
+          "waitToPrepareMs": 10.7,
+          "prepareMs": 6.1,
+          "submitMs": 4,
+          "claimToDoneMs": 124.1
+        },
+        {
+          "inputToDispatchMs": 10.1,
+          "handlerMs": 10.2,
+          "waitToPrepareMs": 10.5,
+          "prepareMs": 6,
+          "submitMs": 4,
+          "claimToDoneMs": 78.8
+        },
+        {
+          "inputToDispatchMs": 10.2,
+          "handlerMs": 10.4,
+          "waitToPrepareMs": 10.7,
+          "prepareMs": 6.1,
+          "submitMs": 4.1,
+          "claimToDoneMs": 82.8
+        },
+        {
+          "inputToDispatchMs": 10,
+          "handlerMs": 10,
+          "waitToPrepareMs": 10.3,
+          "prepareMs": 6.1,
+          "submitMs": 4,
+          "claimToDoneMs": 119.1
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "inputToDispatchMs": 22,
+          "handlerMs": 12.2,
+          "waitToPrepareMs": 23.9,
+          "prepareMs": 9.6,
+          "submitMs": 4.9,
+          "claimToDoneMs": 303.9
+        },
+        {
+          "inputToDispatchMs": 21.7,
+          "handlerMs": 12,
+          "waitToPrepareMs": 23.1,
+          "prepareMs": 10.2,
+          "submitMs": 4.6,
+          "claimToDoneMs": 470.4
+        },
+        {
+          "inputToDispatchMs": 22.7,
+          "handlerMs": 11.9,
+          "waitToPrepareMs": 23.2,
+          "prepareMs": 8.7,
+          "submitMs": 4.5,
+          "claimToDoneMs": 382.9
+        },
+        {
+          "inputToDispatchMs": 22.7,
+          "handlerMs": 12.1,
+          "waitToPrepareMs": 24.5,
+          "prepareMs": 8.1,
+          "submitMs": 4.8,
+          "claimToDoneMs": 342.4
+        },
+        {
+          "inputToDispatchMs": 22.7,
+          "handlerMs": 12,
+          "waitToPrepareMs": 23.9,
+          "prepareMs": 8.2,
+          "submitMs": 4.7,
+          "claimToDoneMs": 482.6
+        }
+      ],
+      "splitUnpaired": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        499,
+        499,
+        500,
+        500,
+        500
+      ],
+      "longTasksOver50OutsideIsolation": [
+        1,
+        2,
+        3,
+        2,
+        2
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        61,
+        62,
+        65,
+        63,
+        70
+      ],
+      "isolationMs": [
+        [
+          138.8
+        ],
+        [
+          137.9
+        ],
+        [
+          135.2
+        ],
+        [
+          138.4
+        ],
+        [
+          137
+        ]
+      ],
+      "writesDuringPress": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "firstWriteAfterUpMs": [
+        68.5,
+        70.9,
+        65.1,
+        68.2,
+        68.3
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ],
+      "fontLoadStatus": [
+        "loaded",
+        "loaded",
+        "loaded",
+        "loaded",
+        "loaded"
+      ],
+      "longTasksOver50DuringFontLoad": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "scenario": "e26-pointer-busy-10k/v2",
+      "variant": "plain",
+      "project": "chrome-dpr1-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "86ae783b4a175c3881c99e5c23041afd87c7a95c12aade2b51c4e1894b32e2da"
+      ],
+      "browser": "chromium 156.0.8078.80",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        136.1,
+        144.7,
+        142.9,
+        150.8,
+        141.9
+      ],
+      "perRunP95Ms": [
+        304.6,
+        358.9,
+        361.3,
+        410.7,
+        422.8
+      ],
+      "maxPerRunP95Ms": 422.8,
+      "pass": false,
+      "samples": [
+        241,
+        238,
+        245,
+        244,
+        247
+      ],
+      "splitMedianMs": [
+        {
+          "inputToDispatchMs": 10.9,
+          "handlerMs": 11.1,
+          "waitToPrepareMs": 11.7,
+          "prepareMs": 6.6,
+          "submitMs": 4.1,
+          "claimToDoneMs": 94.7
+        },
+        {
+          "inputToDispatchMs": 10.8,
+          "handlerMs": 11.1,
+          "waitToPrepareMs": 11.7,
+          "prepareMs": 6.7,
+          "submitMs": 4.1,
+          "claimToDoneMs": 95.5
+        },
+        {
+          "inputToDispatchMs": 10.6,
+          "handlerMs": 11,
+          "waitToPrepareMs": 11.7,
+          "prepareMs": 6.4,
+          "submitMs": 4.1,
+          "claimToDoneMs": 99
+        },
+        {
+          "inputToDispatchMs": 10.6,
+          "handlerMs": 10.9,
+          "waitToPrepareMs": 11.7,
+          "prepareMs": 6.5,
+          "submitMs": 4.1,
+          "claimToDoneMs": 99.9
+        },
+        {
+          "inputToDispatchMs": 10.8,
+          "handlerMs": 10.9,
+          "waitToPrepareMs": 11.7,
+          "prepareMs": 6.6,
+          "submitMs": 4.1,
+          "claimToDoneMs": 92.5
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "inputToDispatchMs": 23.2,
+          "handlerMs": 12.6,
+          "waitToPrepareMs": 34.5,
+          "prepareMs": 8.4,
+          "submitMs": 4.9,
+          "claimToDoneMs": 247.7
+        },
+        {
+          "inputToDispatchMs": 24.1,
+          "handlerMs": 12.9,
+          "waitToPrepareMs": 37.3,
+          "prepareMs": 8.5,
+          "submitMs": 4.8,
+          "claimToDoneMs": 312.7
+        },
+        {
+          "inputToDispatchMs": 22.9,
+          "handlerMs": 12.5,
+          "waitToPrepareMs": 35.3,
+          "prepareMs": 8.1,
+          "submitMs": 4.6,
+          "claimToDoneMs": 323.9
+        },
+        {
+          "inputToDispatchMs": 22.9,
+          "handlerMs": 12.6,
+          "waitToPrepareMs": 36.1,
+          "prepareMs": 8.4,
+          "submitMs": 4.9,
+          "claimToDoneMs": 355.2
+        },
+        {
+          "inputToDispatchMs": 23.2,
+          "handlerMs": 12.3,
+          "waitToPrepareMs": 34.9,
+          "prepareMs": 8.5,
+          "submitMs": 4.7,
+          "claimToDoneMs": 388.5
+        }
+      ],
+      "splitUnpaired": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        499,
+        500,
+        500,
+        500,
+        500
+      ],
+      "longTasksOver50OutsideIsolation": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "isolationMs": [
+        [],
+        [],
+        [],
+        [],
+        []
+      ],
+      "writesDuringPress": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "firstWriteAfterUpMs": [
+        533.8,
+        528.4,
+        532.1,
+        536.3,
+        531.5
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ],
+      "fontLoadStatus": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "longTasksOver50DuringFontLoad": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "scenario": "e26-pointer-busy-10k/v2",
+      "variant": "plain",
+      "project": "chrome-dpr2-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "1794d260c5097f4454c9a80d0a98d7df5e1b82a37f7a20889bd2802533b774cf"
+      ],
+      "browser": "chromium 156.0.8078.80",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        143.7,
+        175.6,
+        212.3,
+        164.8,
+        200
+      ],
+      "perRunP95Ms": [
+        845.1,
+        452.6,
+        503.5,
+        543.4,
+        440.6
+      ],
+      "maxPerRunP95Ms": 845.1,
+      "pass": false,
+      "samples": [
+        240,
+        241,
+        243,
+        247,
+        245
+      ],
+      "splitMedianMs": [
+        {
+          "inputToDispatchMs": 10.3,
+          "handlerMs": 10.6,
+          "waitToPrepareMs": 10.7,
+          "prepareMs": 6,
+          "submitMs": 4,
+          "claimToDoneMs": 105.1
+        },
+        {
+          "inputToDispatchMs": 10.2,
+          "handlerMs": 10.4,
+          "waitToPrepareMs": 10.4,
+          "prepareMs": 6.1,
+          "submitMs": 3.9,
+          "claimToDoneMs": 135.2
+        },
+        {
+          "inputToDispatchMs": 10.2,
+          "handlerMs": 10.6,
+          "waitToPrepareMs": 10.8,
+          "prepareMs": 6,
+          "submitMs": 4,
+          "claimToDoneMs": 170.7
+        },
+        {
+          "inputToDispatchMs": 10.3,
+          "handlerMs": 10.4,
+          "waitToPrepareMs": 10.8,
+          "prepareMs": 6.3,
+          "submitMs": 4,
+          "claimToDoneMs": 126.5
+        },
+        {
+          "inputToDispatchMs": 10.3,
+          "handlerMs": 10.4,
+          "waitToPrepareMs": 10.7,
+          "prepareMs": 6.3,
+          "submitMs": 4,
+          "claimToDoneMs": 160.6
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "inputToDispatchMs": 21.6,
+          "handlerMs": 12.4,
+          "waitToPrepareMs": 25.2,
+          "prepareMs": 7.3,
+          "submitMs": 4.9,
+          "claimToDoneMs": 790.7
+        },
+        {
+          "inputToDispatchMs": 21.9,
+          "handlerMs": 12.2,
+          "waitToPrepareMs": 22.8,
+          "prepareMs": 7.4,
+          "submitMs": 4.8,
+          "claimToDoneMs": 401.4
+        },
+        {
+          "inputToDispatchMs": 21.7,
+          "handlerMs": 12.1,
+          "waitToPrepareMs": 23.2,
+          "prepareMs": 7.3,
+          "submitMs": 4.4,
+          "claimToDoneMs": 458.8
+        },
+        {
+          "inputToDispatchMs": 22.1,
+          "handlerMs": 12.1,
+          "waitToPrepareMs": 23.5,
+          "prepareMs": 7.9,
+          "submitMs": 4.7,
+          "claimToDoneMs": 519.9
+        },
+        {
+          "inputToDispatchMs": 21.2,
+          "handlerMs": 12,
+          "waitToPrepareMs": 22.9,
+          "prepareMs": 7.5,
+          "submitMs": 4.7,
+          "claimToDoneMs": 399.9
+        }
+      ],
+      "splitUnpaired": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        499,
+        500,
+        500,
+        500,
+        500
+      ],
+      "longTasksOver50OutsideIsolation": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "isolationMs": [
+        [],
+        [],
+        [],
+        [],
+        []
+      ],
+      "writesDuringPress": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "firstWriteAfterUpMs": [
+        537.2,
+        534.7,
+        524.6,
+        522.6,
+        529.1
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ],
+      "fontLoadStatus": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "longTasksOver50DuringFontLoad": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "scenario": "e26-pointer-busy-10k/v2",
+      "variant": "plain",
+      "project": "edge-dpr1-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "86ae783b4a175c3881c99e5c23041afd87c7a95c12aade2b51c4e1894b32e2da"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        135.8,
+        127.6,
+        135,
+        125.4,
+        132.7
+      ],
+      "perRunP95Ms": [
+        371.6,
+        354.2,
+        449.8,
+        299.3,
+        568.5
+      ],
+      "maxPerRunP95Ms": 568.5,
+      "pass": false,
+      "samples": [
+        244,
+        242,
+        242,
+        244,
+        243
+      ],
+      "splitMedianMs": [
+        {
+          "inputToDispatchMs": 10.2,
+          "handlerMs": 10.5,
+          "waitToPrepareMs": 10.8,
+          "prepareMs": 6.4,
+          "submitMs": 4.1,
+          "claimToDoneMs": 84.6
+        },
+        {
+          "inputToDispatchMs": 10.1,
+          "handlerMs": 10.5,
+          "waitToPrepareMs": 10.8,
+          "prepareMs": 6.3,
+          "submitMs": 4.1,
+          "claimToDoneMs": 83.5
+        },
+        {
+          "inputToDispatchMs": 10.3,
+          "handlerMs": 10.6,
+          "waitToPrepareMs": 10.8,
+          "prepareMs": 6.2,
+          "submitMs": 4.1,
+          "claimToDoneMs": 85.7
+        },
+        {
+          "inputToDispatchMs": 10.3,
+          "handlerMs": 10.6,
+          "waitToPrepareMs": 11,
+          "prepareMs": 6.5,
+          "submitMs": 4.1,
+          "claimToDoneMs": 80.7
+        },
+        {
+          "inputToDispatchMs": 10.2,
+          "handlerMs": 10.5,
+          "waitToPrepareMs": 10.7,
+          "prepareMs": 6.5,
+          "submitMs": 4.1,
+          "claimToDoneMs": 81.8
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "inputToDispatchMs": 22.6,
+          "handlerMs": 12.6,
+          "waitToPrepareMs": 25.4,
+          "prepareMs": 8,
+          "submitMs": 6,
+          "claimToDoneMs": 327
+        },
+        {
+          "inputToDispatchMs": 23.2,
+          "handlerMs": 12.6,
+          "waitToPrepareMs": 23.7,
+          "prepareMs": 8.7,
+          "submitMs": 6.1,
+          "claimToDoneMs": 306.5
+        },
+        {
+          "inputToDispatchMs": 23.3,
+          "handlerMs": 13,
+          "waitToPrepareMs": 25.3,
+          "prepareMs": 7.9,
+          "submitMs": 6.1,
+          "claimToDoneMs": 418.7
+        },
+        {
+          "inputToDispatchMs": 23.1,
+          "handlerMs": 12.6,
+          "waitToPrepareMs": 32,
+          "prepareMs": 8.2,
+          "submitMs": 6.3,
+          "claimToDoneMs": 264
+        },
+        {
+          "inputToDispatchMs": 23.3,
+          "handlerMs": 12.7,
+          "waitToPrepareMs": 23.3,
+          "prepareMs": 8.7,
+          "submitMs": 6.1,
+          "claimToDoneMs": 545.1
+        }
+      ],
+      "splitUnpaired": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        500,
+        500,
+        500,
+        500,
+        500
+      ],
+      "longTasksOver50OutsideIsolation": [
+        0,
+        0,
+        0,
+        1,
+        0
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        0,
+        0,
+        0,
+        79,
+        0
+      ],
+      "isolationMs": [
+        [],
+        [],
+        [],
+        [],
+        []
+      ],
+      "writesDuringPress": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "firstWriteAfterUpMs": [
+        531.2,
+        528,
+        525.2,
+        537,
+        533.7
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ],
+      "fontLoadStatus": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "longTasksOver50DuringFontLoad": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "scenario": "e26-pointer-busy-10k/v2",
+      "variant": "plain",
+      "project": "edge-dpr2-v2",
+      "repetitions": 5,
+      "commits": [
+        "c6762299a61fb5af606ee6f609dc0478944f9f9e"
+      ],
+      "dirty": false,
+      "configurationHashes": [
+        "1794d260c5097f4454c9a80d0a98d7df5e1b82a37f7a20889bd2802533b774cf"
+      ],
+      "browser": "chromium 156.0.4314.58",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "turing",
+        "device": "",
+        "description": ""
+      },
+      "idleRafMedianMs": [
+        16.7,
+        16.7,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "kind": "latency",
+      "boundMs": 50,
+      "perRunMedianMs": [
+        151.7,
+        157.4,
+        266.3,
+        163.4,
+        159.4
+      ],
+      "perRunP95Ms": [
+        454.6,
+        488.8,
+        722.1,
+        671.6,
+        490.3
+      ],
+      "maxPerRunP95Ms": 722.1,
+      "pass": false,
+      "samples": [
+        245,
+        246,
+        244,
+        245,
+        245
+      ],
+      "splitMedianMs": [
+        {
+          "inputToDispatchMs": 10,
+          "handlerMs": 10.4,
+          "waitToPrepareMs": 10.4,
+          "prepareMs": 6.1,
+          "submitMs": 4,
+          "claimToDoneMs": 112.5
+        },
+        {
+          "inputToDispatchMs": 9.9,
+          "handlerMs": 10.3,
+          "waitToPrepareMs": 10.4,
+          "prepareMs": 6,
+          "submitMs": 4.1,
+          "claimToDoneMs": 117.3
+        },
+        {
+          "inputToDispatchMs": 10,
+          "handlerMs": 10.3,
+          "waitToPrepareMs": 10.4,
+          "prepareMs": 6.1,
+          "submitMs": 4,
+          "claimToDoneMs": 224.8
+        },
+        {
+          "inputToDispatchMs": 9.9,
+          "handlerMs": 10.2,
+          "waitToPrepareMs": 10.4,
+          "prepareMs": 6.1,
+          "submitMs": 4,
+          "claimToDoneMs": 128.6
+        },
+        {
+          "inputToDispatchMs": 10.1,
+          "handlerMs": 10.4,
+          "waitToPrepareMs": 10.5,
+          "prepareMs": 6,
+          "submitMs": 4,
+          "claimToDoneMs": 118.6
+        }
+      ],
+      "splitP95Ms": [
+        {
+          "inputToDispatchMs": 21.5,
+          "handlerMs": 12,
+          "waitToPrepareMs": 22.5,
+          "prepareMs": 7.3,
+          "submitMs": 4.7,
+          "claimToDoneMs": 427.5
+        },
+        {
+          "inputToDispatchMs": 21.5,
+          "handlerMs": 12,
+          "waitToPrepareMs": 22.5,
+          "prepareMs": 7.2,
+          "submitMs": 4.4,
+          "claimToDoneMs": 457.6
+        },
+        {
+          "inputToDispatchMs": 21.4,
+          "handlerMs": 11.5,
+          "waitToPrepareMs": 22.2,
+          "prepareMs": 7.7,
+          "submitMs": 4.5,
+          "claimToDoneMs": 667.9
+        },
+        {
+          "inputToDispatchMs": 22.3,
+          "handlerMs": 11.8,
+          "waitToPrepareMs": 22.4,
+          "prepareMs": 7.4,
+          "submitMs": 4.7,
+          "claimToDoneMs": 635.7
+        },
+        {
+          "inputToDispatchMs": 21.6,
+          "handlerMs": 12,
+          "waitToPrepareMs": 23.3,
+          "prepareMs": 7.5,
+          "submitMs": 4.6,
+          "claimToDoneMs": 466.5
+        }
+      ],
+      "splitUnpaired": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "noChange": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "movesSent": [
+        500,
+        500,
+        499,
+        500,
+        500
+      ],
+      "longTasksOver50OutsideIsolation": [
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      "worstLongTaskOutsideIsolationMs": [
+        0,
+        0,
+        0,
+        0,
+        67
+      ],
+      "isolationMs": [
+        [],
+        [],
+        [],
+        [],
+        []
+      ],
+      "writesDuringPress": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "firstWriteAfterUpMs": [
+        530.1,
+        526.5,
+        525.4,
+        531.2,
+        529.7
+      ],
+      "layerRows": [
+        655,
+        655,
+        655,
+        655,
+        655
+      ],
+      "fontLoadStatus": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "longTasksOver50DuringFontLoad": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}
