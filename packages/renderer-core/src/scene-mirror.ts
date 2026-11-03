@@ -108,11 +108,44 @@ type OwnedScene = {
   readonly rootOrder: readonly string[];
   readonly geometryRevisions: Map<string, number>;
   view: Readonly<{
-    nodeList: readonly RenderNodeSnapshot[];
-    nodes: ReadonlyMap<string, RenderNodeSnapshot>;
-    geometryRevisions: ReadonlyMap<string, number>;
+    /** The version's IDs in ordinal order; the node list is built from them when first read. */
+    sortedIds: readonly string[];
+    layer: ViewLayer;
+    nodeList: { value: readonly RenderNodeSnapshot[] | null };
   }> | null;
 };
+
+/**
+ * E30 contract, U4: a view's nodes and geometry revisions. A base layer holds copies of the whole
+ * maps; a layer over it holds only the IDs written since its parent's version, null for a
+ * removed node or a node without a revision, and defers the rest to its parent. A set that
+ * writes a few leaves so costs its view the written IDs, not a copy of the page.
+ */
+type ViewLayer = Readonly<{
+  nodes: ReadonlyMap<string, RenderNodeSnapshot | null>;
+  revisions: ReadonlyMap<string, number | null>;
+  parent: ViewLayer | null;
+  /** Layers below this one, and IDs held by the layers over the base. */
+  depth: number;
+  written: number;
+}>;
+const VIEW_LAYER_DEPTH = 16;
+
+function layerNode(layer: ViewLayer, id: string): RenderNodeSnapshot | undefined {
+  for (let at: ViewLayer | null = layer; at !== null; at = at.parent) {
+    const node = at.nodes.get(id);
+    if (node !== undefined) return node ?? undefined;
+  }
+  return undefined;
+}
+
+function layerRevision(layer: ViewLayer, id: string): number | undefined {
+  for (let at: ViewLayer | null = layer; at !== null; at = at.parent) {
+    const revision = at.revisions.get(id);
+    if (revision !== undefined) return revision ?? undefined;
+  }
+  return undefined;
+}
 
 /** The mirror's indexes of the current scene, mutated in place by each publish. */
 type SceneIndexes = {
@@ -184,6 +217,8 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
    */
   #changeLog: string[] = [];
   #changeFloor = 0;
+  /** E30-U4: the last view's layer, with the change log and serial it was built at. */
+  #lastView: Readonly<{ layer: ViewLayer; log: readonly string[]; serial: number }> | null = null;
 
   static {
     injectNextGeometryRevision = (mirror, next) => {
@@ -444,23 +479,29 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     if (scene === null || this.#synchronizationStatus === 'disposed') return null;
     this.#retired.clear();
     // Once per version, on the frame path: the list and the view's own maps (E26 section 4.1).
-    if (scene.view === null) mergePendingIds(this.#indexes);
-    scene.view ??= Object.freeze({
-      nodeList: Object.freeze(this.#indexes.sortedIds.map((id) => scene.nodes.get(id)!)),
-      nodes: new Map(scene.nodes),
-      geometryRevisions: new Map(scene.geometryRevisions),
-    });
-    const { nodes, geometryRevisions, nodeList } = scene.view;
     const floor = this.#changeFloor;
     const log = this.#changeLog;
     const changeSerial = floor + log.length;
+    if (scene.view === null) {
+      mergePendingIds(this.#indexes);
+      scene.view = Object.freeze({
+        sortedIds: this.#indexes.sortedIds,
+        layer: this.#viewLayer(scene, log, floor, changeSerial),
+        nodeList: { value: null },
+      });
+    }
+    const view = scene.view;
+    const layer = view.layer;
     return Object.freeze({
       sceneEpoch: scene.sceneEpoch,
       version: copyVersion(scene),
-      nodes: nodeList,
+      get nodes() {
+        view.nodeList.value ??= Object.freeze(view.sortedIds.map((id) => layerNode(layer, id)!));
+        return view.nodeList.value;
+      },
       rootOrder: scene.rootOrder,
-      getNode: (id: string) => nodes.get(id),
-      getGeometryRevision: (id: string) => geometryRevisions.get(id),
+      getNode: (id: string) => layerNode(layer, id),
+      getGeometryRevision: (id: string) => layerRevision(layer, id),
       changeSerial,
       // The log is replaced, never truncated, when the floor moves, so a stale view answers null.
       changedSince: (serial: number) =>
@@ -470,6 +511,51 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
             ? null
             : log.slice(serial - floor, changeSerial - floor),
     });
+  }
+
+  /**
+   * E30-U4: the layer of a new view: over the last view's layer when the change log still lists
+   * every ID written since it and the layers stay few and small, else a copy of the whole maps.
+   */
+  #viewLayer(scene: OwnedScene, log: readonly string[], floor: number, serial: number): ViewLayer {
+    const last = this.#lastView;
+    let layer: ViewLayer;
+    if (
+      last !== null &&
+      last.log === log &&
+      last.serial >= floor &&
+      last.serial <= serial &&
+      last.layer.depth < VIEW_LAYER_DEPTH &&
+      last.layer.written + (serial - last.serial) <= Math.max(64, scene.nodes.size >> 3)
+    ) {
+      const ids = log.slice(last.serial - floor, serial - floor);
+      if (ids.length === 0) layer = last.layer;
+      else {
+        const nodes = new Map<string, RenderNodeSnapshot | null>();
+        const revisions = new Map<string, number | null>();
+        for (const id of ids) {
+          nodes.set(id, scene.nodes.get(id) ?? null);
+          revisions.set(id, scene.geometryRevisions.get(id) ?? null);
+        }
+        layer = Object.freeze({
+          nodes,
+          revisions,
+          parent: last.layer,
+          depth: last.layer.depth + 1,
+          written: last.layer.written + nodes.size,
+        });
+      }
+    } else {
+      layer = Object.freeze({
+        nodes: new Map(scene.nodes),
+        revisions: new Map(scene.geometryRevisions),
+        parent: null,
+        depth: 0,
+        written: 0,
+      });
+    }
+    this.#lastView = Object.freeze({ layer, log, serial });
+    return layer;
   }
 
   public getPendingChangeState(): ScenePendingChangeState {
@@ -491,6 +577,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     this.#indexes = emptyIndexes();
     this.#retired.clear();
     this.#resetChangeLog();
+    this.#lastView = null;
     this.#synchronizationStatus = 'disposed';
   }
 
