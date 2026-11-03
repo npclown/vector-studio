@@ -148,6 +148,68 @@ function disableFrameMeasures() {
       ? undefined
       : (measure as (...args: unknown[]) => PerformanceMeasure)(name, ...rest)) as never;
 }
+type Span = { startMs: number; durationMs: number };
+/**
+ * E30-U1c: each ended move's latency split (E30 contract, section 3). A move pairs with the
+ * claiming callback's prepare: the last `vs-prepare` starting at or after `handlerEndMs` and
+ * ending at or before `claimMs`, and the first `vs-submit` after it, before `claimMs`. A move
+ * with no such prepare (or missing stamps) is counted as unpaired, never guessed.
+ */
+function pairLatencySplit(state: {
+  latencies: readonly {
+    inputMs: number;
+    doneMs: number | null;
+    dispatchMs?: number;
+    handlerEndMs?: number;
+    claimMs?: number;
+  }[];
+  measures: { prepare: Span[]; submit: Span[] } | null;
+}) {
+  const { prepare, submit } = state.measures!;
+  const parts = {
+    inputToDispatchMs: [] as number[],
+    handlerMs: [] as number[],
+    waitToPrepareMs: [] as number[],
+    prepareMs: [] as number[],
+    submitMs: [] as number[],
+    claimToDoneMs: [] as number[],
+  };
+  let paired = 0;
+  let unpaired = 0;
+  for (const entry of state.latencies) {
+    const { dispatchMs, handlerEndMs, claimMs, doneMs } = entry;
+    if (doneMs === null || !Number.isFinite(doneMs)) continue;
+    const frame =
+      dispatchMs === undefined || handlerEndMs === undefined || claimMs === undefined
+        ? undefined
+        : [...prepare]
+            .reverse()
+            .find(
+              (span) => span.startMs >= handlerEndMs && span.startMs + span.durationMs <= claimMs,
+            );
+    if (frame === undefined) {
+      unpaired += 1;
+      continue;
+    }
+    const frameEnd = frame.startMs + frame.durationMs;
+    const sent = submit.find(
+      (span) => span.startMs >= frameEnd && span.startMs + span.durationMs <= claimMs!,
+    );
+    paired += 1;
+    parts.inputToDispatchMs.push(dispatchMs! - entry.inputMs);
+    parts.handlerMs.push(handlerEndMs! - dispatchMs!);
+    parts.waitToPrepareMs.push(frame.startMs - handlerEndMs!);
+    parts.prepareMs.push(frame.durationMs);
+    if (sent !== undefined) parts.submitMs.push(sent.durationMs);
+    parts.claimToDoneMs.push(doneMs - claimMs!);
+  }
+  return {
+    split: Object.fromEntries(
+      Object.entries(parts).map(([key, values]) => [key, summary(values)]),
+    ) as Record<keyof typeof parts, ReturnType<typeof summary>>,
+    pairs: { paired, unpaired },
+  };
+}
 if (memoryVariant && traceDirectory !== undefined)
   throw new Error('E26_MEMORY and E26_TRACE record different traces: set one');
 let tracing: { browser: Browser } | null = null;
@@ -990,6 +1052,15 @@ for (const { scenario, variant } of runs) {
           clickCount: type === 'mouseMoved' ? 0 : 1,
         });
       await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: start.x, y: start.y });
+      // E30-U1c: the latency split needs the renderer's vs-* measures, so a frame measurement
+      // window spans the press. It opens before the presence check and the busy set-up, so the
+      // press follows the same steps with the split on or off; E26_SPLIT=0 leaves it closed.
+      if (splitEnabled) {
+        await page.evaluate((names) => {
+          for (const name of names) performance.clearMeasures(name);
+          window.__e26Bench!.backend()!.startFrameMeasurements(8192);
+        }, Object.values(SPLIT_MEASURES));
+      }
       const presenceStart = await presence(page);
       if (busy) {
         await execute(page, [
@@ -1044,10 +1115,25 @@ for (const { scenario, variant } of runs) {
       // measure settle; then the run is read.
       await page.waitForTimeout(1_500);
       const state = await page.evaluate(
-        ({ downMs, upMs, upHandledMs }) => {
+        ({ downMs, upMs, upHandledMs, splitEnabled }) => {
           const hook = window.__e26Bench!;
           const history = hook.editor()!.query({ type: 'history' }) as { undoDepth: number };
+          const entries = (name: string) =>
+            performance
+              .getEntriesByName(name, 'measure')
+              .map((entry) => ({ startMs: entry.startTime, durationMs: entry.duration }));
+          let measures: Record<
+            'prepare' | 'submit',
+            { startMs: number; durationMs: number }[]
+          > | null = null;
+          if (splitEnabled) {
+            hook.backend()!.stopFrameMeasurements();
+            measures = { prepare: entries('vs-prepare'), submit: entries('vs-submit') };
+            for (const name of ['vs-prepare', 'vs-submit', 'vs-acknowledge', 'vs-gpu'])
+              performance.clearMeasures(name);
+          }
           return {
+            measures,
             latencies: hook.latencies.filter(
               (entry) => entry.inputMs >= downMs && entry.inputMs <= upMs,
             ),
@@ -1069,8 +1155,9 @@ for (const { scenario, variant } of runs) {
             recoveryAttempts: hook.backend()!.getStatistics().recoveryAttempts,
           };
         },
-        { downMs, upMs, upHandledMs },
+        { downMs, upMs, upHandledMs, splitEnabled },
       );
+      const latencySplit = state.measures === null ? null : pairLatencySplit(state);
       const samples = state.latencies
         .filter((entry) => entry.doneMs !== null && Number.isFinite(entry.doneMs))
         .map((entry) => entry.doneMs! - entry.inputMs);
@@ -1120,6 +1207,9 @@ for (const { scenario, variant } of runs) {
         lastOffset: last,
         pointerToWorkDoneMs: summary(samples),
         boundMs: scenario.latencyBoundMs,
+        splitEnabled,
+        split: latencySplit?.split ?? null,
+        splitPairs: latencySplit?.pairs ?? null,
         // Not ended and not failed after the settle, claimed by a submission or not.
         unresolved: state.latencies.filter(open_).length,
         failed: state.latencies.filter((entry) => entry.failed === true).length,
