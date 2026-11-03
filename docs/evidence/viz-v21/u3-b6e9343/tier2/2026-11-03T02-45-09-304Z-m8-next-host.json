@@ -1,0 +1,36 @@
+{
+  "schema": "headed-timing-v1",
+  "config": "playwright.m8-next-host.config.ts",
+  "startedUtc": "2026-11-03T02:45:09.304Z",
+  "status": "passed",
+  "workers": 4,
+  "wallMilliseconds": 59658,
+  "tests": 36,
+  "testMilliseconds": 204202,
+  "specs": [
+    {
+      "file": "tests/m8-next-host/m8-next-host.spec.ts",
+      "project": "edge-900",
+      "tests": 9,
+      "milliseconds": 56009
+    },
+    {
+      "file": "tests/m8-next-host/m8-next-host.spec.ts",
+      "project": "edge-720",
+      "tests": 9,
+      "milliseconds": 54514
+    },
+    {
+      "file": "tests/m8-next-host/m8-next-host.spec.ts",
+      "project": "chrome-720",
+      "tests": 9,
+      "milliseconds": 50131
+    },
+    {
+      "file": "tests/m8-next-host/m8-next-host.spec.ts",
+      "project": "chrome-900",
+      "tests": 9,
+      "milliseconds": 43548
+    }
+  ]
+}

@@ -1,0 +1,1278 @@
+﻿node.exe : $ playwright test --config playwright.e26.config.ts
+At C:\Program Files\nodejs\pnpm.ps1:16 char:5
++     & "$basedir/node$exe"  "$basedir/node_modules/corepack/dist/pnpm. ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ($ playwright te...t.e26.config.ts:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[WebServer] (node:16280) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:25248) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+
+Running 160 tests using 1 worker
+
+(node:30512) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r1
+  1) [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r1 ──────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r1-chrome-dpr1\error-context.md
+
+
+(node:28172) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[2/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r2
+  2) [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r2 ──────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r2-chrome-dpr1\error-context.md
+
+
+
+
+(node:4496) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[3/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r3
+  3) [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r3 ──────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r3-chrome-dpr1\error-context.md
+
+
+(node:38624) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[4/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r4
+  4) [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r4 ──────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r4-chrome-dpr1\error-context.md
+
+
+(node:27364) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[5/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r5
+  5) [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r5 ──────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r5-chrome-dpr1\error-context.md
+
+
+(node:38764) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[6/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r1
+  6) [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r1 ──────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r1-chrome-dpr1\error-context.md
+
+
+(node:13708) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[7/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r2
+  7) [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r2 ──────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r2-chrome-dpr1\error-context.md
+
+
+(node:28696) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[8/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r3
+  8) [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r3 ──────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r3-chrome-dpr1\error-context.md
+
+
+
+
+(node:18620) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[9/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r4
+  9) [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r4 ──────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r4-chrome-dpr1\error-context.md
+
+
+
+
+(node:8840) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[10/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r5
+  10) [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r5 ─────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r5-chrome-dpr1\error-context.md
+
+
+(node:25440) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[11/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r1
+[12/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r2
+[13/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r3
+[14/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r4
+[15/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r5
+[16/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r1
+[17/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r2
+[18/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r3
+[19/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r4
+[20/160] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r5
+(node:31712) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[21/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r1
+  11) [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r1 ─────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r1-chrome-dpr2\error-context.md
+
+
+
+
+(node:37972) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[22/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r2
+  12) [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r2 ─────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r2-chrome-dpr2\error-context.md
+
+
+(node:37600) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[23/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r3
+  13) [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r3 ─────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r3-chrome-dpr2\error-context.md
+
+
+
+
+(node:32228) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[24/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r4
+  14) [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r4 ─────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r4-chrome-dpr2\error-context.md
+
+
+(node:37844) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[25/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r5
+  15) [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r5 ─────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r5-chrome-dpr2\error-context.md
+
+
+(node:20852) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[26/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r1
+  16) [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r1 ─────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r1-chrome-dpr2\error-context.md
+
+
+(node:10016) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[27/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r2
+  17) [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r2 ─────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r2-chrome-dpr2\error-context.md
+
+
+
+
+(node:9800) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[28/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r3
+  18) [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r3 ─────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r3-chrome-dpr2\error-context.md
+
+
+(node:37108) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[29/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r4
+  19) [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r4 ─────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r4-chrome-dpr2\error-context.md
+
+
+
+
+(node:36636) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[30/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r5
+  20) [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r5 ─────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r5-chrome-dpr2\error-context.md
+
+
+(node:5492) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[31/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r1
+[32/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r2
+[33/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r3
+[34/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r4
+[35/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r5
+[36/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r1
+[37/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r2
+[38/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r3
+[39/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r4
+[40/160] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r5
+
+
+(node:19336) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[41/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r1
+  21) [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r1 ───────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r1-edge-dpr1\error-context.md
+
+
+(node:35360) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[42/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r2
+  22) [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r2 ───────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r2-edge-dpr1\error-context.md
+
+
+(node:34324) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[43/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r3
+  23) [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r3 ───────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r3-edge-dpr1\error-context.md
+
+
+(node:6344) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[44/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r4
+  24) [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r4 ───────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r4-edge-dpr1\error-context.md
+
+
+(node:32624) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[45/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r5
+  25) [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r5 ───────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r5-edge-dpr1\error-context.md
+
+
+
+
+(node:12876) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[46/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r1
+  26) [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r1 ───────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r1-edge-dpr1\error-context.md
+
+
+(node:19728) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[47/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r2
+  27) [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r2 ───────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r2-edge-dpr1\error-context.md
+
+
+(node:34316) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[48/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r3
+  28) [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r3 ───────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r3-edge-dpr1\error-context.md
+
+
+(node:27208) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[49/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r4
+  29) [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r4 ───────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r4-edge-dpr1\error-context.md
+
+
+(node:38844) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[50/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r5
+  30) [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r5 ───────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r5-edge-dpr1\error-context.md
+
+
+(node:34888) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[51/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r1
+[52/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r2
+[53/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r3
+[54/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r4
+[55/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r5
+[56/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r1
+[57/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r2
+[58/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r3
+[59/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r4
+[60/160] [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r5
+
+
+(node:20600) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[61/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r1
+  31) [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r1 ───────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r1-edge-dpr2\error-context.md
+
+
+(node:23816) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[62/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r2
+  32) [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r2 ───────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r2-edge-dpr2\error-context.md
+
+
+(node:14244) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[63/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r3
+  33) [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r3 ───────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r3-edge-dpr2\error-context.md
+
+
+(node:20332) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[64/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r4
+  34) [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r4 ───────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r4-edge-dpr2\error-context.md
+
+
+
+
+(node:1960) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[65/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r5
+  35) [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r5 ───────────────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-r5-edge-dpr2\error-context.md
+
+
+
+
+(node:7160) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[66/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r1
+  36) [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r1 ───────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r1-edge-dpr2\error-context.md
+
+
+
+
+(node:28968) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[67/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r2
+  37) [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r2 ───────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r2-edge-dpr2\error-context.md
+
+
+
+(node:16032) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[68/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r3
+  38) [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r3 ───────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r3-edge-dpr2\error-context.md
+
+
+(node:12348) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[69/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r4
+  39) [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r4 ───────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r4-edge-dpr2\error-context.md
+
+
+(node:3328) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[70/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r5
+  40) [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r5 ───────
+
+    Error: M8-N3: a headed project needs M8_N3_BASELINE, the JSON that `node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` wrote on this machine
+
+       at ..\support\m8-n3-budget.ts:121
+
+      119 |   const named = reader.headless ? process.env.M8_N3_HEADLESS_BASELINE : process.env.M8_N3_BASELINE;
+      120 |   if (named === undefined && !reader.headless) {
+    > 121 |     throw new Error(
+          |           ^
+      122 |       'M8-N3: a headed project needs M8_N3_BASELINE, the JSON that ' +
+      123 |         '`node tooling/m8-n3-measure.mjs --root <17a2b0a checkout> --headed --json <file>` ' +
+      124 |         'wrote on this machine',
+        at baselineFor (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:121:11)
+        at expectLayoutBudget (D:\GIT\vector-studio\tests\support\m8-n3-budget.ts:145:16)
+        at open (D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:359:26)
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:905:7
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v1-plain-r5-edge-dpr2\error-context.md
+
+
+(node:24108) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[71/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r1
+[72/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r2
+[73/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r3
+[74/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r4
+[75/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r5
+[76/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r1
+[77/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r2
+[78/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r3
+[79/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r4
+[80/160] [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r5
+(node:14720) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[81/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r1
+[82/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r2
+[83/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r3
+[84/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r4
+[85/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r5
+[86/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r1
+[87/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r2
+[88/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r3
+[89/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r4
+[90/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r5
+[91/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r1
+[92/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r2
+[93/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r3
+[94/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r4
+[95/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r5
+[96/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r1
+[97/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r2
+[98/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r3
+[99/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r4
+[100/160] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r5
+(node:25240) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[101/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r1
+[102/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r2
+[103/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r3
+[104/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r4
+[105/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r5
+[106/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r1
+[107/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r2
+[108/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r3
+[109/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r4
+[110/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r5
+[111/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r1
+[112/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r2
+[113/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r3
+[114/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r4
+[115/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r5
+[116/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r1
+[117/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r2
+[118/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r3
+[119/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r4
+[120/160] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r5
+(node:14140) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[121/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r1
+[122/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r2
+[123/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r3
+[124/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r4
+[125/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r5
+[126/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r1
+[127/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r2
+[128/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r3
+[129/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r4
+[130/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r5
+[131/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r1
+[132/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r2
+[133/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r3
+[134/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r4
+[135/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r5
+[136/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r1
+[137/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r2
+[138/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r3
+[139/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r4
+[140/160] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r5
+(node:27472) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[141/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r1
+[142/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r2
+[143/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r3
+[144/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r4
+[145/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r5
+[146/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r1
+[147/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r2
+[148/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r3
+[149/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r4
+[150/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r5
+[151/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r1
+  41) [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r1 ────────────
+
+    Error: the release was applied
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 2
+    Received: 1
+
+      1114 |       expect(result.unresolved).toBe(0);
+      1115 |       expect(samples.length, 'moves that produced a revision').toBeGreaterThan(0);
+    > 1116 |       expect(result.undoDepth, 'the release was applied').toBe(result.expectedUndoDepth);
+           |                                                           ^
+      1117 |       if (busy) expect(result.rejections).toBe(1);
+      1118 |       if (layers !== null) expect(layers.rows, 'layer rows shown').toBe(layers.expectedRows);
+      1119 |       if (fontLoad !== null) {
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:1116:59
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v2-r1-edge-dpr2-v2\error-context.md
+
+
+
+
+(node:32160) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[152/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r2
+[153/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r3
+[154/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r4
+[155/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r5
+[156/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r1
+[157/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r2
+[158/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r3
+[159/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r4
+[160/160] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 (plain) r5
+  41 failed
+    [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r1 ───────────────
+    [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r2 ───────────────
+    [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r3 ───────────────
+    [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r4 ───────────────
+    [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r5 ───────────────
+    [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r1 ───────
+    [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r2 ───────
+    [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r3 ───────
+    [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r4 ───────
+    [chrome-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r5 ───────
+    [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r1 ───────────────
+    [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r2 ───────────────
+    [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r3 ───────────────
+    [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r4 ───────────────
+    [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r5 ───────────────
+    [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r1 ───────
+    [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r2 ───────
+    [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r3 ───────
+    [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r4 ───────
+    [chrome-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r5 ───────
+    [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r1 ─────────────────
+    [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r2 ─────────────────
+    [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r3 ─────────────────
+    [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r4 ─────────────────
+    [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r5 ─────────────────
+    [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r1 ─────────
+    [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r2 ─────────
+    [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r3 ─────────
+    [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r4 ─────────
+    [edge-dpr1] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r5 ─────────
+    [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r1 ─────────────────
+    [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r2 ─────────────────
+    [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r3 ─────────────────
+    [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r4 ─────────────────
+    [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 r5 ─────────────────
+    [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r1 ─────────
+    [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r2 ─────────
+    [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r3 ─────────
+    [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r4 ─────────
+    [edge-dpr2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v1 (plain) r5 ─────────
+    [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:668:5 › e26-pointer-busy-10k/v2 r1 ──────────────
+  80 skipped
+  39 passed (15.6m)
+[ELIFECYCLE] Command failed with exit code 1.

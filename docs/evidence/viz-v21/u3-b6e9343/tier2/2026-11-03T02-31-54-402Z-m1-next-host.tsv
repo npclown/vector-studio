@@ -1,0 +1,3 @@
+file	project	title	status	ms	worker
+tests/m1-next-host/m1-next-host.spec.ts	chrome	M1-A12: the next-host page renders the M1 fixture and edits it	passed	7633	0
+tests/m1-next-host/m1-next-host.spec.ts	edge	M1-A12: the next-host page renders the M1 fixture and edits it	passed	7580	1

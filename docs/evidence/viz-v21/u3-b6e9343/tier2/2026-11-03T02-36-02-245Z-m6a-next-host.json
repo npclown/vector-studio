@@ -1,0 +1,24 @@
+{
+  "schema": "headed-timing-v1",
+  "config": "playwright.m6a-next-host.config.ts",
+  "startedUtc": "2026-11-03T02:36:02.245Z",
+  "status": "passed",
+  "workers": 4,
+  "wallMilliseconds": 17671,
+  "tests": 22,
+  "testMilliseconds": 25550,
+  "specs": [
+    {
+      "file": "tests/m6a-next-host/m6a-next-host.spec.ts",
+      "project": "edge",
+      "tests": 11,
+      "milliseconds": 13016
+    },
+    {
+      "file": "tests/m6a-next-host/m6a-next-host.spec.ts",
+      "project": "chrome",
+      "tests": 11,
+      "milliseconds": 12534
+    }
+  ]
+}

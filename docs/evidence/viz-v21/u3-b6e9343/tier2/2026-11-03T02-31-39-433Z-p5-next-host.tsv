@@ -1,0 +1,5 @@
+file	project	title	status	ms	worker
+tests/p5-next-host/p5-next-host.spec.ts	chrome	P5-A09: the WebGPU host and the recording renderer agree on a command script	passed	4340	0
+tests/p5-next-host/p5-next-host.spec.ts	edge	P5-A09: the WebGPU host and the recording renderer agree on a command script	passed	4493	1
+tests/p5-next-host/p5-next-host.spec.ts	chrome	P5-A12: the page creates, selects, moves, undoes and draws through EditorCanvas	passed	5076	0
+tests/p5-next-host/p5-next-host.spec.ts	edge	P5-A12: the page creates, selects, moves, undoes and draws through EditorCanvas	passed	5129	1

@@ -1,0 +1,132 @@
+{
+  "schema": "headed-timing-v1",
+  "config": "playwright.gpu.config.ts",
+  "startedUtc": "2026-11-03T02:18:46.732Z",
+  "status": "passed",
+  "workers": 4,
+  "wallMilliseconds": 771484,
+  "tests": 93,
+  "testMilliseconds": 2210603,
+  "specs": [
+    {
+      "file": "tests/gpu/p1-primitives.spec.ts",
+      "project": "chrome",
+      "tests": 14,
+      "milliseconds": 698045
+    },
+    {
+      "file": "tests/gpu/p4-clip-mask.spec.ts",
+      "project": "chrome",
+      "tests": 9,
+      "milliseconds": 544665
+    },
+    {
+      "file": "tests/gpu/e24-stroke-dash.spec.ts",
+      "project": "chrome",
+      "tests": 6,
+      "milliseconds": 198965
+    },
+    {
+      "file": "tests/gpu/e25-isolated-opacity.spec.ts",
+      "project": "chrome",
+      "tests": 12,
+      "milliseconds": 170665
+    },
+    {
+      "file": "tests/gpu/e28-text-atlas.spec.ts",
+      "project": "chrome",
+      "tests": 14,
+      "milliseconds": 142787
+    },
+    {
+      "file": "tests/gpu/viz-v3-integration.spec.ts",
+      "project": "chrome",
+      "tests": 2,
+      "milliseconds": 101913
+    },
+    {
+      "file": "tests/gpu/viz-v2-path-data.spec.ts",
+      "project": "chrome",
+      "tests": 2,
+      "milliseconds": 67629
+    },
+    {
+      "file": "tests/gpu/viz-v1-appearance.spec.ts",
+      "project": "chrome",
+      "tests": 2,
+      "milliseconds": 58748
+    },
+    {
+      "file": "tests/gpu/e17-write-once.spec.ts",
+      "project": "chrome",
+      "tests": 3,
+      "milliseconds": 51198
+    },
+    {
+      "file": "tests/gpu/p3-st-u7-joint.spec.ts",
+      "project": "chrome",
+      "tests": 3,
+      "milliseconds": 43273
+    },
+    {
+      "file": "tests/gpu/e23-gradient-paint.spec.ts",
+      "project": "chrome",
+      "tests": 6,
+      "milliseconds": 32247
+    },
+    {
+      "file": "tests/gpu/p3-v3-mesh-smoke.spec.ts",
+      "project": "chrome",
+      "tests": 2,
+      "milliseconds": 32199
+    },
+    {
+      "file": "tests/gpu/p3-b2-strokes.spec.ts",
+      "project": "chrome",
+      "tests": 3,
+      "milliseconds": 22606
+    },
+    {
+      "file": "tests/gpu/e10-test-hooks.spec.ts",
+      "project": "chrome",
+      "tests": 6,
+      "milliseconds": 18601
+    },
+    {
+      "file": "tests/gpu/p3-st-u6-stroke.spec.ts",
+      "project": "chrome",
+      "tests": 2,
+      "milliseconds": 14003
+    },
+    {
+      "file": "tests/gpu/foundation-experiments.spec.ts",
+      "project": "chrome",
+      "tests": 3,
+      "milliseconds": 5616
+    },
+    {
+      "file": "tests/gpu/p3-v4-paths.spec.ts",
+      "project": "chrome",
+      "tests": 1,
+      "milliseconds": 3386
+    },
+    {
+      "file": "tests/gpu/playground-dashboard.spec.ts",
+      "project": "chrome",
+      "tests": 1,
+      "milliseconds": 1584
+    },
+    {
+      "file": "tests/gpu/webgpu-recovery.spec.ts",
+      "project": "chrome",
+      "tests": 1,
+      "milliseconds": 1257
+    },
+    {
+      "file": "tests/gpu/e3-a04-readback.spec.ts",
+      "project": "chrome",
+      "tests": 1,
+      "milliseconds": 1216
+    }
+  ]
+}

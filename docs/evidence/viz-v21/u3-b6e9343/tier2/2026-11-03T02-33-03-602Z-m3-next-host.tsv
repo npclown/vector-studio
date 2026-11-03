@@ -1,0 +1,3 @@
+file	project	title	status	ms	worker
+tests/m3-next-host/m3-next-host.spec.ts	edge	M3-A12: edits a closed cubic path and an open path in a rotated group	passed	16174	1
+tests/m3-next-host/m3-next-host.spec.ts	chrome	M3-A12: edits a closed cubic path and an open path in a rotated group	passed	16429	0

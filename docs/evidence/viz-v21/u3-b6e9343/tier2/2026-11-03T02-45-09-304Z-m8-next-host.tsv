@@ -1,0 +1,37 @@
+file	project	title	status	ms	worker
+tests/m8-next-host/m8-next-host.spec.ts	chrome-900	M8-A14: the M8-N3 budget holds on open and with a page rename open	passed	5030	1
+tests/m8-next-host/m8-next-host.spec.ts	chrome-720	M8-A14: the M8-N3 budget holds on open and with a page rename open	passed	5631	0
+tests/m8-next-host/m8-next-host.spec.ts	edge-720	M8-A14: the M8-N3 budget holds on open and with a page rename open	passed	6708	2
+tests/m8-next-host/m8-next-host.spec.ts	edge-900	M8-A14: the M8-N3 budget holds on open and with a page rename open	passed	6748	3
+tests/m8-next-host/m8-next-host.spec.ts	chrome-900	M8-A14: focusing an Appearance field scrolls the right column, never the window	passed	4376	1
+tests/m8-next-host/m8-next-host.spec.ts	chrome-720	M8-A14: focusing an Appearance field scrolls the right column, never the window	passed	5384	0
+tests/m8-next-host/m8-next-host.spec.ts	edge-720	M8-A14: focusing an Appearance field scrolls the right column, never the window	passed	5878	2
+tests/m8-next-host/m8-next-host.spec.ts	edge-900	M8-A14: focusing an Appearance field scrolls the right column, never the window	passed	5942	3
+tests/m8-next-host/m8-next-host.spec.ts	chrome-900	M8-A14: layer panel select, toggle, expand, rename, hide and reorder	passed	5624	1
+tests/m8-next-host/m8-next-host.spec.ts	chrome-720	M8-A14: layer panel select, toggle, expand, rename, hide and reorder	passed	6563	0
+tests/m8-next-host/m8-next-host.spec.ts	edge-720	M8-A14: layer panel select, toggle, expand, rename, hide and reorder	passed	7394	2
+tests/m8-next-host/m8-next-host.spec.ts	chrome-900	M8-A14: add, rename, switch and remove pages	passed	4667	1
+tests/m8-next-host/m8-next-host.spec.ts	edge-900	M8-A14: layer panel select, toggle, expand, rename, hide and reorder	passed	7403	3
+tests/m8-next-host/m8-next-host.spec.ts	chrome-720	M8-A14: add, rename, switch and remove pages	passed	5578	0
+tests/m8-next-host/m8-next-host.spec.ts	chrome-900	M8-A14: transform, line arrow, child constraint and an invalid field	passed	5012	1
+tests/m8-next-host/m8-next-host.spec.ts	edge-720	M8-A14: add, rename, switch and remove pages	passed	6311	2
+tests/m8-next-host/m8-next-host.spec.ts	edge-900	M8-A14: add, rename, switch and remove pages	passed	6366	3
+tests/m8-next-host/m8-next-host.spec.ts	chrome-720	M8-A14: transform, line arrow, child constraint and an invalid field	passed	5778	0
+tests/m8-next-host/m8-next-host.spec.ts	chrome-900	M8-A14: a text style over a text edit selection	passed	4531	1
+tests/m8-next-host/m8-next-host.spec.ts	edge-720	M8-A14: transform, line arrow, child constraint and an invalid field	passed	6421	2
+tests/m8-next-host/m8-next-host.spec.ts	edge-900	M8-A14: transform, line arrow, child constraint and an invalid field	passed	6521	3
+tests/m8-next-host/m8-next-host.spec.ts	chrome-900	M8-A14: Create instance, Reset text in its group and Detach instance	passed	4802	1
+tests/m8-next-host/m8-next-host.spec.ts	chrome-720	M8-A14: a text style over a text edit selection	passed	5615	0
+tests/m8-next-host/m8-next-host.spec.ts	edge-720	M8-A14: a text style over a text edit selection	passed	6035	2
+tests/m8-next-host/m8-next-host.spec.ts	chrome-900	M8-A14: Create star and its points from the ext.star panel	passed	4651	1
+tests/m8-next-host/m8-next-host.spec.ts	edge-900	M8-A14: a text style over a text edit selection	passed	6145	3
+tests/m8-next-host/m8-next-host.spec.ts	chrome-720	M8-A14: Create instance, Reset text in its group and Detach instance	passed	5438	0
+tests/m8-next-host/m8-next-host.spec.ts	chrome-900	M8-A14: under ?test=1&faults=1 a throwing panel fails alone and the unowned panel is reported	passed	4855	1
+tests/m8-next-host/m8-next-host.spec.ts	chrome-720	M8-A14: Create star and its points from the ext.star panel	passed	4964	0
+tests/m8-next-host/m8-next-host.spec.ts	edge-720	M8-A14: Create instance, Reset text in its group and Detach instance	passed	6432	2
+tests/m8-next-host/m8-next-host.spec.ts	edge-900	M8-A14: Create instance, Reset text in its group and Detach instance	passed	6691	3
+tests/m8-next-host/m8-next-host.spec.ts	edge-720	M8-A14: Create star and its points from the ext.star panel	passed	5032	2
+tests/m8-next-host/m8-next-host.spec.ts	chrome-720	M8-A14: under ?test=1&faults=1 a throwing panel fails alone and the unowned panel is reported	passed	5180	0
+tests/m8-next-host/m8-next-host.spec.ts	edge-900	M8-A14: Create star and its points from the ext.star panel	passed	5419	3
+tests/m8-next-host/m8-next-host.spec.ts	edge-720	M8-A14: under ?test=1&faults=1 a throwing panel fails alone and the unowned panel is reported	passed	4303	2
+tests/m8-next-host/m8-next-host.spec.ts	edge-900	M8-A14: under ?test=1&faults=1 a throwing panel fails alone and the unowned panel is reported	passed	4774	3
