@@ -285,7 +285,9 @@ export function primitivePackingWithinBudget(
  * bounded by first-order rounding analysis: every f32 rounding adds at most u = 2^-24 (taken as
  * 2^-24 (1 + 1e-6)) times the magnitude it rounds, and every magnitude is bounded over the range
  * by an affine function's extremes over the camera box and the quad's corners, whose guard is
- * largest at the interval's lowest zoom. The bound is the camera-independent analogue of
+ * largest at the interval's lowest zoom. A subnormal f32 result rounds with an absolute error of
+ * at most 2^-150 instead; its share of a physical pixel is far below the budget's margin. The
+ * bound declines when any value of the chain could come near float32's maximum. The bound is the camera-independent analogue of
  * `primitivePackingWithinBudget`: where it is within the budget, so is the assessment at every
  * camera in the range (unit-tested against the assessment at sampled cameras).
  */
@@ -367,6 +369,11 @@ export function primitivePackingBoundOver(
   let quantization = 0;
   let arithmetic = 0;
   let reach = 1;
+  // The largest magnitude any f32 value of the vertex chain can take over the range (world
+  // units before the scale, physical pixels after it, the guard and corners included): the
+  // rounding model holds only while every one stays far below float32's maximum, which the
+  // assessment's own finiteness checks would otherwise catch at a camera of the range.
+  let magnitude = Math.max(g0, g1, pMax, qMax);
   for (const axis of [0, 1] as const) {
     const b = reachOf(axis);
     const m1 = linear[axis]! + tAbs[axis]! + oMax[axis]!;
@@ -377,6 +384,7 @@ export function primitivePackingBoundOver(
       u * scale * (2 * linear[axis]! + (linear[axis]! + tAbs[axis]!) + 3 * m1) * (1 + 8 * u);
     const sMax = (b + u * m1) * scale;
     const pMaxAbs = sMax + chain;
+    magnitude = Math.max(magnitude, m1, m1 * scale, 2 * pMaxAbs);
     const extent = axis === 0 ? physicalWidth : physicalHeight;
     // v - p: the NDC division and offset, and their inverse in Float64.
     const ndc = u * (2 * pMaxAbs + extent / 2) * (1 + 4 * u);
@@ -394,7 +402,13 @@ export function primitivePackingBoundOver(
     quantization: quantization + geometryError + bookkeeping,
     arithmetic: arithmetic + bookkeeping,
   };
-  if (!Number.isFinite(result.quantization + result.arithmetic) || reach > 2 ** 100) return null;
+  if (
+    !Number.isFinite(result.quantization + result.arithmetic + magnitude) ||
+    reach > 2 ** 100 ||
+    magnitude > 2 ** 100
+  ) {
+    return null;
+  }
   return Object.freeze(result);
 }
 

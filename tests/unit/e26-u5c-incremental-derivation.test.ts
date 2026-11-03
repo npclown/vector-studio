@@ -136,13 +136,15 @@ function runDifferential(seed: number, frames: number, limits?: Partial<PathMesh
       // failure would then break the assessment's purity, which the memo relies on. E30-U3b: so
       // would a failure at a camera inside the packing range the source holds (zoom within 1/16
       // and positions within a quarter viewport of the camera it was taken at), so failures are
-      // injected only on moves that leave it: a zoom step of at least 1.2, or a far jump.
+      // injected only on moves that leave it: a zoom step of at least 1.2 (the range's zoom
+      // interval spans a factor 1.0625 each way), or a jump beyond the range's widest half-width
+      // (800 / 1.5 / 0.125 / 4, about 1,067 units, at this generator's narrowest zoom and DPR).
       const ratio = camera.zoom / before.zoom;
       const far =
         ratio > 1.2 ||
         ratio < 1 / 1.2 ||
-        Math.abs(camera.x - before.x) > 1000 ||
-        Math.abs(camera.y - before.y) > 1000;
+        Math.abs(camera.x - before.x) > 1100 ||
+        Math.abs(camera.y - before.y) > 1100;
       failing.on = rng() < 0.25 && far;
     }
     // Otherwise a frame with no change.

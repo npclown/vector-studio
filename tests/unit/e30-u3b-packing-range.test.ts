@@ -157,4 +157,33 @@ describe('E30-U3b packing range bound', () => {
     expect(bound).not.toBeNull();
     expect(Math.max(bound!.quantization, bound!.arithmetic)).toBeLessThanOrEqual(BUDGET);
   });
+
+  it('declines where the vertex chain overflows float32 at a tiny zoom', () => {
+    // Physical pixels stay small while the world-unit values pass float32's maximum.
+    const node = primitive(random(3), [1e10, 0, 0, 1e10, 0, 0]);
+    const bounds = { minX: 0, minY: 0, maxX: 1e30, maxY: 1e30 };
+    const zoom = 1e-35;
+    const camera = { x: 0, y: 0 };
+    expect(() =>
+      assessPrimitivePacking(node.transform, bounds, camera, camera, zoom, 1, 800, 600),
+    ).toThrow();
+    const span = 800 / zoom / 4;
+    const bound = primitivePackingBoundOver(
+      node.transform,
+      bounds,
+      camera,
+      {
+        zoomMin: zoom / (1 + 1 / 16),
+        zoomMax: zoom * (1 + 1 / 16),
+        minX: -span,
+        maxX: span,
+        minY: -span,
+        maxY: span,
+      },
+      1,
+      800,
+      600,
+    );
+    expect(bound).toBeNull();
+  });
 });
