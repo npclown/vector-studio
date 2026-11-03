@@ -182,12 +182,23 @@ export type BenchDriver =
   | Readonly<{ kind: 'pan-zoom'; fitted: BenchCamera; t0: number }>;
 
 export type BenchWrite = { startMs: number; endMs: number | null; ok: boolean | null };
-/** `doneMs` is NaN while claimed by a submission and stays NaN with `failed` if the wait rejects. */
+/**
+ * `doneMs` is NaN while claimed by a submission and stays NaN with `failed` if the wait rejects.
+ * E30-U1b (E30 contract, section 3, latency split), all `performance.now()` values: a move's
+ * `dispatchMs` and `handlerEndMs` bracket its `pointermove` dispatch (the capture window listener
+ * runs first, the bubbling one after the canvas's handlers, which hold the editor's gesture
+ * update, projection and scene set), and `claimMs` is the end of the render callback whose
+ * submission claimed the sample. A reader pairs `claimMs` with that callback's `vs-prepare`
+ * measure (the last one starting before it) for the wait to prepare. Keys carry `claimMs` only.
+ */
 export type BenchLatency = {
   inputMs: number;
   revision: number;
   doneMs: number | null;
   failed?: true;
+  dispatchMs?: number;
+  handlerEndMs?: number;
+  claimMs?: number;
 };
 export type BenchLongTask = Readonly<{ startMs: number; durationMs: number }>;
 
@@ -329,7 +340,8 @@ export class Bench {
   private rejected = 0;
   readonly replaces: BenchReplace[] = [];
   private lastSubmitted = 0;
-  private pendingInput: Readonly<{ inputMs: number; revision: number }> | null = null;
+  private pendingInput: Readonly<{ inputMs: number; revision: number; dispatchMs: number }> | null =
+    null;
   private pendingKey: Readonly<{ inputMs: number; revision: number }> | null = null;
   readonly keyLatencies: BenchLatency[] = [];
   readonly noChangeKeys: number[] = [];
@@ -365,15 +377,26 @@ export class Bench {
       const move = event as PointerEvent;
       const first =
         typeof move.getCoalescedEvents === 'function' ? move.getCoalescedEvents()[0] : undefined;
-      this.pendingInput = { inputMs: (first ?? move).timeStamp, revision: this.revision() };
+      this.pendingInput = {
+        inputMs: (first ?? move).timeStamp,
+        revision: this.revision(),
+        dispatchMs: performance.now(),
+      };
     };
     const after = () => {
+      const handlerEndMs = performance.now();
       const input = this.pendingInput;
       this.pendingInput = null;
       if (input === null || this.rendererRef === null) return;
       const revision = this.revision();
       if (revision > input.revision) {
-        this.latencies.push({ inputMs: input.inputMs, revision, doneMs: null });
+        this.latencies.push({
+          inputMs: input.inputMs,
+          revision,
+          doneMs: null,
+          dispatchMs: input.dispatchMs,
+          handlerEndMs,
+        });
       } else this.noChangeMoves.push(input.inputMs);
     };
     window.addEventListener('pointermove', before, { capture: true });
@@ -622,7 +645,11 @@ export class Bench {
     );
     if (waiting.length === 0) return;
     // Claimed now, so a later submission does not resolve them again.
-    for (const entry of waiting) entry.doneMs = Number.NaN;
+    const claimMs = performance.now();
+    for (const entry of waiting) {
+      entry.doneMs = Number.NaN;
+      entry.claimMs = claimMs;
+    }
     backend.waitForSubmittedWork().then(
       () => {
         const now = performance.now();

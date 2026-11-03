@@ -253,7 +253,16 @@ type PageHook = {
   disarmReject(): void;
   rejections(): number;
   replaces: readonly { startMs: number; durationMs: number; nodes: number; status: string }[];
-  latencies: readonly { inputMs: number; revision: number; doneMs: number | null; failed?: true }[];
+  // E30-U1b: moves carry dispatchMs/handlerEndMs, claimed samples (moves and keys) claimMs.
+  latencies: readonly {
+    inputMs: number;
+    revision: number;
+    doneMs: number | null;
+    failed?: true;
+    dispatchMs?: number;
+    handlerEndMs?: number;
+    claimMs?: number;
+  }[];
   noChangeMoves: readonly number[];
   writes: readonly { startMs: number; endMs: number | null; ok: boolean | null }[];
   longTasks: readonly { startMs: number; durationMs: number }[];

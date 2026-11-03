@@ -32,6 +32,9 @@ type BenchInstance = {
     revision: number;
     doneMs: number | null;
     failed?: true;
+    dispatchMs?: number;
+    handlerEndMs?: number;
+    claimMs?: number;
   }[];
   readonly clock: { request(callback: (timestampMs: number) => void): number };
   wrapRenderer(renderer: Sync): Sync;
@@ -356,7 +359,19 @@ describe('E26-U1b next-host bench option', () => {
     };
     move(500, 480, true);
     move(510, 505, false);
-    expect(state.latencies).toEqual([{ inputMs: 480, revision: 2, doneMs: null }]);
+    expect(state.latencies).toEqual([
+      {
+        inputMs: 480,
+        revision: 2,
+        doneMs: null,
+        dispatchMs: expect.any(Number) as number,
+        handlerEndMs: expect.any(Number) as number,
+      },
+    ]);
+    // E30-U1b: the dispatch brackets the handler, in order.
+    expect(state.latencies[0]!.handlerEndMs).toBeGreaterThanOrEqual(
+      state.latencies[0]!.dispatchMs!,
+    );
     expect(state.hook().noChangeMoves).toEqual([505]);
     state.clock.request(() => {
       order.push('backend');
@@ -398,10 +413,16 @@ describe('E26-U1b next-host bench option', () => {
     );
     const [before, after] = listeners.get('pointermove') ?? [];
     const event = { timeStamp: 700, getCoalescedEvents: () => [{ timeStamp: 690 }] };
+    // E30-U1b: a counting clock pins each stamp to its own point; the canvas handler reads one.
+    let tick = 0;
+    const now = vi.spyOn(performance, 'now').mockImplementation(() => (tick += 1));
     before!(event);
+    performance.now();
     inner.applyChanges({ inserted: [] });
     after!(event);
-    expect(state.latencies).toEqual([{ inputMs: 690, revision: 2, doneMs: null }]);
+    expect(state.latencies).toEqual([
+      { inputMs: 690, revision: 2, doneMs: null, dispatchMs: 1, handlerEndMs: 3 },
+    ]);
     // A submission whose scene is behind the input's revision does not end it.
     inner.setRevision(1);
     state.clock.request(() => {
@@ -409,6 +430,7 @@ describe('E26-U1b next-host bench option', () => {
     });
     frames.shift()!(800);
     expect(state.latencies[0]!.doneMs).toBeNull();
+    expect(state.latencies[0]!.claimMs).toBeUndefined();
     // The next submission at its revision claims it; a rejected wait marks it failed.
     inner.setRevision(2);
     state.clock.request(() => {
@@ -416,6 +438,9 @@ describe('E26-U1b next-host bench option', () => {
     });
     frames.shift()!(816);
     expect(state.latencies[0]!.doneMs).toBeNaN();
+    // E30-U1b: the claim is stamped once, after the handler's end, and the first wait leaves it.
+    expect(state.latencies[0]!.claimMs).toBeGreaterThan(3);
+    now.mockRestore();
     fail(new Error('device lost'));
     await Promise.resolve();
     await Promise.resolve();
