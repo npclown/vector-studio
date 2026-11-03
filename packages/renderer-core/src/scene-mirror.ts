@@ -22,6 +22,7 @@ import {
 import { hasFiniteSceneArithmetic } from './scene-numeric.js';
 import {
   firstDuplicateNodeId,
+  nodeEquals,
   snapshotsEqual,
   validateCandidateGraph,
   validateChangesShape,
@@ -112,6 +113,12 @@ type OwnedScene = {
     sortedIds: readonly string[];
     layer: ViewLayer;
     nodeList: { value: readonly RenderNodeSnapshot[] | null };
+    /**
+     * E30-U5 (L4): the serial of the view before this one, and the IDs written since it whose
+     * node and geometry revision are as that view had them (a node removed and inserted again
+     * unchanged, as an isolation does); null when the last view is unknown.
+     */
+    settled: Readonly<{ serial: number; ids: ReadonlySet<string> }> | null;
   }> | null;
 };
 
@@ -484,14 +491,17 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     const changeSerial = floor + log.length;
     if (scene.view === null) {
       mergePendingIds(this.#indexes);
+      const settled = this.#settled(scene, log, floor, changeSerial);
       scene.view = Object.freeze({
         sortedIds: this.#indexes.sortedIds,
         layer: this.#viewLayer(scene, log, floor, changeSerial),
         nodeList: { value: null },
+        settled,
       });
     }
     const view = scene.view;
     const layer = view.layer;
+    const settled = view.settled;
     return Object.freeze({
       sceneEpoch: scene.sceneEpoch,
       version: copyVersion(scene),
@@ -509,8 +519,54 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
           ? null
           : serial > changeSerial
             ? null
-            : log.slice(serial - floor, changeSerial - floor),
+            : settled === null || serial > settled.serial
+              ? log.slice(serial - floor, changeSerial - floor)
+              : // E30-U5 (L4): an ID written only after the last view, and now as it was there, is
+                // as the view at `serial` had it.
+                [
+                  ...log.slice(serial - floor, settled.serial - floor),
+                  ...log
+                    .slice(settled.serial - floor, changeSerial - floor)
+                    .filter((id) => !settled.ids.has(id)),
+                ],
     });
+  }
+
+  /**
+   * E30-U5 (L4): the IDs written since the last view whose node and geometry revision equal the
+   * last view's, so a reader of that view or an earlier one skips them; null when the log no
+   * longer lists every ID written since the last view.
+   */
+  #settled(
+    scene: OwnedScene,
+    log: readonly string[],
+    floor: number,
+    serial: number,
+  ): Readonly<{ serial: number; ids: ReadonlySet<string> }> | null {
+    const last = this.#lastView;
+    if (last === null || last.log !== log || last.serial < floor || last.serial > serial) {
+      return null;
+    }
+    const ids = new Set<string>();
+    const seen = new Set<string>();
+    for (let index = last.serial - floor; index < serial - floor; index += 1) {
+      const id = log[index]!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const before = layerNode(last.layer, id);
+      const after = scene.nodes.get(id);
+      // A path's geometry revision changes exactly when its path data does (E26-U5b keeps it
+      // for a path inserted again with equal data), so equal revisions stand for the data.
+      const revision = layerRevision(last.layer, id);
+      const same =
+        before === undefined || after === undefined
+          ? before === after
+          : before === after ||
+            (revision === scene.geometryRevisions.get(id) &&
+              nodeEquals(before, after, revision === undefined));
+      if (same) ids.add(id);
+    }
+    return Object.freeze({ serial: last.serial, ids });
   }
 
   /**

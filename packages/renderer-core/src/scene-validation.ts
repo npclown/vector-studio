@@ -947,7 +947,15 @@ function clipEquals(left: SceneClip, right: SceneClip): boolean {
   );
 }
 
-function nodeEquals(left: RenderNodeSnapshot, right: RenderNodeSnapshot): boolean {
+/**
+ * Node equality under the replay rule. E30-U5 compares a view's written nodes with it, passing
+ * `pathData` false when equal geometry revisions already show equal path data.
+ */
+export function nodeEquals(
+  left: RenderNodeSnapshot,
+  right: RenderNodeSnapshot,
+  pathData = true,
+): boolean {
   if (
     left.id !== right.id ||
     left.parentId !== right.parentId ||
@@ -970,7 +978,7 @@ function nodeEquals(left: RenderNodeSnapshot, right: RenderNodeSnapshot): boolea
   }
   if (left.kind === 'path' && right.kind === 'path') {
     return (
-      pathDataEquals(left.geometry, right.geometry) &&
+      (!pathData || pathDataEquals(left.geometry, right.geometry)) &&
       left.geometry.fillRule === right.geometry.fillRule &&
       nullablePaintEquals(left.style.fill, right.style.fill) &&
       nullablePathStrokeEquals(left.style.stroke, right.style.stroke)
