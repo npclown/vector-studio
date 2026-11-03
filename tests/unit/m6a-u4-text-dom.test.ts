@@ -22,7 +22,7 @@ import {
 import { nextGeneration } from '../../packages/text-dom/src/generation.js';
 import { createListeners } from '../../packages/text-dom/src/listeners.js';
 import { createTextDom } from '../../packages/text-dom/src/index.js';
-import { HOLD_CAP_MS } from '../../packages/text-dom/src/text-dom.js';
+import { CHANGE_LOG_SIZE, HOLD_CAP_MS } from '../../packages/text-dom/src/text-dom.js';
 import { checkRequest, isValidFamily, isValidLang } from '../../packages/text-dom/src/validate.js';
 
 // MVP M6a-U4 (docs/plans/mvp-m6a-text-model-contract.md, section 4, M6a-A04): the parts of
@@ -1041,6 +1041,59 @@ describe('V-21 one dispatch per registration (contract, section 4.1)', () => {
     expect(generation).toBeGreaterThan(before);
     await flush();
     expect(seen).toEqual([generation]);
+    dom.dispose();
+  });
+});
+
+describe('V-21 changedSince over the log (contract, section 4.2)', () => {
+  it('names the registered family, a foreign face family, "all" for DPR, and [] for none', async () => {
+    const { document, fonts, queries } = shim();
+    const dom = createTextDom({ document });
+    ShimFontFace.created = [];
+    const start = dom.generation;
+    expect(dom.changedSince!(start)).toEqual([]);
+    const loaded = dom.registerFont({ family: 'My Face', source: { url: 'a' } });
+    const afterAdd = dom.generation;
+    expect(dom.changedSince!(start)).toEqual(['My Face']);
+    ShimFontFace.created[0]!.settle('loaded');
+    await loaded;
+    expect(dom.changedSince!(afterAdd)).toEqual(['My Face']);
+    const beforeForeign = dom.generation;
+    fonts.dispatchEvent(
+      Object.assign(new Event('loadingdone'), { fontfaces: [new ShimFontFace('UI Font', 'u')] }),
+    );
+    expect(dom.changedSince!(beforeForeign)).toEqual(['UI Font']);
+    expect(dom.changedSince!(start)).toEqual(['My Face', 'UI Font']);
+    // A font-set event with no face list, and a DPR change, affect everything.
+    const beforeAll = dom.generation;
+    fonts.dispatchEvent(new Event('loadingdone'));
+    expect(dom.changedSince!(beforeAll)).toBeNull();
+    const beforeDpr = dom.generation;
+    queries[0]!.dispatchEvent(new Event('change'));
+    expect(dom.changedSince!(beforeDpr)).toBeNull();
+    // Older than the port, or not a safe integer: all.
+    expect(dom.changedSince!(start - 1)).toBeNull();
+    expect(dom.changedSince!(Number.NaN)).toBeNull();
+    expect(dom.changedSince!(dom.generation)).toEqual([]);
+    dom.dispose();
+  });
+
+  it('keeps the last CHANGE_LOG_SIZE increments; older generations read as all', async () => {
+    const { document } = shim();
+    const dom = createTextDom({ document });
+    ShimFontFace.created = [];
+    const start = dom.generation;
+    // Each registration increments twice (add, settle).
+    for (let index = 0; index < CHANGE_LOG_SIZE / 2; index += 1) {
+      const pending = dom.registerFont({ family: `F${index}`, source: { url: 'x' } });
+      ShimFontFace.created.at(-1)!.settle('loaded');
+      await pending;
+    }
+    expect(dom.changedSince!(start)).toHaveLength(CHANGE_LOG_SIZE / 2);
+    const pending = dom.registerFont({ family: 'Last', source: { url: 'x' } });
+    expect(dom.changedSince!(start)).toBeNull();
+    ShimFontFace.created.at(-1)!.settle('loaded');
+    await pending;
     dom.dispose();
   });
 });

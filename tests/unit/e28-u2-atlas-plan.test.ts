@@ -386,6 +386,35 @@ describe('E28-K10 keys and the raster port', () => {
   });
 });
 
+describe('V-21 E28 amendment: two generations in one scene', () => {
+  it('a newer node does not make kept text report D3 again or rasterize again', () => {
+    const a = textNode('a', [
+      ['FAIL', 0],
+      ['A', 10],
+    ]);
+    const { frame, port, replace, takeInvalidations } = setup([
+      a,
+      textNode('b', [['B', 0]], { y: 40 }),
+    ]);
+    takeInvalidations();
+    expect(frame().text!.notices).toEqual([
+      { code: 'glyph-raster-failure', nodeId: 'a', reason: 'unavailable' },
+    ]);
+    expect(port.requests).toHaveLength(3);
+    // Only 'b' is laid out again (a family-scoped relayout); 'a' keeps generation 0.
+    replace([a, textNode('b', [['B', 0]], { generation: 2, y: 40 })]);
+    takeInvalidations();
+    for (let index = 0; index < 3; index += 1) {
+      const packet = frame();
+      expect(packet.text!.notices).toEqual([]);
+      expect(instanceCount(packet)).toBe(2);
+    }
+    // One raster for 'b' at its new generation; none for 'a'.
+    expect(port.requests.map((request) => request.text)).toEqual(['FAIL', 'A', 'B', 'B']);
+    expect(takeInvalidations()).toBe(0);
+  });
+});
+
 describe('E28 section 4 order', () => {
   it('a text draw closes the analytic run at its paint position', () => {
     const { frame } = setup([box('a', 0), textNode('t', [['A', 0]]), box('b', 40)]);
@@ -523,6 +552,32 @@ describe('E28 section 4 pages and eviction', () => {
     replace([textNode('a', many(1, 20), { ...small, generation: 1 })]);
     const third = frame();
     expect(third.text!.clears.map((clear) => clear.page)).toEqual([1]);
+  });
+
+  it('V-21 (contract 4.3): a page whose generation a scene node still carries is not obsolete', () => {
+    const away: SceneAffine = [1, 0, 0, 1, 5000, 0];
+    const { frame, replace } = setup(
+      [
+        textNode('a', many(2), { ...small, generation: 1 }),
+        textNode('b', many(2, 10), { ...small, generation: 2 }),
+      ],
+      { pages: 2, pageSize: 16 },
+    );
+    expect(frame().text!.uploads.map((upload) => upload.page)).toEqual([0, 0, 1, 1]);
+    // Draws page 0 (generation 1) only, so page 1 (generation 2) is the least recently used.
+    replace([
+      textNode('a', many(2), { ...small, generation: 1 }),
+      textNode('b', many(2, 10), { ...small, generation: 2, transform: away }),
+    ]);
+    frame();
+    // Both still in the scene, culled; a new generation-2 node needs a page. Generation 1 is
+    // drawn by a node of the scene, so page 0 is not obsolete and the least recently used goes.
+    replace([
+      textNode('a', many(2), { ...small, generation: 1, transform: away }),
+      textNode('b', many(2, 10), { ...small, generation: 2, transform: away }),
+      textNode('c', many(1, 20), { ...small, generation: 2 }),
+    ]);
+    expect(frame().text!.clears.map((clear) => clear.page)).toEqual([1]);
   });
 
   it('omits what does not fit and reports E28-D2 once per transition', () => {

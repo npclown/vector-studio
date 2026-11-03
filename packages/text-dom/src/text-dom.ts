@@ -93,6 +93,9 @@ type PortProbeRecord =
       dispatchMs: number;
     };
 
+/** V-21 (section 4.2): increments `changedSince` remembers; older generations read as "all". */
+export const CHANGE_LOG_SIZE = 64;
+
 /** V-21 (V21-Q3 (a)): how long a pending face of this port may hold a dispatch. */
 export const HOLD_CAP_MS = 3_000;
 
@@ -160,9 +163,15 @@ export function createTextDom(options: TextDomOptions): TextDom {
     if (disposed || undispatched.length === 0 || holding.size > 0 || flushTimer !== null) return;
     flushTimer = setTimeout(flush, 0);
   };
-  const increment = (source: BumpSource): void => {
+  // V-21 (section 4.2): the families each increment can affect, for `changedSince`. A bounded
+  // log; `floor` is the generation before its oldest entry.
+  const log: { after: number; families: readonly string[] | null }[] = [];
+  let floor = generation;
+  const increment = (source: BumpSource, families: readonly string[] | null): void => {
     if (disposed) return;
     generation = nextGeneration();
+    log.push({ after: generation, families });
+    if (log.length > CHANGE_LOG_SIZE) floor = log.shift()!.after;
     undispatched.push(source);
     probe()?.({ kind: 'port-bump', atMs: now(), source, generation });
     request();
@@ -185,16 +194,23 @@ export function createTextDom(options: TextDomOptions): TextDom {
       capTimer = null;
     }
   };
-  /** A font-set event whose faces were all registered here is redundant with their settle. */
-  const foreign = (event: Event): boolean => {
+  /**
+   * A font-set event whose faces were all registered here is redundant with their settle
+   * (undefined); otherwise the families it can affect, or null when it names no face.
+   */
+  const foreign = (event: Event): readonly string[] | null | undefined => {
     const list = (event as { fontfaces?: readonly FontFace[] }).fontfaces;
-    return list === undefined || list.length === 0 || !list.every((face) => faces.has(face));
+    if (list === undefined || list.length === 0) return null;
+    if (list.every((face) => faces.has(face))) return undefined;
+    return list.map((face) => face.family);
   };
   const onLoadingDone = (event: Event): void => {
-    if (foreign(event)) increment('loadingdone');
+    const families = foreign(event);
+    if (families !== undefined) increment('loadingdone', families);
   };
   const onLoadingError = (event: Event): void => {
-    if (foreign(event)) increment('loadingerror');
+    const families = foreign(event);
+    if (families !== undefined) increment('loadingerror', families);
   };
 
   fonts?.addEventListener('loadingdone', onLoadingDone);
@@ -204,7 +220,7 @@ export function createTextDom(options: TextDomOptions): TextDom {
   let resolution: MediaQueryList | null = null;
   const onResolution = (): void => {
     arm();
-    increment('resolution');
+    increment('resolution', null);
   };
   const arm = (): void => {
     resolution?.removeEventListener('change', onResolution);
@@ -245,6 +261,16 @@ export function createTextDom(options: TextDomOptions): TextDom {
       });
       return unscaleResult(result, request, scale);
     },
+    changedSince(since: number): readonly string[] | null {
+      if (typeof since !== 'number' || !Number.isSafeInteger(since) || since < floor) return null;
+      const families = new Set<string>();
+      for (const entry of log) {
+        if (entry.after <= since) continue;
+        if (entry.families === null) return null;
+        for (const family of entry.families) families.add(family);
+      }
+      return [...families];
+    },
     subscribe(listener: () => void): () => void {
       if (typeof listener !== 'function')
         throw new TypeError('text-dom: listener is not a function');
@@ -272,19 +298,19 @@ export function createTextDom(options: TextDomOptions): TextDom {
       }
       faces.add(face);
       hold(face);
-      increment('add'); // A registry change.
+      increment('add', [font.family]); // A registry change.
       // The face settled; one still in flight at `dispose` resolves 'error', since dispose
       // removed it from `document.fonts` (review r1 N2).
       return face.load().then(
         () => {
           if (disposed) return 'error' as const;
           release(face);
-          increment('settle');
+          increment('settle', [font.family]);
           return 'loaded' as const;
         },
         () => {
           release(face);
-          increment('settle-error');
+          increment('settle-error', [font.family]);
           return 'error' as const;
         },
       );

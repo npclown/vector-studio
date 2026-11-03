@@ -36,16 +36,92 @@ export function layoutRequest(node: TextNode): TextLayoutRequest {
 }
 
 /**
+ * V-21 (contract, section 4.2): a family name as CSS matches it, unquoted (undoing the string
+ * escapes text-dom's `quoteCssString` writes: `\"`, `\\` and hex escapes) and ASCII
+ * case-folded. An unquoted entry of a list (a generic family) is trimmed only. For the port's raw
+ * names, see `foldFamily`.
+ */
+export function normalizeFamily(name: string): string {
+  let value = name.trim();
+  if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+    const inner = value.slice(1, -1);
+    value = '';
+    for (let index = 0; index < inner.length; index += 1) {
+      const character = inner[index]!;
+      if (character !== '\\' || index + 1 >= inner.length) {
+        value += character;
+        continue;
+      }
+      const hex = /^[0-9a-fA-F]{1,6} ?/.exec(inner.slice(index + 1));
+      if (hex === null) {
+        value += inner[index + 1]!;
+        index += 1;
+      } else {
+        value += String.fromCodePoint(Number.parseInt(hex[0].trim(), 16));
+        index += hex[0].length;
+      }
+    }
+  }
+  return foldFamily(value);
+}
+
+/**
+ * V-21: a raw family name as the port gives it (`FontFace.family`, a registered family), ASCII
+ * case-folded only. text-dom's font list quotes the raw name exactly, so unquoting it there
+ * (`normalizeFamily`) gives the same string; a raw name is never trimmed or unquoted.
+ */
+export function foldFamily(name: string): string {
+  return name.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+}
+
+/** The families of a CSS font-family list, normalized: commas outside double quotes split it. */
+export function fontListFamilies(list: string): string[] {
+  const families: string[] = [];
+  let start = 0;
+  let quoted = false;
+  for (let index = 0; index < list.length; index += 1) {
+    const character = list[index]!;
+    if (quoted && character === '\\') index += 1;
+    else if (character === '"') quoted = !quoted;
+    else if (character === ',' && !quoted) {
+      families.push(normalizeFamily(list.slice(start, index)));
+      start = index + 1;
+    }
+  }
+  families.push(normalizeFamily(list.slice(start)));
+  return families.filter((family) => family.length > 0);
+}
+
+/** Whether a result's font lists name one of `changed` (normalized families). */
+function affected(result: TextLayoutResult, changed: ReadonlySet<string>): boolean {
+  return result.fontLists.some((list) =>
+    fontListFamilies(list).some((family) => changed.has(family)),
+  );
+}
+
+/**
  * The editor's layout cache (section 5): a node object maps to its request key in a `WeakMap`,
  * and request keys map to results in a least-recently-used map of `TEXT_LAYOUT_CACHE_SIZE`
- * entries, so nodes with equal requests share one layout. The map holds one generation: a
- * generation change drops it.
+ * entries, so nodes with equal requests share one layout. A generation change drops the
+ * results it can affect (V-21, section 4.2: those whose font lists name a family the port's
+ * `changedSince` returns, or all of them); a kept result keeps its older generation.
  */
 export class TextLayoutCache {
   private readonly keys = new WeakMap<TextNode, string>();
   private results = new Map<string, TextLayoutResult>();
-  /** The generation the results belong to. */
+  /** The generation the cache last synced to (kept results may be older). */
   private generation: number;
+  /**
+   * V-21: the request keys dropped since the editor last took them (`takeDropped`), or null
+   * when everything was dropped; the relayout re-projects only those units.
+   */
+  private dropped: Set<string> | null = new Set();
+  /**
+   * V-21 review: whether the generation changed since the last `takeDropped`. While it has, a
+   * result stored at the new generation also marks its key, so a unit whose result was not
+   * held at the sync and is laid out again before the relayout is still re-projected.
+   */
+  private changedSinceTake = false;
   /**
    * The last generation `notify` reported, kept apart from the results' generation so that a
    * layout call between a bump and the editor's listener (another listener laying out) cannot
@@ -71,12 +147,41 @@ export class TextLayoutCache {
     if (split === null) this.previous = null;
   }
 
-  /** Drops the results of an older generation. */
+  /** Drops the results an older generation's increments can affect (V-21, section 4.2). */
   private sync(generation: number): void {
     if (generation === this.generation) return;
+    const changed = this.port.changedSince?.(this.generation) ?? null;
     this.generation = generation;
-    this.previous = this.split === null ? null : this.results;
-    this.results = new Map();
+    this.changedSinceTake = true;
+    this.previous = this.split === null ? null : new Map(this.results);
+    if (changed === null) {
+      this.results = new Map();
+      this.dropped = null;
+      return;
+    }
+    const families = new Set(changed.map(foldFamily));
+    if (families.size === 0) return;
+    for (const [key, result] of this.results) {
+      if (!affected(result, families)) continue;
+      this.results.delete(key);
+      this.dropped?.add(key);
+    }
+  }
+
+  /**
+   * V-21: for the relayout, whether `node`'s projected layout may be stale: its result was
+   * dropped or stored again since the generation changed after the last `takeDropped`, or is
+   * not held. Null from `takeDropped` means all.
+   */
+  takeDropped(): ((node: TextNode) => boolean) | null {
+    const dropped = this.dropped;
+    this.dropped = new Set();
+    this.changedSinceTake = false;
+    if (dropped === null) return null;
+    return (node) => {
+      const key = this.keys.get(node) ?? JSON.stringify(layoutRequest(node));
+      return dropped.has(key) || !this.results.has(key);
+    };
   }
 
   /**
@@ -134,6 +239,7 @@ export class TextLayoutCache {
     // holds; it is returned but not stored.
     if (this.port.generation !== generation) return result;
     this.results.set(key, result);
+    if (this.changedSinceTake) this.dropped?.add(key);
     if (this.results.size > TEXT_LAYOUT_CACHE_SIZE) {
       this.results.delete(this.results.keys().next().value!);
     }

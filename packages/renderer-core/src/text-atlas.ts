@@ -251,6 +251,12 @@ export class GlyphAtlasPlan {
     Readonly<{ generation: number; status: 'empty' | 'failed'; reason?: TextFailureReason }>
   >();
   #newestGeneration = -1;
+  /**
+   * V-21 (contract, section 4.3): the layout generations the current scene's text leaves carry,
+   * off-screen ones included, when the caller gives them; null keeps E28's "older than the newest
+   * seen" rule.
+   */
+  #sceneGenerations: ReadonlySet<number> | null = null;
   #frame = 0;
   #overLimit = false;
   /** Section 4, Compaction: the page the next frame evicts before its lookups. */
@@ -318,6 +324,7 @@ export class GlyphAtlasPlan {
     rendererGeneration: number,
     requests: readonly AtlasRequest[],
     holdsText: boolean,
+    sceneGenerations: ReadonlySet<number> | null = null,
   ): AtlasFrame {
     if (rendererGeneration !== this.#rendererGeneration) {
       this.#rendererGeneration = rendererGeneration;
@@ -346,6 +353,10 @@ export class GlyphAtlasPlan {
       });
     }
     for (const request of requests) this.#observeGeneration(request.generation);
+    if (sceneGenerations !== this.#sceneGenerations) {
+      this.#sceneGenerations = sceneGenerations;
+      if (sceneGenerations !== null) this.#dropObsolete();
+    }
 
     const pages = [...this.#pages];
     const added = new Map<string, AtlasEntry>();
@@ -760,22 +771,36 @@ export class GlyphAtlasPlan {
   #observeGeneration(generation: number): void {
     if (generation <= this.#newestGeneration) return;
     this.#newestGeneration = generation;
+    if (this.#sceneGenerations === null) this.#dropObsolete();
+  }
+
+  /**
+   * Whether layout generation `generation` is obsolete: no node of the current scene carries it
+   * (V-21, section 4.3), or, without the scene's generations, it is older than the newest seen.
+   */
+  #obsolete(generation: number): boolean {
+    const scene = this.#sceneGenerations;
+    return scene === null ? generation < this.#newestGeneration : !scene.has(generation);
+  }
+
+  /** Drops the empty and failed outcomes and the reported E28-D3 keys of obsolete generations. */
+  #dropObsolete(): void {
     for (const [key, outcome] of this.#outcomes) {
-      if (outcome.generation < generation) this.#outcomes.delete(key);
+      if (this.#obsolete(outcome.generation)) this.#outcomes.delete(key);
     }
     for (const key of this.#failuresReported) {
-      if (Number(key.slice(key.lastIndexOf('\u0000') + 1)) < generation) {
+      if (this.#obsolete(Number(key.slice(key.lastIndexOf('\u0000') + 1)))) {
         this.#failuresReported.delete(key);
       }
     }
   }
 
-  /** True when every entry of the page is of a layout generation below the newest one seen. */
+  /** True when every entry of the page is of an obsolete layout generation. */
   #holdsOnlyOlder(page: AtlasPage, added: ReadonlyMap<string, AtlasEntry>): boolean {
     if (page.keys.size === 0) return false;
     for (const key of page.keys) {
       const entry = added.get(key) ?? this.#entries.get(key);
-      if (entry === undefined || entry.generation >= this.#newestGeneration) return false;
+      if (entry === undefined || !this.#obsolete(entry.generation)) return false;
     }
     return true;
   }
@@ -961,6 +986,7 @@ export function planTextFrame(
   holdsText: boolean,
   camera: Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>,
   target: Readonly<{ generation: number; width: number; height: number; devicePixelRatio: number }>,
+  sceneGenerations: ReadonlySet<number> | null = null,
 ): TextFrame {
   const requests: AtlasRequest[] = [];
   const placed: Placed[] = [];
@@ -1010,7 +1036,7 @@ export function planTextFrame(
       }
     }
   });
-  const frame = atlas.plan(target.generation, requests, holdsText);
+  const frame = atlas.plan(target.generation, requests, holdsText, sceneGenerations);
   const records: number[] = [];
   const draws: TextLeafDraw[][] = leaves.map(() => []);
   frame.resolutions.forEach((resolution, index) => {

@@ -294,6 +294,8 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   readonly #isolateUnitOpacity: boolean;
   /** E28 contract, U2: the glyph atlas plan; null without `text: 'atlas'`. */
   readonly #atlas: GlyphAtlasPlan | null;
+  /** V-21 (section 4.3): the scene's text generations, kept while the derived set is unchanged. */
+  #generations: Readonly<{ texts: DerivedTexts; set: ReadonlySet<number> }> | null = null;
   readonly #onTextDeferred: (() => void) | undefined;
   /** P3 V3 section f: true exactly when this source consumes a fill-mesh or stroke-mesh port. */
   public readonly requiresMeshPipeline: boolean;
@@ -609,7 +611,14 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     const textFrame =
       this.#atlas === null
         ? null
-        : planTextFrame(this.#atlas, texts, derivedTexts.held, cameraState.camera, target);
+        : planTextFrame(
+            this.#atlas,
+            texts,
+            derivedTexts.held,
+            cameraState.camera,
+            target,
+            this.#sceneGenerations(derivedTexts),
+          );
     const textItems =
       textFrame === null
         ? []
@@ -1343,6 +1352,21 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
    * The visible primitives and text leaves. E26 contract, U5c: kept while the derivation's leaves,
    * the camera and the target size stay the same.
    */
+  /**
+   * V-21 (contract, section 4.3): the layout generations the scene's text leaves carry, hidden and
+   * off-screen ones included. The same set object is returned until the generations change, so
+   * the atlas re-checks obsolescence only then.
+   */
+  #sceneGenerations(texts: DerivedTexts): ReadonlySet<number> {
+    const known = this.#generations;
+    if (known !== null && known.texts === texts) return known.set;
+    const set = new Set(texts.leaves.map((leaf) => leaf.node.generation));
+    const same =
+      known !== null && known.set.size === set.size && [...set].every((g) => known.set.has(g));
+    this.#generations = { texts, set: same ? known.set : set };
+    return this.#generations.set;
+  }
+
   #cull(
     derivation: Derivation,
     camera: Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>,
