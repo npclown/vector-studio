@@ -80,6 +80,7 @@ The P0 runner accepts `--power-source`, `--power-mode`, `--background-load` and 
 - First-present wall time
 - Frame interval median/p95/p99
 - CPU encode-and-submit time median/p95/p99
+- The E30 frame split of a primitive frame, when recorded: `split.prepareMs`, `split.submitMs`, `split.acknowledgeMs` and `split.gpuMs` (median/p95/p99/max each), from the renderer's `vs-*` User Timing measures over the measured window ([E30 contract, section 3](../plans/d9-e30-renderer-cost-contract.md#3-the-frame-split-u1)). Each CPU part lies inside the encode-and-submit time, so per frame the three sum to at most it (the measures' own cost falls inside it); medians do not add. `gpuMs` is submit end to `onSubmittedWorkDone()` for every eighth frame, a queue-completion proxy, not GPU execution or presentation. A record says `splitEnabled: false` and `split: null` when the run turned the measures off (`E26_SPLIT=0`; its record file name ends in `--nosplit`, and the summarizer refuses a row that mixes on and off runs). The split reaches `summary.json` (`splitMedianMs`, `splitP95Ms`) only, not `summary.md`
 - Pointer-to-present latency when interaction exists
 - Frames submitted and frames presented where measurable
 - Draw calls or render-pass count
