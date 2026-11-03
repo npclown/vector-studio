@@ -1,3 +1,4 @@
+import { probeNow, type RelayoutSplit } from './text-probe.js';
 import type {
   PathStroke,
   RenderChangeSet,
@@ -1087,6 +1088,8 @@ type Changes = Pick<RenderChangeSet, 'inserted' | 'updated' | 'removed' | 'order
 type Rejection = Extract<SceneApplyResult, { status: 'invalid-scene' }>;
 
 export class SceneProjector {
+  /** V21-U1: while the bench's text probe times a relayout, the split it fills; null otherwise. */
+  split: RelayoutSplit | null = null;
   private readonly renderer: RendererSceneSynchronization;
   private readonly custom: CustomProjection;
   private readonly report: (event: DiagnosticEvent) => void;
@@ -1228,6 +1231,7 @@ export class SceneProjector {
     };
     for (const [id, entry] of this.memo) {
       if (entry.node.type === 'text') {
+        if (this.split !== null) this.split.textUnits += 1;
         this.memo.delete(id);
       } else if (entry.instance !== undefined && hasText(id)) {
         const expanded = new Map(
@@ -1246,16 +1250,27 @@ export class SceneProjector {
     const excluded = this.excluded.size;
     const retry = this.release(document, touched);
     if (this.excluded.size !== excluded) this.scoped = false;
+    const split = this.split;
     if (this.identity === null || this.base === null || this.page !== page) {
       if (this.page !== page) this.textReported = false;
+      if (split !== null) split.path = 'snapshot';
       this.sendSnapshot(document, page);
       return;
     }
     // Released subtrees are retried after the main set.
-    const result =
-      this.scoped && !this.wholePage
-        ? this.scopedSync(document, touched)
-        : this.sync(this.project(document, retry));
+    let result: ReturnType<SceneProjector['sync']>;
+    if (this.scoped && !this.wholePage) {
+      if (split !== null) split.path = 'scoped';
+      result = this.scopedSync(document, touched);
+    } else if (split === null) {
+      result = this.sync(this.project(document, retry));
+    } else {
+      split.path = 'whole-page';
+      const started = probeNow();
+      const projection = this.project(document, retry);
+      split.projectMs += probeNow() - started;
+      result = this.sync(projection);
+    }
     if (result === null || this.accepted(result)) {
       this.retry(document, retry);
       return;
@@ -1614,11 +1629,21 @@ export class SceneProjector {
    * nothing to send or after `disposed`; state is updated only on success.
    */
   private sync(projection: PageProjection): (SceneApplyResult & { changes: Changes }) | null {
+    const split = this.split;
+    const diffStarted = split === null ? 0 : probeNow();
     const changes = this.differences(projection, this.goneFrom(projection));
+    if (split !== null) split.diffMs += probeNow() - diffStarted;
     if (changes === null) return null;
+    if (split !== null) {
+      split.inserted += changes.inserted.length;
+      split.updated += changes.updated.length;
+      split.removed += changes.removed.length;
+    }
     // Not scoped until the set is accepted, also when the renderer throws.
     this.scoped = false;
+    const applyStarted = split === null ? 0 : probeNow();
     const result = this.apply(changes);
+    if (split !== null) split.applyMs += probeNow() - applyStarted;
     if (result === null) return null;
     if (this.accepted(result)) {
       this.sent = new Map(projection.nodes);

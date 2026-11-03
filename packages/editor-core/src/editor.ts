@@ -56,6 +56,7 @@ import {
 } from './keymap.js';
 import { SceneProjector } from './projector.js';
 import { TextLayoutCache, layoutRequest, type TextLayouter } from './text.js';
+import { emptySplit, probeNow, textProbe, type RelayoutSplit } from './text-probe.js';
 import {
   caretAfterInsertion,
   clampCaret,
@@ -931,16 +932,76 @@ class EditorCore implements Editor {
     // (a port that bumps in `layout`) is deferred to the end of that projector action, whose
     // caller then raises the event and the diagnostics after its own.
     cache?.port.subscribe(() => {
-      if (!cache.notify()) return;
-      if (this.reportTo !== null) {
-        this.relayoutPending += 1;
+      // V21-U1: the bench's text probe, if installed, times this dispatch (text-probe.ts).
+      const probe = textProbe();
+      if (probe === undefined) {
+        this.onTextGeneration(cache);
         return;
       }
-      const diagnostics: EditorEvent[] = [];
-      this.withProjector((projector) => projector.relayout(this.document), diagnostics);
-      this.emit({ type: 'session', field: 'textLayout' });
-      diagnostics.forEach((event) => this.emit(event));
+      const split = emptySplit();
+      const atMs = probeNow();
+      cache.probe(split);
+      let timing: ReturnType<EditorCore['onTextGeneration']>;
+      try {
+        timing = this.onTextGeneration(cache, split);
+      } finally {
+        cache.probe(null);
+      }
+      const totalMs = probeNow() - atMs;
+      probe({
+        kind: 'editor-dispatch',
+        atMs,
+        generation: cache.port.generation,
+        handled: timing.handled,
+        deferred: timing.deferred,
+        totalMs,
+        notifyMs: timing.notifyMs,
+        relayoutMs: timing.relayoutMs,
+        emitMs: timing.emitMs,
+        ...split,
+      });
     });
+  }
+
+  /**
+   * The port listener's work (M6c-P4): drops the cache, re-projects the text and raises
+   * `textLayout`. With `split` (V21-U1), the projector fills it and the phases are timed.
+   */
+  private onTextGeneration(
+    cache: TextLayoutCache,
+    split: RelayoutSplit | null = null,
+  ): { handled: boolean; deferred: boolean; notifyMs: number; relayoutMs: number; emitMs: number } {
+    const timing = { handled: false, deferred: false, notifyMs: 0, relayoutMs: 0, emitMs: 0 };
+    let mark = split === null ? 0 : probeNow();
+    const lap = (): number => {
+      const now = probeNow();
+      const elapsed = now - mark;
+      mark = now;
+      return elapsed;
+    };
+    const handled = cache.notify();
+    if (split !== null) timing.notifyMs = lap();
+    if (!handled) return timing;
+    timing.handled = true;
+    if (this.reportTo !== null) {
+      this.relayoutPending += 1;
+      timing.deferred = true;
+      return timing;
+    }
+    const diagnostics: EditorEvent[] = [];
+    this.withProjector((projector) => {
+      projector.split = split;
+      try {
+        projector.relayout(this.document);
+      } finally {
+        projector.split = null;
+      }
+    }, diagnostics);
+    if (split !== null) timing.relayoutMs = lap();
+    this.emit({ type: 'session', field: 'textLayout' });
+    diagnostics.forEach((event) => this.emit(event));
+    if (split !== null) timing.emitMs = lap();
+    return timing;
   }
 
   /**

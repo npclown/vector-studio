@@ -283,6 +283,12 @@ export type BenchHook = Readonly<{
    * layer tree renders), `properties`, `appearance`, `panels` and `aside`.
    */
   renders: () => Readonly<Record<string, number>>;
+  /**
+   * V21-U1 (V-21 contract, U1): the text probe's records since the bench was installed, in
+   * order: text-dom's `port-bump` (source, generation, dispatch time) and the editor's
+   * `editor-dispatch` (the relayout's split), the editor's first for the same bump.
+   */
+  textDispatches: () => readonly Readonly<Record<string, unknown>>[];
 }>;
 
 declare global {
@@ -630,6 +636,13 @@ export class Bench {
 
   private readonly renderCounts: Record<string, number> = {};
 
+  /** V21-U1: the text probe `pageBench` installs; keeps each record as given. */
+  readonly recordText = (record: Readonly<Record<string, unknown>>): void => {
+    this.textRecords.push(record);
+  };
+
+  private readonly textRecords: Readonly<Record<string, unknown>>[] = [];
+
   hook(): BenchHook {
     return {
       query: this.query,
@@ -669,6 +682,7 @@ export class Bench {
         return result.ok ? { ok: true } : { ok: false, code: result.code };
       },
       renders: () => ({ ...this.renderCounts }),
+      textDispatches: () => [...this.textRecords],
     };
   }
 
@@ -688,6 +702,9 @@ export function pageBench(): Bench | null {
   current = new Bench(query);
   window.__e26Bench = current.hook();
   (globalThis as { __vsRenderProbe?: (id: string) => void }).__vsRenderProbe = current.countRender;
+  (
+    globalThis as { __vsTextProbe?: (record: Readonly<Record<string, unknown>>) => void }
+  ).__vsTextProbe = current.recordText;
   return current;
 }
 
