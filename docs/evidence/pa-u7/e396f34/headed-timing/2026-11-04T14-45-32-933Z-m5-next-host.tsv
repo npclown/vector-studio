@@ -1,0 +1,11 @@
+file	project	title	status	ms	worker
+tests/m5-next-host/m5-next-host.spec.ts	edge	M5-A10: a reload restores the document and the last open page	passed	8481	1
+tests/m5-next-host/m5-next-host.spec.ts	chrome	M5-A10: a reload restores the document and the last open page	passed	8644	0
+tests/m5-next-host/m5-next-host.spec.ts	edge	M5-A10: Save file downloads an envelope and Open file restores it	passed	3462	1
+tests/m5-next-host/m5-next-host.spec.ts	chrome	M5-A10: Save file downloads an envelope and Open file restores it	passed	3605	0
+tests/m5-next-host/m5-next-host.spec.ts	edge	M5-A10: a corrupt entry (malformed text) loads nothing and is kept	passed	7945	1
+tests/m5-next-host/m5-next-host.spec.ts	chrome	M5-A10: a corrupt entry (malformed text) loads nothing and is kept	passed	7910	0
+tests/m5-next-host/m5-next-host.spec.ts	edge	M5-A10: a corrupt entry (a document with a bad field) loads nothing and is kept	passed	7859	1
+tests/m5-next-host/m5-next-host.spec.ts	chrome	M5-A10: a corrupt entry (a document with a bad field) loads nothing and is kept	passed	7895	0
+tests/m5-next-host/m5-next-host.spec.ts	chrome	M5 section 5.3: persist=1 ignores fixture= and persistence.flush writes	passed	5400	0
+tests/m5-next-host/m5-next-host.spec.ts	edge	M5 section 5.3: persist=1 ignores fixture= and persistence.flush writes	passed	5932	1

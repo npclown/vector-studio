@@ -1,0 +1,5 @@
+PA-U7 laptop sitting at e396f34, 2026-11-04 (UTC)
+
+pnpm test:headed --tier 2: no failures (343 passed, 0 failed, 0 flaky, 0 skipped).
+pnpm test:e26 (five v2 workloads, 3 repetitions): no test failures (72 passed, 72 skipped v1 projects).
+Performance targets are observations here; e26-summary.md lists each per-run p95 against its target.

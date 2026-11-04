@@ -1,0 +1,15 @@
+stage	status	minutes
+gpu	passed	9.2
+p5-next-host	passed	0.2
+m1-next-host	passed	0.1
+m2-next-host	passed	0.7
+m3-next-host	passed	0.3
+m4-next-host	passed	1.3
+m5-next-host	passed	0.6
+m6a-next-host	passed	0.3
+m6b-next-host	passed	0.7
+m6c-next-host	passed	4.7
+m6c-typing	passed	0.9
+m7-next-host	passed	0.2
+m8-next-host	passed	0.8
+total	passed	20.0
