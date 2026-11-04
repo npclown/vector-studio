@@ -1,0 +1,39 @@
+﻿node.exe : $ playwright test --config playwright.m2-next-host.config.ts
+At C:\Program Files\nodejs\pnpm.ps1:16 char:5
++     & "$basedir/node$exe"  "$basedir/node_modules/corepack/dist/pnpm. ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ($ playwright te...-host.config.ts:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[WebServer] (node:22896) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:26364) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+
+Running 10 tests using 1 worker
+
+(node:6056) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/10] [chrome] › tests\m2-next-host\m2-next-host.spec.ts:285:1 › M2-A13 section 7: every default chord reaches the editor
+[2/10] [chrome] › tests\m2-next-host\m2-next-host.spec.ts:433:1 › M2-A13: frame entry by double-click, the scope indicator and the toolbar ungroup
+[3/10] [chrome] › tests\m2-next-host\m2-next-host.spec.ts:479:1 › M2-A13: Alt-drag duplicates and Alt-click cycles an overlapping stack
+[4/10] [chrome] › tests\m2-next-host\m2-next-host.spec.ts:525:1 › M2-A13: copy, cut and paste through the system clipboard, also in a second tab
+[5/10] [chrome] › tests\m2-next-host\m2-next-host.spec.ts:610:1 › M2-A13 host: zoom controls, snap overlay and the rotate cursor
+(node:1988) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[6/10] [edge] › tests\m2-next-host\m2-next-host.spec.ts:285:1 › M2-A13 section 7: every default chord reaches the editor
+[7/10] [edge] › tests\m2-next-host\m2-next-host.spec.ts:433:1 › M2-A13: frame entry by double-click, the scope indicator and the toolbar ungroup
+[8/10] [edge] › tests\m2-next-host\m2-next-host.spec.ts:479:1 › M2-A13: Alt-drag duplicates and Alt-click cycles an overlapping stack
+[9/10] [edge] › tests\m2-next-host\m2-next-host.spec.ts:525:1 › M2-A13: copy, cut and paste through the system clipboard, also in a second tab
+[10/10] [edge] › tests\m2-next-host\m2-next-host.spec.ts:610:1 › M2-A13 host: zoom controls, snap overlay and the rotate cursor
+  10 passed (55.2s)
+
+headed timing: 10 tests, wall 0.9 min, 1 worker(s); D:\GIT\vector-studio\artifacts\headed-timing\2026-11-04T10-49-32-993Z-m2-next-host.json
+     0.4 min  edge         tests/m2-next-host/m2-next-host.spec.ts
+     0.4 min  chrome       tests/m2-next-host/m2-next-host.spec.ts
