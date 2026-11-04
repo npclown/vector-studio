@@ -20,7 +20,7 @@ describe('E30-U5 (L3) backend byte equality', () => {
       for (let index = 0; index < backing.length; index += 1) {
         backing[index] = Math.floor(rng() * 4);
       }
-      // Offsets 0 to 3 on both sides: aligned, unaligned and mixed views of shared buffers.
+      // Offsets 0 to 3 on both sides: aligned, unaligned and mixed views, some over one ArrayBuffer.
       const leftOffset = Math.floor(rng() * 4);
       const left = new Uint8Array(backing.buffer, leftOffset, length);
       let right: Uint8Array;
