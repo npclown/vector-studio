@@ -12,7 +12,7 @@ Unit U5 of the [E30 contract](../../plans/d9-e30-renderer-cost-contract.md#43-co
 
 ## The frame split at F, against `0846555`
 
-Median of run medians and maximum of run p95s; the `0846555` values in parentheses are the same statistics from its re-read.
+Median of run medians and maximum of run p95s; the `0846555` values in parentheses are the same statistics from its re-read. Its committed record keeps only the summary text (its raw records were not kept), so the frame `maxPerRunP95Ms`, gpu and encode baselines here are from that sitting's `summary.md` as the operator reported it at the time; they are not reproducible from the repository.
 
 | Scenario | Project | prepare median | submit median | submit p95 | gpu median | gpu p95 | `encodeAndSubmitMs` p95 per run | frame `maxPerRunP95Ms` | long tasks > 50 ms per run |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -33,11 +33,11 @@ Median of run medians and maximum of run p95s; the `0846555` values in parenthes
 | `simple-stress/v2` | edge-dpr1-v2 | 2.8 (2.7) | 0.6 (0.6) | 0.7 (0.8) | 5.8 (4.0) | 6.9 | 3.7, 3.6, 3.5 (3.8–4.1) | 18.1 (18.1) | 0, 0, 0 |
 | `simple-stress/v2` | edge-dpr2-v2 | 2.7 (2.8) | 0.6 (0.6) | 0.7 (0.8) | 6.1 (6.6) | 8.6 | 3.5, 3.6, 3.5 (3.8–4.3) | 18.1 (18.1) | 0, 0, 0 |
 
-- **Submit fell by a factor of 3 to 6** where clipped draws are many: typical view 4.0 to 1.1 to 1.2 ms in the median (p95 5.2 to 5.7 to 1.6 to 1.7), all-visible edit about 34 to 6.1 to 6.2 ms, pan 35 to 38 to 20 to 21 ms. Prepare is unchanged, as L3a and L3b do not touch it. Stress, with no clip states, is unchanged.
+- **Submit fell** where clipped draws are many: by a factor of about 3.5 in the typical view (4.0 to 1.1 to 1.2 ms in the median, p95 5.2 to 5.7 to 1.6 to 1.7) and about 5.5 in all-visible edit (about 34 to 6.1 to 6.2 ms), and by about 1.8 in pan (35 to 38 to 20 to 21 ms). Prepare is unchanged, as L3a and L3b do not touch it. Stress, with no clip states, is unchanged.
 - **The typical view now presents in one refresh:** frame `maxPerRunP95Ms` 18.1 to 18.2 ms in every run (35.5 to 35.9 at `0846555`), at this sitting's rAF interval (above); `encodeAndSubmitMs` p95 4.4 to 4.9 ms; no long task in 11 of 12 runs. The E26 row's target (≤ 16.7 ms) is below this PC's rAF interval in this sitting, so the summary still marks it a miss; the stress rows, which also present every frame, show the same 18.1 ms.
 - **All-visible edit:** frame p95 52.7 to 53.6 ms (72 to 89), encode p95 20 to 24 ms (50 to 63), long tasks 0 to 2 per run (144 to 173).
 - **All-visible pan:** frame p95 70.4 to 72.3 ms in all but one run (54.4 ms), encode p95 47 to 70 ms (68 to 87), long tasks 8 to 39 per run (123 to 157). Prepare (19 to 25 ms in the median) and submit (20 to 21 ms) are now about equal.
-- **The GPU queue proxy rose in the all-visible rows** (edit 118 to 120 to 224 to 251 ms in the median, pan 172 to 202 to 269 to 289 ms) and halved in the typical view (41 to 42 to about 20.6 ms). `vs-gpu` runs from a frame's submit end to its `onSubmittedWorkDone()` and holds the earlier frames' queued work: with the main thread submitting each all-visible frame in about a third of the time, more frames are queued ahead of each sample, so the proxy grows while the frame time falls. These rows are now bound by the GPU's work per frame, not by the main thread's encode.
+- **The GPU queue proxy rose in the all-visible rows** (edit 118 to 120 to 224 to 251 ms in the median, pan 172 to 202 to 269 to 289 ms) and halved in the typical view (41 to 42 to about 20.6 ms). `vs-gpu` runs from a frame's submit end to its `onSubmittedWorkDone()` and holds the earlier frames' queued work: with the main thread submitting each all-visible frame in less time, more frames can be queued ahead of each sample, so the proxy grows while the frame time falls. We read this as these rows now being bound by the GPU's work per frame rather than the main thread's encode (main-thread prepare plus submit is about 16 ms in edit while a frame takes two to three refreshes); the harness does not profile GPU work, so this is an inference. Stress, with few draws, also rose on DPR 1 (gpu median 3.7 to 6.0 and 4.0 to 5.8 ms).
 
 ## The latency split (`e26-pointer-busy-10k/v2`)
 
@@ -54,16 +54,16 @@ Median of run medians and maximum of run p95s; the `0846555` values in parenthes
 
 - **A median move is about 40 ms faster** (68 to 80 ms against 109 to 135), and the worst run p95 is 171 to 315 ms (339 to 557). Submit is 1.3 to 1.4 ms of it (4.2 at `0846555`); prepare plus submit is about 4 ms.
 - **Long tasks after an isolation:** busy rows 1 per run in 11 of 12 runs and 2 in one, which, less the font load's one task per busy run (`longTasksOver50OutsideIsolation` counts it), is 1 other task in 12 runs (about 3 in 12 at `0846555`); plain rows 1 in 12 runs (0 in 12).
-- The rows still miss PA-A04's 50 ms; the remainder is between the move's submission and its observed completion, which the GPU queue holds, as above.
+- The rows still miss PA-A04's 50 ms; the remainder is between the move's submission and its observed completion, which we read as GPU queue time, as above (not profiled).
 
 ## Conditional levers (E30-A07)
 
-- **L3, after L3a and L3b.** The CPU encode is no longer the leading cost: `vs-submit` p95 is 1.6 to 1.7 ms in the typical view (under section 4.3's 5 ms) and 9.5 to 10.6 ms in all-visible edit, 23.6 to 26.9 ms in pan. `vs-gpu` p95 stays over 5 ms in every row (6.9 to 359 ms), and in the all-visible rows the GPU's work per frame now sets the frame time. Section 4.3 writes up a GPU remedy that needs a new pipeline, render bundle or draw-order change as its own item first; what the GPU spends per all-visible frame (the 4x multisampled 2560 × 1440 target at DPR 2, the mask passes, overdraw) is not profiled by the E26 harness, so the next step for L3 is that profile and the write-up, not a merge in E30. The pan rows' remaining CPU (prepare 19 to 25 ms, submit about 20 ms, from the masked states and mask tiles that move with the camera) is a candidate for a further L3 part.
+- **L3, after L3a and L3b.** The CPU encode is no longer the leading cost: `vs-submit` p95 is 1.6 to 1.7 ms in the typical view (under section 4.3's 5 ms) and 9.5 to 10.6 ms in all-visible edit, 23.6 to 26.9 ms in pan. `vs-gpu` p95 stays over 5 ms in every row (6.9 to 359 ms), and in the all-visible rows the GPU's work per frame appears to set the frame time (inferred, as above). Section 4.3 writes up a GPU remedy that needs a new pipeline, render bundle or draw-order change as its own item first; what the GPU spends per all-visible frame (the 4x multisampled 2560 × 1440 target at DPR 2, the mask passes, overdraw) is not profiled by the E26 harness, so the next step for L3 is that profile and the write-up, not a merge in E30. The pan rows' remaining CPU (prepare 19 to 25 ms, submit about 20 ms, from the masked states and mask tiles that move with the camera) is a candidate for a further L3 part.
 - **L4** (#489) and **L5** (not needed at `0846555`; prepare plus submit is now about 4 ms of a median move) stand.
 
 ## Result
 
 - L3a and L3b took the backend's main-thread encode from the leading cost to a small one on the PC: submit 4.0 to 1.1 ms in the typical view and 34 to 6 ms in all-visible edit (median); the typical view now presents every frame (18.1 ms at this sitting's longer rAF interval), and a median pointer move is about 40 ms faster.
-- The all-visible rows (PA-A03) are now bound by the GPU's per-frame work (`vs-gpu` up as the queue deepens); a GPU-side remedy is written up as its own item before any merge (section 4.3).
+- The all-visible rows (PA-A03) appear bound by the GPU's per-frame work (`vs-gpu` up as the queue deepens; inferred, not profiled); a GPU-side remedy is written up as its own item before any merge (section 4.3).
 - `test:gpu` (SwiftShader) 93/93 at `af351d3`, the run #492 and #493 owed.
 - One v1 control failed at its font load (`net::ERR_NO_BUFFER_SPACE`) and passed on its retry; named, not counted.
