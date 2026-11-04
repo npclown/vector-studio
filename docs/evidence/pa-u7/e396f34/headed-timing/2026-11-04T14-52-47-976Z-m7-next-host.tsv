@@ -1,0 +1,5 @@
+file	project	title	status	ms	worker
+tests/m7-next-host/m7-next-host.spec.ts	chrome	M7-A11: source edits reach instances; resize, detach, source delete and undo	passed	5352	0
+tests/m7-next-host/m7-next-host.spec.ts	edge	M7-A11: source edits reach instances; resize, detach, source delete and undo	passed	5688	1
+tests/m7-next-host/m7-next-host.spec.ts	chrome	M7-A11: a ?persist=1 reload keeps the instances linked	passed	5991	0
+tests/m7-next-host/m7-next-host.spec.ts	edge	M7-A11: a ?persist=1 reload keeps the instances linked	passed	6038	1

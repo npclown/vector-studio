@@ -1,0 +1,36 @@
+{
+  "schema": "headed-timing-v1",
+  "config": "playwright.m6c-next-host.config.ts",
+  "startedUtc": "2026-11-04T14:51:52.747Z",
+  "status": "passed",
+  "workers": 1,
+  "wallMilliseconds": 54337,
+  "tests": 8,
+  "testMilliseconds": 49624,
+  "specs": [
+    {
+      "file": "tests/m6c-next-host/m6c-typing.spec.ts",
+      "project": "edge-dpr2",
+      "tests": 2,
+      "milliseconds": 13737
+    },
+    {
+      "file": "tests/m6c-next-host/m6c-typing.spec.ts",
+      "project": "chrome-dpr2",
+      "tests": 2,
+      "milliseconds": 13620
+    },
+    {
+      "file": "tests/m6c-next-host/m6c-typing.spec.ts",
+      "project": "edge",
+      "tests": 2,
+      "milliseconds": 11370
+    },
+    {
+      "file": "tests/m6c-next-host/m6c-typing.spec.ts",
+      "project": "chrome",
+      "tests": 2,
+      "milliseconds": 10897
+    }
+  ]
+}
