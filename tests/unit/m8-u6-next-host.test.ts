@@ -525,7 +525,8 @@ describe('M8-N3: every next-host config states its viewport and every spec check
         );
       }
     }
-    expect(specs).toBe(17);
+    // PA-U8 added tests/m6a-next-host/pa-u8-r34.spec.ts.
+    expect(specs).toBe(18);
     // The helper checks the origin, the document size, both rows, row 2's height, the right
     // column's width, height and fit, and the horizontal scroll.
     const helper = read('tests/support/m8-n3-budget.ts');
