@@ -142,3 +142,11 @@ Decided 2026-10-24 for P3 ([E11-Q3 (a)](plans/d9-e11-p3-c03-c05-closure-contract
 Initially, trusted extensions are registered by the host at build time. They may contribute node definitions, tools, commands, shortcuts, and UI panels. Extensions use commands, queries, and events rather than mutating the store or renderer directly.
 
 Untrusted plugins, sandbox execution, a marketplace, import/export, raster editing, animation, and real-time collaboration are deferred.
+
+Future considerations (recorded 2026-11-04 at the user's request; no work is scheduled). Today's extension surface ([host API guide](host-api.md#extensions)) covers path-shaped custom node types that use the node's own fill and stroke, commands, tools, key bindings, UI panels, and import or export built on public commands and queries. These need engine or core changes first, because the scene contract has no place for them:
+
+- New paint types beyond solid, linear and radial (for example patterns, image fills, conic or mesh gradients).
+- Effects and filters (for example blur, shadow, blend modes).
+- Non-path content such as raster image nodes, and any renderer-side extension (custom shaders, direct renderer access).
+
+A plugin contract is planned when the first concrete need for one of these appears. It would cover a renderer-side extension port for registering paints and effects, extension versioning and compatibility rules, and, only if untrusted plugins are wanted, runtime installation and a sandbox, which stay deferred until then.
