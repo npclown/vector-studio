@@ -1,0 +1,15 @@
+     Running unittests src\lib.rs (.tools\geometry-build\release\deps\vector_studio_geometry_kernel-57fa1f1e0e26e2c5.ex
+e)
+
+running 1 test
+p3-fill-ladder dump: 1 entries, 4366 bytes
+test fill_ladder_dump_tests::emit_fill_ladder_dump ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 594 filtered out; finished in 0.01s
+
+ Test Files  72 passed | 4 skipped (76)
+      Tests  1217 passed | 6 skipped (1223)
+   Start at  23:19:11
+   Duration  851.30s (transform 1.91s, setup 0ms, import 9.16s, tests 833.17s, environment 5ms)
+
+exit 0 end 2026-11-04T14:33:23.1282009Z

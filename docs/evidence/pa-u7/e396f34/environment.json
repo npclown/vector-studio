@@ -1,0 +1,90 @@
+{
+  "item": "PA-U7 (pre-alpha gate plan, PA-A08, PA-Q5 (a)) lower-tier sitting on the user's laptop",
+  "head": "e396f340c5e491971ef7142b572268043b54ae0d",
+  "checkout": "origin/main detached; git status clean apart from untracked artifacts/ (build caches) before the timed parts",
+  "machine": {
+    "host": "DESKTOP-O0IIPP6",
+    "source": "Win32_ComputerSystem, Win32_OperatingSystem, Win32_Processor, Win32_VideoController (CIM), observed 2026-11-04T14:17:56Z",
+    "os": "Windows 11 Pro 10.0.26200, 25H2, UBR 9711",
+    "cpu": "13th Gen Intel Core i9-13900H, 14 cores, 20 logical processors",
+    "ramGB": 39.6,
+    "gpus": [
+      {
+        "name": "Intel Iris Xe Graphics",
+        "driver": "31.0.101.4146 (2023-02-22)",
+        "display": "internal panel 1920 x 1200, 120 Hz, not primary"
+      },
+      {
+        "name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+        "driver": "31.0.15.4617 (2023-11-09)",
+        "display": "external monitor 3440 x 1440, 99 Hz, primary"
+      }
+    ],
+    "displayScale": "AppliedDPI 96 (100 %)",
+    "power": "AC (PowerLineStatus Online), battery 100 %, at every snapshot",
+    "node": "24.22.1",
+    "pnpm": "11.1.2",
+    "chrome": "156.0.8078.80 (file version of chrome.exe)",
+    "edge": "156.0.4314.58 (file version of msedge.exe)"
+  },
+  "webgpuAdapter": {
+    "reported": "nvidia / lovelace (RTX 4050 Laptop GPU)",
+    "source": "adapter field of all 72 e26 run records; vendor field of all 41 evidence JSON files written by the tier 2 gpu stage under artifacts/ (14:33-14:54Z)",
+    "intelIGpu": false,
+    "why": "The product requests powerPreference 'high-performance' (packages/renderer-webgpu/src/webgpu-platform.ts) and so does the E26 harness's adapter probe (tests/e26/e26-harness.spec.ts); Chromium honoured it with the discrete GPU present. No --force_high_performance_gpu flag was passed and no Windows graphics preference was changed (the only per-app entry is an unrelated game)."
+  },
+  "m8n3Baseline": {
+    "file": "m8-n3-17a2b0a-laptop-headed.json",
+    "localPath": "artifacts/m8-n3/17a2b0a-laptop-headed.json",
+    "sha256": "251FF72C003093F4A547E0CE574122041028FCDABE1A80289FD63E80157055DB",
+    "measured": "2026-11-02 on this laptop, headed, at 17a2b0a (root D:\\GIT\\vs-17a2b0a), Chrome 156.0.8078.74 and Edge 156.0.4314.58; reused, not re-measured"
+  },
+  "observations": [
+    {
+      "utc": "2026-11-04T14:17:56Z",
+      "what": "open apps: Chrome (user window, 16 processes), Edge (5 windowless processes), Outlook (olk), Notepad++, TeamViewer, Windows Terminal, Claude, Settings; CPU load 28 %; free RAM 19.8 GB",
+      "source": "agent observation (Get-Process with a main window, Win32_Processor.LoadPercentage)"
+    },
+    {
+      "utc": "2026-11-04T14:20:29Z",
+      "what": "after the user closed the browsers (thread reply 14:20:26Z): chrome 0 processes; msedge 5 windowless processes started 10:23:33Z (background/startup boost), kept",
+      "source": "agent observation"
+    },
+    {
+      "utc": "2026-11-04T14:33:43Z",
+      "what": "before tier 2: CPU 3.6 % (6 s average), free RAM 21.1 GB, AC",
+      "source": "Get-Counter Processor(_Total), Win32_OperatingSystem"
+    },
+    {
+      "utc": "2026-11-04T14:54:17Z",
+      "what": "before e26: CPU 10.1 % (6 s average), free RAM 13.6 GB, AC; WSL running (vmmemWSL 4.7 GB working set)",
+      "source": "Get-Counter Processor(_Total), Win32_OperatingSystem, Get-Process"
+    }
+  ],
+  "runs": [
+    {
+      "what": "pnpm test:geometry (geometry WASM build)",
+      "utc": "2026-11-04T14:17:5xZ to 14:33:23Z",
+      "result": "exit 0; vitest 1217 passed, 6 skipped",
+      "log": "geometry-tail.log"
+    },
+    {
+      "what": "M8_N3_BASELINE=<laptop baseline> pnpm test:headed --tier 2 (default 4 workers)",
+      "utc": "2026-11-04T14:33:46Z to 14:53:49Z",
+      "result": "exit 0; 343 passed, 0 failed, 0 flaky, 0 skipped; 20.0 min",
+      "files": ["stages.tsv", "headed-timing/", "tier2-console.log", "failures.txt"]
+    },
+    {
+      "what": "E26_SCENARIOS=<five v2 workloads> E26_REPETITIONS=3 M8_N3_BASELINE=<laptop baseline> E26_RESULTS_DIR=test-results/pa-u7/e26-runs pnpm test:e26",
+      "utc": "2026-11-04T14:54:2xZ to 15:24:57Z",
+      "result": "exit 0; 72 passed, 72 skipped (the v1 projects skip M9 scenarios); 30.6 min",
+      "files": ["e26-runs/", "e26-console.log", "e26-summary.json", "e26-summary.md"]
+    }
+  ],
+  "departures": [
+    "WebGPU ran on the NVIDIA RTX 4050, not the Intel iGPU the brief requires, in both tier 2 and e26 (see webgpuAdapter). This sitting is therefore not the PA-Q5 (a) integrated-GPU reference; it is kept as a discrete-GPU laptop record.",
+    "Chrome is 156.0.8078.80; the reused M8-N3 baseline was measured with 156.0.8078.74 (Edge unchanged). All M8-N3 budget checks passed.",
+    "Edge background processes (5, windowless), Outlook, Notepad++, TeamViewer and WSL stayed open during the timed parts.",
+    "Frame p95 values fall on about 10 ms steps, consistent with vsync on the 99 Hz external primary monitor; the browser windows' monitor was not recorded."
+  ]
+}

@@ -1,0 +1,9 @@
+file	project	title	status	ms	worker
+tests/m6c-next-host/m6c-typing.spec.ts	chrome	M6c-A08: a typed word and a composing syllable draw at the port positions with ink	passed	7862	0
+tests/m6c-next-host/m6c-typing.spec.ts	chrome	M6c-A08 (input half): the word and the syllable reach the document through real input	passed	3035	0
+tests/m6c-next-host/m6c-typing.spec.ts	edge	M6c-A08: a typed word and a composing syllable draw at the port positions with ink	passed	8165	1
+tests/m6c-next-host/m6c-typing.spec.ts	edge	M6c-A08 (input half): the word and the syllable reach the document through real input	passed	3205	1
+tests/m6c-next-host/m6c-typing.spec.ts	chrome-dpr2	M6c-A08: a typed word and a composing syllable draw at the port positions with ink	passed	10528	2
+tests/m6c-next-host/m6c-typing.spec.ts	chrome-dpr2	M6c-A08 (input half): the word and the syllable reach the document through real input	passed	3092	2
+tests/m6c-next-host/m6c-typing.spec.ts	edge-dpr2	M6c-A08: a typed word and a composing syllable draw at the port positions with ink	passed	10696	3
+tests/m6c-next-host/m6c-typing.spec.ts	edge-dpr2	M6c-A08 (input half): the word and the syllable reach the document through real input	passed	3041	3
