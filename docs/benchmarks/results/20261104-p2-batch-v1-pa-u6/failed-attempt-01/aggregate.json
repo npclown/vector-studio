@@ -1,0 +1,14 @@
+{
+  "schema": "p2-aggregate/v1",
+  "profile": "functional",
+  "disposition": "FUNCTIONAL_FAIL",
+  "acceptance": "Requires Primary review; not full P2/P1 acceptance",
+  "performanceDisposition": "NOT_APPLICABLE",
+  "findings": [
+    "Error: Command failed (1): D:\\GIT\\vector-studio\\node_modules\\@playwright\\test\\cli.js",
+    "Missing repetition: chrome/1",
+    "Missing repetition: edge/1"
+  ],
+  "worstMedianPairedSpeedup": null,
+  "repetitions": []
+}

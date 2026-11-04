@@ -1,0 +1,16 @@
+# PA-U8 R34 headed spec, 6e172765, DESKTOP-DKVUSAV, 2026-11-04
+# Command: M8_N3_BASELINE=docs/evidence/m8-a14-2026-11-01/17a2b0a-main-pc-headed.json pnpm exec playwright test --config playwright.m6a-next-host.config.ts tests/m6a-next-host/pa-u8-r34.spec.ts --reporter=list
+# A first invocation without M8_N3_BASELINE failed all 4 tests at the M8-N3 baseline check (no measurement).
+
+Running 4 tests using 1 worker
+  ok 1 [chrome] › tests\m6a-next-host\pa-u8-r34.spec.ts:95:3 › PA-A09 R34: "Malgun Gothic" lays out in the named system font (575ms)
+  ok 2 [chrome] › tests\m6a-next-host\pa-u8-r34.spec.ts:95:3 › PA-A09 R34: "Times New Roman" lays out in the named system font (593ms)
+  ok 3 [edge] › tests\m6a-next-host\pa-u8-r34.spec.ts:95:3 › PA-A09 R34: "Malgun Gothic" lays out in the named system font (685ms)
+  ok 4 [edge] › tests\m6a-next-host\pa-u8-r34.spec.ts:95:3 › PA-A09 R34: "Times New Roman" lays out in the named system font (525ms)
+  4 passed (7.6s)
+
+# Annotations (from a third identical run with --reporter=list,json, 4 passed):
+chrome  Malgun Gothic max |layout - canvas| = 0
+chrome  Times New Roman max |layout - canvas| = 0
+edge  Malgun Gothic max |layout - canvas| = 0
+edge  Times New Roman max |layout - canvas| = 0

@@ -1,0 +1,63 @@
+{
+  "schema": "p2-aggregate/v1",
+  "profile": "functional",
+  "disposition": "FUNCTIONAL_PASS",
+  "acceptance": "Requires Primary review; not full P2/P1 acceptance",
+  "performanceDisposition": "NOT_APPLICABLE",
+  "findings": [],
+  "worstMedianPairedSpeedup": 0.9653934888491452,
+  "repetitions": [
+    {
+      "project": "chrome",
+      "repetition": 1,
+      "analysis": {
+        "disposition": "FUNCTIONAL_PASS",
+        "findings": [],
+        "unverified": [],
+        "batch": {
+          "count": 2,
+          "median": 381.19999999552965,
+          "p95": 390.1000000014901,
+          "p99": 390.1000000014901,
+          "min": 381.19999999552965,
+          "max": 390.1000000014901
+        },
+        "perPath": {
+          "count": 2,
+          "median": 376.6000000014901,
+          "p95": 387.30000000447035,
+          "p99": 387.30000000447035,
+          "min": 376.6000000014901,
+          "max": 387.30000000447035
+        },
+        "medianPairedSpeedup": 0.9653934888491452
+      }
+    },
+    {
+      "project": "edge",
+      "repetition": 1,
+      "analysis": {
+        "disposition": "FUNCTIONAL_PASS",
+        "findings": [],
+        "unverified": [],
+        "batch": {
+          "count": 2,
+          "median": 374.8999999985099,
+          "p95": 392.70000000298023,
+          "p99": 392.70000000298023,
+          "min": 374.8999999985099,
+          "max": 392.70000000298023
+        },
+        "perPath": {
+          "count": 2,
+          "median": 378.29999999701977,
+          "p95": 379.79999999701977,
+          "p99": 379.79999999701977,
+          "min": 378.29999999701977,
+          "max": 379.79999999701977
+        },
+        "medianPairedSpeedup": 0.9671504965473324
+      }
+    }
+  ]
+}

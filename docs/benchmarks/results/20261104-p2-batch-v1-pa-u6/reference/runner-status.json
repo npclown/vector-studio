@@ -1,0 +1,6 @@
+{
+  "schema": "p2-runner-status/v1",
+  "finishedAt": "2026-11-04T13:36:55.698Z",
+  "success": false,
+  "failure": "Error: Command failed (1): D:\\GIT\\vector-studio\\node_modules\\vitest\\vitest.mjs"
+}
