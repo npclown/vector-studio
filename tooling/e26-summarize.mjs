@@ -40,7 +40,7 @@ const records = readdirSync(directory)
   .sort()
   .map((name) => ({ name, ...JSON.parse(readFileSync(path.join(directory, name), 'utf8')) }))
   // PA-U4b: memory-variant runs are never timed evidence (A09-A03).
-  .filter((record) => record.memoryVariant !== true);
+  .filter((record) => record.memoryVariant !== true && record.presentMonVariant !== true);
 
 const groups = new Map();
 for (const record of records) {
