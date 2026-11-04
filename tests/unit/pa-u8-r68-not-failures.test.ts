@@ -46,8 +46,9 @@ describe('PA-U8 R68: the path-rendering "not failures" cases', () => {
     // A width-0 stroke draws nothing and is accepted without a stroke port.
     const zero = strokedNode('zero', 0, { stroke: pathStroke({ width: 0 }) });
     expect(fillOnly().replaceSnapshot(snapshot([zero])).status).toBe('applied');
-    // R68 as first written said the fill draws and nothing is reported; the requirement now states what ships (2026-11-04): the scene is rejected with a
-    // reason, which the editor projector reports as the diagnostic editor.renderer-unsupported.
+    // R68 first said the fill draws and nothing is reported; reworded 2026-11-04 to what ships:
+    // the scene is rejected with a reason, which the editor projector reports as the diagnostic
+    // editor.renderer-unsupported.
     const stroked = strokedNode('stroked', 0);
     const result = fillOnly().replaceSnapshot(snapshot([pathNode('other', 40), stroked]));
     expect(result).toMatchObject({ status: 'invalid-scene', reason: 'unsupported-feature' });
