@@ -1,0 +1,45 @@
+{
+  "item": "PA-U5",
+  "commit": "6eb90f2cae107eee55d02be0eddd6cff94fd0bd3",
+  "machine": "DESKTOP-DKVUSAV",
+  "os": "Windows 11 Pro 10.0.26200",
+  "node": "v24.22.1",
+  "pnpm": "11.1.2",
+  "playwright": "1.62.1",
+  "browser": {
+    "channel": "chrome",
+    "version": "156.0.8078.81",
+    "note": "The record's userAgent says Chrome/151.0.7922.34: that is the Playwright 'Desktop Chrome' device descriptor override; the installed and launched Chrome is 156.0.8078.81."
+  },
+  "gpu": {
+    "name": "NVIDIA GeForce GTX 1660 SUPER",
+    "driverVersion": "32.0.16.1088",
+    "driverDate": "2026-07-22"
+  },
+  "presentmon": {
+    "file": "test-results/p1-tools/presentmon-2.5.1/PresentMon-2.5.1-x64.exe",
+    "source": "https://github.com/GameTechDev/PresentMon/releases/download/v2.5.1/PresentMon-2.5.1-x64.exe",
+    "bytes": 956768,
+    "sha256": "9bec3083069f58f911e6a512f4806db51a27bd096103087bc1d05ef54c80a191",
+    "note": "Re-downloaded with the user's approval on 2026-11-04; the ignored copy was missing. Hash matches the pinned value; helper -PreflightOnly passed."
+  },
+  "command": "$env:E26_PRESENTMON='test-results/pa-u5-6eb90f2-01'; $env:E26_SCENARIOS='e26-pointer-busy-10k/v2'; $env:E26_REPETITIONS='1'; $env:M8_N3_BASELINE='docs/evidence/m8-a14-2026-11-01/17a2b0a-main-pc-headed.json'; pnpm exec playwright test --config playwright.e26.config.ts --project chrome-dpr1-v2",
+  "attempts": [
+    {
+      "startUtc": "2026-11-04T13:41:33Z",
+      "endUtc": "2026-11-04T13:41:54Z",
+      "outcome": "Stopped before elevation: the PresentMon binary was missing (helper hash check). No UAC prompt, no capture."
+    },
+    {
+      "startUtc": "2026-11-04T13:43:51Z",
+      "endUtc": "2026-11-04T13:44:10Z",
+      "outcome": "Stopped before elevation: the empty capture directory left by attempt 1 already existed. No UAC prompt, no capture."
+    },
+    {
+      "startUtc": "2026-11-04T13:44:20Z",
+      "endUtc": "2026-11-04T13:45:08Z",
+      "outcome": "The measured run. UAC approved; PresentMon requested 13:44:36.99Z, started 13:44:39.97Z, ended 13:45:05.14Z, exit 0. The test failed: 'the release was applied' (undoDepth 1, expected 2); rejections 0. The plain variant was skipped."
+    }
+  ],
+  "browsersRunningBefore": 0
+}
