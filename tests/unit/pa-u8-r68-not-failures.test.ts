@@ -16,11 +16,12 @@ import {
 import { pathStroke, strokedNode } from '../support/st-u6-stroke-harness.js';
 
 // Pre-alpha gate, unit PA-U8, criterion PA-A09 (R68 half): one check per "not failures" case of
-// requirements.md (section "Path rendering failures"). Each case states what is drawn and that
-// nothing is reported. The first case is checked against the behavior that ships, which the
-// B2 stroke contract's section 9.1 amendment S4 (checked by ST-A10) fixed as a rejection: the
-// check records that contradiction (PA-A09 records it as FAIL) rather than asserting the
-// requirement text. Functional evidence only; no precision or performance claim.
+// requirements.md (section "Path rendering failures") and its stroke-port case. Each case states what is drawn and that
+// nothing is reported. The first case, a renderer without a stroke port, first said "draws
+// fills only"; the B2 stroke contract's section 9.1 amendment S4 (ST-A10) made it a rejection,
+// and on 2026-11-04 the user had the requirement reworded to match ("Rejected, not drawn
+// less"), so the check asserts the rejection. Functional evidence only; no precision or
+// performance claim.
 
 const invalidation: RendererInvalidationTarget = {
   invalidate: () => undefined,
@@ -37,7 +38,7 @@ function snapshot(nodes: readonly RenderNodeSnapshot[]): RenderSceneSnapshot {
 }
 
 describe('PA-U8 R68: the path-rendering "not failures" cases', () => {
-  it('case 1, no stroke port: a fill-only scene applies, but a stroke of width > 0 rejects the whole scene as unsupported-feature (contradicts R68)', () => {
+  it('case 1, no stroke port: a fill-only scene applies, but a stroke of width > 0 rejects the whole scene as unsupported-feature (R68 as reworded 2026-11-04)', () => {
     const fillOnly = () =>
       new PrimitiveRendererService(invalidation, { fillMesh: createCountingPort() });
     // A fill without a stroke applies and is not reported: the "draws fills only" half holds.
@@ -45,7 +46,7 @@ describe('PA-U8 R68: the path-rendering "not failures" cases', () => {
     // A width-0 stroke draws nothing and is accepted without a stroke port.
     const zero = strokedNode('zero', 0, { stroke: pathStroke({ width: 0 }) });
     expect(fillOnly().replaceSnapshot(snapshot([zero])).status).toBe('applied');
-    // R68 says the fill draws and nothing is reported. What ships: the scene is rejected with a
+    // R68 as first written said the fill draws and nothing is reported; the requirement now states what ships (2026-11-04): the scene is rejected with a
     // reason, which the editor projector reports as the diagnostic editor.renderer-unsupported.
     const stroked = strokedNode('stroked', 0);
     const result = fillOnly().replaceSnapshot(snapshot([pathNode('other', 40), stroked]));
