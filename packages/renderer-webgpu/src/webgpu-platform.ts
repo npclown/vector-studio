@@ -343,7 +343,10 @@ class BrowserAdapterPort implements WebGpuAdapterPort {
   }
 
   async requestDevice(): Promise<WebGpuDevicePort> {
-    return new BrowserDevicePort(await this.native.requestDevice());
+    // E30-U5 GPU profile, DIAGNOSTIC ONLY: ask for timestamp queries when offered.
+    const requiredFeatures: GPUFeatureName[] =
+      this.native.features?.has?.('timestamp-query') === true ? ['timestamp-query'] : [];
+    return new BrowserDevicePort(await this.native.requestDevice({ requiredFeatures }));
   }
 }
 

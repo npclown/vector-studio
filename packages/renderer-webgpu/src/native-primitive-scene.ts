@@ -710,6 +710,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   readonly clipPipelineAvailable: boolean;
   readonly sampleCount: 1 | 4;
   readonly #device: GPUDevice;
+  #gpuTsNow: GpuTs | null = null;
   readonly #context: NativeCanvasContextPort;
   readonly #format: PrimitiveTargetFormat;
   readonly #generation: number;
@@ -1164,6 +1165,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       const presentationView = presentation.createView();
       const multisampleView = this.#attachment?.createView();
       const encoder = this.#device.createCommandEncoder({ label: 'vector-studio/primitive-frame' });
+      const gpuTsNow = gpuTsFrame(this.#device);
+      this.#gpuTsNow = gpuTsNow;
       if (clip !== null) {
         this.#encodeMaskPasses(encoder, clip, arena, meshArena, transients);
       }
@@ -1176,6 +1179,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
             });
       const stencilView = this.#stencilAttachment?.createView();
       const pass = encoder.beginRenderPass({
+        ...gpuTsWrites(gpuTsNow, 'main'),
         label: 'vector-studio/primitive-pass',
         colorAttachments: [
           {
@@ -1377,8 +1381,11 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           count: this.#count,
         });
       }
+      gpuTsEncode(gpuTsNow, encoder);
       const commandBuffer = encoder.finish();
       this.#device.queue.submit([commandBuffer]);
+      gpuTsAfterSubmit(gpuTsNow);
+      this.#gpuTsNow = null;
       submittedWork = true;
 
       const serial = this.#nextSubmissionSerial;
@@ -1950,6 +1957,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         // A mesh source without the mesh path, or whose draw did not reach the packet, covers
         // nothing: the pass clears the tile and draws no source.
         const pass = encoder.beginRenderPass({
+          ...gpuTsWrites(this.#gpuTsNow, 'mask'),
           label: `vector-studio/mask-pass/${level.id}`,
           colorAttachments: [
             {
@@ -2586,6 +2594,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     layers.layers.forEach((layer, index) => {
       for (const tile of layers.tiles[index]!) {
         const pass = encoder.beginRenderPass({
+          ...gpuTsWrites(this.#gpuTsNow, 'layer'),
           label: `vector-studio/layer-pass/${index}`,
           colorAttachments: [
             {
@@ -4099,6 +4108,116 @@ function deeplyFrozenClipRecord(record: ClipPacketPart['states'][number]): boole
     if (!Object.isFrozen(rect) || !Object.isFrozen(rect.toLocal)) return false;
   }
   return true;
+}
+
+// E30-U5 GPU profile, DIAGNOSTIC ONLY (branch claude/e30-gpu-profile-diag, never merged):
+// per-pass GPU timestamps, summed by pass kind, reported as `vs-gputs-*` User Timing measures
+// whose duration is the summed GPU time in ms (`vs-gputs-n-*`: the pass count as a duration).
+type GpuTs = {
+  device: GPUDevice;
+  set: GPUQuerySet;
+  resolve: GPUBuffer;
+  free: GPUBuffer[];
+  index: number;
+  kinds: string[];
+  read: GPUBuffer | null;
+};
+const GPU_TS_MAX = 4096;
+let gpuTs: GpuTs | null | undefined;
+function gpuTsFrame(device: GPUDevice): GpuTs | null {
+  if (gpuTs === undefined || (gpuTs !== null && gpuTs.device !== device)) {
+    gpuTs =
+      (device.features as GPUSupportedFeatures | undefined)?.has?.('timestamp-query') === true
+        ? {
+            device,
+            set: device.createQuerySet({ type: 'timestamp', count: GPU_TS_MAX }),
+            resolve: device.createBuffer({
+              size: GPU_TS_MAX * 8,
+              usage: 0x200 | 0x4,
+            }),
+            free: Array.from({ length: 6 }, () =>
+              device.createBuffer({
+                size: GPU_TS_MAX * 8,
+                usage: 0x1 | 0x8,
+              }),
+            ),
+            index: 0,
+            kinds: [],
+            read: null,
+          }
+        : null;
+    console.log(`[e30-gputs] timestamp-query ${gpuTs === null ? 'unavailable' : 'enabled'}`);
+  }
+  if (gpuTs === null) return null;
+  gpuTs.index = 0;
+  gpuTs.kinds = [];
+  gpuTs.read = gpuTs.free.pop() ?? null;
+  return gpuTs.read === null ? null : gpuTs;
+}
+function gpuTsWrites(
+  ts: GpuTs | null,
+  kind: string,
+): { timestampWrites?: GPURenderPassTimestampWrites } {
+  if (ts === null || ts.index + 2 > GPU_TS_MAX) return {};
+  const begin = ts.index;
+  ts.index += 2;
+  ts.kinds.push(kind);
+  return {
+    timestampWrites: {
+      querySet: ts.set,
+      beginningOfPassWriteIndex: begin,
+      endOfPassWriteIndex: begin + 1,
+    },
+  };
+}
+function gpuTsEncode(ts: GpuTs | null, encoder: GPUCommandEncoder): void {
+  if (ts === null || ts.index === 0) return;
+  encoder.resolveQuerySet(ts.set, 0, ts.index, ts.resolve, 0);
+  encoder.copyBufferToBuffer(ts.resolve, 0, ts.read!, 0, ts.index * 8);
+}
+function gpuTsAfterSubmit(ts: GpuTs | null): void {
+  if (ts === null) return;
+  const read = ts.read!;
+  const count = ts.index;
+  const kinds = ts.kinds;
+  if (count === 0) {
+    ts.free.push(read);
+    return;
+  }
+  void read.mapAsync(1, 0, count * 8).then(
+    () => {
+      const stamps = new BigUint64Array(read.getMappedRange(0, count * 8).slice(0));
+      read.unmap();
+      ts.free.push(read);
+      const sums = new Map<string, number>();
+      const counts = new Map<string, number>();
+      let first = stamps[0]!;
+      let last = stamps[1]!;
+      for (let i = 0; i < kinds.length; i += 1) {
+        const b = stamps[2 * i]!;
+        const e = stamps[2 * i + 1]!;
+        if (b < first) first = b;
+        if (e > last) last = e;
+        const ms = e > b ? Number(e - b) / 1e6 : 0;
+        sums.set(kinds[i]!, (sums.get(kinds[i]!) ?? 0) + ms);
+        counts.set(kinds[i]!, (counts.get(kinds[i]!) ?? 0) + 1);
+      }
+      const now = performance.now();
+      let total = 0;
+      for (const kind of ['mask', 'layer', 'main']) {
+        const ms = sums.get(kind) ?? 0;
+        total += ms;
+        performance.measure(`vs-gputs-${kind}`, { start: now, duration: ms });
+        performance.measure(`vs-gputs-n-${kind}`, { start: now, duration: counts.get(kind) ?? 0 });
+      }
+      performance.measure('vs-gputs-passes', { start: now, duration: total });
+      performance.measure('vs-gputs-span', {
+        start: now,
+        duration: last > first ? Number(last - first) / 1e6 : 0,
+      });
+    },
+    () => ts.free.push(read),
+  );
 }
 
 /**

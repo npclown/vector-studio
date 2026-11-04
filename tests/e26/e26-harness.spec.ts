@@ -139,6 +139,15 @@ const SPLIT_MEASURES = Object.freeze({
   submitMs: 'vs-submit',
   acknowledgeMs: 'vs-acknowledge',
   gpuMs: 'vs-gpu',
+  // E30-U5 GPU profile, DIAGNOSTIC ONLY.
+  gpuTsMaskMs: 'vs-gputs-mask',
+  gpuTsLayerMs: 'vs-gputs-layer',
+  gpuTsMainMs: 'vs-gputs-main',
+  gpuTsPassesMs: 'vs-gputs-passes',
+  gpuTsSpanMs: 'vs-gputs-span',
+  gpuTsMaskPasses: 'vs-gputs-n-mask',
+  gpuTsLayerPasses: 'vs-gputs-n-layer',
+  gpuTsMainPasses: 'vs-gputs-n-main',
 });
 /** Runs in the page before any script: `vs-*` measures become no-ops (E26_SPLIT=0). */
 function disableFrameMeasures() {
