@@ -1,6 +1,7 @@
 import type { TextLayoutResult } from '@vector-studio/contracts';
 import { expect, test, type Page } from '@playwright/test';
 import type { TextTestHook } from '../../apps/next-host/src/m6a-text-host';
+import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
 // Pre-alpha gate, unit PA-U8, criterion PA-A09 (R34 half, "System fonts and host-provided web
 // fonts" by name): on the main PC (Windows), in headed Chrome and Edge, text runs naming a
@@ -33,6 +34,8 @@ async function open(page: Page) {
   await page.waitForFunction(() => window.__p5Host !== undefined);
   const status = page.getByTestId('status');
   await expect(status).toHaveAttribute('data-fixture', 'loaded', { timeout: 30_000 });
+  // M8-N3 (M8-U6): the layout budget, as every next-host spec's open checks it.
+  await expectLayoutBudget(page);
   return errors;
 }
 
