@@ -1,0 +1,67 @@
+﻿node.exe : $ playwright test --config playwright.m6b-next-host.config.ts
+At C:\Program Files\nodejs\pnpm.ps1:16 char:5
++     & "$basedir/node$exe"  "$basedir/node_modules/corepack/dist/pnpm. ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ($ playwright te...-host.config.ts:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[WebServer] (node:24028) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:7796) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+
+Running 38 tests using 1 worker
+
+(node:24568) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:240:1 › M6b-A12: caret segments and selection rectangles match the measured clusters
+[2/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:345:1 › M6b-A12: a click places the caret, a double-click selects the word, focus stays
+[3/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:415:1 › M6b-A12: Up and Down move by lines at the goal x
+[4/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:489:1 › M6b-A13: real keys follow rules 1 to 6, Tab keeps focus, the clipboard chords run
+[5/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:605:1 › M6b-A13: a DOM paste of text/plain with HTML reads the plain text, in and outside edit mode
+[6/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:666:1 › M6b-A13: presses in edit mode keep focus on the textarea, which sits at the caret
+[7/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 01-syllable-space-punctuation.json replays through CDP (A syllable, then a space, then a punctuation mark)
+[8/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 02a-enter-keydown.json replays through CDP (Enter during a composition: compositionend, then a non-229 Enter keydown)
+[9/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 02b-enter-linebreak.json replays through CDP (Enter during a composition: compositionend, then insertLineBreak with no second keydown)
+[10/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 03a-arrow-keydown.json replays through CDP (An arrow during a composition: compositionend, then a non-229 ArrowLeft keydown)
+[11/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 03b-arrow-commit-only.json replays through CDP (An arrow during a composition: compositionend and no second keydown)
+[12/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 04-backspace-jamo-and-after-commit.json replays through CDP (Backspace inside a composition (jamo), then in the empty textarea after the commit)
+[13/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 06a-empty-end-empty-range.json replays through CDP (An empty compositionend over an empty range)
+[14/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 06b-empty-end-selection.json replays through CDP (An empty compositionend over a selection)
+[15/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 08a-click-focus-kept.json replays through CDP (A click during a composition with focus kept (pointerdown prevented))
+[16/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 08b-click-focus-moved.json replays through CDP (A click during a composition with focus moved)
+[17/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 08c-blur-to-panel.json replays through CDP (An element blur to a panel input during a composition)
+[18/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 09a-pending-commit.json replays through CDP (A first composition on a pending node, committed)
+[19/38] [chrome] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 09b-pending-cancel.json replays through CDP (A first composition on a pending node, cancelled)
+(node:6864) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[20/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:240:1 › M6b-A12: caret segments and selection rectangles match the measured clusters
+[21/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:345:1 › M6b-A12: a click places the caret, a double-click selects the word, focus stays
+[22/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:415:1 › M6b-A12: Up and Down move by lines at the goal x
+[23/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:489:1 › M6b-A13: real keys follow rules 1 to 6, Tab keeps focus, the clipboard chords run
+[24/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:605:1 › M6b-A13: a DOM paste of text/plain with HTML reads the plain text, in and outside edit mode
+[25/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:666:1 › M6b-A13: presses in edit mode keep focus on the textarea, which sits at the caret
+[26/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 01-syllable-space-punctuation.json replays through CDP (A syllable, then a space, then a punctuation mark)
+[27/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 02a-enter-keydown.json replays through CDP (Enter during a composition: compositionend, then a non-229 Enter keydown)
+[28/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 02b-enter-linebreak.json replays through CDP (Enter during a composition: compositionend, then insertLineBreak with no second keydown)
+[29/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 03a-arrow-keydown.json replays through CDP (An arrow during a composition: compositionend, then a non-229 ArrowLeft keydown)
+[30/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 03b-arrow-commit-only.json replays through CDP (An arrow during a composition: compositionend and no second keydown)
+[31/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 04-backspace-jamo-and-after-commit.json replays through CDP (Backspace inside a composition (jamo), then in the empty textarea after the commit)
+[32/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 06a-empty-end-empty-range.json replays through CDP (An empty compositionend over an empty range)
+[33/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 06b-empty-end-selection.json replays through CDP (An empty compositionend over a selection)
+[34/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 08a-click-focus-kept.json replays through CDP (A click during a composition with focus kept (pointerdown prevented))
+[35/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 08b-click-focus-moved.json replays through CDP (A click during a composition with focus moved)
+[36/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 08c-blur-to-panel.json replays through CDP (An element blur to a panel input during a composition)
+[37/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 09a-pending-commit.json replays through CDP (A first composition on a pending node, committed)
+[38/38] [edge] › tests\m6b-next-host\m6b-next-host.spec.ts:1024:3 › M6b-A13: trace 09b-pending-cancel.json replays through CDP (A first composition on a pending node, cancelled)
+  38 passed (46.6s)
+
+headed timing: 38 tests, wall 0.8 min, 1 worker(s); D:\GIT\vector-studio\artifacts\headed-timing\2026-11-04T10-50-29-244Z-m6b-next-host.json
+     0.4 min  chrome       tests/m6b-next-host/m6b-next-host.spec.ts
+     0.3 min  edge         tests/m6b-next-host/m6b-next-host.spec.ts

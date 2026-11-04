@@ -1,0 +1,12 @@
+﻿HEAD 80e47896ee3763fff76a24630e760d1d5fac00a3; display 60 Hz 1920x1080, GTX 1660 SUPER driver 32.0.16.1088; power plan Balanced 381b4222-f694-41f0-9685-ff5bb260df2e; no Chrome/Edge open before the sitting
+Prep: install PASS; test:geometry PASS (cargo 526 passed / 69 ignored; vitest 72 files passed / 4 skipped, 1217 passed / 6 skipped); build PASS.
+Browsers: Chrome 156.0.8078.81, Edge 156.0.4314.58. Node v24.22.1. Open apps: TeamViewer (service and client), one unrelated Codex node runtime.
+Sitting (split off): E26_SPLIT=0, E26_REPETITIONS=3, M8_N3_BASELINE=docs/evidence/m8-a14-2026-11-01/17a2b0a-main-pc-headed.json,
+  pnpm test:e26 --project chrome-dpr1-v2 --project chrome-dpr2-v2 --project edge-dpr1-v2 --project edge-dpr2-v2
+  07:28:18Z - 08:46:58Z: 160 passed, 0 failed, 84 skipped. runs/ holds 160 records (commit 80e47896, dirty false).
+Headed tier 2 (pnpm test:headed --tier 2, M8_N3_BASELINE set, default 4 workers): 08:46:58Z - 09:12:55Z, total failed (25.9 min).
+  Failed stages: m2-next-host (2 failed / 8 passed: M2-A13 clipboard, chrome and edge) and m6b-next-host (4 failed / 34 passed:
+  M6b-A13 real keys clipboard chords and DOM paste, chrome and edge). Every failure reads an empty system clipboard.
+  All other stages passed (gpu 93 passed). Log: headed-tier2.log.
+  Retry once of the two failed stages (VS_HEADED_WORKERS=4, VS_GPU_TIER=2, same baseline): m2-next-host 10 passed,
+  m6b-next-host 38 passed (headed-tier2-retry-m2.log, headed-tier2-retry-m6b.log).
