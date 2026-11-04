@@ -7,6 +7,10 @@ if ((profile !== 'functional' && profile !== 'reference') || !process.env.P2_RUN
 export default defineConfig({
   testDir: './tests/geometry-benchmark',
   testMatch: 'benchmark.spec.ts',
+  // PA-U6: the P3 benchmarks added later keep their own `benchmark.spec.ts` in subdirectories
+  // (p3-b0-wasm, p3-al-ob5), which throw without their own run directory; only the top-level P2
+  // spec belongs to this run. The workload, consumer and thresholds are unchanged.
+  testIgnore: ['p3-*/**'],
   outputDir: './test-results/p2-benchmark',
   fullyParallel: false,
   workers: 1,
