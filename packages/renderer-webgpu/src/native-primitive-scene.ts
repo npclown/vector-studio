@@ -419,6 +419,8 @@ type ValidatedClip = Readonly<{
   /** U4: the frame's mask levels in pass order, and each content state's innermost level. */
   masks: readonly PlannedMask[];
   stateMasks: ReadonlyMap<number, string>;
+  /** E30-U5 (L3): the planned masks by level ID (IDs are unique), for the per-draw lookup. */
+  maskById: ReadonlyMap<string, PlannedMask>;
   /** E22-K1: the extent of the frame's tile set, over all its mask levels. */
   tileSet: Readonly<{ width: number; height: number }>;
 }> | null;
@@ -1635,6 +1637,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         frame: new Uint8Array(frame.buffer),
         states,
         masks: Object.freeze(planned),
+        maskById: new Map(planned.map((mask) => [mask.level.id, mask])),
         stateMasks,
         tileSet: Object.freeze({ width: tileSet.width, height: tileSet.height }),
       });
@@ -1820,7 +1823,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   #clipBindGroup(clip: NonNullable<ValidatedClip>, state: number): GPUBindGroup {
     const levelId = clip.stateMasks.get(state);
     if (levelId === undefined) return clip.buffer.bindGroup;
-    return clip.masks.find((mask) => mask.level.id === levelId)!.entry.bindGroup!;
+    return clip.maskById.get(levelId)!.entry.bindGroup!;
   }
 
   /**
@@ -1878,7 +1881,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       const parentGroup =
         level.parent === null
           ? clip.buffer.bindGroup
-          : clip.masks.find((other) => other.level.id === level.parent)!.entry.bindGroup!;
+          : clip.maskById.get(level.parent)!.entry.bindGroup!;
       for (const part of mask.tiles) {
         // A mesh source without the mesh path, or whose draw did not reach the packet, covers
         // nothing: the pass clears the tile and draws no source.
@@ -4015,10 +4018,30 @@ class AllocationError extends Error {
   }
 }
 
-function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
-  return (
-    left.byteLength === right.byteLength && left.every((value, index) => value === right[index])
-  );
+/**
+ * Byte equality for the change-only writes. E30-U5 (L3): compared in 32-bit words where both views
+ * are aligned (the callback form cost about 20 ms of an unchanged frame's 1,300 clip states in
+ * the container). Exported for its unit test only.
+ * @internal
+ */
+export function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  if (left === right) return true;
+  const length = left.byteLength;
+  if (length !== right.byteLength) return false;
+  let index = 0;
+  if (left.byteOffset % 4 === 0 && right.byteOffset % 4 === 0) {
+    const words = length >>> 2;
+    const leftWords = new Uint32Array(left.buffer, left.byteOffset, words);
+    const rightWords = new Uint32Array(right.buffer, right.byteOffset, words);
+    for (let word = 0; word < words; word += 1) {
+      if (leftWords[word] !== rightWords[word]) return false;
+    }
+    index = words << 2;
+  }
+  for (; index < length; index += 1) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
 }
 
 function sameSet(...sets: readonly ReadonlySet<number>[]): boolean {
