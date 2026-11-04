@@ -1,0 +1,72 @@
+{
+  "record": "test-results\\e26-runs\\chrome-dpr1-v2--e26-pointer-busy-10k_v2--r1--presentmon.json",
+  "csv": "test-results\\pa-u5-6eb90f2-01\\chrome.csv",
+  "schema": "CPUStartQPC + DisplayLatency",
+  "header": [
+    "Application",
+    "ProcessID",
+    "SwapChainAddress",
+    "PresentRuntime",
+    "SyncInterval",
+    "PresentFlags",
+    "AllowsTearing",
+    "PresentMode",
+    "CPUStartQPC",
+    "FrameTime",
+    "CPUBusy",
+    "CPUWait",
+    "GPULatency",
+    "GPUTime",
+    "GPUBusy",
+    "GPUWait",
+    "DisplayLatency",
+    "DisplayedTime",
+    "AnimationError",
+    "AnimationTime",
+    "MsFlipDelay",
+    "AllInputToPhotonLatency",
+    "ClickToPhotonLatency"
+  ],
+  "gpuPid": 23820,
+  "rows": 25,
+  "targetRows": 25,
+  "displayedRows": 25,
+  "clock": {
+    "frequency": 10000000,
+    "offsetMs": 44609762.63489999,
+    "driftMs": 0.03009999543428421,
+    "uncertaintyMs": 0.6018000021576881
+  },
+  "window": {
+    "firstDisplayQpcMs": 44623353.1493,
+    "lastDisplayQpcMs": 44625486.4148,
+    "firstInputQpcMs": 44623349.03489999,
+    "lastDoneQpcMs": 44623794.03489999
+  },
+  "moves": 25,
+  "movesInsideCapture": 24,
+  "movesOutsideCapture": 1,
+  "pointerToWorkDoneMs": {
+    "count": 24,
+    "p50": 90.5,
+    "p95": 171.60000000149012,
+    "max": 186.60000000149012
+  },
+  "lowerBoundMs": {
+    "count": 24,
+    "p50": 16.960400007665157,
+    "p95": 45.79570000618696,
+    "max": 61.09570001065731
+  },
+  "afterWorkDoneMs": {
+    "count": 24,
+    "p50": 105.64530000835657,
+    "p95": 189.3622000142932,
+    "max": 204.3622000142932
+  },
+  "limits": [
+    "lowerBoundMs is a true but weak lower bound; afterWorkDoneMs is a heuristic. No frame or content identity joins a CSV row to a move (P1.0m J2).",
+    "Page-to-QPC offset from bracketed clock pairs; each bound carries the clock uncertainty.",
+    "One run, one browser, synthetic CDP input; the UAC prompt preceded the run."
+  ]
+}
