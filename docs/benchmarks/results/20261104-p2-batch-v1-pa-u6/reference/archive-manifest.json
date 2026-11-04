@@ -1,0 +1,126 @@
+{
+  "sourceDirectory": "artifacts/p2.5/20261104-pa-u6-reference-02",
+  "note": "Computed after commit from the stored files: originalBytes and originalSha256 describe the gunzipped bytes (node:zlib.gunzipSync). The pre-compression files on the main PC were not hashed at archive time, so this manifest does not prove the compression lossless.",
+  "files": [
+    {
+      "originalName": "aggregate.json",
+      "storedName": "aggregate.json",
+      "originalBytes": 6943,
+      "storedBytes": 6943,
+      "originalSha256": "b3a6b129567a468b8c8529bfcad75daa14dafa391b8afa1cf0bca1af17400357",
+      "storedSha256": "b3a6b129567a468b8c8529bfcad75daa14dafa391b8afa1cf0bca1af17400357"
+    },
+    {
+      "originalName": "build.json",
+      "storedName": "build.json",
+      "originalBytes": 1138,
+      "storedBytes": 1138,
+      "originalSha256": "53d277ecba4b792056631bb20d4a6015b8980e120fe503e2316d4295470dd496",
+      "storedSha256": "53d277ecba4b792056631bb20d4a6015b8980e120fe503e2316d4295470dd496"
+    },
+    {
+      "originalName": "chrome-r1.json",
+      "storedName": "chrome-r1.json.gz",
+      "originalBytes": 1632076,
+      "storedBytes": 33142,
+      "originalSha256": "241559d5edf01586b477a765eb41333979f993b92a981414182e16bfb6eea80a",
+      "storedSha256": "5433f659986e9834840da0ffb8f46d730a8ecad9a95e9351fae381f898516ef3"
+    },
+    {
+      "originalName": "chrome-r2.json",
+      "storedName": "chrome-r2.json.gz",
+      "originalBytes": 1631935,
+      "storedBytes": 33090,
+      "originalSha256": "b8430bd70030085ffbd56d5031a3381cb205f931068e92440a52e2c34704b739",
+      "storedSha256": "65af687a54fb3becb169f3bdbf71fed8f47dc6b5d1e040ed9207dceff8fd87d0"
+    },
+    {
+      "originalName": "chrome-r3.json",
+      "storedName": "chrome-r3.json.gz",
+      "originalBytes": 1632014,
+      "storedBytes": 33119,
+      "originalSha256": "c0e9b40cb406f4d64f73216a8f45897734e2a0d7ad99ce80f56c2a00aec32d50",
+      "storedSha256": "18152efa337a00c4c4b62f1f15958eb7ea2ff702b48b707bc2d4b3b62fa66310"
+    },
+    {
+      "originalName": "chrome-r4.json",
+      "storedName": "chrome-r4.json.gz",
+      "originalBytes": 1631832,
+      "storedBytes": 33016,
+      "originalSha256": "2c06c0936a8b2a513bcaf9c06e7deee7f2c28567e4ef0573d125a110f3f28921",
+      "storedSha256": "a15850fa95ccb9824f404471d8cf61ade753179bff734efa9904012477ae88e3"
+    },
+    {
+      "originalName": "chrome-r5.json",
+      "storedName": "chrome-r5.json.gz",
+      "originalBytes": 1632067,
+      "storedBytes": 33125,
+      "originalSha256": "4677993213039df939e81b0e6c34418b551a7830f0e2a92ad1c4f7b7e9eda1a3",
+      "storedSha256": "8f7ca11c82b644c1efa91874a39b70c7b938ba81891e0d88785f023a316b9585"
+    },
+    {
+      "originalName": "completion.json",
+      "storedName": "completion.json",
+      "originalBytes": 19708,
+      "storedBytes": 19708,
+      "originalSha256": "9e900f4483854eb4e0a74ae81df7464f5c69664fe9dcb1230da69fb41573cf40",
+      "storedSha256": "9e900f4483854eb4e0a74ae81df7464f5c69664fe9dcb1230da69fb41573cf40"
+    },
+    {
+      "originalName": "edge-r1.json",
+      "storedName": "edge-r1.json.gz",
+      "originalBytes": 1632109,
+      "storedBytes": 33135,
+      "originalSha256": "480e3be370cf5e3302d8181c4a0e22123bac86d2c52dc1aa2bc5cf644e25bed0",
+      "storedSha256": "bccb77aaf15d3e9da3f39fcbc06733ff3fbc625194f24d56e752d22cf85ba60f"
+    },
+    {
+      "originalName": "edge-r2.json",
+      "storedName": "edge-r2.json.gz",
+      "originalBytes": 1632163,
+      "storedBytes": 33108,
+      "originalSha256": "81a09b0745dc0fabb482057e4410794e82b71a320f25c2db6c2415941bf9c7c0",
+      "storedSha256": "1773f1ad4133924a141b07054e147cab338b0bc0eee9e6c9c4558a7ee682bd91"
+    },
+    {
+      "originalName": "edge-r3.json",
+      "storedName": "edge-r3.json.gz",
+      "originalBytes": 1632239,
+      "storedBytes": 33233,
+      "originalSha256": "71f817e9889fae7a30c2cc247d94805319fdbf94136030403824389a134415b2",
+      "storedSha256": "fdf7f0c79b5c4cd1c3bb48dc3939f8a8f31d5ab0b9f7ffce7ae07c20bd0666b2"
+    },
+    {
+      "originalName": "edge-r4.json",
+      "storedName": "edge-r4.json.gz",
+      "originalBytes": 1631986,
+      "storedBytes": 33078,
+      "originalSha256": "c0517f047b2fb552dd639e2cb802e9d639131aff98d77748be7cf0fd994d8aa2",
+      "storedSha256": "74ecf1d30ed2c387f0f25b4f618cb81bad56a7c5abd277537b7275257df028c3"
+    },
+    {
+      "originalName": "edge-r5.json",
+      "storedName": "edge-r5.json.gz",
+      "originalBytes": 1631964,
+      "storedBytes": 33003,
+      "originalSha256": "ca9cd8a9d81383d871a87b4d3bf8a44f4078b9cd52c000e80ab1cf67d24a7f2a",
+      "storedSha256": "75e931f6af67b0701edaa79cee28d6444b382ddd0784054bfc8c668265cd800f"
+    },
+    {
+      "originalName": "invocation.json",
+      "storedName": "invocation.json",
+      "originalBytes": 21203,
+      "storedBytes": 21203,
+      "originalSha256": "f36799b521a28d9abf9d352f54801ea951af6147f3336faefdb58e6d50e055bf",
+      "storedSha256": "f36799b521a28d9abf9d352f54801ea951af6147f3336faefdb58e6d50e055bf"
+    },
+    {
+      "originalName": "runner-status.json",
+      "storedName": "runner-status.json",
+      "originalBytes": 202,
+      "storedBytes": 202,
+      "originalSha256": "16498f96b20cab66d17c05144021e2cbb0d68ff829e2f73a6b7a6981b8605714",
+      "storedSha256": "16498f96b20cab66d17c05144021e2cbb0d68ff829e2f73a6b7a6981b8605714"
+    }
+  ]
+}
