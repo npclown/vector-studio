@@ -1,0 +1,23 @@
+{
+  "observedAt": "2026-11-04T12:48:17.9859722Z",
+  "displayRefreshHz": {
+    "value": 60,
+    "source": "tooling/p1-presentmon-preflight.ps1, observed 2026-11-04T12:48:17.9859722Z; per-device EnumDisplaySettings"
+  },
+  "power": {
+    "value": "AC online; active scheme 381b4222-f694-41f0-9685-ff5bb260df2e",
+    "source": "tooling/p1-presentmon-preflight.ps1, observed 2026-11-04T12:48:17.9859722Z; Windows Forms PowerStatus and powercfg"
+  },
+  "backgroundLoad": {
+    "value": "No chrome.exe/msedge.exe processes before the run (the user closed their Chrome at 12:48Z); no local build/test or subagent work during the runs. Resident user apps (Claude desktop, ChatGPT, Everything, Tailscale, StSess, msedgewebview2) were running and idle-to-light by cumulative CPU listing.",
+    "source": "Agent observation (Get-Process at 2026-11-04T12:48Z), not operator confirmation."
+  },
+  "driver": {
+    "value": "NVIDIA GeForce GTX 1660 SUPER / 32.0.16.1088",
+    "source": "tooling/p1-presentmon-preflight.ps1, observed 2026-11-04T12:48:17.9859722Z; Win32_VideoController"
+  },
+  "display": {
+    "value": "Primary \\\\.\\DISPLAY1 at (0,0), 1920x1080 @ 60 Hz; second monitor \\\\.\\DISPLAY2 at (1920,0). Window occlusion not checked by an operator; verify captured window bounds remain on \\\\.\\DISPLAY1.",
+    "source": "tooling/p1-presentmon-preflight.ps1, observed 2026-11-04T12:48:17.9859722Z; EnumDisplaySettings. Agent observation, not operator confirmation."
+  }
+}

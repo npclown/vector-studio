@@ -1,0 +1,32 @@
+{
+  "files": [
+    {
+      "path": "assets/index-BkImHdNZ.js",
+      "sha256": "4615817077bacc7b9279c7ee7505a0e74c83320ea018384e714a1e06dee1dcc9"
+    },
+    {
+      "path": "geometry.wasm",
+      "sha256": "58f26517603d0d599f187481c967832e3f6abea2eb53c738e5540b6200b4fd35"
+    },
+    {
+      "path": "index.html",
+      "sha256": "22a721b91cf4acd29ff000086f8b7b1161e17568c7a9eb4869d01179fe5bfc4b"
+    }
+  ],
+  "sha256": "208f1ce239d9c550faa8d899a11e27c9ebeeb363408fcdf6e33cb8b8a8f222f3",
+  "wasmSha256": "58f26517603d0d599f187481c967832e3f6abea2eb53c738e5540b6200b4fd35",
+  "buildMode": "production",
+  "compilerObservation": "rustc 1.94.1 (e408947bf 2026-03-25)\nbinary: rustc\ncommit-hash: e408947bfd200af42db322daf0fadfe7e26d3bd1\ncommit-date: 2026-03-25\nhost: x86_64-pc-windows-msvc\nrelease: 1.94.1\nLLVM version: 21.1.8\n",
+  "rust": {
+    "version": "1.94.1",
+    "commit": "e408947bfd200af42db322daf0fadfe7e26d3bd1",
+    "target": "wasm32-unknown-unknown",
+    "profile": "release",
+    "optLevel": 3,
+    "lto": true,
+    "codegenUnits": 1,
+    "panic": "abort",
+    "strip": true,
+    "remapPathPrefix": "<repository>=."
+  }
+}
