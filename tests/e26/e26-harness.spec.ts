@@ -989,12 +989,9 @@ for (const { scenario, variant } of runs) {
           encodeAndSubmitMs: summary(run.measurements.encodeAndSubmitMs),
           splitEnabled,
           split: splitEnabled
-            ? {
-                prepareMs: summary(run.split.prepareMs),
-                submitMs: summary(run.split.submitMs),
-                acknowledgeMs: summary(run.split.acknowledgeMs),
-                gpuMs: summary(run.split.gpuMs),
-              }
+            ? Object.fromEntries(
+                Object.entries(run.split).map(([key, value]) => [key, summary(value)]),
+              )
             : null,
           ceilingMs: scenario.frameCeilingMs,
           // Each interval should end in a submission: intervals + 1 against submissions.
