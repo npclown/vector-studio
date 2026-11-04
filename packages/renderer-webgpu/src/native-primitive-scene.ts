@@ -425,6 +425,16 @@ type ValidatedClip = Readonly<{
   tileSet: Readonly<{ width: number; height: number }>;
 }> | null;
 
+/** E30-U5 (L3b): a clip state's packed bytes and the inputs they were packed from. */
+type PackedClipState = Readonly<{
+  record: ClipPacketPart['states'][number];
+  originX: number;
+  originY: number;
+  maskX: number;
+  maskY: number;
+  bytes: Uint8Array;
+}>;
+
 /** U4 and E22-K1: a tile set attachment, released after the frame's submission. */
 type Transient = Readonly<{ id: string; resource: Readonly<{ destroy(): void }> }>;
 
@@ -735,6 +745,19 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   #nextClipBuffer = 1;
   /** @internal Tests only (P4-A06): state records written to the clip buffer so far. */
   public clipStateWritesForTesting = 0;
+  /**
+   * E30-U5 (L3b): the last frame's packed bytes per clip state index, kept for a record that is
+   * the same deeply frozen object under the same origin and mask level offset, so an unchanged
+   * state is not packed again and its change-only write compares by identity.
+   */
+  #packedClipStates = new Map<number, PackedClipState>();
+  #reusePackedClipStates = true;
+  /** @internal Tests only (E30-U5 L3b): clip state bytes counted as reused, and the twin's switch. */
+  public reusedClipStatesForTesting = 0;
+  public disableClipStateReuseForTesting(): void {
+    this.#reusePackedClipStates = false;
+    this.#packedClipStates.clear();
+  }
   readonly paintPipelineAvailable: boolean;
   readonly #paint: PaintPipelineState | null;
   readonly layerPipelineAvailable: boolean;
@@ -1570,26 +1593,64 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     }
     const states = new Map<number, Uint8Array>();
     const stateMasks = new Map<number, string>();
+    const packed = new Map<number, PackedClipState>();
     for (const record of records.values()) {
       if (!record.masks.every((id) => levels.has(id))) {
         throw new Error('A clip state names a missing mask level.');
       }
       const innermost = record.masks.at(-1);
       let bytes: Uint8Array | null;
-      if (innermost === undefined) {
-        bytes = packClipState(record, part.origin);
-      } else {
+      let maskX = 0;
+      let maskY = 0;
+      if (innermost !== undefined) {
         const level = levels.get(innermost);
         if (level === undefined) throw new Error('A clip state names a missing mask level.');
         stateMasks.set(record.index, innermost);
+        maskX = -level.device.x;
+        maskY = -level.device.y;
+      }
+      // E30-U5 (L3b): the bytes are a function of the record's contents, the origin and the
+      // mask offset, so a deeply frozen record seen last frame under the same lanes keeps them.
+      const kept = this.#reusePackedClipStates
+        ? this.#packedClipStates.get(record.index)
+        : undefined;
+      if (
+        kept !== undefined &&
+        kept.record === record &&
+        kept.originX === part.origin.x &&
+        kept.originY === part.origin.y &&
+        kept.maskX === maskX &&
+        kept.maskY === maskY
+      ) {
+        bytes = kept.bytes;
+        this.reusedClipStatesForTesting += 1;
+      } else if (innermost === undefined) {
+        bytes = packClipState(record, part.origin);
+      } else {
         bytes = packClipState(record, part.origin, {
-          maskOffset: [-level.device.x, -level.device.y],
+          maskOffset: [maskX, maskY],
           pixelShift: [0, 0],
         });
       }
       if (bytes === null) throw new Error('Unsupported clip state record.');
       states.set(record.index, bytes);
+      if (this.#reusePackedClipStates && deeplyFrozenClipRecord(record)) {
+        packed.set(
+          record.index,
+          kept?.bytes === bytes
+            ? kept
+            : Object.freeze({
+                record,
+                originX: part.origin.x,
+                originY: part.origin.y,
+                maskX,
+                maskY,
+                bytes,
+              }),
+        );
+      }
     }
+    if (this.#reusePackedClipStates) this.#packedClipStates = packed;
     if (this.#clip === null || used.size === 0) return null;
     for (const [index, bytes] of passStates) states.set(index, bytes);
     const capacity = nextPassState - 1;
@@ -4016,6 +4077,24 @@ class AllocationError extends Error {
   public constructor(cause?: unknown) {
     super('Primitive arena allocation failed.', cause === undefined ? undefined : { cause });
   }
+}
+
+/**
+ * E30-U5 (L3b): whether a clip state record and everything `packClipState` reads from it are
+ * frozen, so a record seen again as the same object has the same contents.
+ */
+function deeplyFrozenClipRecord(record: ClipPacketPart['states'][number]): boolean {
+  if (
+    !Object.isFrozen(record) ||
+    !Object.isFrozen(record.rects) ||
+    !Object.isFrozen(record.masks)
+  ) {
+    return false;
+  }
+  for (const rect of record.rects) {
+    if (!Object.isFrozen(rect) || !Object.isFrozen(rect.toLocal)) return false;
+  }
+  return true;
 }
 
 /**
