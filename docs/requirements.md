@@ -143,7 +143,7 @@ Initially, trusted extensions are registered by the host at build time. They may
 
 Untrusted plugins, sandbox execution, a marketplace, import/export, raster editing, animation, and real-time collaboration are deferred.
 
-Future considerations (recorded 2026-11-04 at the user's request; no work is scheduled). Today's extension surface ([host API guide](host-api.md#extensions)) covers path-shaped custom node types that use the node's own fill and stroke, commands, tools, key bindings, UI panels, and import or export built on public commands and queries. These need engine or core changes first, because the scene contract has no place for them:
+Future considerations (recorded 2026-11-04 at the user's request; no work is scheduled). Today's extension surface ([host API guide](host-api.md#extensions)) covers path-shaped custom node types that use the node's own fill and stroke, commands, tools, key bindings and UI panels; import or export (deferred above) could later be built as extension commands on the public commands and queries. These need engine or core changes first, because the scene contract or the extension boundary has no place for them:
 
 - New paint types beyond solid, linear and radial (for example patterns, image fills, conic or mesh gradients).
 - Effects and filters (for example blur, shadow, blend modes).
