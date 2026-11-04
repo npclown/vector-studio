@@ -11,6 +11,7 @@ import {
   createPathHarness,
   identity,
   pathNode,
+  target,
 } from '../support/v3a-path-harness.js';
 import { pathStroke, strokedNode } from '../support/st-u6-stroke-harness.js';
 
@@ -68,6 +69,16 @@ describe('PA-U8 R68: the path-rendering "not failures" cases', () => {
     expect(served.notices).toEqual([]);
     expect(served.draws).toHaveLength(1);
     expect(served.draws[0]!.fringe).not.toBeNull();
+    // The shipped configuration: the renderer service with `fringeForTesting: 'off'` builds the
+    // same pipeline without a builder; its packet carries no notice either.
+    const service = new PrimitiveRendererService(invalidation, {
+      fillMesh: createCountingPort(),
+      fringeForTesting: 'off',
+    });
+    expect(service.replaceSnapshot(snapshot([pathNode('a', 0)])).status).toBe('applied');
+    const packet = service.prepare(target);
+    expect(packet).not.toBeNull();
+    expect(packet!.mesh?.notices ?? []).toEqual([]);
   });
 
   it('case 3, singular transform: the path is not drawn, nothing is reported, and its neighbour draws', () => {

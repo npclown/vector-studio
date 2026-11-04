@@ -22,8 +22,8 @@ const SIZE = 20;
 const TOLERANCE = 0.05;
 
 const CASES = [
-  { family: 'Malgun Gothic', sample: 'Vector 한글 Studio', tail: true },
-  { family: 'Times New Roman', sample: 'Vector Studio WAVE', tail: false },
+  { family: 'Malgun Gothic', sample: 'Vector 한글 studio', tail: true },
+  { family: 'Times New Roman', sample: 'Vector studio and paths', tail: false },
 ] as const;
 
 async function open(page: Page) {
@@ -58,7 +58,9 @@ async function read(page: Page, family: string, sample: string): Promise<Reading
         lineHeight: 1.2,
       });
       const canvas = new OffscreenCanvas(8, 8).getContext('2d')!;
-      const installed = ['monospace', 'serif', 'sans-serif'].every((generic) => {
+      // Installed if the family changes the measure against any generic: Times New Roman is
+      // Chrome's default serif on Windows, so it equals `serif` but not the other two.
+      const installed = ['monospace', 'serif', 'sans-serif'].some((generic) => {
         canvas.font = `40px ${generic}`;
         const plain = canvas.measureText('abcdefghijklmnopqrstuvwxyz').width;
         canvas.font = `40px "${family}", ${generic}`;
@@ -70,7 +72,9 @@ async function read(page: Page, family: string, sample: string): Promise<Reading
       const last = named.clusters[named.clusters.length - 1]!;
       const width = (end: number) => canvas.measureText(sample.slice(0, end)).width;
       // Pair kerning moves a glyph by its neighbour, so a prefix's canvas width equals the next
-      // cluster's x only where no kerning pair spans the cut: at the spaces between words.
+      // cluster's x only where no kerning pair spans the cut: at the spaces between words, with
+      // lowercase letters or Hangul beside each space (Times has space pairs only before capitals
+      // such as A, T, V, W and Y, so the samples avoid them).
       const spaces = named.clusters.filter((c) => sample.slice(c.start, c.end) === ' ');
       return {
         installed,
