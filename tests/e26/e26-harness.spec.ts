@@ -4,6 +4,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { installMemoryLedger, type MemoryLedger } from '../support/memory-ledger.js';
 import {
+  abandonPresentMon,
+  clockSync,
+  finishPresentMon,
+  presentMonDirectory,
+  startPresentMon,
+  type PresentMonCapture,
+} from './presentmon.js';
+import {
   MEMORY_TRACE_CATEGORIES,
   memoryBlock,
   summarizeMemoryTrace,
@@ -213,6 +221,13 @@ function pairLatencySplit(state: {
 if (memoryVariant && traceDirectory !== undefined)
   throw new Error('E26_MEMORY and E26_TRACE record different traces: set one');
 let tracing: { browser: Browser } | null = null;
+// PA-U5: a capture whose test failed before it was finished; its launcher finishes here.
+let openCapture: PresentMonCapture | null = null;
+test.afterEach(async () => {
+  const capture = openCapture;
+  openCapture = null;
+  if (capture !== null) await abandonPresentMon(capture);
+});
 test.afterEach(async () => {
   if (tracing === null) return;
   const { browser } = tracing;
@@ -803,14 +818,24 @@ for (const { scenario, variant } of runs) {
         // A traced run is a diagnostic, never evidence (M9-U3a): its record says so.
         ...(traceDirectory === undefined ? {} : { traced: true }),
         ...(memoryVariant ? { memoryVariant: true } : {}),
+        // PA-U5: a PresentMon run waits on UAC and is never timed evidence (tests/e26/presentmon.ts).
+        ...(presentMonDirectory === undefined ? {} : { presentMonVariant: true }),
       };
       const slug = `${testInfo.project.name}--${scenario.id.replace(/[^a-z0-9-]+/gi, '_')}${
         variant === 'plain' ? '-plain' : ''
-      }--r${repetition}${memoryVariant ? '--memory' : ''}${splitEnabled ? '' : '--nosplit'}`;
+      }--r${repetition}${memoryVariant ? '--memory' : ''}${splitEnabled ? '' : '--nosplit'}${
+        presentMonDirectory === undefined ? '' : '--presentmon'
+      }`;
       test.skip(
         memoryVariant && variant !== 'frame',
         'the memory variant runs the frame runs only',
       );
+      test.skip(
+        presentMonDirectory !== undefined && variant !== 'busy',
+        'the PresentMon attempt (PA-U5) runs the busy pointer run only',
+      );
+      // Load, up to 90 s of UAC consent, the run and the rest of the 25 s capture.
+      if (presentMonDirectory !== undefined) test.setTimeout(420_000);
       const { errors, consoleErrors } = await installProbe(page);
       if (!splitEnabled) await page.addInitScript(disableFrameMeasures);
       if (memoryVariant) {
@@ -1052,6 +1077,19 @@ for (const { scenario, variant } of runs) {
           clickCount: type === 'mouseMoved' ? 0 : 1,
         });
       await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: start.x, y: start.y });
+      // PA-U5: the elevated capture starts (after the user's UAC consent) before the presence
+      // check, so the check sees the page after the consent prompt; clock pairs bracket the run.
+      let capture: PresentMonCapture | null = null;
+      let syncBefore: Awaited<ReturnType<typeof clockSync>> | null = null;
+      if (presentMonDirectory !== undefined) {
+        const channel = testInfo.project.use.channel;
+        if (channel !== 'chrome' && channel !== 'msedge')
+          throw new Error('E26_PRESENTMON needs a headed Chrome or Edge project.');
+        capture = await startPresentMon(browser, channel);
+        openCapture = capture;
+        await page.bringToFront();
+        syncBefore = await clockSync(page);
+      }
       // E30-U1c: the latency split needs the renderer's vs-* measures, so a frame measurement
       // window spans the press. It opens before the presence check and the busy set-up, so the
       // press follows the same steps with the split on or off; E26_SPLIT=0 leaves it closed.
@@ -1114,6 +1152,7 @@ for (const { scenario, variant } of runs) {
       // The due write after pointer up, the last samples' submitted work and the isolation
       // measure settle; then the run is read.
       await page.waitForTimeout(1_500);
+      const syncAfter = capture === null ? null : await clockSync(page);
       const state = await page.evaluate(
         ({ downMs, upMs, upHandledMs, splitEnabled }) => {
           const hook = window.__e26Bench!;
@@ -1231,7 +1270,11 @@ for (const { scenario, variant } of runs) {
         undoDepth: state.undoDepth,
         expectedUndoDepth: busy ? 2 : 1,
         state,
+        ...(capture === null
+          ? {}
+          : { presentmon: { ...(await finishPresentMon(capture)), syncBefore, syncAfter } }),
       };
+      openCapture = null;
       record(slug, result);
       expectValidRun(state, {
         errors,
