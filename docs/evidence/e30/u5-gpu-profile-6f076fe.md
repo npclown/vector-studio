@@ -46,17 +46,17 @@ All times are in ms.
   - The main pass takes 35.2 ms at DPR 1 and 39.8 ms at DPR 2 in all-visible edit. Four times the pixels at the same 4x sample count add 13 %.
   - On the same target the typical view's main pass takes about 5.5 ms and stress's under 1 ms.
   - The pass is not bound by fill rate. What it is bound by within the drawn items is not measured: the draw calls, the mesh stencil-and-cover per path, or vertex work.
-  - The encoder already switches pipelines only at a variant change and binds a clip state only when it changes. So removing redundant state calls, the in-E30 kind of L3 remedy, has little left to take. The draw counts per frame were not re-read for the v2 page after the U1c correction, so no per-draw figure is given here.
+  - The encoder skips repeated pipeline and clip binds within a run of same-kind draws. A switch between draw kinds, or a text or composite draw, rebinds them, the analytic vertex and index buffers included. Trimming those rebinds is the in-E30 kind of L3 remedy; how often they occur and what they cost on the GPU are not measured. The draw counts per frame were not re-read for the v2 page after the U1c correction, so no per-draw figure is given here.
 - **Pan adds about 9 to 10 ms of mask passes.** These are 595 mask passes (8.7 and 10.5 ms), one per level tile, re-rendered every frame because masked levels move with the camera. Span minus the pass sum adds about 6 ms of GPU time between passes, the tile copies included.
 - **`vs-gpu` is much longer than a frame's GPU work in the all-visible rows. This is an estimate.**
   - `vs-gpu` runs from a frame's submit end to its `onSubmittedWorkDone()`. In the all-visible rows it is 218 to 348 ms in the median, which is 5.0 to 6.0 times the frame's GPU span, or about four to five frame intervals.
   - That is consistent with several frames of work queued ahead of each sample. It is also consistent with completion being reported late (delivery or presentation waits). The passes leave the GPU about 20 % idle at a 50 ms frame, which does not by itself explain a standing queue that deep.
-  - In the typical view `vs-gpu` is 19 ms against 6 ms of passes per 16.7 ms frame. That is about one frame interval plus its own work, so no deep queue is shown.
+  - In the typical view `vs-gpu` is 19 ms against 6 ms of passes per 16.7 ms frame. That is about one frame interval, so no deep queue is shown.
   - Whether this delay is in the pointer rows' claim-to-work-done time is not measured here, because the pointer rows were not run.
 
 ## L3 decision
 
-- **No GPU-side remedy merges in E30.** The GPU cost is not split below the pass, so there is no measured leading cost to take, and the in-scope kind of L3 remedy (redundant state calls) is largely taken already (above).
+- **No GPU-side remedy merges in E30.** The GPU cost is not split below the pass, so there is no measured leading cost to take, and the in-scope kind of L3 remedy (trimming the rebinds at draw-kind switches) is unmeasured (above).
 - **The remedies that a split would point to are of the kind section 4.3 writes up as its own item first:**
   - batching or instancing across paints;
   - a merged draw list that changes draw order;
