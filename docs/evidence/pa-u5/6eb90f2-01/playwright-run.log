@@ -1,0 +1,49 @@
+
+node.exe : [WebServer] (node:25160) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+At C:\Program Files\nodejs\pnpm.ps1:16 char:5
++     & "$basedir/node$exe"  "$basedir/node_modules/corepack/dist/pnpm. ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([WebServer] (no... env being set.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:22824) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+
+Running 2 tests using 1 worker
+
+(node:11936) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/2] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-pointer-busy-10k/v2 r1
+  1) [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-pointer-busy-10k/v2 r1 ───────────
+
+    Error: the release was applied
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 2
+    Received: 1
+
+      1295 |       expect(result.unresolved).toBe(0);
+      1296 |       expect(samples.length, 'moves that produced a revision').toBeGreaterThan(0);
+    > 1297 |       expect(result.undoDepth, 'the release was applied').toBe(result.expectedUndoDepth);
+           |                                                           ^
+      1298 |       if (busy) expect(result.rejections).toBe(1);
+      1299 |       if (layers !== null) expect(layers.rows, 'layer rows shown').toBe(layers.expectedRows);
+      1300 |       if (fontLoad !== null) {
+        at D:\GIT\vector-studio\tests\e26\e26-harness.spec.ts:1297:59
+
+    Error Context: test-results\e26\e26-harness-e26-pointer-busy-10k-v2-r1-chrome-dpr1-v2\error-context.md
+
+
+(node:14332) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[2/2] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-pointer-busy-10k/v2 (plain) r1
+  1 failed
+    [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-pointer-busy-10k/v2 r1 ────────────
+  1 skipped
