@@ -69,8 +69,9 @@ describe('PA-U8 R68: the path-rendering "not failures" cases', () => {
     expect(served.notices).toEqual([]);
     expect(served.draws).toHaveLength(1);
     expect(served.draws[0]!.fringe).not.toBeNull();
-    // The shipped configuration: the renderer service with `fringeForTesting: 'off'` builds the
-    // same pipeline without a builder; its packet carries no notice either.
+    // The renderer service with its builder turned off (`fringeForTesting: 'off'`, a test-only
+    // option; the default is 'on') builds the same pipeline without a builder: the path is
+    // meshed and sent, with no fringe variant and no notice.
     const service = new PrimitiveRendererService(invalidation, {
       fillMesh: createCountingPort(),
       fringeForTesting: 'off',
@@ -78,7 +79,11 @@ describe('PA-U8 R68: the path-rendering "not failures" cases', () => {
     expect(service.replaceSnapshot(snapshot([pathNode('a', 0)])).status).toBe('applied');
     const packet = service.prepare(target);
     expect(packet).not.toBeNull();
-    expect(packet!.mesh?.notices ?? []).toEqual([]);
+    expect(packet!.mesh).toBeDefined();
+    expect(packet!.mesh!.notices).toEqual([]);
+    expect(
+      service.getLastDrawRecordForTesting()?.draws.map((draw) => [draw.nodeId, draw.fringe]),
+    ).toEqual([['a', 'region-only-off']]);
   });
 
   it('case 3, singular transform: the path is not drawn, nothing is reported, and its neighbour draws', () => {
