@@ -1429,6 +1429,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   public dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
+    this.#packedClipStates.clear();
     this.#capture?.reject(new CaptureError('disposed', 'the scene was disposed'));
     this.#capture = undefined;
     // Section 4: a submitted capture releases its objects before its promise settles.
@@ -1492,6 +1493,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     const part = packet.clip;
     if (part === undefined) {
       if (used.size > 0) throw new Error('A clipped draw without a clip part.');
+      // E30-U5 (L3b): a frame without clip states keeps none.
+      this.#packedClipStates.clear();
       return null;
     }
     if (
@@ -4081,7 +4084,8 @@ class AllocationError extends Error {
 
 /**
  * E30-U5 (L3b): whether a clip state record and everything `packClipState` reads from it are
- * frozen, so a record seen again as the same object has the same contents.
+ * frozen, so a record seen again as the same object has the same contents. It assumes plain data
+ * properties, as the source's records have: a frozen getter or a proxy is not detected.
  */
 function deeplyFrozenClipRecord(record: ClipPacketPart['states'][number]): boolean {
   if (

@@ -257,8 +257,20 @@ describe('E30-U5 (L3b) kept clip state bytes', () => {
         scene.fixture.calls.length = 0;
         scene.bytes.length = 0;
       }
+      const reusedBefore = kept.reused();
       const left = kept.scene.submitPrimitivePacket(packet);
       const right = fresh.scene.submitPrimitivePacket(packet);
+      // The original packet again keeps every state the change before it did not touch: all of
+      // them after itself, all but the widened one, none after an origin move (every state).
+      const keptAgain = new Map([
+        [1, clip.states.length],
+        [3, clip.states.length - 1],
+        [5, 0],
+        [7, 0],
+      ]).get(index);
+      if (keptAgain !== undefined) {
+        expect(kept.reused() - reusedBefore, `packet ${index} kept`).toBe(keptAgain);
+      }
       expect(left.status, `packet ${index}`).toBe('submitted');
       expect(right.status, `packet ${index}`).toBe('submitted');
       expect(kept.fixture.calls, `packet ${index} calls`).toEqual(fresh.fixture.calls);
