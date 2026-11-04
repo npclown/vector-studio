@@ -15,13 +15,13 @@ import {
 } from '../support/v3a-path-harness.js';
 import { pathStroke, strokedNode } from '../support/st-u6-stroke-harness.js';
 
-// Pre-alpha gate, unit PA-U8, criterion PA-A09 (R68 half): one check per "not failures" case of
-// requirements.md (section "Path rendering failures") and its stroke-port case. Each case
-// states what is drawn and that nothing is reported. The first case, a renderer without a stroke port, first said "draws
-// fills only"; the B2 stroke contract's section 9.1 amendment S4 (ST-A10) made it a rejection,
-// and on 2026-11-04 the user had the requirement reworded to match ("Rejected, not drawn
-// less"), so the check asserts the rejection. Functional evidence only; no precision or
-// performance claim.
+// Pre-alpha gate, unit PA-U8, criterion PA-A09 (R68 half): one check per case of
+// requirements.md, section "Path rendering failures": the two "not failures" cases and the
+// stroke-port case. Each states what is drawn and that nothing is reported, or, for the
+// stroke-port case, the rejection. That case first said "draws fills only"; the B2 stroke
+// contract's section 9.1 amendment S4 (ST-A10) made it a rejection, and on 2026-11-04 the user
+// had the requirement reworded to match ("Rejected, not drawn less"). Functional evidence only;
+// no precision or performance claim.
 
 const invalidation: RendererInvalidationTarget = {
   invalidate: () => undefined,
