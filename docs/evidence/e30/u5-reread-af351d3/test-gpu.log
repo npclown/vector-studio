@@ -1,0 +1,131 @@
+﻿node.exe : $ playwright test --config playwright.gpu.config.ts
+At C:\Program Files\nodejs\pnpm.ps1:16 char:5
++     & "$basedir/node$exe"  "$basedir/node_modules/corepack/dist/pnpm. ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ($ playwright te...t.gpu.config.ts:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[WebServer] (node:21704) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:4788) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+
+Running 93 tests using 1 worker
+
+(node:23632) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/93] [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 1x, DPR 1
+[2/93] [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 1x, DPR 1.5
+[3/93] [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 1x, DPR 2
+[4/93] [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 4x, DPR 1
+[5/93] [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 4x, DPR 1.5
+[6/93] [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 4x, DPR 2
+[7/93] [chrome] › tests\gpu\e17-write-once.spec.ts:120:1 › E17-A5 fixtures: count at most 1, covered pixels counted once, 4x equals 1x
+[8/93] [chrome] › tests\gpu\e17-write-once.spec.ts:226:3 › E17-A5 reset path: 511 mesh draws, rectangle A at ordinals 0, 255 and 510, at 1x
+[9/93] [chrome] › tests\gpu\e17-write-once.spec.ts:226:3 › E17-A5 reset path: 511 mesh draws, rectangle A at ordinals 0, 255 and 510, at 4x
+[10/93] [chrome] › tests\gpu\e23-gradient-paint.spec.ts:543:3 › E23-A03 G1 to G8 against the oracle at DPR 1
+[11/93] [chrome] › tests\gpu\e23-gradient-paint.spec.ts:584:3 › E23-A04 premultiplied ramp and hard stop at DPR 1
+[12/93] [chrome] › tests\gpu\e23-gradient-paint.spec.ts:543:3 › E23-A03 G1 to G8 against the oracle at DPR 2
+[13/93] [chrome] › tests\gpu\e23-gradient-paint.spec.ts:584:3 › E23-A04 premultiplied ramp and hard stop at DPR 2
+[14/93] [chrome] › tests\gpu\e23-gradient-paint.spec.ts:617:1 › E23-A05 and A06: invalidation and batching counters
+[15/93] [chrome] › tests\gpu\e23-gradient-paint.spec.ts:747:1 › E23-A09 paint resources in accounting, after removal, device loss and disposal
+[16/93] [chrome] › tests\gpu\e24-stroke-dash.spec.ts:466:3 › E24-A05 D1 to D9 against the oracle at DPR 1
+[17/93] [chrome] › tests\gpu\e24-stroke-dash.spec.ts:530:3 › E24-A05 D7 dash ends agree across zooms at DPR 1
+[18/93] [chrome] › tests\gpu\e24-stroke-dash.spec.ts:466:3 › E24-A05 D1 to D9 against the oracle at DPR 2
+[19/93] [chrome] › tests\gpu\e24-stroke-dash.spec.ts:530:3 › E24-A05 D7 dash ends agree across zooms at DPR 2
+[20/93] [chrome] › tests\gpu\e24-stroke-dash.spec.ts:715:1 › E24-A04 GPU part: invalidation counters
+[21/93] [chrome] › tests\gpu\e24-stroke-dash.spec.ts:820:1 › E24-A03 note: the real kernel at 4,096 dashes on D8 geometry
+[22/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:471:5 › E25-A03 O1 to O8 against the oracle at 4x, DPR 1
+[23/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:471:5 › E25-A03 O1 to O8 against the oracle at 4x, DPR 2
+[24/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:471:5 › E25-A03 O1 to O8 against the oracle at 1x, DPR 1
+[25/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:471:5 › E25-A03 O1 to O8 against the oracle at 1x, DPR 2
+[26/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:606:3 › E25-A05 O8 tile seams on a 2100 x 1300 surface at 4x
+[27/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:606:3 › E25-A05 O8 tile seams on a 2100 x 1300 surface at 1x
+[28/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:681:1 › E25-A03 O7 opacity 0 and opacity 1
+[29/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:737:1 › E25-A07 O9 layer budget on a 3840 x 2160 surface at 4x
+[30/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:848:1 › E25-A04 opacity edits, visibility, pan and layer passes
+[31/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:965:1 › E25-A06 layer resources in accounting, after removal, device loss and disposal
+[32/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:1049:3 › E25 shared-edge observation at DPR 1
+[33/93] [chrome] › tests\gpu\e25-isolated-opacity.spec.ts:1049:3 › E25 shared-edge observation at DPR 2
+[34/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:499:5 › E28-A03 T1 to T7 against the oracle at 4x, DPR 1
+[35/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:499:5 › E28-A03 T1 to T7 against the oracle at 4x, DPR 2
+[36/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:499:5 › E28-A03 T1 to T7 against the oracle at 1x, DPR 1
+[37/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:499:5 › E28-A03 T1 to T7 against the oracle at 1x, DPR 2
+[38/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:607:1 › E28-A04 edits, pans, zoom and generation on the raster counters
+[39/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:724:1 › E28-A05 atlas pages and sampler in accounting, resize, removal, device loss
+[40/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:823:1 › T8 atlas pressure: eviction, over-limit notice and convergence (E28-A06)
+[41/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:918:1 › T8 raster budget convergence and the 32 MiB atlas bound (E28-A06)
+[42/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:977:1 › T8 eviction order: an older-generation page goes before the least recent (E28-A06)
+[43/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:1032:1 › T9 generation 2 never draws generation 1 bitmaps (E28-A08)
+[44/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:1089:1 › E28-A07 scenes without text are identical with text=none and text=atlas
+[45/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:1132:1 › E28-A08 the canvas port: identity, empty, too-large, unavailable, bearings, two pages
+[46/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:1233:3 › E28 M6c per-cluster readback and raster cost at DPR 1
+[47/93] [chrome] › tests\gpu\e28-text-atlas.spec.ts:1233:3 › E28 M6c per-cluster readback and raster cost at DPR 2
+[48/93] [chrome] › tests\gpu\e3-a04-readback.spec.ts:75:1 › E3-U4 GPU model check and E3-PC12
+[49/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples1 dpr1
+[50/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples1 dpr1
+[51/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples1 dpr1.5
+[52/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples1 dpr1.5
+[53/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples1 dpr2
+[54/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples1 dpr2
+[55/93] [chrome] › tests\gpu\p1-primitives.spec.ts:149:3 › P1 latest-scene recovery samples1
+[56/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples4 dpr1
+[57/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples4 dpr1
+[58/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples4 dpr1.5
+[59/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples4 dpr1.5
+[60/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples4 dpr2
+[61/93] [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples4 dpr2
+[62/93] [chrome] › tests\gpu\p1-primitives.spec.ts:149:3 › P1 latest-scene recovery samples4
+[63/93] [chrome] › tests\gpu\p3-b2-strokes.spec.ts:178:5 › DPR 1 › P3 B2 stroke page screenshots at DPR 1 (UNVERIFIED precision)
+[64/93] [chrome] › tests\gpu\p3-b2-strokes.spec.ts:178:5 › DPR 2 › P3 B2 stroke page screenshots at DPR 2 (UNVERIFIED precision)
+[65/93] [chrome] › tests\gpu\p3-b2-strokes.spec.ts:178:5 › DPR 3 › P3 B2 stroke page screenshots at DPR 3 (UNVERIFIED precision)
+[66/93] [chrome] › tests\gpu\p3-st-u6-stroke.spec.ts:38:3 › P3 ST-U6 stroke fixtures samples1 (UNVERIFIED precision)
+[67/93] [chrome] › tests\gpu\p3-st-u6-stroke.spec.ts:38:3 › P3 ST-U6 stroke fixtures samples4 (UNVERIFIED precision)
+[68/93] [chrome] › tests\gpu\p3-st-u7-joint.spec.ts:76:3 › P3 ST-U7 joint fixtures samples1 (UNVERIFIED precision)
+[69/93] [chrome] › tests\gpu\p3-st-u7-joint.spec.ts:76:3 › P3 ST-U7 joint fixtures samples4 (UNVERIFIED precision)
+[70/93] [chrome] › tests\gpu\p3-st-u7-joint.spec.ts:296:1 › P3 ST-U7 seeded defects fail their checks (UNVERIFIED precision)
+[71/93] [chrome] › tests\gpu\p3-v3-mesh-smoke.spec.ts:36:3 › P3 V3c mesh smoke samples1 (UNVERIFIED precision)
+[72/93] [chrome] › tests\gpu\p3-v3-mesh-smoke.spec.ts:36:3 › P3 V3c mesh smoke samples4 (UNVERIFIED precision)
+[73/93] [chrome] › tests\gpu\p3-v4-paths.spec.ts:75:1 › P3 V4 path page screenshots (UNVERIFIED precision)
+[74/93] [chrome] › tests\gpu\p4-clip-mask.spec.ts:411:3 › P4 U5 images (P4-A02 to A05, A10), 1x, DPR 1
+[75/93] [chrome] › tests\gpu\p4-clip-mask.spec.ts:411:3 › P4 U5 images (P4-A02 to A05, A10), 4x, DPR 1
+[76/93] [chrome] › tests\gpu\p4-clip-mask.spec.ts:411:3 › P4 U5 images (P4-A02 to A05, A10), 1x, DPR 2
+[77/93] [chrome] › tests\gpu\p4-clip-mask.spec.ts:411:3 › P4 U5 images (P4-A02 to A05, A10), 4x, DPR 2
+[78/93] [chrome] › tests\gpu\p4-clip-mask.spec.ts:614:1 › P4 U5 invalidation, culling, batching and resources (P4-A06 to A08), 4x, DPR 1
+[79/93] [chrome] › tests\gpu\p4-clip-mask.spec.ts:995:1 › P4 U5 mask texture budget (P4-A08), 1x
+[80/93] [chrome] › tests\gpu\p4-clip-mask.spec.ts:1099:3 › P4 U5 frame-time observation (P4-A11), 4x
+[81/93] [chrome] › tests\gpu\p4-clip-mask.spec.ts:1099:3 › P4 U5 frame-time observation (P4-A11), 1x
+[82/93] [chrome] › tests\gpu\p4-clip-mask.spec.ts:1193:1 › E22 U3 tiled mask passes at 3840 x 2160 (E22-A5), 4x, DPR 2
+[83/93] [chrome] › tests\gpu\viz-v1-appearance.spec.ts:218:5 › DPR 1 › V-1 path appearance page at DPR 1 (UNVERIFIED precision)
+[84/93] [chrome] › tests\gpu\viz-v1-appearance.spec.ts:218:5 › DPR 2 › V-1 path appearance page at DPR 2 (UNVERIFIED precision)
+[85/93] [chrome] › tests\gpu\viz-v2-path-data.spec.ts:212:5 › DPR 1 › V-2 path-data page at DPR 1 (UNVERIFIED precision)
+[86/93] [chrome] › tests\gpu\viz-v2-path-data.spec.ts:212:5 › DPR 2 › V-2 path-data page at DPR 2 (UNVERIFIED precision)
+[87/93] [chrome] › tests\gpu\viz-v3-integration.spec.ts:97:5 › DPR 1 › V-3 A07 integration page at DPR 1 (UNVERIFIED precision)
+[88/93] [chrome] › tests\gpu\viz-v3-integration.spec.ts:97:5 › DPR 2 › V-3 A07 integration page at DPR 2 (UNVERIFIED precision)
+(node:13096) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[89/93] [chrome] › tests\gpu\foundation-experiments.spec.ts:175:5 › camera triangle at DPR 1 › preserves camera, shared-buffer, and pipeline-cache evidence through recovery
+[90/93] [chrome] › tests\gpu\foundation-experiments.spec.ts:175:5 › camera triangle at DPR 1.5 › preserves camera, shared-buffer, and pipeline-cache evidence through recovery
+[91/93] [chrome] › tests\gpu\foundation-experiments.spec.ts:175:5 › camera triangle at DPR 2 › preserves camera, shared-buffer, and pipeline-cache evidence through recovery
+[92/93] [chrome] › tests\gpu\playground-dashboard.spec.ts:12:1 › captures a functional dashboard smoke artifact
+[93/93] [chrome] › tests\gpu\webgpu-recovery.spec.ts:13:1 › surfaces validation error and recovers once after deliberate device destruction
+  Slow test file: [chrome] › tests\gpu\p1-primitives.spec.ts (8.6m)
+  Slow test file: [chrome] › tests\gpu\p4-clip-mask.spec.ts (8.1m)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  93 passed (28.4m)
+
+headed timing: 93 tests, wall 28.4 min, 1 worker(s); D:\GIT\vector-studio\artifacts\headed-timing\2026-11-04T05-24-12-804Z-gpu.json
+     8.6 min  chrome       tests/gpu/p1-primitives.spec.ts
+     8.1 min  chrome       tests/gpu/p4-clip-mask.spec.ts
+     2.0 min  chrome       tests/gpu/e24-stroke-dash.spec.ts
+     1.9 min  chrome       tests/gpu/e25-isolated-opacity.spec.ts
+     1.7 min  chrome       tests/gpu/e28-text-atlas.spec.ts
+     1.7 min  chrome       tests/gpu/viz-v3-integration.spec.ts
+     0.9 min  chrome       tests/gpu/viz-v2-path-data.spec.ts
+     0.8 min  chrome       tests/gpu/viz-v1-appearance.spec.ts

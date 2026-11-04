@@ -1,0 +1,12 @@
+﻿refresh 60 Hz 1920x1080, GTX 1660 SUPER driver 32.0.16.1088; power plan Balanced 381b4222-f694-41f0-9685-ff5bb260df2e; HEAD af351d39730e628aab5fb99ae8ae762d2b4714e3
+Browsers: Chrome 156.0.8078.81, Edge 156.0.4314.58 (record browser fields). Node v24.22.1.
+Prep: install PASS; test:geometry PASS (cargo 526 passed / 69 ignored; vitest 72 files passed / 4 skipped, 1217 passed / 6 skipped); build PASS.
+Sitting: E26_REPETITIONS=3, split on (E26_SPLIT unset), M8_N3_BASELINE=docs/evidence/m8-a14-2026-11-01/17a2b0a-main-pc-headed.json,
+  pnpm test:e26 --project chrome-dpr1-v2 --project chrome-dpr2-v2 --project edge-dpr1-v2 --project edge-dpr2-v2
+  04:05:23Z - 05:24:11Z: 159 passed, 1 failed, 84 skipped.
+  Failure: [chrome-dpr1-v2] e26-ui0-pointer-busy-10k/v1 r3 (v1 control): "the font-load change loaded" expected loaded, got error;
+  record console error "Failed to load resource: net::ERR_NO_BUFFER_SPACE". Its record and error context are kept in attempt1/.
+  Retry once (after test:gpu, same env, --project chrome-dpr1-v2 --grep "e26-ui0-pointer-busy-10k/v1 r3$"): 1 passed (retry-console.log);
+  its record replaces the attempt-1 record in runs/. runs/ holds 160 records.
+test:gpu: 05:24:11Z - 05:52:34Z, 93 passed.
+Other open apps: a user Chrome session (processes from 03:29Z, before the sitting) stayed open during the sitting; one unrelated Codex node runtime.

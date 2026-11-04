@@ -1,0 +1,577 @@
+{
+  "scenario": "m9-typing-10k/v1",
+  "variant": "typing",
+  "repetition": 3,
+  "project": "edge-dpr2-v2",
+  "browser": "chromium 156.0.4314.58",
+  "devicePixelRatio": 2,
+  "commit": "af351d39730e628aab5fb99ae8ae762d2b4714e3",
+  "dirty": false,
+  "configurationHash": "9d44a8c7f91f4803063b4800ce55676c23528ecd1064f8b3b92f6437b28f1927",
+  "configuration": {
+    "scenario": {
+      "id": "m9-typing-10k/v1",
+      "document": "m9-v2",
+      "seed": 27961,
+      "camera": "typical",
+      "interaction": "typing",
+      "frameCeilingMs": null,
+      "latencyBoundMs": null,
+      "renderMode": "on-demand",
+      "persist": true,
+      "reject": null,
+      "setFillBeforeDownMs": null,
+      "m9": {
+        "ui": true,
+        "window": {
+          "width": 1600,
+          "height": 1000
+        },
+        "fontLoad": null,
+        "typing": {
+          "offset": 60,
+          "text": "abcdefghijabcdefghijabcdefghijabcdefghij",
+          "intervalMs": 120
+        }
+      }
+    },
+    "documentSha256": "cae673836f01b38f0849bfbb282a2d69fb309bf51f0c4366f9bd0fa71560895c",
+    "schemaVersion": 6,
+    "viewport": {
+      "width": 1280,
+      "height": 720
+    },
+    "devicePixelRatio": 2,
+    "camera": {
+      "position": {
+        "x": -163.47761620647682,
+        "y": -164.6933678602503
+      },
+      "zoom": 0.5159188439084609
+    },
+    "fitMargin": 0.1,
+    "typical": {
+      "insetCss": 80,
+      "visible": {
+        "min": 900,
+        "max": 1100,
+        "target": 1000
+      }
+    },
+    "cullGuardPx": 2,
+    "drivers": {
+      "thetaPeriodMs": 10000,
+      "warmUpMs": 5000,
+      "windowEndMs": 15000,
+      "dragX": 40,
+      "dragY": 30,
+      "pan": 0.05,
+      "zoomBase": 0.95,
+      "zoomSwing": 0.05,
+      "latencyCadenceMs": 8,
+      "latencyDurationMs": 4000
+    },
+    "stress": {
+      "seed": 1345388545,
+      "multiplier": 1664525,
+      "increment": 1013904223,
+      "count": 10000,
+      "columns": 100,
+      "rows": 100,
+      "origin": {
+        "x": 180,
+        "y": 160
+      },
+      "span": {
+        "x": 900,
+        "y": 400
+      }
+    },
+    "sceneNodes": 10985,
+    "drawnLeaves": 6809,
+    "repetitions": 3,
+    "m9": {
+      "layoutTableSha256": "22b68314e364a88de2c6c4d28dcb29e586970f86a642826f9b143719ad43dacd",
+      "expanded": [
+        "f1",
+        "g3"
+      ],
+      "layerRows": 655,
+      "typingTarget": "r18"
+    }
+  },
+  "visibility": {
+    "visible": 997,
+    "inside": 946,
+    "leaves": 6809
+  },
+  "environment": {
+    "devicePixelRatio": 2,
+    "canvas": {
+      "width": 2560,
+      "height": 1440
+    },
+    "screen": {
+      "width": 1600,
+      "height": 1000
+    },
+    "idleRafMedianMs": 18,
+    "adapter": {
+      "vendor": "nvidia",
+      "architecture": "turing",
+      "device": "",
+      "description": ""
+    },
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Safari/537.36 Edg/151.0.7922.34"
+  },
+  "presence": {
+    "start": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    },
+    "end": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    }
+  },
+  "errors": [],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "loadWriteOk": true,
+  "layers": {
+    "expanded": [
+      "f1",
+      "g3"
+    ],
+    "rows": 655,
+    "expectedRows": 655
+  },
+  "typingTarget": "r18",
+  "entered": {
+    "ok": true
+  },
+  "focused": "TEXTAREA",
+  "textBefore": "studio pixel Final Draft mask canvas glyph glyph frame #42 v",
+  "textAfter": "studio pixel Final Draft mask canvas glyph glyph frame #42 vabcdefghijabcdefghijabcdefghijabcdefghij",
+  "keys": 40,
+  "sentAtMs": [
+    0,
+    122,
+    249,
+    373,
+    483,
+    608,
+    733,
+    843,
+    970,
+    1080,
+    1205,
+    1331,
+    1442,
+    1567,
+    1692,
+    1802,
+    1928,
+    2054,
+    2164,
+    2289,
+    2413,
+    2522,
+    2648,
+    2772,
+    2882,
+    3008,
+    3131,
+    3241,
+    3365,
+    3492,
+    3602,
+    3727,
+    3852,
+    3961,
+    4088,
+    4215,
+    4326,
+    4451,
+    4561,
+    4686
+  ],
+  "keyToWorkDoneMs": {
+    "count": 40,
+    "median": 34.19999999925494,
+    "p95": 61.399999998509884,
+    "p99": 70.90000000037253,
+    "max": 70.90000000037253
+  },
+  "keyToWorkDoneSamplesMs": [
+    43.19999999925494,
+    31.09999999962747,
+    29,
+    28.09999999962747,
+    30.899999998509884,
+    28.800000000745058,
+    29,
+    33.899999998509884,
+    29.90000000037253,
+    28.300000000745058,
+    27.5,
+    33,
+    27,
+    27.09999999962747,
+    27.100000001490116,
+    28.59999999962747,
+    39.90000000037253,
+    70.59999999962747,
+    34.19999999925494,
+    30.199999999254942,
+    27.199999999254942,
+    28.40000000037253,
+    28.600000001490116,
+    44.70000000111759,
+    42,
+    41.5,
+    45.90000000037253,
+    51.69999999925494,
+    46.59999999962747,
+    47.80000000074506,
+    47.30000000074506,
+    53.09999999962747,
+    49.100000001490116,
+    50,
+    70.90000000037253,
+    54.29999999888241,
+    61.399999998509884,
+    54.30000000074506,
+    51,
+    55.40000000037253
+  ],
+  "unresolved": 0,
+  "failed": 0,
+  "noChange": 0,
+  "longTasksAvailable": true,
+  "longTasksOver50": [
+    {
+      "startMs": 12647.300000000745,
+      "durationMs": 55
+    },
+    {
+      "startMs": 14716.800000000745,
+      "durationMs": 51
+    },
+    {
+      "startMs": 15810.099999999627,
+      "durationMs": 55
+    }
+  ],
+  "writes": [
+    {
+      "startMs": 843.7000000011176,
+      "endMs": 928.4000000003725,
+      "ok": true
+    },
+    {
+      "startMs": 12647.400000000373,
+      "endMs": 12728,
+      "ok": true
+    },
+    {
+      "startMs": 14716.900000000373,
+      "endMs": 14788.300000000745,
+      "ok": true
+    },
+    {
+      "startMs": 15810.200000001118,
+      "endMs": 15884.700000001118,
+      "ok": true
+    }
+  ],
+  "state": {
+    "keyLatencies": [
+      {
+        "inputMs": 10609.400000000373,
+        "revision": 2,
+        "doneMs": 10652.599999999627,
+        "claimMs": 10642
+      },
+      {
+        "inputMs": 10732.5,
+        "revision": 3,
+        "doneMs": 10763.599999999627,
+        "claimMs": 10754.200000001118
+      },
+      {
+        "inputMs": 10858.700000001118,
+        "revision": 4,
+        "doneMs": 10887.700000001118,
+        "claimMs": 10879
+      },
+      {
+        "inputMs": 10983,
+        "revision": 5,
+        "doneMs": 11011.099999999627,
+        "claimMs": 11002.900000000373
+      },
+      {
+        "inputMs": 11092.700000001118,
+        "revision": 6,
+        "doneMs": 11123.599999999627,
+        "claimMs": 11113.5
+      },
+      {
+        "inputMs": 11218.400000000373,
+        "revision": 7,
+        "doneMs": 11247.200000001118,
+        "claimMs": 11238.099999999627
+      },
+      {
+        "inputMs": 11343.5,
+        "revision": 8,
+        "doneMs": 11372.5,
+        "claimMs": 11362.900000000373
+      },
+      {
+        "inputMs": 11453.700000001118,
+        "revision": 9,
+        "doneMs": 11487.599999999627,
+        "claimMs": 11476.200000001118
+      },
+      {
+        "inputMs": 11580.599999999627,
+        "revision": 10,
+        "doneMs": 11610.5,
+        "claimMs": 11599.700000001118
+      },
+      {
+        "inputMs": 11690.599999999627,
+        "revision": 11,
+        "doneMs": 11718.900000000373,
+        "claimMs": 11709.5
+      },
+      {
+        "inputMs": 11815.400000000373,
+        "revision": 12,
+        "doneMs": 11842.900000000373,
+        "claimMs": 11833.900000000373
+      },
+      {
+        "inputMs": 11941.700000001118,
+        "revision": 13,
+        "doneMs": 11974.700000001118,
+        "claimMs": 11964.099999999627
+      },
+      {
+        "inputMs": 12051.900000000373,
+        "revision": 14,
+        "doneMs": 12078.900000000373,
+        "claimMs": 12070
+      },
+      {
+        "inputMs": 12176.700000001118,
+        "revision": 15,
+        "doneMs": 12203.800000000745,
+        "claimMs": 12194.900000000373
+      },
+      {
+        "inputMs": 12302.099999999627,
+        "revision": 16,
+        "doneMs": 12329.200000001118,
+        "claimMs": 12320.400000000373
+      },
+      {
+        "inputMs": 12412.200000001118,
+        "revision": 17,
+        "doneMs": 12440.800000000745,
+        "claimMs": 12431.800000000745
+      },
+      {
+        "inputMs": 12537.900000000373,
+        "revision": 18,
+        "doneMs": 12577.800000000745,
+        "claimMs": 12568.300000000745
+      },
+      {
+        "inputMs": 12664.5,
+        "revision": 19,
+        "doneMs": 12735.099999999627,
+        "claimMs": 12725.700000001118
+      },
+      {
+        "inputMs": 12774.200000001118,
+        "revision": 20,
+        "doneMs": 12808.400000000373,
+        "claimMs": 12799.200000001118
+      },
+      {
+        "inputMs": 12899.300000000745,
+        "revision": 21,
+        "doneMs": 12929.5,
+        "claimMs": 12920.400000000373
+      },
+      {
+        "inputMs": 13023.200000001118,
+        "revision": 22,
+        "doneMs": 13050.400000000373,
+        "claimMs": 13041.300000000745
+      },
+      {
+        "inputMs": 13132.300000000745,
+        "revision": 23,
+        "doneMs": 13160.700000001118,
+        "claimMs": 13151.700000001118
+      },
+      {
+        "inputMs": 13257.599999999627,
+        "revision": 24,
+        "doneMs": 13286.200000001118,
+        "claimMs": 13277.099999999627
+      },
+      {
+        "inputMs": 13382.099999999627,
+        "revision": 25,
+        "doneMs": 13426.800000000745,
+        "claimMs": 13404.400000000373
+      },
+      {
+        "inputMs": 13491.800000000745,
+        "revision": 26,
+        "doneMs": 13533.800000000745,
+        "claimMs": 13512.099999999627
+      },
+      {
+        "inputMs": 13617.800000000745,
+        "revision": 27,
+        "doneMs": 13659.300000000745,
+        "claimMs": 13635.800000000745
+      },
+      {
+        "inputMs": 13741.5,
+        "revision": 28,
+        "doneMs": 13787.400000000373,
+        "claimMs": 13759.200000001118
+      },
+      {
+        "inputMs": 13851.200000001118,
+        "revision": 29,
+        "doneMs": 13902.900000000373,
+        "claimMs": 13873.700000001118
+      },
+      {
+        "inputMs": 13974.900000000373,
+        "revision": 30,
+        "doneMs": 14021.5,
+        "claimMs": 13993.200000001118
+      },
+      {
+        "inputMs": 14101.900000000373,
+        "revision": 31,
+        "doneMs": 14149.700000001118,
+        "claimMs": 14119.700000001118
+      },
+      {
+        "inputMs": 14211.900000000373,
+        "revision": 32,
+        "doneMs": 14259.200000001118,
+        "claimMs": 14229.700000001118
+      },
+      {
+        "inputMs": 14337.5,
+        "revision": 33,
+        "doneMs": 14390.599999999627,
+        "claimMs": 14361.099999999627
+      },
+      {
+        "inputMs": 14461.599999999627,
+        "revision": 34,
+        "doneMs": 14510.700000001118,
+        "claimMs": 14479.099999999627
+      },
+      {
+        "inputMs": 14570.800000000745,
+        "revision": 35,
+        "doneMs": 14620.800000000745,
+        "claimMs": 14588.900000000373
+      },
+      {
+        "inputMs": 14698.099999999627,
+        "revision": 36,
+        "doneMs": 14769,
+        "claimMs": 14715.700000001118
+      },
+      {
+        "inputMs": 14825.300000000745,
+        "revision": 37,
+        "doneMs": 14879.599999999627,
+        "claimMs": 14846.800000000745
+      },
+      {
+        "inputMs": 14936.200000001118,
+        "revision": 38,
+        "doneMs": 14997.599999999627,
+        "claimMs": 14965.200000001118
+      },
+      {
+        "inputMs": 15061.5,
+        "revision": 39,
+        "doneMs": 15115.800000000745,
+        "claimMs": 15083.400000000373
+      },
+      {
+        "inputMs": 15170.900000000373,
+        "revision": 40,
+        "doneMs": 15221.900000000373,
+        "claimMs": 15189.900000000373
+      },
+      {
+        "inputMs": 15296.400000000373,
+        "revision": 41,
+        "doneMs": 15351.800000000745,
+        "claimMs": 15319.400000000373
+      }
+    ],
+    "noChangeKeys": [],
+    "writes": [
+      {
+        "startMs": 843.7000000011176,
+        "endMs": 928.4000000003725,
+        "ok": true
+      },
+      {
+        "startMs": 12647.400000000373,
+        "endMs": 12728,
+        "ok": true
+      },
+      {
+        "startMs": 14716.900000000373,
+        "endMs": 14788.300000000745,
+        "ok": true
+      },
+      {
+        "startMs": 15810.200000001118,
+        "endMs": 15884.700000001118,
+        "ok": true
+      }
+    ],
+    "longTasksAvailable": true,
+    "longTasks": [
+      {
+        "startMs": 12647.300000000745,
+        "durationMs": 55
+      },
+      {
+        "startMs": 14716.800000000745,
+        "durationMs": 51
+      },
+      {
+        "startMs": 15810.099999999627,
+        "durationMs": 55
+      }
+    ],
+    "mode": "on-demand",
+    "lifecycle": "ready",
+    "recoveryAttempts": 0
+  }
+}
