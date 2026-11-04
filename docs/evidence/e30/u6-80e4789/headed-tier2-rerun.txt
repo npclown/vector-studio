@@ -1,0 +1,20 @@
+Headed tier 2 full re-run, as reported by the operator (log and timing files kept on the main PC, not committed).
+HEAD 80e47896ee3763fff76a24630e760d1d5fac00a3; pnpm test:headed --tier 2; M8_N3_BASELINE=docs/evidence/m8-a14-2026-11-01/17a2b0a-main-pc-headed.json; default 4 workers.
+TeamViewer left running; clipboard and keyboard not touched during the run.
+start 2026-11-04T10:53:02Z, end 2026-11-04T11:18:21Z, total 25.3 min, 0 failed.
+
+stage            status  minutes  passed
+gpu              passed  12.5     93
+p5-next-host     passed  0.2      4
+m1-next-host     passed  0.2      2
+m2-next-host     passed  0.9      10
+m3-next-host     passed  0.3      2
+m4-next-host     passed  1.8      10
+m5-next-host     passed  0.8      10
+m6a-next-host    passed  0.3      22
+m6b-next-host    passed  0.8      38
+m6c-next-host    passed  4.9      100
+m6c-typing       passed  1.2      8
+m7-next-host     passed  0.3      4
+m8-next-host     passed  1.0      36
+total            passed  25.3

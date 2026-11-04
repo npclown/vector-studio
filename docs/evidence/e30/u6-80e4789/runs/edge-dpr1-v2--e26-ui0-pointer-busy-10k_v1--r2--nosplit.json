@@ -1,0 +1,2898 @@
+{
+  "scenario": "e26-ui0-pointer-busy-10k/v1",
+  "variant": "busy",
+  "repetition": 2,
+  "project": "edge-dpr1-v2",
+  "browser": "chromium 156.0.4314.58",
+  "devicePixelRatio": 1,
+  "commit": "80e47896ee3763fff76a24630e760d1d5fac00a3",
+  "dirty": false,
+  "configurationHash": "a1c3c30701aa2dea0eecd599ac3cc4449c99583d255438e40c77f23095b9a81f",
+  "configuration": {
+    "scenario": {
+      "id": "e26-ui0-pointer-busy-10k/v1",
+      "document": "m9-v2",
+      "seed": 27961,
+      "camera": "typical",
+      "interaction": "latency-drag",
+      "frameCeilingMs": null,
+      "latencyBoundMs": 50,
+      "renderMode": "on-demand",
+      "persist": true,
+      "reject": {
+        "mode": "once",
+        "armedAtMs": 1000,
+        "target": "moved-leaf"
+      },
+      "setFillBeforeDownMs": 100,
+      "m9": {
+        "ui": false,
+        "window": {
+          "width": 1600,
+          "height": 1000
+        },
+        "fontLoad": {
+          "armedAtMs": 2000,
+          "family": "M9 Font Load",
+          "mark": "m9-font-load"
+        },
+        "typing": null
+      }
+    },
+    "documentSha256": "cae673836f01b38f0849bfbb282a2d69fb309bf51f0c4366f9bd0fa71560895c",
+    "schemaVersion": 6,
+    "viewport": {
+      "width": 1280,
+      "height": 720
+    },
+    "devicePixelRatio": 1,
+    "camera": {
+      "position": {
+        "x": -163.47761620647682,
+        "y": -164.6933678602503
+      },
+      "zoom": 0.5159188439084609
+    },
+    "fitMargin": 0.1,
+    "typical": {
+      "insetCss": 80,
+      "visible": {
+        "min": 900,
+        "max": 1100,
+        "target": 1000
+      }
+    },
+    "cullGuardPx": 2,
+    "drivers": {
+      "thetaPeriodMs": 10000,
+      "warmUpMs": 5000,
+      "windowEndMs": 15000,
+      "dragX": 40,
+      "dragY": 30,
+      "pan": 0.05,
+      "zoomBase": 0.95,
+      "zoomSwing": 0.05,
+      "latencyCadenceMs": 8,
+      "latencyDurationMs": 4000
+    },
+    "stress": {
+      "seed": 1345388545,
+      "multiplier": 1664525,
+      "increment": 1013904223,
+      "count": 10000,
+      "columns": 100,
+      "rows": 100,
+      "origin": {
+        "x": 180,
+        "y": 160
+      },
+      "span": {
+        "x": 900,
+        "y": 400
+      }
+    },
+    "sceneNodes": 10985,
+    "drawnLeaves": 6809,
+    "repetitions": 3,
+    "m9": {
+      "layoutTableSha256": "22b68314e364a88de2c6c4d28dcb29e586970f86a642826f9b143719ad43dacd",
+      "expanded": [],
+      "layerRows": 0,
+      "typingTarget": null
+    }
+  },
+  "visibility": {
+    "visible": 999,
+    "inside": 946,
+    "leaves": 6809
+  },
+  "environment": {
+    "devicePixelRatio": 1,
+    "canvas": {
+      "width": 1280,
+      "height": 720
+    },
+    "screen": {
+      "width": 1600,
+      "height": 1000
+    },
+    "idleRafMedianMs": 18,
+    "adapter": {
+      "vendor": "nvidia",
+      "architecture": "turing",
+      "device": "",
+      "description": ""
+    },
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Safari/537.36 Edg/151.0.7922.34"
+  },
+  "presence": {
+    "start": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    },
+    "end": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    }
+  },
+  "errors": [],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "downMs": 9949.699999999255,
+  "upMs": 13977.199999999255,
+  "upHandledMs": 13977.800000000745,
+  "probe": {
+    "downs": [
+      9949.699999999255
+    ],
+    "ups": [
+      13977.199999999255
+    ],
+    "downsHandled": [
+      9950.300000000745
+    ],
+    "upsHandled": [
+      13977.800000000745
+    ],
+    "otherDowns": [],
+    "otherUps": [],
+    "visibilityChanges": 0,
+    "blurs": 0,
+    "pageErrors": []
+  },
+  "loadWriteOk": true,
+  "moves": 499,
+  "expectedMoves": 500,
+  "sentAtMs": [
+    0,
+    15,
+    24,
+    24,
+    39,
+    40,
+    51,
+    63,
+    64,
+    83,
+    84,
+    96,
+    96,
+    107,
+    118,
+    126,
+    134,
+    138,
+    149,
+    156,
+    165,
+    167,
+    178,
+    195,
+    196,
+    212,
+    213,
+    228,
+    229,
+    244,
+    245,
+    256,
+    257,
+    275,
+    276,
+    291,
+    292,
+    297,
+    307,
+    317,
+    323,
+    334,
+    339,
+    351,
+    355,
+    367,
+    368,
+    379,
+    386,
+    402,
+    403,
+    415,
+    416,
+    431,
+    431,
+    447,
+    448,
+    464,
+    465,
+    481,
+    482,
+    497,
+    497,
+    513,
+    514,
+    526,
+    529,
+    544,
+    545,
+    555,
+    561,
+    576,
+    577,
+    584,
+    599,
+    600,
+    611,
+    623,
+    624,
+    638,
+    639,
+    655,
+    656,
+    671,
+    672,
+    683,
+    702,
+    702,
+    718,
+    719,
+    719,
+    734,
+    750,
+    751,
+    756,
+    766,
+    774,
+    782,
+    788,
+    798,
+    806,
+    814,
+    829,
+    830,
+    842,
+    843,
+    858,
+    859,
+    876,
+    876,
+    892,
+    893,
+    907,
+    908,
+    923,
+    923,
+    940,
+    941,
+    957,
+    958,
+    972,
+    973,
+    984,
+    985,
+    1001,
+    1002,
+    1017,
+    1018,
+    1034,
+    1035,
+    1053,
+    1053,
+    1068,
+    1069,
+    1084,
+    1085,
+    1099,
+    1100,
+    1112,
+    1113,
+    1128,
+    1129,
+    1145,
+    1146,
+    1162,
+    1162,
+    1179,
+    1180,
+    1194,
+    1195,
+    1210,
+    1210,
+    1226,
+    1227,
+    1238,
+    1242,
+    1255,
+    1256,
+    1274,
+    1275,
+    1290,
+    1290,
+    1305,
+    1306,
+    1321,
+    1322,
+    1337,
+    1338,
+    1353,
+    1354,
+    1369,
+    1370,
+    1385,
+    1386,
+    1401,
+    1402,
+    1417,
+    1418,
+    1430,
+    1433,
+    1449,
+    1450,
+    1465,
+    1466,
+    1480,
+    1481,
+    1488,
+    1499,
+    1510,
+    1526,
+    1527,
+    1538,
+    1539,
+    1554,
+    1555,
+    1570,
+    1571,
+    1586,
+    1587,
+    1602,
+    1603,
+    1620,
+    1621,
+    1638,
+    1638,
+    1654,
+    1655,
+    1655,
+    1666,
+    1676,
+    1685,
+    1700,
+    1701,
+    1712,
+    1713,
+    1729,
+    1730,
+    1744,
+    1744,
+    1756,
+    1764,
+    1779,
+    1781,
+    1785,
+    1795,
+    1806,
+    1811,
+    1821,
+    1827,
+    1832,
+    1842,
+    1859,
+    1859,
+    1875,
+    1875,
+    1890,
+    1891,
+    1906,
+    1906,
+    1917,
+    1920,
+    1935,
+    1936,
+    1946,
+    1952,
+    1968,
+    1969,
+    1982,
+    1999,
+    2000,
+    2001,
+    2015,
+    2016,
+    2031,
+    2032,
+    2044,
+    2049,
+    2061,
+    2076,
+    2077,
+    2094,
+    2095,
+    2096,
+    2110,
+    2126,
+    2127,
+    2128,
+    2142,
+    2158,
+    2159,
+    2160,
+    2174,
+    2175,
+    2190,
+    2198,
+    2206,
+    2209,
+    2221,
+    2230,
+    2231,
+    2241,
+    2253,
+    2264,
+    2265,
+    2275,
+    2284,
+    2290,
+    2300,
+    2312,
+    2312,
+    2327,
+    2328,
+    2339,
+    2348,
+    2363,
+    2364,
+    2376,
+    2377,
+    2393,
+    2393,
+    2409,
+    2409,
+    2425,
+    2426,
+    2441,
+    2442,
+    2458,
+    2459,
+    2475,
+    2475,
+    2490,
+    2491,
+    2502,
+    2505,
+    2517,
+    2521,
+    2533,
+    2537,
+    2546,
+    2553,
+    2562,
+    2569,
+    2583,
+    2583,
+    2597,
+    2600,
+    2609,
+    2616,
+    2625,
+    2632,
+    2648,
+    2649,
+    2661,
+    2664,
+    2679,
+    2680,
+    2694,
+    2711,
+    2712,
+    2712,
+    2727,
+    2728,
+    2742,
+    2757,
+    2758,
+    2775,
+    2775,
+    2776,
+    2790,
+    2791,
+    2802,
+    2811,
+    2822,
+    2827,
+    2837,
+    2842,
+    2852,
+    2861,
+    2868,
+    2879,
+    2884,
+    2890,
+    2899,
+    2909,
+    2915,
+    2925,
+    2930,
+    2947,
+    2947,
+    2960,
+    2961,
+    2977,
+    2978,
+    2993,
+    2994,
+    3009,
+    3010,
+    3025,
+    3025,
+    3041,
+    3042,
+    3052,
+    3057,
+    3073,
+    3073,
+    3088,
+    3089,
+    3103,
+    3104,
+    3119,
+    3120,
+    3135,
+    3136,
+    3151,
+    3152,
+    3167,
+    3168,
+    3179,
+    3189,
+    3199,
+    3204,
+    3215,
+    3215,
+    3231,
+    3232,
+    3247,
+    3248,
+    3263,
+    3264,
+    3278,
+    3279,
+    3289,
+    3304,
+    3305,
+    3315,
+    3325,
+    3341,
+    3341,
+    3352,
+    3353,
+    3362,
+    3373,
+    3377,
+    3387,
+    3398,
+    3404,
+    3413,
+    3420,
+    3424,
+    3435,
+    3451,
+    3452,
+    3463,
+    3468,
+    3473,
+    3484,
+    3488,
+    3499,
+    3509,
+    3515,
+    3524,
+    3531,
+    3545,
+    3545,
+    3560,
+    3561,
+    3577,
+    3578,
+    3594,
+    3595,
+    3606,
+    3610,
+    3616,
+    3626,
+    3635,
+    3642,
+    3658,
+    3659,
+    3670,
+    3671,
+    3686,
+    3690,
+    3701,
+    3705,
+    3713,
+    3721,
+    3734,
+    3737,
+    3750,
+    3753,
+    3764,
+    3774,
+    3784,
+    3784,
+    3799,
+    3800,
+    3811,
+    3826,
+    3827,
+    3843,
+    3844,
+    3859,
+    3860,
+    3870,
+    3878,
+    3881,
+    3894,
+    3898,
+    3909,
+    3920,
+    3920,
+    3936,
+    3937,
+    3952,
+    3953,
+    3968,
+    3969,
+    3981,
+    3989
+  ],
+  "lastOffset": {
+    "x": 23.430004662821773,
+    "y": -54.31475109565867
+  },
+  "pointerToWorkDoneMs": {
+    "count": 262,
+    "median": 67.40000000223517,
+    "p95": 202.69999999925494,
+    "p99": 288.6000000014901,
+    "max": 314.29999999701977
+  },
+  "boundMs": 50,
+  "splitEnabled": false,
+  "split": null,
+  "splitPairs": null,
+  "unresolved": 0,
+  "failed": 0,
+  "noChange": 1,
+  "longTasksAvailable": true,
+  "longTasksOver50": [
+    {
+      "startMs": 11228.699999999255,
+      "durationMs": 173,
+      "isolation": true,
+      "fontLoad": false
+    },
+    {
+      "startMs": 12068.699999999255,
+      "durationMs": 66,
+      "isolation": false,
+      "fontLoad": true
+    }
+  ],
+  "layers": null,
+  "fontLoad": {
+    "armed": {
+      "armedAtMs": 2000,
+      "family": "M9 Font Load",
+      "mark": "m9-font-load"
+    },
+    "status": "loaded",
+    "loads": [
+      {
+        "family": "M9 Font Load",
+        "startMs": 12004.300000000745,
+        "settledMs": 12068.39999999851,
+        "endMs": 12262,
+        "status": "loaded",
+        "generationBefore": 2,
+        "generationAfter": 4,
+        "bumps": 1,
+        "lastBumpMs": 12134.599999997765,
+        "revisionBefore": 127,
+        "revisionAfter": 140
+      }
+    ]
+  },
+  "isolations": [
+    {
+      "startMs": 11237.699999999255,
+      "durationMs": 162.80000000074506
+    }
+  ],
+  "rejections": 1,
+  "writesDuringPress": [],
+  "firstWriteAfterUpMs": 87,
+  "undoDepth": 2,
+  "expectedUndoDepth": 2,
+  "state": {
+    "measures": null,
+    "latencies": [
+      {
+        "inputMs": 9987.699999999255,
+        "revision": 3,
+        "doneMs": 10055.199999999255,
+        "dispatchMs": 9996.89999999851,
+        "handlerEndMs": 10010.199999999255,
+        "claimMs": 10041.699999999255
+      },
+      {
+        "inputMs": 9996.699999999255,
+        "revision": 4,
+        "doneMs": 10055.199999999255,
+        "dispatchMs": 10010.89999999851,
+        "handlerEndMs": 10022.800000000745,
+        "claimMs": 10041.699999999255
+      },
+      {
+        "inputMs": 10012.199999999255,
+        "revision": 5,
+        "doneMs": 10055.199999999255,
+        "dispatchMs": 10023.300000000745,
+        "handlerEndMs": 10034.300000000745,
+        "claimMs": 10041.699999999255
+      },
+      {
+        "inputMs": 10024.199999999255,
+        "revision": 6,
+        "doneMs": 10128.300000000745,
+        "dispatchMs": 10042.699999999255,
+        "handlerEndMs": 10054.599999997765,
+        "claimMs": 10083.800000000745
+      },
+      {
+        "inputMs": 10056.5,
+        "revision": 7,
+        "doneMs": 10128.300000000745,
+        "dispatchMs": 10056.699999999255,
+        "handlerEndMs": 10067.300000000745,
+        "claimMs": 10083.800000000745
+      },
+      {
+        "inputMs": 10056.599999997765,
+        "revision": 8,
+        "doneMs": 10128.300000000745,
+        "dispatchMs": 10067.599999997765,
+        "handlerEndMs": 10078.099999997765,
+        "claimMs": 10083.800000000745
+      },
+      {
+        "inputMs": 10068.89999999851,
+        "revision": 9,
+        "doneMs": 10128.300000000745,
+        "dispatchMs": 10085.199999999255,
+        "handlerEndMs": 10097.300000000745,
+        "claimMs": 10115.300000000745
+      },
+      {
+        "inputMs": 10090.5,
+        "revision": 10,
+        "doneMs": 10128.300000000745,
+        "dispatchMs": 10097.800000000745,
+        "handlerEndMs": 10109.89999999851,
+        "claimMs": 10115.300000000745
+      },
+      {
+        "inputMs": 10098.800000000745,
+        "revision": 11,
+        "doneMs": 10339.099999997765,
+        "dispatchMs": 10116.39999999851,
+        "handlerEndMs": 10127.800000000745,
+        "claimMs": 10154.699999999255
+      },
+      {
+        "inputMs": 10121.599999997765,
+        "revision": 12,
+        "doneMs": 10339.099999997765,
+        "dispatchMs": 10129.099999997765,
+        "handlerEndMs": 10138.89999999851,
+        "claimMs": 10154.699999999255
+      },
+      {
+        "inputMs": 10129,
+        "revision": 13,
+        "doneMs": 10339.099999997765,
+        "dispatchMs": 10139.39999999851,
+        "handlerEndMs": 10149.300000000745,
+        "claimMs": 10154.699999999255
+      },
+      {
+        "inputMs": 10139.89999999851,
+        "revision": 14,
+        "doneMs": 10339.099999997765,
+        "dispatchMs": 10155.89999999851,
+        "handlerEndMs": 10166.39999999851,
+        "claimMs": 10171.800000000745
+      },
+      {
+        "inputMs": 10168.599999997765,
+        "revision": 15,
+        "doneMs": 10339.099999997765,
+        "dispatchMs": 10172.699999999255,
+        "handlerEndMs": 10183.699999999255,
+        "claimMs": 10188.89999999851
+      },
+      {
+        "inputMs": 10185.800000000745,
+        "revision": 16,
+        "doneMs": 10339.099999997765,
+        "dispatchMs": 10189.599999997765,
+        "handlerEndMs": 10200.300000000745,
+        "claimMs": 10205.300000000745
+      },
+      {
+        "inputMs": 10201.800000000745,
+        "revision": 17,
+        "doneMs": 10339.099999997765,
+        "dispatchMs": 10206,
+        "handlerEndMs": 10217.599999997765,
+        "claimMs": 10233.099999997765
+      },
+      {
+        "inputMs": 10217.199999999255,
+        "revision": 18,
+        "doneMs": 10339.099999997765,
+        "dispatchMs": 10218.099999997765,
+        "handlerEndMs": 10227.699999999255,
+        "claimMs": 10233.099999997765
+      },
+      {
+        "inputMs": 10229.89999999851,
+        "revision": 19,
+        "doneMs": 10339.099999997765,
+        "dispatchMs": 10233.89999999851,
+        "handlerEndMs": 10248.099999997765,
+        "claimMs": 10254.800000000745
+      },
+      {
+        "inputMs": 10249.300000000745,
+        "revision": 20,
+        "doneMs": 10339.099999997765,
+        "dispatchMs": 10255.599999997765,
+        "handlerEndMs": 10268.39999999851,
+        "claimMs": 10293.599999997765
+      },
+      {
+        "inputMs": 10264.89999999851,
+        "revision": 21,
+        "doneMs": 10339.099999997765,
+        "dispatchMs": 10268.800000000745,
+        "handlerEndMs": 10279.099999997765,
+        "claimMs": 10293.599999997765
+      },
+      {
+        "inputMs": 10269.800000000745,
+        "revision": 22,
+        "doneMs": 10339.099999997765,
+        "dispatchMs": 10279.599999997765,
+        "handlerEndMs": 10288.89999999851,
+        "claimMs": 10293.599999997765
+      },
+      {
+        "inputMs": 10290.099999997765,
+        "revision": 23,
+        "doneMs": 10339.099999997765,
+        "dispatchMs": 10294.39999999851,
+        "handlerEndMs": 10305.300000000745,
+        "claimMs": 10311.39999999851
+      },
+      {
+        "inputMs": 10295.599999997765,
+        "revision": 24,
+        "doneMs": 10339.099999997765,
+        "dispatchMs": 10312.300000000745,
+        "handlerEndMs": 10322.300000000745,
+        "claimMs": 10327
+      },
+      {
+        "inputMs": 10323.699999999255,
+        "revision": 25,
+        "doneMs": 10516,
+        "dispatchMs": 10327.800000000745,
+        "handlerEndMs": 10338.5,
+        "claimMs": 10365.199999999255
+      },
+      {
+        "inputMs": 10340.300000000745,
+        "revision": 26,
+        "doneMs": 10516,
+        "dispatchMs": 10340.5,
+        "handlerEndMs": 10350,
+        "claimMs": 10365.199999999255
+      },
+      {
+        "inputMs": 10340.39999999851,
+        "revision": 27,
+        "doneMs": 10516,
+        "dispatchMs": 10350.39999999851,
+        "handlerEndMs": 10360.199999999255,
+        "claimMs": 10365.199999999255
+      },
+      {
+        "inputMs": 10351.300000000745,
+        "revision": 28,
+        "doneMs": 10516,
+        "dispatchMs": 10366.199999999255,
+        "handlerEndMs": 10376.5,
+        "claimMs": 10391.300000000745
+      },
+      {
+        "inputMs": 10375.300000000745,
+        "revision": 29,
+        "doneMs": 10516,
+        "dispatchMs": 10376.89999999851,
+        "handlerEndMs": 10386.5,
+        "claimMs": 10391.300000000745
+      },
+      {
+        "inputMs": 10388.199999999255,
+        "revision": 30,
+        "doneMs": 10516,
+        "dispatchMs": 10392,
+        "handlerEndMs": 10402.099999997765,
+        "claimMs": 10406.39999999851
+      },
+      {
+        "inputMs": 10403.699999999255,
+        "revision": 31,
+        "doneMs": 10516,
+        "dispatchMs": 10407.099999997765,
+        "handlerEndMs": 10418.599999997765,
+        "claimMs": 10424.099999997765
+      },
+      {
+        "inputMs": 10420.300000000745,
+        "revision": 32,
+        "doneMs": 10516,
+        "dispatchMs": 10425,
+        "handlerEndMs": 10435.599999997765,
+        "claimMs": 10440.5
+      },
+      {
+        "inputMs": 10437.800000000745,
+        "revision": 33,
+        "doneMs": 10516,
+        "dispatchMs": 10441.39999999851,
+        "handlerEndMs": 10452.199999999255,
+        "claimMs": 10457.099999997765
+      },
+      {
+        "inputMs": 10454.300000000745,
+        "revision": 34,
+        "doneMs": 10516,
+        "dispatchMs": 10457.89999999851,
+        "handlerEndMs": 10469,
+        "claimMs": 10474.5
+      },
+      {
+        "inputMs": 10470.300000000745,
+        "revision": 35,
+        "doneMs": 10516,
+        "dispatchMs": 10475.39999999851,
+        "handlerEndMs": 10487.5,
+        "claimMs": 10502.699999999255
+      },
+      {
+        "inputMs": 10486.199999999255,
+        "revision": 36,
+        "doneMs": 10516,
+        "dispatchMs": 10487.89999999851,
+        "handlerEndMs": 10497.5,
+        "claimMs": 10502.699999999255
+      },
+      {
+        "inputMs": 10498.800000000745,
+        "revision": 37,
+        "doneMs": 10644.599999997765,
+        "dispatchMs": 10503.800000000745,
+        "handlerEndMs": 10515.39999999851,
+        "claimMs": 10542.5
+      },
+      {
+        "inputMs": 10517.199999999255,
+        "revision": 38,
+        "doneMs": 10644.599999997765,
+        "dispatchMs": 10517.39999999851,
+        "handlerEndMs": 10526.89999999851,
+        "claimMs": 10542.5
+      },
+      {
+        "inputMs": 10517.300000000745,
+        "revision": 39,
+        "doneMs": 10644.599999997765,
+        "dispatchMs": 10527.199999999255,
+        "handlerEndMs": 10537,
+        "claimMs": 10542.5
+      },
+      {
+        "inputMs": 10528.199999999255,
+        "revision": 40,
+        "doneMs": 10644.599999997765,
+        "dispatchMs": 10543.599999997765,
+        "handlerEndMs": 10555.89999999851,
+        "claimMs": 10588.099999997765
+      },
+      {
+        "inputMs": 10549.699999999255,
+        "revision": 41,
+        "doneMs": 10644.599999997765,
+        "dispatchMs": 10556.300000000745,
+        "handlerEndMs": 10570.099999997765,
+        "claimMs": 10588.099999997765
+      },
+      {
+        "inputMs": 10557.300000000745,
+        "revision": 42,
+        "doneMs": 10644.599999997765,
+        "dispatchMs": 10570.599999997765,
+        "handlerEndMs": 10582.89999999851,
+        "claimMs": 10588.099999997765
+      },
+      {
+        "inputMs": 10573,
+        "revision": 43,
+        "doneMs": 10644.599999997765,
+        "dispatchMs": 10589,
+        "handlerEndMs": 10599.800000000745,
+        "claimMs": 10616.199999999255
+      },
+      {
+        "inputMs": 10596.5,
+        "revision": 44,
+        "doneMs": 10644.599999997765,
+        "dispatchMs": 10600.199999999255,
+        "handlerEndMs": 10609.89999999851,
+        "claimMs": 10616.199999999255
+      },
+      {
+        "inputMs": 10611.300000000745,
+        "revision": 45,
+        "doneMs": 10644.599999997765,
+        "dispatchMs": 10617,
+        "handlerEndMs": 10627.89999999851,
+        "claimMs": 10632.599999997765
+      },
+      {
+        "inputMs": 10628.800000000745,
+        "revision": 46,
+        "doneMs": 10712,
+        "dispatchMs": 10633.5,
+        "handlerEndMs": 10644,
+        "claimMs": 10659.599999997765
+      },
+      {
+        "inputMs": 10644.599999997765,
+        "revision": 47,
+        "doneMs": 10712,
+        "dispatchMs": 10644.800000000745,
+        "handlerEndMs": 10654.599999997765,
+        "claimMs": 10659.599999997765
+      },
+      {
+        "inputMs": 10656.099999997765,
+        "revision": 48,
+        "doneMs": 10712,
+        "dispatchMs": 10663.5,
+        "handlerEndMs": 10673.199999999255,
+        "claimMs": 10677.599999997765
+      },
+      {
+        "inputMs": 10675.099999997765,
+        "revision": 49,
+        "doneMs": 10712,
+        "dispatchMs": 10678.800000000745,
+        "handlerEndMs": 10689.099999997765,
+        "claimMs": 10694.800000000745
+      },
+      {
+        "inputMs": 10692,
+        "revision": 50,
+        "doneMs": 10894.699999999255,
+        "dispatchMs": 10695.699999999255,
+        "handlerEndMs": 10706.39999999851,
+        "claimMs": 10711.099999997765
+      },
+      {
+        "inputMs": 10706.89999999851,
+        "revision": 51,
+        "doneMs": 10894.699999999255,
+        "dispatchMs": 10716.89999999851,
+        "handlerEndMs": 10727.199999999255,
+        "claimMs": 10731.699999999255
+      },
+      {
+        "inputMs": 10723.199999999255,
+        "revision": 52,
+        "doneMs": 10894.699999999255,
+        "dispatchMs": 10732.699999999255,
+        "handlerEndMs": 10745.099999997765,
+        "claimMs": 10765.39999999851
+      },
+      {
+        "inputMs": 10738.89999999851,
+        "revision": 53,
+        "doneMs": 10894.699999999255,
+        "dispatchMs": 10745.599999997765,
+        "handlerEndMs": 10759.599999997765,
+        "claimMs": 10765.39999999851
+      },
+      {
+        "inputMs": 10746.5,
+        "revision": 54,
+        "doneMs": 10894.699999999255,
+        "dispatchMs": 10766.5,
+        "handlerEndMs": 10777.599999997765,
+        "claimMs": 10791.800000000745
+      },
+      {
+        "inputMs": 10771,
+        "revision": 55,
+        "doneMs": 10894.699999999255,
+        "dispatchMs": 10778,
+        "handlerEndMs": 10787.699999999255,
+        "claimMs": 10791.800000000745
+      },
+      {
+        "inputMs": 10778.89999999851,
+        "revision": 56,
+        "doneMs": 10894.699999999255,
+        "dispatchMs": 10792.89999999851,
+        "handlerEndMs": 10803.699999999255,
+        "claimMs": 10818
+      },
+      {
+        "inputMs": 10802.699999999255,
+        "revision": 57,
+        "doneMs": 10894.699999999255,
+        "dispatchMs": 10804.099999997765,
+        "handlerEndMs": 10813.800000000745,
+        "claimMs": 10818
+      },
+      {
+        "inputMs": 10815.5,
+        "revision": 58,
+        "doneMs": 10894.699999999255,
+        "dispatchMs": 10818.800000000745,
+        "handlerEndMs": 10829.699999999255,
+        "claimMs": 10835
+      },
+      {
+        "inputMs": 10831.5,
+        "revision": 59,
+        "doneMs": 10894.699999999255,
+        "dispatchMs": 10835.89999999851,
+        "handlerEndMs": 10847.099999997765,
+        "claimMs": 10851.699999999255
+      },
+      {
+        "inputMs": 10848.89999999851,
+        "revision": 60,
+        "doneMs": 10894.699999999255,
+        "dispatchMs": 10852.599999997765,
+        "handlerEndMs": 10863.199999999255,
+        "claimMs": 10868
+      },
+      {
+        "inputMs": 10865.39999999851,
+        "revision": 61,
+        "doneMs": 10894.699999999255,
+        "dispatchMs": 10869,
+        "handlerEndMs": 10878.89999999851,
+        "claimMs": 10883.5
+      },
+      {
+        "inputMs": 10881,
+        "revision": 62,
+        "doneMs": 10912,
+        "dispatchMs": 10884.199999999255,
+        "handlerEndMs": 10894.099999997765,
+        "claimMs": 10900.099999997765
+      },
+      {
+        "inputMs": 10896.199999999255,
+        "revision": 63,
+        "doneMs": 10929.199999999255,
+        "dispatchMs": 10901,
+        "handlerEndMs": 10911.5,
+        "claimMs": 10917.800000000745
+      },
+      {
+        "inputMs": 10913.300000000745,
+        "revision": 64,
+        "doneMs": 11227.599999997765,
+        "dispatchMs": 10918.599999997765,
+        "handlerEndMs": 10928.699999999255,
+        "claimMs": 10934.599999997765
+      },
+      {
+        "inputMs": 10930.89999999851,
+        "revision": 65,
+        "doneMs": 11227.599999997765,
+        "dispatchMs": 10935.5,
+        "handlerEndMs": 10945.699999999255,
+        "claimMs": 10960.89999999851
+      },
+      {
+        "inputMs": 10945.699999999255,
+        "revision": 66,
+        "doneMs": 11227.599999997765,
+        "dispatchMs": 10946.199999999255,
+        "handlerEndMs": 10955.89999999851,
+        "claimMs": 10960.89999999851
+      },
+      {
+        "inputMs": 10958.099999997765,
+        "revision": 67,
+        "doneMs": 11227.599999997765,
+        "dispatchMs": 10961.89999999851,
+        "handlerEndMs": 10972.5,
+        "claimMs": 10977.599999997765
+      },
+      {
+        "inputMs": 10975.599999997765,
+        "revision": 68,
+        "doneMs": 11227.599999997765,
+        "dispatchMs": 10978.5,
+        "handlerEndMs": 10988.89999999851,
+        "claimMs": 10994.699999999255
+      },
+      {
+        "inputMs": 10991.099999997765,
+        "revision": 69,
+        "doneMs": 11227.599999997765,
+        "dispatchMs": 10995.599999997765,
+        "handlerEndMs": 11005.5,
+        "claimMs": 11011.5
+      },
+      {
+        "inputMs": 11007.39999999851,
+        "revision": 70,
+        "doneMs": 11227.599999997765,
+        "dispatchMs": 11012.39999999851,
+        "handlerEndMs": 11024.300000000745,
+        "claimMs": 11029.099999997765
+      },
+      {
+        "inputMs": 11026.39999999851,
+        "revision": 71,
+        "doneMs": 11227.599999997765,
+        "dispatchMs": 11030,
+        "handlerEndMs": 11040.699999999255,
+        "claimMs": 11045.89999999851
+      },
+      {
+        "inputMs": 11042.300000000745,
+        "revision": 72,
+        "doneMs": 11227.599999997765,
+        "dispatchMs": 11047,
+        "handlerEndMs": 11057.099999997765,
+        "claimMs": 11061.5
+      },
+      {
+        "inputMs": 11057.599999997765,
+        "revision": 73,
+        "doneMs": 11227.599999997765,
+        "dispatchMs": 11062.39999999851,
+        "handlerEndMs": 11073.300000000745,
+        "claimMs": 11088
+      },
+      {
+        "inputMs": 11072.699999999255,
+        "revision": 74,
+        "doneMs": 11227.599999997765,
+        "dispatchMs": 11073.699999999255,
+        "handlerEndMs": 11083.300000000745,
+        "claimMs": 11088
+      },
+      {
+        "inputMs": 11085.39999999851,
+        "revision": 75,
+        "doneMs": 11227.599999997765,
+        "dispatchMs": 11088.800000000745,
+        "handlerEndMs": 11099.89999999851,
+        "claimMs": 11104.89999999851
+      },
+      {
+        "inputMs": 11102,
+        "revision": 76,
+        "doneMs": 11227.599999997765,
+        "dispatchMs": 11105.800000000745,
+        "handlerEndMs": 11116.199999999255,
+        "claimMs": 11121.599999997765
+      },
+      {
+        "inputMs": 11118.39999999851,
+        "revision": 77,
+        "doneMs": 11227.599999997765,
+        "dispatchMs": 11122.5,
+        "handlerEndMs": 11133.099999997765,
+        "claimMs": 11139.099999997765
+      },
+      {
+        "inputMs": 11134.89999999851,
+        "revision": 78,
+        "doneMs": 11227.599999997765,
+        "dispatchMs": 11139.89999999851,
+        "handlerEndMs": 11153.699999999255,
+        "claimMs": 11187
+      },
+      {
+        "inputMs": 11152.199999999255,
+        "revision": 79,
+        "doneMs": 11227.599999997765,
+        "dispatchMs": 11154,
+        "handlerEndMs": 11168.199999999255,
+        "claimMs": 11187
+      },
+      {
+        "inputMs": 11167.89999999851,
+        "revision": 80,
+        "doneMs": 11227.599999997765,
+        "dispatchMs": 11168.699999999255,
+        "handlerEndMs": 11181,
+        "claimMs": 11187
+      },
+      {
+        "inputMs": 11182.89999999851,
+        "revision": 81,
+        "doneMs": 11227.599999997765,
+        "dispatchMs": 11187.89999999851,
+        "handlerEndMs": 11200.300000000745,
+        "claimMs": 11215.5
+      },
+      {
+        "inputMs": 11199.800000000745,
+        "revision": 82,
+        "doneMs": 11227.599999997765,
+        "dispatchMs": 11200.599999997765,
+        "handlerEndMs": 11210,
+        "claimMs": 11215.5
+      },
+      {
+        "inputMs": 11211.099999997765,
+        "revision": 83,
+        "doneMs": 11499.699999999255,
+        "dispatchMs": 11216.300000000745,
+        "handlerEndMs": 11226.699999999255,
+        "claimMs": 11447.39999999851
+      },
+      {
+        "inputMs": 11228.599999997765,
+        "revision": 86,
+        "doneMs": 11499.699999999255,
+        "dispatchMs": 11228.800000000745,
+        "handlerEndMs": 11401.39999999851,
+        "claimMs": 11447.39999999851
+      },
+      {
+        "inputMs": 11228.699999999255,
+        "revision": 87,
+        "doneMs": 11499.699999999255,
+        "dispatchMs": 11402,
+        "handlerEndMs": 11424.300000000745,
+        "claimMs": 11447.39999999851
+      },
+      {
+        "inputMs": 11402.699999999255,
+        "revision": 88,
+        "doneMs": 11499.699999999255,
+        "dispatchMs": 11448.5,
+        "handlerEndMs": 11459.099999997765,
+        "claimMs": 11486.099999997765
+      },
+      {
+        "inputMs": 11453.39999999851,
+        "revision": 89,
+        "doneMs": 11499.699999999255,
+        "dispatchMs": 11459.599999997765,
+        "handlerEndMs": 11470,
+        "claimMs": 11486.099999997765
+      },
+      {
+        "inputMs": 11460.699999999255,
+        "revision": 90,
+        "doneMs": 11499.699999999255,
+        "dispatchMs": 11470.5,
+        "handlerEndMs": 11481.599999997765,
+        "claimMs": 11486.099999997765
+      },
+      {
+        "inputMs": 11471.39999999851,
+        "revision": 91,
+        "doneMs": 11574,
+        "dispatchMs": 11487,
+        "handlerEndMs": 11499.199999999255,
+        "claimMs": 11514.5
+      },
+      {
+        "inputMs": 11499.800000000745,
+        "revision": 92,
+        "doneMs": 11574,
+        "dispatchMs": 11499.89999999851,
+        "handlerEndMs": 11509.699999999255,
+        "claimMs": 11514.5
+      },
+      {
+        "inputMs": 11511.800000000745,
+        "revision": 93,
+        "doneMs": 11574,
+        "dispatchMs": 11515.39999999851,
+        "handlerEndMs": 11525.89999999851,
+        "claimMs": 11531.099999997765
+      },
+      {
+        "inputMs": 11527.599999997765,
+        "revision": 94,
+        "doneMs": 11574,
+        "dispatchMs": 11531.89999999851,
+        "handlerEndMs": 11541.699999999255,
+        "claimMs": 11545.89999999851
+      },
+      {
+        "inputMs": 11543.5,
+        "revision": 95,
+        "doneMs": 11574,
+        "dispatchMs": 11546.699999999255,
+        "handlerEndMs": 11557.39999999851,
+        "claimMs": 11562.199999999255
+      },
+      {
+        "inputMs": 11559.5,
+        "revision": 96,
+        "doneMs": 11591.800000000745,
+        "dispatchMs": 11563,
+        "handlerEndMs": 11573.5,
+        "claimMs": 11579.800000000745
+      },
+      {
+        "inputMs": 11575.39999999851,
+        "revision": 97,
+        "doneMs": 11609.599999997765,
+        "dispatchMs": 11580.699999999255,
+        "handlerEndMs": 11591.39999999851,
+        "claimMs": 11597.699999999255
+      },
+      {
+        "inputMs": 11593.699999999255,
+        "revision": 98,
+        "doneMs": 11626.5,
+        "dispatchMs": 11598.5,
+        "handlerEndMs": 11609.199999999255,
+        "claimMs": 11614.39999999851
+      },
+      {
+        "inputMs": 11611.099999997765,
+        "revision": 99,
+        "doneMs": 11715.800000000745,
+        "dispatchMs": 11615.300000000745,
+        "handlerEndMs": 11626,
+        "claimMs": 11661.5
+      },
+      {
+        "inputMs": 11627.300000000745,
+        "revision": 100,
+        "doneMs": 11715.800000000745,
+        "dispatchMs": 11627.5,
+        "handlerEndMs": 11637.199999999255,
+        "claimMs": 11661.5
+      },
+      {
+        "inputMs": 11627.39999999851,
+        "revision": 101,
+        "doneMs": 11715.800000000745,
+        "dispatchMs": 11637.699999999255,
+        "handlerEndMs": 11647.5,
+        "claimMs": 11661.5
+      },
+      {
+        "inputMs": 11638.599999997765,
+        "revision": 102,
+        "doneMs": 11715.800000000745,
+        "dispatchMs": 11647.800000000745,
+        "handlerEndMs": 11657.5,
+        "claimMs": 11661.5
+      },
+      {
+        "inputMs": 11648.89999999851,
+        "revision": 103,
+        "doneMs": 11715.800000000745,
+        "dispatchMs": 11662.800000000745,
+        "handlerEndMs": 11673.300000000745,
+        "claimMs": 11688
+      },
+      {
+        "inputMs": 11673.5,
+        "revision": 104,
+        "doneMs": 11715.800000000745,
+        "dispatchMs": 11673.800000000745,
+        "handlerEndMs": 11683.199999999255,
+        "claimMs": 11688
+      },
+      {
+        "inputMs": 11686.300000000745,
+        "revision": 105,
+        "doneMs": 11715.800000000745,
+        "dispatchMs": 11688.89999999851,
+        "handlerEndMs": 11700.599999997765,
+        "claimMs": 11704.800000000745
+      },
+      {
+        "inputMs": 11702.300000000745,
+        "revision": 106,
+        "doneMs": 11820.099999997765,
+        "dispatchMs": 11705.599999997765,
+        "handlerEndMs": 11715.300000000745,
+        "claimMs": 11744
+      },
+      {
+        "inputMs": 11717.099999997765,
+        "revision": 107,
+        "doneMs": 11820.099999997765,
+        "dispatchMs": 11717.199999999255,
+        "handlerEndMs": 11727,
+        "claimMs": 11744
+      },
+      {
+        "inputMs": 11717.099999997765,
+        "revision": 108,
+        "doneMs": 11820.099999997765,
+        "dispatchMs": 11727.5,
+        "handlerEndMs": 11738.699999999255,
+        "claimMs": 11744
+      },
+      {
+        "inputMs": 11728.300000000745,
+        "revision": 109,
+        "doneMs": 11820.099999997765,
+        "dispatchMs": 11745.099999997765,
+        "handlerEndMs": 11757,
+        "claimMs": 11781
+      },
+      {
+        "inputMs": 11753.39999999851,
+        "revision": 110,
+        "doneMs": 11820.099999997765,
+        "dispatchMs": 11757.5,
+        "handlerEndMs": 11767.39999999851,
+        "claimMs": 11781
+      },
+      {
+        "inputMs": 11758.099999997765,
+        "revision": 111,
+        "doneMs": 11820.099999997765,
+        "dispatchMs": 11767.89999999851,
+        "handlerEndMs": 11777.199999999255,
+        "claimMs": 11781
+      },
+      {
+        "inputMs": 11768.199999999255,
+        "revision": 112,
+        "doneMs": 11820.099999997765,
+        "dispatchMs": 11782,
+        "handlerEndMs": 11792.39999999851,
+        "claimMs": 11807.89999999851
+      },
+      {
+        "inputMs": 11783.800000000745,
+        "revision": 113,
+        "doneMs": 11820.099999997765,
+        "dispatchMs": 11792.800000000745,
+        "handlerEndMs": 11803.89999999851,
+        "claimMs": 11807.89999999851
+      },
+      {
+        "inputMs": 11793.800000000745,
+        "revision": 114,
+        "doneMs": 11907,
+        "dispatchMs": 11809,
+        "handlerEndMs": 11819.599999997765,
+        "claimMs": 11837.300000000745
+      },
+      {
+        "inputMs": 11815.5,
+        "revision": 115,
+        "doneMs": 11907,
+        "dispatchMs": 11823.599999997765,
+        "handlerEndMs": 11833.599999997765,
+        "claimMs": 11837.300000000745
+      },
+      {
+        "inputMs": 11832.300000000745,
+        "revision": 116,
+        "doneMs": 11907,
+        "dispatchMs": 11838.39999999851,
+        "handlerEndMs": 11848.800000000745,
+        "claimMs": 11866.89999999851
+      },
+      {
+        "inputMs": 11848.39999999851,
+        "revision": 117,
+        "doneMs": 11907,
+        "dispatchMs": 11849.199999999255,
+        "handlerEndMs": 11862.599999997765,
+        "claimMs": 11866.89999999851
+      },
+      {
+        "inputMs": 11863.5,
+        "revision": 118,
+        "doneMs": 11907,
+        "dispatchMs": 11868.099999997765,
+        "handlerEndMs": 11879.300000000745,
+        "claimMs": 11894
+      },
+      {
+        "inputMs": 11878.89999999851,
+        "revision": 119,
+        "doneMs": 11907,
+        "dispatchMs": 11879.699999999255,
+        "handlerEndMs": 11888.89999999851,
+        "claimMs": 11894
+      },
+      {
+        "inputMs": 11890.199999999255,
+        "revision": 120,
+        "doneMs": 11958.89999999851,
+        "dispatchMs": 11894.89999999851,
+        "handlerEndMs": 11906.300000000745,
+        "claimMs": 11931.699999999255
+      },
+      {
+        "inputMs": 11908.199999999255,
+        "revision": 121,
+        "doneMs": 11958.89999999851,
+        "dispatchMs": 11908.300000000745,
+        "handlerEndMs": 11917.699999999255,
+        "claimMs": 11931.699999999255
+      },
+      {
+        "inputMs": 11908.199999999255,
+        "revision": 122,
+        "doneMs": 11958.89999999851,
+        "dispatchMs": 11918.099999997765,
+        "handlerEndMs": 11927.699999999255,
+        "claimMs": 11931.699999999255
+      },
+      {
+        "inputMs": 11919.199999999255,
+        "revision": 123,
+        "doneMs": 11966.099999997765,
+        "dispatchMs": 11932.699999999255,
+        "handlerEndMs": 11943,
+        "claimMs": 11958.099999997765
+      },
+      {
+        "inputMs": 11941.39999999851,
+        "revision": 124,
+        "doneMs": 11966.099999997765,
+        "dispatchMs": 11943.39999999851,
+        "handlerEndMs": 11953.39999999851,
+        "claimMs": 11958.099999997765
+      },
+      {
+        "inputMs": 11954.89999999851,
+        "revision": 125,
+        "doneMs": 12021.599999997765,
+        "dispatchMs": 11966.199999999255,
+        "handlerEndMs": 11977,
+        "claimMs": 11980.800000000745
+      },
+      {
+        "inputMs": 11974.300000000745,
+        "revision": 126,
+        "doneMs": 12068.39999999851,
+        "dispatchMs": 11981.699999999255,
+        "handlerEndMs": 11992.5,
+        "claimMs": 12020.39999999851
+      },
+      {
+        "inputMs": 11988.5,
+        "revision": 127,
+        "doneMs": 12068.39999999851,
+        "dispatchMs": 11992.800000000745,
+        "handlerEndMs": 12003.5,
+        "claimMs": 12020.39999999851
+      },
+      {
+        "inputMs": 12004.5,
+        "revision": 128,
+        "doneMs": 12068.39999999851,
+        "dispatchMs": 12005.699999999255,
+        "handlerEndMs": 12015.199999999255,
+        "claimMs": 12020.39999999851
+      },
+      {
+        "inputMs": 12016.599999997765,
+        "revision": 129,
+        "doneMs": 12068.5,
+        "dispatchMs": 12021.599999997765,
+        "handlerEndMs": 12032.699999999255,
+        "claimMs": 12036.89999999851
+      },
+      {
+        "inputMs": 12022.5,
+        "revision": 130,
+        "doneMs": 12068.599999997765,
+        "dispatchMs": 12037.800000000745,
+        "handlerEndMs": 12047.800000000745,
+        "claimMs": 12053
+      },
+      {
+        "inputMs": 12049.800000000745,
+        "revision": 131,
+        "doneMs": 12236.300000000745,
+        "dispatchMs": 12054.199999999255,
+        "handlerEndMs": 12067.89999999851,
+        "claimMs": 12156.89999999851
+      },
+      {
+        "inputMs": 12068.699999999255,
+        "revision": 133,
+        "doneMs": 12236.300000000745,
+        "dispatchMs": 12134.89999999851,
+        "handlerEndMs": 12146.800000000745,
+        "claimMs": 12156.89999999851
+      },
+      {
+        "inputMs": 12147.300000000745,
+        "revision": 134,
+        "doneMs": 12262,
+        "dispatchMs": 12158.699999999255,
+        "handlerEndMs": 12169.199999999255,
+        "claimMs": 12190.800000000745
+      },
+      {
+        "inputMs": 12163,
+        "revision": 135,
+        "doneMs": 12262,
+        "dispatchMs": 12169.89999999851,
+        "handlerEndMs": 12180.099999997765,
+        "claimMs": 12190.800000000745
+      },
+      {
+        "inputMs": 12170.699999999255,
+        "revision": 136,
+        "doneMs": 12262,
+        "dispatchMs": 12191.89999999851,
+        "handlerEndMs": 12202.099999997765,
+        "claimMs": 12222.800000000745
+      },
+      {
+        "inputMs": 12194.599999997765,
+        "revision": 137,
+        "doneMs": 12262,
+        "dispatchMs": 12202.599999997765,
+        "handlerEndMs": 12212.300000000745,
+        "claimMs": 12222.800000000745
+      },
+      {
+        "inputMs": 12203.699999999255,
+        "revision": 138,
+        "doneMs": 12262.300000000745,
+        "dispatchMs": 12223.800000000745,
+        "handlerEndMs": 12235.89999999851,
+        "claimMs": 12250.099999997765
+      },
+      {
+        "inputMs": 12226,
+        "revision": 139,
+        "doneMs": 12262.300000000745,
+        "dispatchMs": 12236.5,
+        "handlerEndMs": 12246.199999999255,
+        "claimMs": 12250.099999997765
+      },
+      {
+        "inputMs": 12237.699999999255,
+        "revision": 140,
+        "doneMs": 12299.39999999851,
+        "dispatchMs": 12251.300000000745,
+        "handlerEndMs": 12261.699999999255,
+        "claimMs": 12287.39999999851
+      },
+      {
+        "inputMs": 12257.300000000745,
+        "revision": 141,
+        "doneMs": 12299.39999999851,
+        "dispatchMs": 12263.099999997765,
+        "handlerEndMs": 12273.300000000745,
+        "claimMs": 12287.39999999851
+      },
+      {
+        "inputMs": 12263,
+        "revision": 142,
+        "doneMs": 12299.39999999851,
+        "dispatchMs": 12273.800000000745,
+        "handlerEndMs": 12283.099999997765,
+        "claimMs": 12287.39999999851
+      },
+      {
+        "inputMs": 12285.199999999255,
+        "revision": 143,
+        "doneMs": 12446.699999999255,
+        "dispatchMs": 12288.300000000745,
+        "handlerEndMs": 12298.89999999851,
+        "claimMs": 12325.199999999255
+      },
+      {
+        "inputMs": 12300.699999999255,
+        "revision": 144,
+        "doneMs": 12446.699999999255,
+        "dispatchMs": 12300.89999999851,
+        "handlerEndMs": 12310.599999997765,
+        "claimMs": 12325.199999999255
+      },
+      {
+        "inputMs": 12300.800000000745,
+        "revision": 145,
+        "doneMs": 12446.699999999255,
+        "dispatchMs": 12311,
+        "handlerEndMs": 12321,
+        "claimMs": 12325.199999999255
+      },
+      {
+        "inputMs": 12312.099999997765,
+        "revision": 146,
+        "doneMs": 12446.800000000745,
+        "dispatchMs": 12326.300000000745,
+        "handlerEndMs": 12338.300000000745,
+        "claimMs": 12352.5
+      },
+      {
+        "inputMs": 12337,
+        "revision": 147,
+        "doneMs": 12446.800000000745,
+        "dispatchMs": 12338.699999999255,
+        "handlerEndMs": 12347.89999999851,
+        "claimMs": 12352.5
+      },
+      {
+        "inputMs": 12350,
+        "revision": 148,
+        "doneMs": 12446.800000000745,
+        "dispatchMs": 12353.699999999255,
+        "handlerEndMs": 12364,
+        "claimMs": 12368.699999999255
+      },
+      {
+        "inputMs": 12366.199999999255,
+        "revision": 149,
+        "doneMs": 12446.800000000745,
+        "dispatchMs": 12369.599999997765,
+        "handlerEndMs": 12380.099999997765,
+        "claimMs": 12385
+      },
+      {
+        "inputMs": 12381.89999999851,
+        "revision": 150,
+        "doneMs": 12446.800000000745,
+        "dispatchMs": 12385.89999999851,
+        "handlerEndMs": 12396.300000000745,
+        "claimMs": 12401
+      },
+      {
+        "inputMs": 12398.599999997765,
+        "revision": 151,
+        "doneMs": 12446.800000000745,
+        "dispatchMs": 12402,
+        "handlerEndMs": 12412.300000000745,
+        "claimMs": 12418.599999997765
+      },
+      {
+        "inputMs": 12414.699999999255,
+        "revision": 152,
+        "doneMs": 12446.800000000745,
+        "dispatchMs": 12419.300000000745,
+        "handlerEndMs": 12429.199999999255,
+        "claimMs": 12433.89999999851
+      },
+      {
+        "inputMs": 12431.5,
+        "revision": 153,
+        "doneMs": 12493.599999997765,
+        "dispatchMs": 12434.800000000745,
+        "handlerEndMs": 12446.099999997765,
+        "claimMs": 12452.199999999255
+      },
+      {
+        "inputMs": 12448.099999997765,
+        "revision": 154,
+        "doneMs": 12493.599999997765,
+        "dispatchMs": 12453.099999997765,
+        "handlerEndMs": 12463.699999999255,
+        "claimMs": 12477.800000000745
+      },
+      {
+        "inputMs": 12463.800000000745,
+        "revision": 155,
+        "doneMs": 12493.599999997765,
+        "dispatchMs": 12464.099999997765,
+        "handlerEndMs": 12473.599999997765,
+        "claimMs": 12477.800000000745
+      },
+      {
+        "inputMs": 12474.800000000745,
+        "revision": 156,
+        "doneMs": 12533.699999999255,
+        "dispatchMs": 12478.5,
+        "handlerEndMs": 12488.300000000745,
+        "claimMs": 12492.599999997765
+      },
+      {
+        "inputMs": 12489.699999999255,
+        "revision": 157,
+        "doneMs": 12533.800000000745,
+        "dispatchMs": 12494.5,
+        "handlerEndMs": 12504.39999999851,
+        "claimMs": 12521.699999999255
+      },
+      {
+        "inputMs": 12494.300000000745,
+        "revision": 158,
+        "doneMs": 12533.800000000745,
+        "dispatchMs": 12504.89999999851,
+        "handlerEndMs": 12517.699999999255,
+        "claimMs": 12521.699999999255
+      },
+      {
+        "inputMs": 12505.800000000745,
+        "revision": 159,
+        "doneMs": 12569.300000000745,
+        "dispatchMs": 12522.800000000745,
+        "handlerEndMs": 12533.300000000745,
+        "claimMs": 12558.199999999255
+      },
+      {
+        "inputMs": 12526.39999999851,
+        "revision": 160,
+        "doneMs": 12569.300000000745,
+        "dispatchMs": 12534.800000000745,
+        "handlerEndMs": 12544.699999999255,
+        "claimMs": 12558.199999999255
+      },
+      {
+        "inputMs": 12534.800000000745,
+        "revision": 161,
+        "doneMs": 12569.300000000745,
+        "dispatchMs": 12545.099999997765,
+        "handlerEndMs": 12554.099999997765,
+        "claimMs": 12558.199999999255
+      },
+      {
+        "inputMs": 12555.800000000745,
+        "revision": 162,
+        "doneMs": 12670.39999999851,
+        "dispatchMs": 12558.89999999851,
+        "handlerEndMs": 12568.89999999851,
+        "claimMs": 12584.800000000745
+      },
+      {
+        "inputMs": 12570.199999999255,
+        "revision": 163,
+        "doneMs": 12670.39999999851,
+        "dispatchMs": 12571.300000000745,
+        "handlerEndMs": 12581,
+        "claimMs": 12584.800000000745
+      },
+      {
+        "inputMs": 12573,
+        "revision": 164,
+        "doneMs": 12670.39999999851,
+        "dispatchMs": 12585.800000000745,
+        "handlerEndMs": 12596.5,
+        "claimMs": 12610.599999997765
+      },
+      {
+        "inputMs": 12589.599999997765,
+        "revision": 165,
+        "doneMs": 12670.39999999851,
+        "dispatchMs": 12596.89999999851,
+        "handlerEndMs": 12606.800000000745,
+        "claimMs": 12610.599999997765
+      },
+      {
+        "inputMs": 12597.89999999851,
+        "revision": 166,
+        "doneMs": 12670.5,
+        "dispatchMs": 12611.89999999851,
+        "handlerEndMs": 12622.599999997765,
+        "claimMs": 12639.199999999255
+      },
+      {
+        "inputMs": 12621.89999999851,
+        "revision": 167,
+        "doneMs": 12670.5,
+        "dispatchMs": 12623,
+        "handlerEndMs": 12632.5,
+        "claimMs": 12639.199999999255
+      },
+      {
+        "inputMs": 12634.099999997765,
+        "revision": 168,
+        "doneMs": 12670.5,
+        "dispatchMs": 12640.099999997765,
+        "handlerEndMs": 12650.599999997765,
+        "claimMs": 12654.800000000745
+      },
+      {
+        "inputMs": 12652.5,
+        "revision": 169,
+        "doneMs": 12762.300000000745,
+        "dispatchMs": 12655.599999997765,
+        "handlerEndMs": 12665.300000000745,
+        "claimMs": 12669.599999997765
+      },
+      {
+        "inputMs": 12666.699999999255,
+        "revision": 170,
+        "doneMs": 12762.300000000745,
+        "dispatchMs": 12677.89999999851,
+        "handlerEndMs": 12688.5,
+        "claimMs": 12692.300000000745
+      },
+      {
+        "inputMs": 12685.199999999255,
+        "revision": 171,
+        "doneMs": 12762.300000000745,
+        "dispatchMs": 12693.300000000745,
+        "handlerEndMs": 12703.800000000745,
+        "claimMs": 12717.599999997765
+      },
+      {
+        "inputMs": 12700.39999999851,
+        "revision": 172,
+        "doneMs": 12762.300000000745,
+        "dispatchMs": 12704.300000000745,
+        "handlerEndMs": 12713.39999999851,
+        "claimMs": 12717.599999997765
+      },
+      {
+        "inputMs": 12714.800000000745,
+        "revision": 173,
+        "doneMs": 12762.300000000745,
+        "dispatchMs": 12718.5,
+        "handlerEndMs": 12728.89999999851,
+        "claimMs": 12733.39999999851
+      },
+      {
+        "inputMs": 12731.099999997765,
+        "revision": 174,
+        "doneMs": 12762.300000000745,
+        "dispatchMs": 12734.39999999851,
+        "handlerEndMs": 12746.099999997765,
+        "claimMs": 12750.300000000745
+      },
+      {
+        "inputMs": 12748.39999999851,
+        "revision": 175,
+        "doneMs": 12798.800000000745,
+        "dispatchMs": 12751.099999997765,
+        "handlerEndMs": 12761.699999999255,
+        "claimMs": 12786.89999999851
+      },
+      {
+        "inputMs": 12763.800000000745,
+        "revision": 176,
+        "doneMs": 12798.800000000745,
+        "dispatchMs": 12763.89999999851,
+        "handlerEndMs": 12773.300000000745,
+        "claimMs": 12786.89999999851
+      },
+      {
+        "inputMs": 12763.800000000745,
+        "revision": 177,
+        "doneMs": 12798.800000000745,
+        "dispatchMs": 12773.699999999255,
+        "handlerEndMs": 12783,
+        "claimMs": 12786.89999999851
+      },
+      {
+        "inputMs": 12774.599999997765,
+        "revision": 178,
+        "doneMs": 12850.699999999255,
+        "dispatchMs": 12787.800000000745,
+        "handlerEndMs": 12798.300000000745,
+        "claimMs": 12837.800000000745
+      },
+      {
+        "inputMs": 12794.89999999851,
+        "revision": 179,
+        "doneMs": 12850.699999999255,
+        "dispatchMs": 12799.800000000745,
+        "handlerEndMs": 12813.599999997765,
+        "claimMs": 12837.800000000745
+      },
+      {
+        "inputMs": 12799.699999999255,
+        "revision": 180,
+        "doneMs": 12850.699999999255,
+        "dispatchMs": 12813.89999999851,
+        "handlerEndMs": 12823.39999999851,
+        "claimMs": 12837.800000000745
+      },
+      {
+        "inputMs": 12814.699999999255,
+        "revision": 181,
+        "doneMs": 12850.699999999255,
+        "dispatchMs": 12823.699999999255,
+        "handlerEndMs": 12832.89999999851,
+        "claimMs": 12837.800000000745
+      },
+      {
+        "inputMs": 12824.5,
+        "revision": 182,
+        "doneMs": 12949.099999997765,
+        "dispatchMs": 12838.89999999851,
+        "handlerEndMs": 12850.300000000745,
+        "claimMs": 12884.599999997765
+      },
+      {
+        "inputMs": 12841.5,
+        "revision": 183,
+        "doneMs": 12949.099999997765,
+        "dispatchMs": 12851.599999997765,
+        "handlerEndMs": 12861.300000000745,
+        "claimMs": 12884.599999997765
+      },
+      {
+        "inputMs": 12851.5,
+        "revision": 184,
+        "doneMs": 12949.099999997765,
+        "dispatchMs": 12861.599999997765,
+        "handlerEndMs": 12870.89999999851,
+        "claimMs": 12884.599999997765
+      },
+      {
+        "inputMs": 12862.300000000745,
+        "revision": 185,
+        "doneMs": 12949.099999997765,
+        "dispatchMs": 12871.300000000745,
+        "handlerEndMs": 12880.599999997765,
+        "claimMs": 12884.599999997765
+      },
+      {
+        "inputMs": 12872.099999997765,
+        "revision": 186,
+        "doneMs": 12949.099999997765,
+        "dispatchMs": 12885.599999997765,
+        "handlerEndMs": 12896.099999997765,
+        "claimMs": 12910.699999999255
+      },
+      {
+        "inputMs": 12887.800000000745,
+        "revision": 187,
+        "doneMs": 12949.099999997765,
+        "dispatchMs": 12896.5,
+        "handlerEndMs": 12906.300000000745,
+        "claimMs": 12910.699999999255
+      },
+      {
+        "inputMs": 12897.599999997765,
+        "revision": 188,
+        "doneMs": 12980.599999997765,
+        "dispatchMs": 12911.800000000745,
+        "handlerEndMs": 12922.300000000745,
+        "claimMs": 12936.800000000745
+      },
+      {
+        "inputMs": 12920,
+        "revision": 189,
+        "doneMs": 12980.599999997765,
+        "dispatchMs": 12922.699999999255,
+        "handlerEndMs": 12931.89999999851,
+        "claimMs": 12936.800000000745
+      },
+      {
+        "inputMs": 12933.800000000745,
+        "revision": 190,
+        "doneMs": 12980.599999997765,
+        "dispatchMs": 12937.699999999255,
+        "handlerEndMs": 12948.800000000745,
+        "claimMs": 12953.5
+      },
+      {
+        "inputMs": 12951,
+        "revision": 191,
+        "doneMs": 12996.5,
+        "dispatchMs": 12954.300000000745,
+        "handlerEndMs": 12964.699999999255,
+        "claimMs": 12969.099999997765
+      },
+      {
+        "inputMs": 12966.5,
+        "revision": 192,
+        "doneMs": 12996.599999997765,
+        "dispatchMs": 12969.89999999851,
+        "handlerEndMs": 12980.199999999255,
+        "claimMs": 12984.89999999851
+      },
+      {
+        "inputMs": 12982.39999999851,
+        "revision": 193,
+        "doneMs": 13013.89999999851,
+        "dispatchMs": 12985.800000000745,
+        "handlerEndMs": 12996,
+        "claimMs": 13001.800000000745
+      },
+      {
+        "inputMs": 12998,
+        "revision": 194,
+        "doneMs": 13123.099999997765,
+        "dispatchMs": 13002.89999999851,
+        "handlerEndMs": 13013.39999999851,
+        "claimMs": 13037.699999999255
+      },
+      {
+        "inputMs": 13014.39999999851,
+        "revision": 195,
+        "doneMs": 13123.099999997765,
+        "dispatchMs": 13014.599999997765,
+        "handlerEndMs": 13024,
+        "claimMs": 13037.699999999255
+      },
+      {
+        "inputMs": 13014.5,
+        "revision": 196,
+        "doneMs": 13123.099999997765,
+        "dispatchMs": 13024.300000000745,
+        "handlerEndMs": 13033.800000000745,
+        "claimMs": 13037.699999999255
+      },
+      {
+        "inputMs": 13025.300000000745,
+        "revision": 197,
+        "doneMs": 13123.099999997765,
+        "dispatchMs": 13038.699999999255,
+        "handlerEndMs": 13050.199999999255,
+        "claimMs": 13064.199999999255
+      },
+      {
+        "inputMs": 13046.300000000745,
+        "revision": 198,
+        "doneMs": 13123.099999997765,
+        "dispatchMs": 13050.599999997765,
+        "handlerEndMs": 13059.89999999851,
+        "claimMs": 13064.199999999255
+      },
+      {
+        "inputMs": 13061.599999997765,
+        "revision": 199,
+        "doneMs": 13123.099999997765,
+        "dispatchMs": 13064.89999999851,
+        "handlerEndMs": 13074.599999997765,
+        "claimMs": 13079.599999997765
+      },
+      {
+        "inputMs": 13076.599999997765,
+        "revision": 200,
+        "doneMs": 13123.099999997765,
+        "dispatchMs": 13080.5,
+        "handlerEndMs": 13091.800000000745,
+        "claimMs": 13096.199999999255
+      },
+      {
+        "inputMs": 13093.300000000745,
+        "revision": 201,
+        "doneMs": 13140.300000000745,
+        "dispatchMs": 13096.89999999851,
+        "handlerEndMs": 13107.300000000745,
+        "claimMs": 13111.5
+      },
+      {
+        "inputMs": 13108.89999999851,
+        "revision": 202,
+        "doneMs": 13140.300000000745,
+        "dispatchMs": 13112.199999999255,
+        "handlerEndMs": 13122.699999999255,
+        "claimMs": 13128.5
+      },
+      {
+        "inputMs": 13124.800000000745,
+        "revision": 203,
+        "doneMs": 13276,
+        "dispatchMs": 13129.39999999851,
+        "handlerEndMs": 13139.800000000745,
+        "claimMs": 13164.39999999851
+      },
+      {
+        "inputMs": 13140.89999999851,
+        "revision": 204,
+        "doneMs": 13276,
+        "dispatchMs": 13141.099999997765,
+        "handlerEndMs": 13150.800000000745,
+        "claimMs": 13164.39999999851
+      },
+      {
+        "inputMs": 13141,
+        "revision": 205,
+        "doneMs": 13276,
+        "dispatchMs": 13151.099999997765,
+        "handlerEndMs": 13160.699999999255,
+        "claimMs": 13164.39999999851
+      },
+      {
+        "inputMs": 13152.199999999255,
+        "revision": 206,
+        "doneMs": 13276,
+        "dispatchMs": 13165.699999999255,
+        "handlerEndMs": 13176.099999997765,
+        "claimMs": 13190.39999999851
+      },
+      {
+        "inputMs": 13171.699999999255,
+        "revision": 207,
+        "doneMs": 13276,
+        "dispatchMs": 13176.699999999255,
+        "handlerEndMs": 13186.199999999255,
+        "claimMs": 13190.39999999851
+      },
+      {
+        "inputMs": 13177.39999999851,
+        "revision": 208,
+        "doneMs": 13276,
+        "dispatchMs": 13191.599999997765,
+        "handlerEndMs": 13202.099999997765,
+        "claimMs": 13206.599999997765
+      },
+      {
+        "inputMs": 13204.39999999851,
+        "revision": 209,
+        "doneMs": 13276,
+        "dispatchMs": 13207.39999999851,
+        "handlerEndMs": 13218,
+        "claimMs": 13224.39999999851
+      },
+      {
+        "inputMs": 13220.39999999851,
+        "revision": 210,
+        "doneMs": 13276,
+        "dispatchMs": 13225.39999999851,
+        "handlerEndMs": 13235.800000000745,
+        "claimMs": 13239.800000000745
+      },
+      {
+        "inputMs": 13236.300000000745,
+        "revision": 211,
+        "doneMs": 13276,
+        "dispatchMs": 13240.599999997765,
+        "handlerEndMs": 13251.099999997765,
+        "claimMs": 13264.699999999255
+      },
+      {
+        "inputMs": 13250.89999999851,
+        "revision": 212,
+        "doneMs": 13276,
+        "dispatchMs": 13251.5,
+        "handlerEndMs": 13260.89999999851,
+        "claimMs": 13264.699999999255
+      },
+      {
+        "inputMs": 13252,
+        "revision": 213,
+        "doneMs": 13312.5,
+        "dispatchMs": 13265.5,
+        "handlerEndMs": 13275.39999999851,
+        "claimMs": 13300.699999999255
+      },
+      {
+        "inputMs": 13277.300000000745,
+        "revision": 214,
+        "doneMs": 13312.5,
+        "dispatchMs": 13277.5,
+        "handlerEndMs": 13286.89999999851,
+        "claimMs": 13300.699999999255
+      },
+      {
+        "inputMs": 13277.39999999851,
+        "revision": 215,
+        "doneMs": 13312.5,
+        "dispatchMs": 13287.300000000745,
+        "handlerEndMs": 13296.599999997765,
+        "claimMs": 13300.699999999255
+      },
+      {
+        "inputMs": 13288.199999999255,
+        "revision": 216,
+        "doneMs": 13348.89999999851,
+        "dispatchMs": 13301.800000000745,
+        "handlerEndMs": 13312.099999997765,
+        "claimMs": 13337.39999999851
+      },
+      {
+        "inputMs": 13314.199999999255,
+        "revision": 217,
+        "doneMs": 13348.89999999851,
+        "dispatchMs": 13314.5,
+        "handlerEndMs": 13323.89999999851,
+        "claimMs": 13337.39999999851
+      },
+      {
+        "inputMs": 13314.39999999851,
+        "revision": 218,
+        "doneMs": 13348.89999999851,
+        "dispatchMs": 13324.199999999255,
+        "handlerEndMs": 13333.39999999851,
+        "claimMs": 13337.39999999851
+      },
+      {
+        "inputMs": 13325.5,
+        "revision": 219,
+        "doneMs": 13384.800000000745,
+        "dispatchMs": 13338.39999999851,
+        "handlerEndMs": 13348.39999999851,
+        "claimMs": 13373
+      },
+      {
+        "inputMs": 13346.39999999851,
+        "revision": 220,
+        "doneMs": 13384.800000000745,
+        "dispatchMs": 13349.599999997765,
+        "handlerEndMs": 13359,
+        "claimMs": 13373
+      },
+      {
+        "inputMs": 13349.5,
+        "revision": 221,
+        "doneMs": 13384.800000000745,
+        "dispatchMs": 13359.300000000745,
+        "handlerEndMs": 13369.099999997765,
+        "claimMs": 13373
+      },
+      {
+        "inputMs": 13360.199999999255,
+        "revision": 222,
+        "doneMs": 13423.099999997765,
+        "dispatchMs": 13373.89999999851,
+        "handlerEndMs": 13384.300000000745,
+        "claimMs": 13410.800000000745
+      },
+      {
+        "inputMs": 13377.099999997765,
+        "revision": 223,
+        "doneMs": 13423.099999997765,
+        "dispatchMs": 13385.599999997765,
+        "handlerEndMs": 13395.5,
+        "claimMs": 13410.800000000745
+      },
+      {
+        "inputMs": 13385.5,
+        "revision": 224,
+        "doneMs": 13423.099999997765,
+        "dispatchMs": 13395.89999999851,
+        "handlerEndMs": 13406.5,
+        "claimMs": 13410.800000000745
+      },
+      {
+        "inputMs": 13396.5,
+        "revision": 225,
+        "doneMs": 13460.300000000745,
+        "dispatchMs": 13411.599999997765,
+        "handlerEndMs": 13422.699999999255,
+        "claimMs": 13448.300000000745
+      },
+      {
+        "inputMs": 13424.5,
+        "revision": 226,
+        "doneMs": 13460.300000000745,
+        "dispatchMs": 13424.699999999255,
+        "handlerEndMs": 13434.099999997765,
+        "claimMs": 13448.300000000745
+      },
+      {
+        "inputMs": 13424.599999997765,
+        "revision": 227,
+        "doneMs": 13460.300000000745,
+        "dispatchMs": 13434.5,
+        "handlerEndMs": 13444.300000000745,
+        "claimMs": 13448.300000000745
+      },
+      {
+        "inputMs": 13435.5,
+        "revision": 228,
+        "doneMs": 13495.599999997765,
+        "dispatchMs": 13449.39999999851,
+        "handlerEndMs": 13459.800000000745,
+        "claimMs": 13484.39999999851
+      },
+      {
+        "inputMs": 13456.599999997765,
+        "revision": 229,
+        "doneMs": 13495.599999997765,
+        "dispatchMs": 13461.099999997765,
+        "handlerEndMs": 13470.5,
+        "claimMs": 13484.39999999851
+      },
+      {
+        "inputMs": 13461.099999997765,
+        "revision": 230,
+        "doneMs": 13495.599999997765,
+        "dispatchMs": 13470.89999999851,
+        "handlerEndMs": 13480.599999997765,
+        "claimMs": 13484.39999999851
+      },
+      {
+        "inputMs": 13471.89999999851,
+        "revision": 231,
+        "doneMs": 13532.199999999255,
+        "dispatchMs": 13485.300000000745,
+        "handlerEndMs": 13495.199999999255,
+        "claimMs": 13520.39999999851
+      },
+      {
+        "inputMs": 13488.5,
+        "revision": 232,
+        "doneMs": 13532.199999999255,
+        "dispatchMs": 13496.699999999255,
+        "handlerEndMs": 13506.800000000745,
+        "claimMs": 13520.39999999851
+      },
+      {
+        "inputMs": 13496.599999997765,
+        "revision": 233,
+        "doneMs": 13532.199999999255,
+        "dispatchMs": 13507.199999999255,
+        "handlerEndMs": 13516.39999999851,
+        "claimMs": 13520.39999999851
+      },
+      {
+        "inputMs": 13518.099999997765,
+        "revision": 234,
+        "doneMs": 13549.099999997765,
+        "dispatchMs": 13521.39999999851,
+        "handlerEndMs": 13531.699999999255,
+        "claimMs": 13537.199999999255
+      },
+      {
+        "inputMs": 13533.5,
+        "revision": 235,
+        "doneMs": 13566.89999999851,
+        "dispatchMs": 13538.099999997765,
+        "handlerEndMs": 13548.599999997765,
+        "claimMs": 13555
+      },
+      {
+        "inputMs": 13550.800000000745,
+        "revision": 236,
+        "doneMs": 13642.199999999255,
+        "dispatchMs": 13555.800000000745,
+        "handlerEndMs": 13566.5,
+        "claimMs": 13591.89999999851
+      },
+      {
+        "inputMs": 13567.89999999851,
+        "revision": 237,
+        "doneMs": 13642.199999999255,
+        "dispatchMs": 13568.099999997765,
+        "handlerEndMs": 13577.5,
+        "claimMs": 13591.89999999851
+      },
+      {
+        "inputMs": 13568,
+        "revision": 238,
+        "doneMs": 13642.199999999255,
+        "dispatchMs": 13577.89999999851,
+        "handlerEndMs": 13587.89999999851,
+        "claimMs": 13591.89999999851
+      },
+      {
+        "inputMs": 13578.89999999851,
+        "revision": 239,
+        "doneMs": 13657.599999997765,
+        "dispatchMs": 13593,
+        "handlerEndMs": 13606.199999999255,
+        "claimMs": 13620.5
+      },
+      {
+        "inputMs": 13599.099999997765,
+        "revision": 240,
+        "doneMs": 13657.599999997765,
+        "dispatchMs": 13606.699999999255,
+        "handlerEndMs": 13616.599999997765,
+        "claimMs": 13620.5
+      },
+      {
+        "inputMs": 13607.699999999255,
+        "revision": 241,
+        "doneMs": 13662.89999999851,
+        "dispatchMs": 13621.5,
+        "handlerEndMs": 13632.099999997765,
+        "claimMs": 13646.39999999851
+      },
+      {
+        "inputMs": 13632,
+        "revision": 242,
+        "doneMs": 13662.89999999851,
+        "dispatchMs": 13632.5,
+        "handlerEndMs": 13641.800000000745,
+        "claimMs": 13646.39999999851
+      },
+      {
+        "inputMs": 13643.300000000745,
+        "revision": 243,
+        "doneMs": 13673.300000000745,
+        "dispatchMs": 13647.199999999255,
+        "handlerEndMs": 13657.300000000745,
+        "claimMs": 13662
+      },
+      {
+        "inputMs": 13659,
+        "revision": 244,
+        "doneMs": 13722.300000000745,
+        "dispatchMs": 13663,
+        "handlerEndMs": 13672.89999999851,
+        "claimMs": 13709.699999999255
+      },
+      {
+        "inputMs": 13662.89999999851,
+        "revision": 245,
+        "doneMs": 13722.300000000745,
+        "dispatchMs": 13674.300000000745,
+        "handlerEndMs": 13684.300000000745,
+        "claimMs": 13709.699999999255
+      },
+      {
+        "inputMs": 13674.099999997765,
+        "revision": 246,
+        "doneMs": 13722.300000000745,
+        "dispatchMs": 13684.800000000745,
+        "handlerEndMs": 13694.39999999851,
+        "claimMs": 13709.699999999255
+      },
+      {
+        "inputMs": 13685.5,
+        "revision": 247,
+        "doneMs": 13722.300000000745,
+        "dispatchMs": 13694.699999999255,
+        "handlerEndMs": 13705.5,
+        "claimMs": 13709.699999999255
+      },
+      {
+        "inputMs": 13706.89999999851,
+        "revision": 248,
+        "doneMs": 13830.89999999851,
+        "dispatchMs": 13710.699999999255,
+        "handlerEndMs": 13721.199999999255,
+        "claimMs": 13750.099999997765
+      },
+      {
+        "inputMs": 13722.599999997765,
+        "revision": 249,
+        "doneMs": 13830.89999999851,
+        "dispatchMs": 13725.599999997765,
+        "handlerEndMs": 13735.199999999255,
+        "claimMs": 13750.099999997765
+      },
+      {
+        "inputMs": 13725.5,
+        "revision": 250,
+        "doneMs": 13830.89999999851,
+        "dispatchMs": 13735.699999999255,
+        "handlerEndMs": 13745.300000000745,
+        "claimMs": 13750.099999997765
+      },
+      {
+        "inputMs": 13736.699999999255,
+        "revision": 251,
+        "doneMs": 13830.89999999851,
+        "dispatchMs": 13751.300000000745,
+        "handlerEndMs": 13762.599999997765,
+        "claimMs": 13786.599999997765
+      },
+      {
+        "inputMs": 13757.300000000745,
+        "revision": 252,
+        "doneMs": 13830.89999999851,
+        "dispatchMs": 13763,
+        "handlerEndMs": 13772.699999999255,
+        "claimMs": 13786.599999997765
+      },
+      {
+        "inputMs": 13772.599999997765,
+        "revision": 253,
+        "doneMs": 13830.89999999851,
+        "dispatchMs": 13773,
+        "handlerEndMs": 13782.599999997765,
+        "claimMs": 13786.599999997765
+      },
+      {
+        "inputMs": 13783.89999999851,
+        "revision": 254,
+        "doneMs": 13830.89999999851,
+        "dispatchMs": 13787.5,
+        "handlerEndMs": 13798,
+        "claimMs": 13802.800000000745
+      },
+      {
+        "inputMs": 13799.699999999255,
+        "revision": 255,
+        "doneMs": 13831.099999997765,
+        "dispatchMs": 13804,
+        "handlerEndMs": 13814.39999999851,
+        "claimMs": 13819
+      },
+      {
+        "inputMs": 13816.699999999255,
+        "revision": 256,
+        "doneMs": 13870,
+        "dispatchMs": 13819.89999999851,
+        "handlerEndMs": 13830.5,
+        "claimMs": 13857.39999999851
+      },
+      {
+        "inputMs": 13832.39999999851,
+        "revision": 257,
+        "doneMs": 13870,
+        "dispatchMs": 13832.5,
+        "handlerEndMs": 13842,
+        "claimMs": 13857.39999999851
+      },
+      {
+        "inputMs": 13832.5,
+        "revision": 258,
+        "doneMs": 13870,
+        "dispatchMs": 13842.5,
+        "handlerEndMs": 13852.39999999851,
+        "claimMs": 13857.39999999851
+      },
+      {
+        "inputMs": 13843.5,
+        "revision": 259,
+        "doneMs": 13923.800000000745,
+        "dispatchMs": 13858.599999997765,
+        "handlerEndMs": 13869.599999997765,
+        "claimMs": 13894.800000000745
+      },
+      {
+        "inputMs": 13866.800000000745,
+        "revision": 260,
+        "doneMs": 13923.800000000745,
+        "dispatchMs": 13871,
+        "handlerEndMs": 13880.800000000745,
+        "claimMs": 13894.800000000745
+      },
+      {
+        "inputMs": 13870.89999999851,
+        "revision": 261,
+        "doneMs": 13923.800000000745,
+        "dispatchMs": 13881.199999999255,
+        "handlerEndMs": 13891.199999999255,
+        "claimMs": 13894.800000000745
+      },
+      {
+        "inputMs": 13882.300000000745,
+        "revision": 262,
+        "doneMs": 13923.800000000745,
+        "dispatchMs": 13896.199999999255,
+        "handlerEndMs": 13908,
+        "claimMs": 13912.5
+      },
+      {
+        "inputMs": 13910.199999999255,
+        "revision": 263,
+        "doneMs": 13942.099999997765,
+        "dispatchMs": 13913.39999999851,
+        "handlerEndMs": 13923.39999999851,
+        "claimMs": 13928.800000000745
+      },
+      {
+        "inputMs": 13925.199999999255,
+        "revision": 264,
+        "doneMs": 14120.300000000745,
+        "dispatchMs": 13929.599999997765,
+        "handlerEndMs": 13940,
+        "claimMs": 13966
+      },
+      {
+        "inputMs": 13942.599999997765,
+        "revision": 265,
+        "doneMs": 14120.300000000745,
+        "dispatchMs": 13942.800000000745,
+        "handlerEndMs": 13952.199999999255,
+        "claimMs": 13966
+      },
+      {
+        "inputMs": 13942.699999999255,
+        "revision": 266,
+        "doneMs": 14120.300000000745,
+        "dispatchMs": 13952.599999997765,
+        "handlerEndMs": 13962.39999999851,
+        "claimMs": 13966
+      },
+      {
+        "inputMs": 13953.599999997765,
+        "revision": 267,
+        "doneMs": 14120.599999997765,
+        "dispatchMs": 13966.89999999851,
+        "handlerEndMs": 13977.300000000745,
+        "claimMs": 14063.300000000745
+      }
+    ],
+    "noChangeMoves": [
+      9972.599999997765
+    ],
+    "writes": [
+      {
+        "startMs": 844.6999999992549,
+        "endMs": 931.3999999985099,
+        "ok": true
+      },
+      {
+        "startMs": 14064.800000000745,
+        "endMs": 14152.89999999851,
+        "ok": true
+      }
+    ],
+    "longTasksAvailable": true,
+    "longTasks": [
+      {
+        "startMs": 11228.699999999255,
+        "durationMs": 173
+      },
+      {
+        "startMs": 12068.699999999255,
+        "durationMs": 66
+      }
+    ],
+    "isolations": [
+      {
+        "startMs": 11237.699999999255,
+        "durationMs": 162.80000000074506
+      }
+    ],
+    "rejections": 1,
+    "fontLoads": [
+      {
+        "family": "M9 Font Load",
+        "startMs": 12004.300000000745,
+        "settledMs": 12068.39999999851,
+        "endMs": 12262,
+        "status": "loaded",
+        "generationBefore": 2,
+        "generationAfter": 4,
+        "bumps": 1,
+        "lastBumpMs": 12134.599999997765,
+        "revisionBefore": 127,
+        "revisionAfter": 140
+      }
+    ],
+    "fontLoadMeasures": [
+      {
+        "startMs": 12004.300000000745,
+        "durationMs": 257.69999999925494
+      }
+    ],
+    "undoDepth": 2,
+    "mode": "on-demand",
+    "lifecycle": "ready",
+    "recoveryAttempts": 0
+  }
+}
