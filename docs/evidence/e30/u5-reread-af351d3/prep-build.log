@@ -1,0 +1,112 @@
+﻿node.exe : $ pnpm --recursive --if-present run build
+At C:\Program Files\nodejs\pnpm.ps1:16 char:5
++     & "$basedir/node$exe"  "$basedir/node_modules/corepack/dist/pnpm. ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ($ pnpm --recurs...esent run build:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Scope: 13 of 14 workspace projects
+packages/contracts build$ tsc --build
+packages/geometry-reference build$ tsc --build
+packages/model build$ tsc --build
+packages/geometry-reference build: Done
+packages/contracts build: Done
+packages/model build: Done
+packages/editor-core build$ tsc --build
+packages/geometry-wasm build$ tsc --build
+packages/persistence-idb build$ tsc --build
+packages/renderer-core build$ tsc --build
+packages/geometry-wasm build: Done
+packages/text-dom build$ tsc --build
+packages/persistence-idb build: Done
+packages/renderer-core build: Done
+packages/editor-core build: Done
+packages/text-dom build: Done
+packages/react build$ tsc --build
+packages/renderer-webgpu build$ tsc --build
+packages/react build: Done
+packages/renderer-webgpu build: Done
+apps/playground build$ vite build
+packages/ui build$ tsc --build
+packages/ui build: Done
+apps/playground build: vite v8.2.2 building client environment for production...
+apps/playground build: transforming...
+apps/playground build: ✓ 123 modules transformed.
+apps/playground build: rendering chunks...
+apps/playground build: computing gzip size...
+apps/playground build: dist/p3-o02.html                                   0.32 kB │ gzip:   0.23 kB
+apps/playground build: dist/p3-coverage.html                              0.33 kB │ gzip:   0.23 kB
+apps/playground build: dist/p3-native-projection.html                     0.34 kB │ gzip:   0.23 kB
+apps/playground build: dist/e3-a04-readback.html                          0.43 kB │ gzip:   0.29 kB
+apps/playground build: dist/index.html                                    0.50 kB │ gzip:   0.30 kB
+apps/playground build: dist/m6-s0-ime-recorder.html                       0.53 kB │ gzip:   0.36 kB
+apps/playground build: dist/e10-test-hooks.html                           0.56 kB │ gzip:   0.33 kB
+apps/playground build: dist/p1-fixture.html                               0.63 kB │ gzip:   0.34 kB
+apps/playground build: dist/p1-runner.html                                0.63 kB │ gzip:   0.34 kB
+apps/playground build: dist/p3-v3-mesh.html                               0.65 kB │ gzip:   0.37 kB
+apps/playground build: dist/viz-v4-a08-corpus.html                        0.70 kB │ gzip:   0.35 kB
+apps/playground build: dist/p4-clip-mask.html                             0.80 kB │ gzip:   0.41 kB
+apps/playground build: dist/m6-s0-text-layout.html                        0.81 kB │ gzip:   0.51 kB
+apps/playground build: dist/e23-gradient-paint.html                       0.82 kB │ gzip:   0.41 kB
+apps/playground build: dist/p3-v4-paths.html                              3.73 kB │ gzip:   1.38 kB
+apps/playground build: dist/p3-b2-strokes.html                            3.91 kB │ gzip:   1.39 kB
+apps/playground build: dist/viz-v3-integration.html                       4.25 kB │ gzip:   1.51 kB
+apps/playground build: dist/viz-v2-path-data.html                         9.45 kB │ gzip:   2.68 kB
+apps/playground build: dist/viz-v1-appearance.html                       10.54 kB │ gzip:   2.54 kB
+apps/playground build: dist/assets/path-notices-DOms5BNM.js               0.10 kB │ gzip:   0.12 kB
+apps/playground build: dist/assets/scene-paint-V7iTWkoK.js                0.13 kB │ gzip:   0.13 kB
+apps/playground build: dist/assets/modulepreload-polyfill-P2Xu9kJm.js     0.67 kB │ gzip:   0.38 kB
+apps/playground build: dist/assets/e10TestHooks-CDdbB3aL.js               2.75 kB │ gzip:   1.47 kB
+apps/playground build: dist/assets/p3-v4-paths-scene-rVw9crS7.js          3.70 kB │ gzip:   1.50 kB
+apps/playground build: dist/assets/p4ClipMask-CE1oatjg.js                 4.36 kB │ gzip:   1.96 kB
+apps/playground build: dist/assets/vizV4A08Corpus-F5fkTKfi.js             4.97 kB │ gzip:   2.27 kB
+apps/playground build: dist/assets/p3V4Paths-BH_fPF9x.js                  5.04 kB │ gzip:   2.24 kB
+apps/playground build: dist/assets/p3B2Strokes-HXZwnl-a.js                5.56 kB │ gzip:   2.47 kB
+apps/playground build: dist/assets/p3-b2-strokes-scene-2HLbVeLE.js        5.64 kB │ gzip:   2.24 kB
+apps/playground build: dist/assets/e3A04Readback-BpHVtTTr.js              6.78 kB │ gzip:   2.66 kB
+apps/playground build: dist/assets/p3V3Mesh-CHHGSowL.js                   7.31 kB │ gzip:   3.10 kB
+apps/playground build: dist/assets/e23GradientPaint-Ci4JdkOd.js           8.51 kB │ gzip:   3.70 kB
+apps/playground build: dist/assets/p3Coverage-BCyW9Pn5.js                 9.32 kB │ gzip:   3.73 kB
+apps/playground build: dist/assets/main-DFYqT3wD.js                      10.37 kB │ gzip:   3.63 kB
+apps/playground build: dist/assets/fill-adapter-CD7_RiEf.js              10.69 kB │ gzip:   3.85 kB
+apps/playground build: dist/assets/primitives-Csq0GwpQ.js                10.91 kB │ gzip:   4.25 kB
+apps/playground build: dist/assets/viz-v1-appearance-state-CjsMLe9e.js   11.22 kB │ gzip:   4.28 kB
+apps/playground build: dist/assets/stroke-adapter-DYqU2mu4.js            11.26 kB │ gzip:   4.01 kB
+apps/playground build: dist/assets/p3NativeProjection-Bcdw0039.js        11.74 kB │ gzip:   4.47 kB
+apps/playground build: dist/assets/vizV1Appearance-ClNRwuQ3.js           12.33 kB │ gzip:   4.69 kB
+apps/playground build: dist/assets/p3O02-BZ_U58I8.js                     12.52 kB │ gzip:   4.72 kB
+apps/playground build: dist/assets/m6S0ImeRecorder-CW-v8ODX.js           14.86 kB │ gzip:   5.53 kB
+apps/playground build: dist/assets/vizV3Integration-Dd8raPQ-.js          15.49 kB │ gzip:   5.80 kB
+apps/playground build: dist/assets/m6S0TextLayout-DkewTjUy.js            15.71 kB │ gzip:   6.77 kB
+apps/playground build: dist/assets/runner-CUUb68KQ.js                    19.51 kB │ gzip:   6.77 kB
+apps/playground build: dist/assets/vizV2PathData-DBjmxWFk.js             22.91 kB │ gzip:   9.01 kB
+apps/playground build: dist/assets/dist-B6LxLmYv.js                     355.12 kB │ gzip: 106.67 kB
+apps/playground build: ✓ built in 199ms
+apps/playground build: Done
+apps/next-host build$ next build
+apps/next-host build: ▲ Next.js 16.4.3 (Turbopack)
+apps/next-host build: ✓ Running next.config.mjs took 55ms
+apps/next-host build:   Creating an optimized production build ...
+apps/next-host build: ✓ Compiled successfully in 1074ms
+apps/next-host build:   Running TypeScript ...
+apps/next-host build:   Finished TypeScript in 4.7s ...
+apps/next-host build:   Collecting page data using 14 workers ...
+apps/next-host build:   Generating static pages using 14 workers (0/3) ...
+apps/next-host build: ✓ Generating static pages using 14 workers (3/3) in 637ms
+apps/next-host build:   Finalizing page optimization ...
+apps/next-host build: Route (app)
+apps/next-host build: ┌ ○ /
+apps/next-host build: ├ ○ /_not-found
+apps/next-host build: ├ ƒ /e26-bench-doc.json
+apps/next-host build: ├ ƒ /geometry-kernel.wasm
+apps/next-host build: ├ ƒ /m1-containers.json
+apps/next-host build: ├ ƒ /m3-path-edit.json
+apps/next-host build: ├ ƒ /m4-appearance.json
+apps/next-host build: ├ ƒ /m6a-test-font.otf
+apps/next-host build: ├ ƒ /m6a-text.json
+apps/next-host build: ├ ƒ /m6b-text-edit.json
+apps/next-host build: ├ ƒ /m6c-text-gpu.json
+apps/next-host build: └ ƒ /m7-symbols.json
+apps/next-host build: ○  (Static)   prerendered as static content
+apps/next-host build: ƒ  (Dynamic)  server-rendered on demand
+apps/next-host build: Done
