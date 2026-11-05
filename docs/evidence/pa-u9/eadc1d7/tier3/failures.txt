@@ -1,0 +1,10 @@
+PA-U9 sitting at eadc1d7, 2026-11-05 (UTC)
+
+pnpm test:headed --tier 3: no failures. 14 stages passed; 460 passed, 0 failed, 0 flaky, 0 skipped.
+  gpu-corpus 24, gpu 186, p5 4, m1 2, m2 10, m3 2, m4 10, m5 10, m6a 26, m6b 38, m6c 100, m6c-typing 8, m7 4, m8 36.
+
+pnpm test:e26 (timing): 1 failed, not re-run:
+  [edge-dpr2-v2] e26-ui0-mixed-all-pan-10k/v1 r3 - page.evaluate: Target page, context or browser has been closed
+  (tests/e26/e26-harness.spec.ts:894). No record written. Not a gated row (ui0 variant of a v1 control).
+
+pnpm test:e26 (memory): no failures (40 passed).

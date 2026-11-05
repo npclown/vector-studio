@@ -1,0 +1,141 @@
+{
+  "scenario": "m9-ui-geometry",
+  "variant": "geometry",
+  "repetition": 1,
+  "project": "edge-dpr1-v2",
+  "commit": "eadc1d75d0e26872128584445333572fa649f089",
+  "dirty": false,
+  "aside": {
+    "origin": {
+      "x": 1,
+      "y": 74
+    },
+    "size": {
+      "width": 1280,
+      "height": 720
+    },
+    "rightColumn": null,
+    "aside": {
+      "left": 1288,
+      "top": 73,
+      "width": 300,
+      "height": 43
+    },
+    "innerWidth": 1600,
+    "innerHeight": 1000,
+    "scrollWidth": 1600,
+    "clientWidth": 1600,
+    "bench": true
+  },
+  "column": {
+    "origin": {
+      "x": 1,
+      "y": 74
+    },
+    "size": {
+      "width": 1280,
+      "height": 720
+    },
+    "rightColumn": {
+      "left": 1288,
+      "top": 73,
+      "width": 300,
+      "height": 720
+    },
+    "aside": null,
+    "innerWidth": 1600,
+    "innerHeight": 1000,
+    "scrollWidth": 1600,
+    "clientWidth": 1600,
+    "bench": true
+  },
+  "plain": {
+    "origin": {
+      "x": 1,
+      "y": 74
+    },
+    "size": {
+      "width": 960,
+      "height": 640
+    },
+    "rightColumn": {
+      "left": 968,
+      "top": 73,
+      "width": 300,
+      "height": 640
+    },
+    "aside": null,
+    "innerWidth": 1600,
+    "innerHeight": 1000,
+    "scrollWidth": 1600,
+    "clientWidth": 1600,
+    "bench": false
+  },
+  "flags": {
+    "origin": {
+      "x": 1,
+      "y": 74
+    },
+    "size": {
+      "width": 960,
+      "height": 640
+    },
+    "rightColumn": {
+      "left": 968,
+      "top": 73,
+      "width": 300,
+      "height": 640
+    },
+    "aside": null,
+    "innerWidth": 1600,
+    "innerHeight": 1000,
+    "scrollWidth": 1600,
+    "clientWidth": 1600,
+    "bench": false
+  },
+  "testing": {
+    "origin": {
+      "x": 1,
+      "y": 74
+    },
+    "size": {
+      "width": 960,
+      "height": 640
+    },
+    "rightColumn": {
+      "left": 968,
+      "top": 73,
+      "width": 300,
+      "height": 640
+    },
+    "aside": null,
+    "innerWidth": 1600,
+    "innerHeight": 1000,
+    "scrollWidth": 1600,
+    "clientWidth": 1600,
+    "bench": false
+  },
+  "testingFlags": {
+    "origin": {
+      "x": 1,
+      "y": 74
+    },
+    "size": {
+      "width": 960,
+      "height": 640
+    },
+    "rightColumn": {
+      "left": 968,
+      "top": 73,
+      "width": 300,
+      "height": 640
+    },
+    "aside": null,
+    "innerWidth": 1600,
+    "innerHeight": 1000,
+    "scrollWidth": 1600,
+    "clientWidth": 1600,
+    "bench": false
+  },
+  "errors": []
+}

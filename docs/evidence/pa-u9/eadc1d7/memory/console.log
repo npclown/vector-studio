@@ -1,0 +1,87 @@
+$ playwright test --config playwright.e26.config.ts
+
+Running 80 tests using 1 worker
+
+[1/80] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r1
+[2/80] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r2
+[3/80] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r3
+[4/80] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r4
+[5/80] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r5
+[6/80] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r1
+[7/80] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r2
+[8/80] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r3
+[9/80] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r4
+[10/80] [chrome-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r5
+[11/80] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r1
+[12/80] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r2
+[13/80] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r3
+[14/80] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r4
+[15/80] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r5
+[16/80] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r1
+[17/80] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r2
+[18/80] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r3
+[19/80] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r4
+[20/80] [chrome-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r5
+[21/80] [edge-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r1
+[22/80] [edge-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r2
+[23/80] [edge-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r3
+[24/80] [edge-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r4
+[25/80] [edge-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r5
+[26/80] [edge-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r1
+[27/80] [edge-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r2
+[28/80] [edge-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r3
+[29/80] [edge-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r4
+[30/80] [edge-dpr1] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r5
+[31/80] [edge-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r1
+[32/80] [edge-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r2
+[33/80] [edge-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r3
+[34/80] [edge-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r4
+[35/80] [edge-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r5
+[36/80] [edge-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r1
+[37/80] [edge-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r2
+[38/80] [edge-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r3
+[39/80] [edge-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r4
+[40/80] [edge-dpr2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r5
+[41/80] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r1
+[42/80] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r2
+[43/80] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r3
+[44/80] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r4
+[45/80] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r5
+[46/80] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r1
+[47/80] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r2
+[48/80] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r3
+[49/80] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r4
+[50/80] [chrome-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r5
+[51/80] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r1
+[52/80] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r2
+[53/80] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r3
+[54/80] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r4
+[55/80] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r5
+[56/80] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r1
+[57/80] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r2
+[58/80] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r3
+[59/80] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r4
+[60/80] [chrome-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r5
+[61/80] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r1
+[62/80] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r2
+[63/80] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r3
+[64/80] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r4
+[65/80] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r5
+[66/80] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r1
+[67/80] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r2
+[68/80] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r3
+[69/80] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r4
+[70/80] [edge-dpr1-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r5
+[71/80] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r1
+[72/80] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r2
+[73/80] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r3
+[74/80] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r4
+[75/80] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-mixed-view-edit-10k/v2 r5
+[76/80] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r1
+[77/80] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r2
+[78/80] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r3
+[79/80] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r4
+[80/80] [edge-dpr2-v2] › tests\e26\e26-harness.spec.ts:772:5 › e26-simple-stress-10k/v2 r5
+  40 skipped
+  40 passed (16.1m)
+EXIT=0

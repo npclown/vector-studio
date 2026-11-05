@@ -1,0 +1,303 @@
+{
+  "item": "PA-U9 (pre-alpha gate plan, PA-A01 to A05 and A10) pre-alpha sitting on the main PC",
+  "head": "eadc1d75d0e26872128584445333572fa649f089",
+  "checkout": "origin/main detached; git status --porcelain empty before every timed part. Untracked agent and test leftovers (.claude/launch.json, docs/evidence/e3-a04-readback-2026-10-24/, ten unignored artifacts/ entries) were moved to D:\\GIT\\vector-studio-untracked-2026-11-05 before the sitting and put back after it.",
+  "machine": {
+    "host": "DESKTOP-DKVUSAV",
+    "os": "Windows 11 Pro 10.0.26200",
+    "cpu": "AMD Ryzen 7 3700X (8 cores, 16 logical)",
+    "ramGB": 31.9,
+    "gpu": "NVIDIA GeForce GTX 1660 SUPER, driver 32.0.16.1088",
+    "displayScale": "AppliedDPI 96 (100 %)",
+    "timeZone": "Korea Standard Time",
+    "node": "24.22.1",
+    "pnpm": "11.1.2",
+    "playwright": "1.62.1",
+    "chrome": "156.0.8078.81 (chrome.exe file version; records say chromium 156.0.8078.81)",
+    "edge": "156.0.4314.58 (msedge.exe file version)",
+    "webgpuAdapter": "nvidia / turing in every timing record",
+    "idleRafMedianMs": 16.7
+  },
+  "m8n3Baseline": "docs/evidence/m8-a14-2026-11-01/17a2b0a-main-pc-headed.json",
+  "userRequest": {
+    "utc": "2026-11-04T22:03Z (about)",
+    "what": "Asked the user in the project thread to close Chrome, Edge and other heavy apps; waited until 22:27Z (over 10 minutes) and started either way."
+  },
+  "observations": [
+    {
+      "when": "before timing",
+      "utc": "2026-11-04T22:27:02Z",
+      "windows": [
+        "ApplicationFrameHost",
+        "chrome",
+        "claude",
+        "MobaXterm",
+        "SystemSettings",
+        "Telegram",
+        "TextInputHost"
+      ],
+      "processCounts": {
+        "msedge": 0,
+        "node": 0,
+        "chrome": 15,
+        "Telegram": 1,
+        "Code": 0,
+        "TradingView": 0
+      },
+      "topByWorkingSetMB": [
+        "claude x14 2417",
+        "chrome x15 1853",
+        "svchost x90 1663",
+        "msedgewebview2 x25 918",
+        "Memory Compression x1 866",
+        "Everything x2 734",
+        "MsMpEng x1 433",
+        "explorer x1 303",
+        "Telegram x1 251",
+        "RuntimeBroker x9 239",
+        "copilotapp x9 197",
+        "KakaoTalk x1 191",
+        "tailscaled x2 187",
+        "TeamViewer x1 164",
+        "StartMenuExperienceHost x1 145",
+        "SearchHost x1 137",
+        "LockApp x1 115",
+        "Secure System x1 110",
+        "ms-teams x2 109",
+        "dwm x1 107",
+        "ShellExperienceHost x1 105",
+        "copilotapphost x1 102",
+        "NVDisplay.Container x2 83",
+        "TextInputHost x1 82",
+        "powershell x1 80"
+      ],
+      "cpu10s": {
+        "samples": [
+          5.5,
+          2.2,
+          2.1,
+          3.1,
+          3.8,
+          3.2,
+          5.3,
+          2.8,
+          3.7,
+          5
+        ],
+        "max": 5.5,
+        "avg": 3.7
+      },
+      "displays": [
+        "\\\\.\\DISPLAY1 1920x1080 primary=True",
+        "\\\\.\\DISPLAY2 1920x1080 primary=False"
+      ],
+      "monitorsActive": 2,
+      "powerLine": "Online",
+      "powerPlan": "Balanced (381b4222-f694-41f0-9685-ff5bb260df2e)",
+      "freeRamGB": 14.5
+    },
+    {
+      "when": "before memory",
+      "utc": "2026-11-05T02:12:58Z",
+      "windows": [
+        "ApplicationFrameHost",
+        "claude",
+        "MobaXterm",
+        "SystemSettings",
+        "Telegram",
+        "TextInputHost"
+      ],
+      "processCounts": {
+        "msedge": 0,
+        "node": 0,
+        "chrome": 0,
+        "Telegram": 1,
+        "Code": 0,
+        "TradingView": 0
+      },
+      "topByWorkingSetMB": [
+        "claude x14 2464",
+        "svchost x91 1644",
+        "Memory Compression x1 737",
+        "Everything x2 735",
+        "msedgewebview2 x19 722",
+        "MsMpEng x1 352",
+        "explorer x1 305",
+        "RuntimeBroker x8 211",
+        "copilotapp x9 199",
+        "Telegram x1 190",
+        "NVDisplay.Container x2 190",
+        "tailscaled x2 188",
+        "TeamViewer x1 164",
+        "KakaoTalk x1 147",
+        "StartMenuExperienceHost x1 144",
+        "SearchHost x1 129",
+        "LockApp x1 115",
+        "Secure System x1 110",
+        "ms-teams x2 109",
+        "ShellExperienceHost x1 105",
+        "dwm x1 103",
+        "copilotapphost x1 102",
+        "TextInputHost x1 82",
+        "powershell x1 80",
+        "backgroundTaskHost x1 76"
+      ],
+      "cpu10s": {
+        "samples": [
+          4,
+          3.7,
+          1.7,
+          1.5,
+          0.8,
+          1,
+          3.4,
+          1.6,
+          1.9,
+          2.7
+        ],
+        "max": 4,
+        "avg": 2.2
+      },
+      "displays": [
+        "\\\\.\\DISPLAY1 1920x1080 primary=True",
+        "\\\\.\\DISPLAY2 1920x1080 primary=False"
+      ],
+      "monitorsActive": 2,
+      "powerLine": "Online",
+      "powerPlan": "Balanced (381b4222-f694-41f0-9685-ff5bb260df2e)",
+      "freeRamGB": 16.1
+    },
+    {
+      "when": "before tier 3",
+      "utc": "2026-11-05T02:29:31Z",
+      "windows": [
+        "ApplicationFrameHost",
+        "claude",
+        "MobaXterm",
+        "SystemSettings",
+        "Telegram",
+        "TextInputHost"
+      ],
+      "processCounts": {
+        "msedge": 0,
+        "node": 0,
+        "chrome": 0,
+        "Telegram": 1,
+        "Code": 0,
+        "TradingView": 0
+      },
+      "topByWorkingSetMB": [
+        "claude x14 2462",
+        "svchost x91 1650",
+        "Memory Compression x1 770",
+        "msedgewebview2 x19 760",
+        "Everything x2 735",
+        "MsMpEng x1 377",
+        "explorer x1 305",
+        "RuntimeBroker x8 211",
+        "NVDisplay.Container x2 190",
+        "tailscaled x2 188",
+        "Telegram x1 184",
+        "TeamViewer x1 164",
+        "copilotapphost x1 148",
+        "KakaoTalk x1 147",
+        "StartMenuExperienceHost x1 144",
+        "SearchHost x1 129",
+        "LockApp x1 115",
+        "Secure System x1 110",
+        "ms-teams x2 109",
+        "ShellExperienceHost x1 105",
+        "dwm x1 104",
+        "copilotapp x9 89",
+        "TextInputHost x1 82",
+        "powershell x1 80",
+        "backgroundTaskHost x1 76"
+      ],
+      "cpu10s": {
+        "samples": [
+          3.3,
+          2.4,
+          1.4,
+          4,
+          6.3,
+          0,
+          2.5,
+          7.9,
+          0,
+          2.7
+        ],
+        "max": 7.9,
+        "avg": 3.1
+      },
+      "displays": [
+        "\\\\.\\DISPLAY1 1920x1080 primary=True",
+        "\\\\.\\DISPLAY2 1920x1080 primary=False"
+      ],
+      "monitorsActive": 2,
+      "powerLine": "Online",
+      "powerPlan": "Balanced (381b4222-f694-41f0-9685-ff5bb260df2e)",
+      "freeRamGB": 16
+    }
+  ],
+  "prep": [
+    {
+      "what": "pnpm install --frozen-lockfile",
+      "result": "exit 0"
+    },
+    {
+      "what": "pnpm test:geometry",
+      "result": "exit 0; cargo 526 passed, 0 failed, 69 ignored; vitest 1217 passed, 6 skipped (72 files passed, 4 skipped)"
+    },
+    {
+      "what": "pnpm build",
+      "result": "exit 0"
+    },
+    {
+      "what": "pnpm viz-v4:expected",
+      "result": "exit 0; 1 passed"
+    }
+  ],
+  "runs": [
+    {
+      "what": "timing (PA-A01 to A04)",
+      "command": "M8_N3_BASELINE=docs/evidence/m8-a14-2026-11-01/17a2b0a-main-pc-headed.json E26_REPETITIONS=5 E26_RESULTS_DIR=test-results/pa-u9/timing-runs pnpm test:e26 (E26_SCENARIOS, E26_TRACE, E26_MEMORY, E26_PRESENTMON unset)",
+      "utc": "2026-11-04T22:27:20Z to 2026-11-05T01:42:07Z",
+      "result": "exit 1; 403 passed, 1 failed, 404 skipped (per-project filter); 3.2 h",
+      "failed": "edge-dpr2-v2 e26-ui0-mixed-all-pan-10k/v1 r3: page.evaluate: Target page, context or browser has been closed (tests/e26/e26-harness.spec.ts:894), no record written; not re-run. Its Playwright error-context was removed when the memory run cleaned test-results/e26/. No Application or System event log entry for a browser crash between 10:35 and 10:37 local.",
+      "files": [
+        "timing/runs/ (403 records, files.txt)",
+        "timing/summary.json",
+        "timing/summary.md",
+        "timing/console.log"
+      ]
+    },
+    {
+      "what": "memory (PA-A05)",
+      "command": "M8_N3_BASELINE=<same> E26_MEMORY=1 E26_SCENARIOS=e26-simple-stress-10k/v2,e26-mixed-view-edit-10k/v2 E26_REPETITIONS=5 E26_RESULTS_DIR=test-results/pa-u9/memory-runs pnpm test:e26",
+      "utc": "2026-11-05T02:13:11Z to 02:29:20Z",
+      "result": "exit 0; 40 passed, 40 skipped; 16.1 min",
+      "files": [
+        "memory/runs/ (40 records, files.txt)",
+        "memory/console.log"
+      ],
+      "notCommitted": "the 40 raw traces under memory-runs/memory-traces/ (about 349 MB) stay on the PC"
+    },
+    {
+      "what": "identity (PA-A10)",
+      "command": "M8_N3_BASELINE=<same> pnpm test:headed --tier 3",
+      "utc": "2026-11-05T02:29:43Z to 03:58:51Z",
+      "result": "exit 0; 14 stages passed; 460 passed, 0 failed, 0 flaky, 0 skipped; 89.1 min",
+      "files": [
+        "tier3/stages.tsv",
+        "tier3/console.log",
+        "tier3/failures.txt"
+      ]
+    }
+  ],
+  "departures": [
+    "At the start of timing the user's Chrome was open (15 processes, one window), with Telegram, KakaoTalk, TeamViewer, MobaXterm, Teams and Settings; CPU 3.7 % average (10 s), peak 5.5 %. Chrome had been closed by 02:12Z (time not observed). Telegram, KakaoTalk, TeamViewer, MobaXterm and Teams stayed open throughout.",
+    "Two 1920 x 1080 displays were connected (M9-U2 also had two; V20-U3 had one).",
+    "One timing test failed (page closed) and was not re-run; that cell has four repetitions.",
+    "Between the timing run's end (01:42Z) and the memory run (02:13Z) the PC was idle while the operator session reconnected."
+  ]
+}

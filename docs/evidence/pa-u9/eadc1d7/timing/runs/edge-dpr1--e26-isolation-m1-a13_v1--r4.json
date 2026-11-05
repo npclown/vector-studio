@@ -1,0 +1,279 @@
+{
+  "scenario": "e26-isolation-m1-a13/v1",
+  "repetition": 4,
+  "project": "edge-dpr1",
+  "browser": "chromium 156.0.4314.58",
+  "devicePixelRatio": 1,
+  "commit": "eadc1d75d0e26872128584445333572fa649f089",
+  "dirty": false,
+  "configurationHash": "7c0ce2db463d0ad1f6a8a8a49ae6ac477738166368900e7cea46d3c123b9ff1f",
+  "configuration": {
+    "isolation": {
+      "id": "e26-isolation-m1-a13/v1",
+      "document": "m1-a13",
+      "replaceRuns": 5,
+      "scattered": 16,
+      "one": {
+        "factor": 3,
+        "constantMs": 50,
+        "capMs": 500
+      },
+      "sixteen": {
+        "factor": 6,
+        "constantMs": 100,
+        "capMs": 1000
+      }
+    },
+    "documentSha256": "d8658b14694ca1e6bbcff734e35575222511df96281720068fa4efe2cb9ef974",
+    "schemaVersion": 6,
+    "sceneNodes": 10634,
+    "targets": {
+      "one": "l4634",
+      "sixteen": [
+        "e289",
+        "l876",
+        "l1456",
+        "e2043",
+        "e2623",
+        "r3204",
+        "e3775",
+        "r4344",
+        "p4920",
+        "r5506",
+        "l6084",
+        "p6656",
+        "e7229",
+        "e7817",
+        "r8388",
+        "r8962"
+      ]
+    },
+    "devicePixelRatio": 1,
+    "repetitions": 5
+  },
+  "environment": {
+    "devicePixelRatio": 1,
+    "canvas": {
+      "width": 1280,
+      "height": 720
+    },
+    "screen": {
+      "width": 1400,
+      "height": 1000
+    },
+    "idleRafMedianMs": 16.699999999999818,
+    "adapter": {
+      "vendor": "nvidia",
+      "architecture": "turing",
+      "device": "",
+      "description": ""
+    },
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Safari/537.36 Edg/151.0.7922.34"
+  },
+  "presence": {
+    "start": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    },
+    "end": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    }
+  },
+  "errors": [],
+  "consoleErrors": [],
+  "replaceSnapshotMs": {
+    "samples": [
+      75.5,
+      78,
+      79.19999998807907,
+      82.5,
+      84.09999999403954
+    ],
+    "median": 79.19999998807907
+  },
+  "cleanLoadTailMs": {
+    "samples": [
+      71.79999999701977,
+      73.80000001192093,
+      75.00000001490116,
+      83.30000001192093,
+      112.59999999403954
+    ],
+    "median": 75.00000001490116
+  },
+  "boundsMs": {
+    "one": 287.5999999642372,
+    "sixteen": 575.1999999284744
+  },
+  "oneMs": 92.40000000596046,
+  "sixteenMs": 111.6000000089407,
+  "pass": {
+    "one": true,
+    "sixteen": true
+  },
+  "run": {
+    "loadErrors": [],
+    "settleErrors": [],
+    "replaces": [
+      {
+        "durationMs": 84.09999999403954,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 167.40000000596046
+      },
+      {
+        "durationMs": 79.19999998807907,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 154.20000000298023
+      },
+      {
+        "durationMs": 82.5,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 195.09999999403954
+      },
+      {
+        "durationMs": 78,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 151.80000001192093
+      },
+      {
+        "durationMs": 75.5,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 147.29999999701977
+      }
+    ],
+    "warmUp": {
+      "error": null,
+      "commandMs": 176.79999999701977,
+      "rejected": [
+        "l4634"
+      ],
+      "rejections": 15,
+      "measures": [
+        {
+          "startMs": 6940.5,
+          "durationMs": 107.20000000298023
+        }
+      ],
+      "durationMs": 107.20000000298023
+    },
+    "single": {
+      "error": null,
+      "commandMs": 171.1000000089407,
+      "rejected": [
+        "l4634"
+      ],
+      "rejections": 15,
+      "measures": [
+        {
+          "startMs": 7903.70000000298,
+          "durationMs": 92.40000000596046
+        }
+      ],
+      "durationMs": 92.40000000596046
+    },
+    "scattered": {
+      "error": null,
+      "commandMs": 185.30000001192093,
+      "rejected": [
+        "e2043",
+        "e2623",
+        "e289",
+        "e3775",
+        "e7229",
+        "e7817",
+        "l1456",
+        "l6084",
+        "l876",
+        "p4920",
+        "p6656",
+        "r3204",
+        "r4344",
+        "r5506",
+        "r8388",
+        "r8962"
+      ],
+      "rejections": 181,
+      "measures": [
+        {
+          "startMs": 8812,
+          "durationMs": 111.6000000089407
+        }
+      ],
+      "durationMs": 111.6000000089407
+    },
+    "longTasks": [
+      {
+        "startMs": 5832.20000000298,
+        "durationMs": 66
+      },
+      {
+        "startMs": 5915.100000008941,
+        "durationMs": 155
+      },
+      {
+        "startMs": 6070.20000000298,
+        "durationMs": 61
+      },
+      {
+        "startMs": 6147.20000000298,
+        "durationMs": 196
+      },
+      {
+        "startMs": 6343.600000008941,
+        "durationMs": 64
+      },
+      {
+        "startMs": 6423.20000000298,
+        "durationMs": 152
+      },
+      {
+        "startMs": 6575.79999999702,
+        "durationMs": 59
+      },
+      {
+        "startMs": 6650.4000000059605,
+        "durationMs": 148
+      },
+      {
+        "startMs": 6798.70000000298,
+        "durationMs": 55
+      },
+      {
+        "startMs": 6870.70000000298,
+        "durationMs": 177
+      },
+      {
+        "startMs": 7048.600000008941,
+        "durationMs": 756
+      },
+      {
+        "startMs": 7824.70000000298,
+        "durationMs": 172
+      },
+      {
+        "startMs": 7996.79999999702,
+        "durationMs": 726
+      },
+      {
+        "startMs": 8738.29999999702,
+        "durationMs": 185
+      },
+      {
+        "startMs": 8924.20000000298,
+        "durationMs": 721
+      }
+    ],
+    "lifecycle": "ready",
+    "recoveryAttempts": 0
+  }
+}

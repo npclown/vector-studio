@@ -1,0 +1,283 @@
+{
+  "scenario": "e26-isolation-m1-a13/v1",
+  "repetition": 2,
+  "project": "edge-dpr2",
+  "browser": "chromium 156.0.4314.58",
+  "devicePixelRatio": 2,
+  "commit": "eadc1d75d0e26872128584445333572fa649f089",
+  "dirty": false,
+  "configurationHash": "30e42bac4151e0c199af74238f477ae9cb957b6444fee1306547124475a1073b",
+  "configuration": {
+    "isolation": {
+      "id": "e26-isolation-m1-a13/v1",
+      "document": "m1-a13",
+      "replaceRuns": 5,
+      "scattered": 16,
+      "one": {
+        "factor": 3,
+        "constantMs": 50,
+        "capMs": 500
+      },
+      "sixteen": {
+        "factor": 6,
+        "constantMs": 100,
+        "capMs": 1000
+      }
+    },
+    "documentSha256": "d8658b14694ca1e6bbcff734e35575222511df96281720068fa4efe2cb9ef974",
+    "schemaVersion": 6,
+    "sceneNodes": 10634,
+    "targets": {
+      "one": "l4634",
+      "sixteen": [
+        "e289",
+        "l876",
+        "l1456",
+        "e2043",
+        "e2623",
+        "r3204",
+        "e3775",
+        "r4344",
+        "p4920",
+        "r5506",
+        "l6084",
+        "p6656",
+        "e7229",
+        "e7817",
+        "r8388",
+        "r8962"
+      ]
+    },
+    "devicePixelRatio": 2,
+    "repetitions": 5
+  },
+  "environment": {
+    "devicePixelRatio": 2,
+    "canvas": {
+      "width": 2560,
+      "height": 1440
+    },
+    "screen": {
+      "width": 1400,
+      "height": 1000
+    },
+    "idleRafMedianMs": 16.699999999999818,
+    "adapter": {
+      "vendor": "nvidia",
+      "architecture": "turing",
+      "device": "",
+      "description": ""
+    },
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Safari/537.36 Edg/151.0.7922.34"
+  },
+  "presence": {
+    "start": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    },
+    "end": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    }
+  },
+  "errors": [],
+  "consoleErrors": [],
+  "replaceSnapshotMs": {
+    "samples": [
+      78.5,
+      79.29999999701977,
+      79.5,
+      81.29999999701977,
+      83.79999999701977
+    ],
+    "median": 79.5
+  },
+  "cleanLoadTailMs": {
+    "samples": [
+      71.5,
+      74,
+      79.70000000298023,
+      81.30000001192093,
+      89.90000000596046
+    ],
+    "median": 79.70000000298023
+  },
+  "boundsMs": {
+    "one": 288.5,
+    "sixteen": 577
+  },
+  "oneMs": 99.40000000596046,
+  "sixteenMs": 179.5,
+  "pass": {
+    "one": true,
+    "sixteen": true
+  },
+  "run": {
+    "loadErrors": [],
+    "settleErrors": [],
+    "replaces": [
+      {
+        "durationMs": 83.79999999701977,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 173.70000000298023
+      },
+      {
+        "durationMs": 78.5,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 158.20000000298023
+      },
+      {
+        "durationMs": 81.29999999701977,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 162.6000000089407
+      },
+      {
+        "durationMs": 79.29999999701977,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 153.29999999701977
+      },
+      {
+        "durationMs": 79.5,
+        "nodes": 10634,
+        "status": "applied",
+        "commandMs": 151
+      }
+    ],
+    "warmUp": {
+      "error": null,
+      "commandMs": 180.29999999701977,
+      "rejected": [
+        "l4634"
+      ],
+      "rejections": 15,
+      "measures": [
+        {
+          "startMs": 7116.79999999702,
+          "durationMs": 105.40000000596046
+        }
+      ],
+      "durationMs": 105.40000000596046
+    },
+    "single": {
+      "error": null,
+      "commandMs": 184,
+      "rejected": [
+        "l4634"
+      ],
+      "rejections": 15,
+      "measures": [
+        {
+          "startMs": 8190,
+          "durationMs": 99.40000000596046
+        }
+      ],
+      "durationMs": 99.40000000596046
+    },
+    "scattered": {
+      "error": null,
+      "commandMs": 302.29999999701977,
+      "rejected": [
+        "e2043",
+        "e2623",
+        "e289",
+        "e3775",
+        "e7229",
+        "e7817",
+        "l1456",
+        "l6084",
+        "l876",
+        "p4920",
+        "p6656",
+        "r3204",
+        "r4344",
+        "r5506",
+        "r8388",
+        "r8962"
+      ],
+      "rejections": 181,
+      "measures": [
+        {
+          "startMs": 9520.09999999404,
+          "durationMs": 179.5
+        }
+      ],
+      "durationMs": 179.5
+    },
+    "longTasks": [
+      {
+        "startMs": 5822.5999999940395,
+        "durationMs": 174
+      },
+      {
+        "startMs": 5997.20000000298,
+        "durationMs": 63
+      },
+      {
+        "startMs": 6075.4000000059605,
+        "durationMs": 159
+      },
+      {
+        "startMs": 6234.5999999940395,
+        "durationMs": 63
+      },
+      {
+        "startMs": 6316.0999999940395,
+        "durationMs": 164
+      },
+      {
+        "startMs": 6481.0999999940395,
+        "durationMs": 64
+      },
+      {
+        "startMs": 6569.29999999702,
+        "durationMs": 154
+      },
+      {
+        "startMs": 6723.70000000298,
+        "durationMs": 62
+      },
+      {
+        "startMs": 6810.5999999940395,
+        "durationMs": 151
+      },
+      {
+        "startMs": 6962.29999999702,
+        "durationMs": 52
+      },
+      {
+        "startMs": 7041.70000000298,
+        "durationMs": 181
+      },
+      {
+        "startMs": 7222.9000000059605,
+        "durationMs": 852
+      },
+      {
+        "startMs": 8105.29999999702,
+        "durationMs": 184
+      },
+      {
+        "startMs": 8290.09999999404,
+        "durationMs": 1092
+      },
+      {
+        "startMs": 9397.20000000298,
+        "durationMs": 303
+      },
+      {
+        "startMs": 9700.29999999702,
+        "durationMs": 1035
+      }
+    ],
+    "lifecycle": "ready",
+    "recoveryAttempts": 0
+  }
+}
