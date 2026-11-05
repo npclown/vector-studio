@@ -37,8 +37,8 @@ export function editorRendererOptions(glyphRaster: EditorGlyphRaster): EditorRen
 
 /**
  * Where the geometry kernel WASM comes from: a URL the page can fetch, its bytes, a compiled
- * `WebAssembly.Module` (compiled once and instantiated for each port), or a function that returns
- * one of those.
+ * `WebAssembly.Module` (compiled once and instantiated for each port; it must come from the
+ * page's own realm, not an iframe), or a function that returns one of those.
  */
 export type GeometryWasmSource =
   | string
@@ -71,6 +71,7 @@ export type WebGpuRendererParts = Readonly<{
   /**
    * Registers a release for something the stage created. Register each one as soon as it exists:
    * releases run in reverse order on `dispose`, and also when the stage or a later step throws.
+   * Call it only while the stage runs: a release added after `dispose` (or a failed run) never runs.
    */
   addRelease(release: () => void): void;
 }>;
