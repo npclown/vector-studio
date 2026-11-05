@@ -59,6 +59,7 @@ const EDIT_TEXT = JSON.parse(
 ) as unknown;
 const PAGE_SOURCE = readFileSync(path.join(appDir, 'app/page.tsx'), 'utf8');
 const RENDERER_SOURCE = readFileSync(path.join(appDir, 'src/webgpu-renderer.ts'), 'utf8');
+const HOST_SOURCE = readFileSync(path.join(root, 'packages/webgpu-host/src/index.ts'), 'utf8');
 /** The Hangul syllables of the committed test font's subset (M6a contract, U5 note 2). */
 const SUBSET_HANGUL = '가각국글기나녕니다동라마바벡사세습아안요자집차채천추카타택터파편하한했';
 
@@ -135,13 +136,12 @@ describe("M6c-U2 next-host renderer options (text: 'atlas')", () => {
     service.dispose();
     // The host's service and the probe's both take them, with the canvas raster port.
     // M6c-U4: under `?test=1` the host service gets the logged port (glyphRasterLog).
-    expect(RENDERER_SOURCE).toMatch(
-      /\.\.\.hostRendererOptions\(rasterLog\?\.port \?\? glyphRaster\),\n {4}\}\);/u,
-    );
+    // AR-U1: the host's service is created by @vector-studio/webgpu-host with the same options.
+    expect(HOST_SOURCE).toMatch(/\.\.\.editorRendererOptions\(servicePort\),\n {6}\}\);/u);
     expect(RENDERER_SOURCE).toMatch(
       /new core\.PrimitiveRendererService\(target, hostRendererOptions\(glyphRaster\)\)/u,
     );
-    expect(RENDERER_SOURCE).toMatch(/const glyphRaster = webgpu\.createCanvasGlyphRaster\(\);/u);
+    expect(HOST_SOURCE).toMatch(/const glyphRaster = webgpu\.createCanvasGlyphRaster\(\);/u);
   });
 
   it.each([
@@ -617,7 +617,7 @@ describe('M6c-U2 cluster probe: the one-cluster scene and its crop', () => {
     // The probe module is loaded only under `?test=1`, by dynamic import.
     expect(PAGE_SOURCE).not.toMatch(/^import [^t].*m6c-text-probe/mu);
     expect(RENDERER_SOURCE).toMatch(
-      /if \(testing\) \{[\s\S]*await import\('\.\/m6c-text-probe'\)/u,
+      /beforeInitialize: testing\s+\? async[\s\S]*import\('\.\/m6c-text-probe'\)/u,
     );
   });
 });

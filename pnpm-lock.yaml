@@ -29,6 +29,9 @@ importers:
       '@vector-studio/editor-core':
         specifier: workspace:*
         version: link:packages/editor-core
+      '@vector-studio/geometry-wasm':
+        specifier: workspace:*
+        version: link:packages/geometry-wasm
       '@vector-studio/model':
         specifier: workspace:*
         version: link:packages/model
@@ -50,6 +53,9 @@ importers:
       '@vector-studio/ui':
         specifier: workspace:*
         version: link:packages/ui
+      '@vector-studio/webgpu-host':
+        specifier: workspace:*
+        version: link:packages/webgpu-host
       eslint:
         specifier: 10.9.1
         version: 10.9.1
@@ -107,6 +113,9 @@ importers:
       '@vector-studio/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@vector-studio/webgpu-host':
+        specifier: workspace:*
+        version: link:../../packages/webgpu-host
       next:
         specifier: 16.4.3
         version: 16.4.3(@playwright/test@1.62.1)(@types/node@26.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -221,6 +230,21 @@ importers:
       react:
         specifier: 19.3.1
         version: 19.3.1
+
+  packages/webgpu-host:
+    dependencies:
+      '@vector-studio/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@vector-studio/geometry-wasm':
+        specifier: workspace:*
+        version: link:../geometry-wasm
+      '@vector-studio/renderer-core':
+        specifier: workspace:*
+        version: link:../renderer-core
+      '@vector-studio/renderer-webgpu':
+        specifier: workspace:*
+        version: link:../renderer-webgpu
 
 packages:
 

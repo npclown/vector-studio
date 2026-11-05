@@ -37,6 +37,7 @@
     { "path": "./packages/renderer-webgpu" },
     { "path": "./packages/text-dom" },
     { "path": "./packages/ui" },
+    { "path": "./packages/webgpu-host" },
     { "path": "./apps/playground" }
   ]
 }

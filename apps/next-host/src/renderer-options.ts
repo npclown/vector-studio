@@ -1,4 +1,8 @@
-import type { PrimitiveRendererServiceOptions } from '@vector-studio/renderer-core';
+import {
+  editorRendererOptions,
+  type EditorGlyphRaster,
+  type EditorRendererOptions,
+} from '@vector-studio/webgpu-host';
 
 // M6c-U2 (MVP M6c contract, section 5): next-host's renderer service options, apart from the
 // kernel ports, in one place, so that the host's service (src/webgpu-renderer.ts) and the
@@ -6,21 +10,18 @@ import type { PrimitiveRendererServiceOptions } from '@vector-studio/renderer-co
 // M1-U5: `clips: 'all'` (P4 rect and mask clips). M4-U4 (M4-P7): `paints: 'gradient'` (E23) and
 // `groups: 'isolated'` (E25). M6c-U2: `text: 'atlas'` with the canvas glyph raster port (E28-S3,
 // which needs `clips` other than 'none'), so projected text leaves draw instead of being
-// isolated as `editor.renderer-unsupported`. This module has no runtime import, so it is unit
-// tested in Node with any port.
+// isolated as `editor.renderer-unsupported`. Its only runtime import is `@vector-studio/webgpu-host`,
+// whose entry loads the renderer modules lazily, so it is unit tested in Node with any port.
 
 /** The E28 glyph raster port, as the service options type carries it. */
-export type HostGlyphRaster = NonNullable<PrimitiveRendererServiceOptions['glyphRaster']>;
+export type HostGlyphRaster = EditorGlyphRaster;
 
 /** The options every next-host service gets, without the fill and stroke mesh ports. */
-export type HostRendererOptions = Readonly<
-  Required<Pick<PrimitiveRendererServiceOptions, 'clips' | 'paints' | 'groups' | 'text'>> & {
-    glyphRaster: HostGlyphRaster;
-  }
->;
+export type HostRendererOptions = EditorRendererOptions;
 
+/** AR-U1: the editor renderer options now live in `@vector-studio/webgpu-host`. */
 export function hostRendererOptions(glyphRaster: HostGlyphRaster): HostRendererOptions {
-  return { clips: 'all', paints: 'gradient', groups: 'isolated', text: 'atlas', glyphRaster };
+  return editorRendererOptions(glyphRaster);
 }
 
 /** One call the host's service made to its glyph raster port (M6c-U4, `?test=1` only). */
