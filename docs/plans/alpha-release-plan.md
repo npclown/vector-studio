@@ -16,7 +16,7 @@ The editor passed the pre-alpha gate with disclosed misses ([exit record](../evi
 | B2 renderer lives in the app | `createWebGpuRenderer` (the WebGPU renderer composition a host passes to `EditorCanvas`) is in `apps/next-host/src/webgpu-renderer.ts`, mixed with test and bench hooks. A host installing the packages cannot draw the canvas. |
 | B3 WASM not packaged | The geometry kernel `.wasm` is built by Rust 1.94.1 into `.tools/geometry-build/` and served by a next-host route (the playground's Vite config serves it too). No package ships it. |
 | B4 package set | A host imports `ui`, `react` or `editor-core` (closure: `contracts`, `model`), and its composition also needs `renderer-core`, `renderer-webgpu`, `geometry-wasm`, `text-dom` and `persistence-idb` to draw, lay out text and save. All of them must be published (or bundled); `geometry-reference` is a test oracle and is not. |
-| B5 no install check | The `tsc` `dist` output has never been installed from a tarball into a fresh Next.js app. |
+| B5 no install check | The `tsc` `dist` output has never been installed from a tarball into a fresh host app (Next.js or plain React). |
 
 ## 2. Recorded user decisions
 
@@ -28,9 +28,9 @@ The editor passed the pre-alpha gate with disclosed misses ([exit record](../evi
 | Unit | Work | Tier |
 | --- | --- | --- |
 | AR-U1 | Move the renderer composition into a new host-composition package `@vector-studio/webgpu-host` as a public factory with a `wasmUrl` (or `wasmModule`) option; next-host keeps its test and bench wrappers around it. It must not go into `renderer-webgpu`: the composition imports `geometry-wasm` (ports) and `react` (`RendererFactory`), and ARCHITECTURE.md forbids renderer packages from importing `geometry-wasm` (enforced by `check:boundaries` and `tests/unit/fill-port-boundaries.test.ts`). The unit adds an ADR and the ARCHITECTURE.md entry for the new package as a host composition root, and updates `host-api.md`. | Full (public surface, package boundaries) |
-| AR-U2 | Ship the kernel `.wasm` in `@vector-studio/geometry-wasm` `dist/` with a reproducible build step and its SHA-256 recorded; document how a Next.js host serves or imports it. | Full |
+| AR-U2 | Ship the kernel `.wasm` in `@vector-studio/geometry-wasm` `dist/` with a reproducible build step and its SHA-256 recorded; document how a host serves or imports it, for Next.js and for a plain React bundler such as Vite. The packages stay host-agnostic: next-host is only the example host. | Full |
 | AR-U3 | Package metadata on the published packages: version `0.1.0-alpha.0`, `files`, `license`, `repository`, `sideEffects`, `publishConfig`; LICENSE and README with the disclosed misses, the unmeasured lower-tier hardware and the known autosave drag-release bug; the package scope per AR-Q4. | Full |
-| AR-U4 | Install check: `pnpm pack` every published package, install the tarballs into a fresh Next.js app outside the workspace, render a document and run one edit; record it in `docs/evidence/`. | Light |
+| AR-U4 | Install check: `pnpm pack` every published package, install the tarballs into two fresh apps outside the workspace, one Next.js and one plain React (Vite), render a document and run one edit in each; record it in `docs/evidence/`. | Light |
 | AR-U5 | Publish with the `alpha` dist-tag to the registry chosen in AR-Q1. **Only after the user's explicit go-ahead**: publishing is outward-facing and, on the public npm registry, cannot be freely undone after 72 hours. | Full |
 
 ## 4. Open questions
