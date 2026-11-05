@@ -62,12 +62,12 @@ The editor passed the pre-alpha gate with these misses disclosed. The [exit reco
 - **Lower-tier GPUs** (integrated graphics) are not measured; the user decided no lower-tier check runs before this alpha.
 - **Presentation latency** (pointer to screen) is unverified, and batch geometry throughput misses its target.
 - **Known intermittent bug**: sometimes a drag stops applying moves and its release is lost. An autosave write was seen during the press both times it occurred; the cause is not yet found.
-- **Other known costs**: the first frame of 10,000 miter-joined rectangles takes about 20 s, a keystroke takes about 330 to 350 ms in a text node grown to 16,384 units, and input with a real Korean IME is not verified.
+- **Other known costs**: the first frame of 10,000 miter-joined rectangles takes about 20 s, a keystroke takes 331 to 353 ms (median) in a text node grown to 16,384 units, and input with a real Korean IME is not verified.
 - **Geometry**: precision is unverified (A04), and the [P3 exit record](docs/evidence/p3-exit/5ddec4e/README.md) discloses known defect classes (an A01 crack, A02 and A08 inconclusive).
 
 ## Licence
 
-No licence is granted yet (`UNLICENSED`, see [LICENSE](LICENSE)); the licence for a public release is still to be chosen.
+[LICENSE](LICENSE) grants readers of this repository a limited, revocable licence to install and run the packages for evaluation only; all other rights are reserved (the package manifests say `UNLICENSED`). The licence for a public release is still to be chosen.
 
 ## Development
 
