@@ -1,6 +1,6 @@
 # Pre-alpha exit record (2026-11-05)
 
-**Status: PROPOSED**, awaiting the user's exit card (PA-A11). This record is unit PA-U10 of the [pre-alpha gate plan](../plans/pre-alpha-gate-plan.md) (V-22), in the form of plan section 6. It lists PA-A01 to A10 with one verdict each and the record that holds it, the gate exceptions the user decides on the card, every remedy PR, the section 2 carried items by name, the machines, the backlog after the gate and the owed user actions. It makes no claim beyond the records it cites.
+**Status: ACCEPTED** by the user on the exit card on 2026-11-05 at 06:28Z (PA-A11; section 9). The pre-alpha exit is made with the gate exceptions of section 3 disclosed. This record is unit PA-U10 of the [pre-alpha gate plan](../plans/pre-alpha-gate-plan.md) (V-22), in the form of plan section 6. It lists PA-A01 to A10 with one verdict each and the record that holds it, the gate exceptions the user decides on the card, every remedy PR, the section 2 carried items by name, the machines, the backlog after the gate and the owed user actions. It makes no claim beyond the records it cites.
 
 **The gate does not pass as written.** PA-A02, A09 and A10 pass (A02 and A09 with disclosure). PA-A01, A03 and A04 miss on the main PC at the gate head. PA-A05 is UNVERIFIED, and could read FAIL. PA-A08 was waived by the user. Under plan section 3 each of these is a gate exception, never adopted automatically. Section 3 below lists them for the exit card. PA-A06 (UNVERIFIED) and PA-A07 (FAIL) meet the non-blocking rules the user chose (PA-Q3 (a), PA-Q4 (a)).
 
@@ -34,7 +34,7 @@
 | PA-A08 | Lower tier: tier 2 on the lower-tier reference                            | Not run on an integrated GPU. On 2026-11-04 at 21:43Z the user decided a lower-tier test is not needed. The laptop sitting on the RTX 4050 (tier 2 343 of 343, v2 workloads observed) is kept as an observation.                                                                                                                                                                                                                                                                                         | Waived (user decision)          | [PA-U7](pa-u7-e396f34.md)                                                                    |
 | PA-A09 | R34 system fonts by name, R68 "not failures" cases                        | R34: headed check 4 of 4 in Chrome and Edge, max \|layout − canvas\| = 0. R68: the three cases are checked by unit test. On 2026-11-04 at 12:00Z the user reworded the stroke-port case to match ST-A10. The R34 run shared the PA-U6 sitting, whose P2 runner recorded `dirty: true` (sources equal `6e17276`).                                                                                                                                                                                                                                                                                                 | PASS with disclosure                            | [PA-U6 record, R34](../benchmarks/results/20261104-p2-batch-v1-pa-u6/README.md#pa-u8-r34-same-sitting), #497 |
 | PA-A10 | Tier 3 at the gate head 0 failed, flaky or skipped; CI green              | Tier 3: 460 passed, 0 failed, 0 flaky, 0 skipped (14 stages, 89.1 min). CI `Validate` passed on the `eadc1d7` push (Actions run 41921042484, 2026-11-04 21:58Z).                                                                                                                                                                                                                                                                                                                                                                                       | PASS                            | [PA-U9](pa-u9-eadc1d7.md#pa-a10-tier-3)                                                      |
-| PA-A11 | This record accepted on a decision card                                   | Pending                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Pending                         | this record, section 9                                                                       |
+| PA-A11 | This record accepted on a decision card | Accepted 2026-11-05 06:28Z, "Accept, misses disclosed" | PASS | this record, section 9                                                                       |
 
 ## 3. Gate exceptions for the exit card
 
@@ -118,4 +118,10 @@ Each item is a non-PASS outside PA-Q3 and PA-Q4, so the user decides it.
 
 ## 9. Acceptance
 
-Pending: the user's exit card (PA-A11).
+**ACCEPTED** by the user on a decision card on 2026-11-05 at 06:28Z (PA-A11), after the record's independent review (READY WITH FOLLOW-UPS, applied). The user chose "Accept, misses disclosed":
+
+- The pre-alpha exit is accepted as recorded, with every FAIL, UNVERIFIED and Waived row as written.
+- PA-A01 stays a miss under the no-rounding rule (PA-Q6 (a)).
+- PA-A03, A04 and A05 are disclosed gate exceptions, and their remedies are in the backlog (section 7).
+- Prototype-plan constraint 2 stands: a lower-tier check is owed before alpha distribution.
+- PA-Q8 stays open.
