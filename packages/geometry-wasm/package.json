@@ -1,9 +1,15 @@
 {
   "name": "@vector-studio/geometry-wasm",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "private": true,
+  "description": "The Vector Studio geometry kernel (WASM) and its fill and stroke mesh adapters.",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/npclown/vector-studio.git",
+    "directory": "packages/geometry-wasm"
+  },
   "type": "module",
-  "description": "Private P2 WASM geometry adapter and reconstructible cache.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -14,6 +20,14 @@
       "import": "./dist/kernel-url.js"
     },
     "./kernel.wasm": "./dist/kernel.wasm"
+  },
+  "files": [
+    "dist",
+    "src",
+    "!dist/*.tsbuildinfo"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   },
   "dependencies": {
     "@vector-studio/contracts": "workspace:*"
