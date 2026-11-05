@@ -20,7 +20,9 @@ describe('AR-U2 geometry kernel packaging', () => {
       import: './dist/kernel-url.js',
     });
     expect(manifest.exports['./kernel.wasm']).toBe('./dist/kernel.wasm');
-    expect(manifest.scripts.prepack).toBe('node ../../tooling/build-geometry-kernel.mjs');
+    expect(manifest.scripts.prepack).toBe(
+      'tsc --build && node ../../tooling/build-geometry-kernel.mjs',
+    );
   });
 
   it('resolves the URL next to the module, never from the main entry', () => {
@@ -47,5 +49,9 @@ describe('AR-U2 geometry kernel packaging', () => {
       expect(identity, fragment).toContain(fragment);
     }
     expect(build).toContain("path.join(dist, 'kernel.wasm')");
+    // The same compiler identity (release and commit) and the unremapped-path check.
+    expect(build).toContain("'e408947bfd200af42db322daf0fadfe7e26d3bd1'");
+    expect(identity).toContain("'e408947bfd200af42db322daf0fadfe7e26d3bd1'");
+    expect(build).toContain("bytes.includes(Buffer.from('src\\\\'))");
   });
 });

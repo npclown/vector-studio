@@ -21,6 +21,6 @@
   "scripts": {
     "build": "tsc --build",
     "build:kernel": "node ../../tooling/build-geometry-kernel.mjs",
-    "prepack": "node ../../tooling/build-geometry-kernel.mjs"
+    "prepack": "tsc --build && node ../../tooling/build-geometry-kernel.mjs"
   }
 }

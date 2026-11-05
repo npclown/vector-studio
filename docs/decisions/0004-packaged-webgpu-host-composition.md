@@ -27,7 +27,7 @@ The composition cannot move into `renderer-webgpu`: [ARCHITECTURE.md](../../ARCH
 
 - One more package to publish in the alpha set (alpha plan, AR-Q2).
 - The playground keeps its own per-page compositions; it may move to this factory later, which needs no new edge.
-- A host still supplies the WASM bytes or URL until AR-U2 ships the kernel in `geometry-wasm`.
+- A host supplies the WASM source; since AR-U2 (2026-11-05) the kernel ships in `geometry-wasm`, and `@vector-studio/geometry-wasm/kernel` gives its URL.
 
 ## Migration impact
 

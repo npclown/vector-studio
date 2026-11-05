@@ -128,6 +128,8 @@ Pointer, 2026-11-01 (M8-U3, [M8 contract](docs/plans/mvp-m8-host-api-ui-contract
 
 Pointer, 2026-11-05 (AR-U1, [alpha release plan](docs/plans/alpha-release-plan.md), [ADR 0004](docs/decisions/0004-packaged-webgpu-host-composition.md)): `@vector-studio/webgpu-host` is a host composition root shipped as a package. It injects `geometry-wasm`'s fill and stroke mesh ports into `renderer-core`'s service on the `renderer-webgpu` backend with the editor's service options, and exports a factory of the shape of `react`'s `RendererFactory` without importing it. It depends on `contracts`, `geometry-wasm`, `renderer-core` and `renderer-webgpu` only, and the boundary checker rejects `react`, `react-dom` and `next` in it. Renderer packages still never import `geometry-wasm`; among current packages only `next-host` depends on `webgpu-host`.
 
+Pointer, 2026-11-05 (AR-U2, [alpha release plan](docs/plans/alpha-release-plan.md)): `geometry-wasm` also ships the kernel WASM it adapts, as `dist/kernel.wasm` built by `tooling/build-geometry-kernel.mjs` with the identity build's toolchain and remaps, and a second entry `@vector-studio/geometry-wasm/kernel` that gives its URL to a host composition. Its main entry and its adapter contracts stay private implementation contracts; no dependency edge changes.
+
 Forbidden dependency examples:
 
 - `model -> renderer-webgpu`

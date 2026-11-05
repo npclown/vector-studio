@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -12,20 +13,38 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const cache = path.join(root, '.tools');
-const localCargoHome = path.join(cache, 'rust/cargo');
-const localRustup = path.join(
-  localCargoHome,
-  process.platform === 'win32' ? 'bin/rustup.exe' : 'bin/rustup',
-);
-// The repository-local toolchain (tooling/install-rust.ps1) wins; otherwise `rustup` on PATH.
-const useLocal = process.env.CARGO_HOME === undefined && existsSync(localRustup);
-const rustup = useLocal ? localRustup : 'rustup';
+// The same toolchain resolution as tooling/test-geometry.mjs: `CARGO_HOME` (or the
+// repository-local install of tooling/install-rust.ps1) names rustup and the toolchains. Without
+// either, `rustup` on PATH with its own homes is used (a Linux container, for example).
+const cargoHome =
+  process.env.CARGO_HOME ??
+  (existsSync(path.join(cache, 'rust/cargo')) ? path.join(cache, 'rust/cargo') : undefined);
+const rustup =
+  cargoHome === undefined
+    ? 'rustup'
+    : path.join(cargoHome, process.platform === 'win32' ? 'bin/rustup.exe' : 'bin/rustup');
+if (cargoHome !== undefined && !existsSync(rustup)) {
+  throw new Error(
+    'Pinned Rust is missing. Run the separately approved tooling/install-rust.ps1 bootstrap first.',
+  );
+}
 const manifest = path.join(root, 'packages/geometry-wasm/kernel/Cargo.toml');
 const target = path.join(cache, 'geometry-build');
+const temporary = path.join(cache, 'geometry-tmp');
+mkdirSync(temporary, { recursive: true });
 const env = {
   ...process.env,
-  ...(useLocal ? { CARGO_HOME: localCargoHome, RUSTUP_HOME: path.join(cache, 'rust/rustup') } : {}),
+  ...(cargoHome === undefined
+    ? {}
+    : {
+        CARGO_HOME: cargoHome,
+        RUSTUP_HOME: process.env.RUSTUP_HOME || path.join(cache, 'rust/rustup'),
+      }),
   CARGO_TARGET_DIR: target,
+  TEMP: temporary,
+  TMP: temporary,
+  // Windows writes crate-relative panic paths as `src\…`; the second remap makes the release
+  // WASM identical to the Linux build (E11 WASM host identity, d9-rendering-track.md).
   CARGO_ENCODED_RUSTFLAGS: [
     '--remap-path-prefix',
     `${root}=.`,
@@ -33,6 +52,29 @@ const env = {
     'src\\=src/',
   ].join('\x1f'),
 };
+
+// The approved compiler (release and commit; the host may be Windows or Linux, whose release
+// WASM bytes are identical under the remaps above).
+const compiler = spawnSync(rustup, ['run', '1.94.1', 'rustc', '--version', '--verbose'], {
+  cwd: root,
+  env,
+  encoding: 'utf8',
+});
+if (compiler.error) throw compiler.error;
+if (compiler.status !== 0)
+  throw new Error(compiler.stderr || 'Rust compiler identity unavailable.');
+const identity = Object.fromEntries(
+  compiler.stdout
+    .split(/\r?\n/)
+    .filter((line) => line.includes(': '))
+    .map((line) => [line.slice(0, line.indexOf(': ')), line.slice(line.indexOf(': ') + 2)]),
+);
+if (
+  identity.release !== '1.94.1' ||
+  identity['commit-hash'] !== 'e408947bfd200af42db322daf0fadfe7e26d3bd1'
+) {
+  throw new Error(`Compiler identity differs from the approved toolchain: ${compiler.stdout}`);
+}
 
 const args = [
   'run',
@@ -59,6 +101,11 @@ const built = path.join(
 const dist = path.join(root, 'packages/geometry-wasm/dist');
 mkdirSync(dist, { recursive: true });
 const output = path.join(dist, 'kernel.wasm');
+const bytes = readFileSync(built);
+// A failed Windows remap leaves `src\\` panic paths in the module (tooling/test-geometry.mjs).
+if (bytes.includes(Buffer.from('src\\'))) {
+  throw new Error('The kernel WASM contains unremapped src\\ paths; it is not the identity build.');
+}
 copyFileSync(built, output);
 const sha256 = createHash('sha256').update(readFileSync(output)).digest('hex');
 writeFileSync(`${output}.sha256`, `${sha256}  kernel.wasm\n`);
