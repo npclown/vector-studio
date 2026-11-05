@@ -8,12 +8,19 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./kernel": {
+      "types": "./dist/kernel-url.d.ts",
+      "import": "./dist/kernel-url.js"
+    },
+    "./kernel.wasm": "./dist/kernel.wasm"
   },
   "dependencies": {
     "@vector-studio/contracts": "workspace:*"
   },
   "scripts": {
-    "build": "tsc --build"
+    "build": "tsc --build",
+    "build:kernel": "node ../../tooling/build-geometry-kernel.mjs",
+    "prepack": "node ../../tooling/build-geometry-kernel.mjs"
   }
 }

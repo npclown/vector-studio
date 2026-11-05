@@ -20,6 +20,7 @@
     "benchmark:p3-al-ob5": "node tooling/run-p3-al-ob5-benchmark.mjs",
     "benchmark:p0:p0-3": "pnpm build && playwright test --config playwright.p0-3-benchmark.config.ts",
     "build": "pnpm --recursive --if-present run build",
+    "build:kernel": "node tooling/build-geometry-kernel.mjs",
     "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test:unit && pnpm run check:boundaries",
     "check:boundaries": "node tooling/check-boundaries.mjs",
     "coverage:p3-o01": "node tooling/run-p3-coverage-metrics.mjs",
