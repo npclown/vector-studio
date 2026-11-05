@@ -16,6 +16,9 @@ export default tseslint.config(
       '**/target/**',
       '**/.next/**',
       '**/next-env.d.ts',
+      // AR-U4: host app templates, compiled only inside fresh apps against the installed tarballs
+      // (tooling/alpha-install-check.mjs type-checks and builds them there).
+      'tooling/alpha-install-check/templates/**',
     ],
   },
   eslint.configs.recommended,
