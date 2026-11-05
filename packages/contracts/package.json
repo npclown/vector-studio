@@ -22,7 +22,8 @@
     "!dist/*.tsbuildinfo"
   ],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://npm.pkg.github.com",
+    "tag": "alpha"
   },
   "scripts": {
     "build": "tsc --build"

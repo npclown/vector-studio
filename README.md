@@ -1,6 +1,6 @@
 # Vector Studio
 
-An embeddable vector editor SDK for React and Next.js applications, drawn by its own WebGPU graphics engine. This is an **alpha** (`0.1.0-alpha.0`): it is published privately to GitHub Packages for readers of this repository, and its APIs may change without notice.
+An embeddable vector editor SDK for React and Next.js applications, drawn by its own WebGPU graphics engine. This is an **alpha** (`0.1.0-alpha.0`): it will be published privately to GitHub Packages for readers of this repository (not yet published), and its APIs may change without notice.
 
 ## Requirements
 
@@ -50,18 +50,20 @@ export function Editor() {
 }
 ```
 
-`geometryKernelUrl` is resolved by your bundler (Vite, webpack 5 and Next.js emit `kernel.wasm` as an asset). If your bundler does not handle `new URL(..., import.meta.url)`, copy `@vector-studio/geometry-wasm/kernel.wasm` to your public folder and pass its URL instead. The [host API guide](docs/host-api.md) covers editor options, text layout (`@vector-studio/text-dom`), hooks, commands, queries, events, extensions and the UI components; [`apps/next-host`](apps/next-host) is a complete example host.
+`geometryKernelUrl` is resolved by your bundler (Vite 8 and Next.js 16 with webpack or Turbopack were checked to emit `kernel.wasm` as an asset). If your bundler does not handle `new URL(..., import.meta.url)`, copy `@vector-studio/geometry-wasm/kernel.wasm` to your public folder and pass its URL instead. The [host API guide](docs/host-api.md) covers editor options, text layout (`@vector-studio/text-dom`), hooks, commands, queries, events, extensions and the UI components; [`apps/next-host`](apps/next-host) is a complete example host.
 
 ## Known limitations of this alpha
 
-The editor passed the pre-alpha gate with these misses disclosed ([exit record](docs/evidence/pre-alpha-exit-2026-11-05.md)):
+The editor passed the pre-alpha gate with these misses disclosed. The [exit record](docs/evidence/pre-alpha-exit-2026-11-05.md) has the full list (sections 2 and 5) and the measurements behind each line.
 
-- **Frame time on 10,000-node documents** on the reference PC: typical editing at 16.8 ms (one refresh over the 16.7 ms target), and editing or panning with everything visible at 50 to 67 ms (target 33.3 ms).
-- **Pointer latency under load**: the 95th percentile on a busy 10,000-node document is 244 to 483 ms (target under 50 ms).
-- **Memory** on the stress document at device pixel ratio 2 is close to the 256 MB ceiling and not verified under it.
+- **Frame time on 10,000-node documents** on the reference PC: typical editing at 16.8 ms against the 16.7 ms target (0.1 ms over; the frame takes one refresh). With everything visible, editing takes 50.1 ms and panning 66.7 to 66.8 ms (target 33.3 ms).
+- **Pointer latency under load**: the worst per-run 95th percentile is 259.6 to 483 ms on a busy 10,000-node document and 244.1 to 295.9 ms on a plain one (target under 50 ms).
+- **Memory** on the stress document at device pixel ratio 2: the measured floor is 250.0 to 251.4 MB against a 256,000,000-byte bound. It is not verified under the bound and could exceed it.
 - **Lower-tier GPUs** (integrated graphics) are not measured; the user decided no lower-tier check runs before this alpha.
-- **Known intermittent bug**: if an autosave write happens while the pointer is held, the drag release can be dropped.
-- Geometry precision is UNVERIFIED (A04), with known defect classes disclosed in the P3 exit record.
+- **Presentation latency** (pointer to screen) is unverified, and batch geometry throughput misses its target.
+- **Known intermittent bug**: sometimes a drag stops applying moves and its release is lost. An autosave write was seen during the press both times it occurred; the cause is not yet found.
+- **Other known costs**: the first frame of 10,000 miter-joined rectangles takes about 20 s, a keystroke takes about 330 to 350 ms in a text node grown to 16,384 units, and input with a real Korean IME is not verified.
+- **Geometry**: precision is unverified (A04), and the [P3 exit record](docs/evidence/p3-exit/5ddec4e/README.md) discloses known defect classes (an A01 crack, A02 and A08 inconclusive).
 
 ## Licence
 
