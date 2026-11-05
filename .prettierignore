@@ -112,3 +112,4 @@ docs/evidence/e30/**/*.json
 # Preserve the PA-U5 main-PC capture files byte-for-byte.
 docs/evidence/pa-u5/**
 docs/evidence/pa-u7/**
+docs/evidence/pa-u9/**

@@ -1,0 +1,271 @@
+{
+  "scenario": "e26-ui0-simple-stress-10k/v1",
+  "variant": "frame",
+  "repetition": 5,
+  "project": "chrome-dpr2-v2",
+  "browser": "chromium 156.0.8078.81",
+  "devicePixelRatio": 2,
+  "commit": "eadc1d75d0e26872128584445333572fa649f089",
+  "dirty": false,
+  "configurationHash": "194d7db10fa3e422b40740be7065241db63cb34e841797398cab7bd82c2fc03a",
+  "configuration": {
+    "scenario": {
+      "id": "e26-ui0-simple-stress-10k/v1",
+      "document": "stress",
+      "seed": 1345388545,
+      "camera": "fitted",
+      "interaction": "pan-zoom",
+      "frameCeilingMs": 33.3,
+      "latencyBoundMs": null,
+      "renderMode": "continuous",
+      "persist": false,
+      "reject": null,
+      "setFillBeforeDownMs": null,
+      "m9": {
+        "ui": false,
+        "window": {
+          "width": 1600,
+          "height": 1000
+        },
+        "fontLoad": null,
+        "typing": null
+      }
+    },
+    "documentSha256": "dc5cf1a75b00e460fa638ec2197024287671beced964522a03d093ded541fae1",
+    "schemaVersion": 6,
+    "viewport": {
+      "width": 1280,
+      "height": 720
+    },
+    "devicePixelRatio": 2,
+    "camera": {
+      "position": {
+        "x": 64.34571078431372,
+        "y": 41.769247855392166
+      },
+      "zoom": 1.131198833797771
+    },
+    "fitMargin": 0.1,
+    "typical": {
+      "insetCss": 80,
+      "visible": {
+        "min": 900,
+        "max": 1100,
+        "target": 1000
+      }
+    },
+    "cullGuardPx": 2,
+    "drivers": {
+      "thetaPeriodMs": 10000,
+      "warmUpMs": 5000,
+      "windowEndMs": 15000,
+      "dragX": 40,
+      "dragY": 30,
+      "pan": 0.05,
+      "zoomBase": 0.95,
+      "zoomSwing": 0.05,
+      "latencyCadenceMs": 8,
+      "latencyDurationMs": 4000
+    },
+    "stress": {
+      "seed": 1345388545,
+      "multiplier": 1664525,
+      "increment": 1013904223,
+      "count": 10000,
+      "columns": 100,
+      "rows": 100,
+      "origin": {
+        "x": 180,
+        "y": 160
+      },
+      "span": {
+        "x": 900,
+        "y": 400
+      }
+    },
+    "sceneNodes": 10000,
+    "drawnLeaves": 10000,
+    "repetitions": 5,
+    "m9": {
+      "layoutTableSha256": null,
+      "expanded": [],
+      "layerRows": 0,
+      "typingTarget": null
+    }
+  },
+  "visibility": {
+    "visible": 10000,
+    "inside": 10000,
+    "leaves": 10000
+  },
+  "environment": {
+    "devicePixelRatio": 2,
+    "canvas": {
+      "width": 2560,
+      "height": 1440
+    },
+    "screen": {
+      "width": 1600,
+      "height": 1000
+    },
+    "idleRafMedianMs": 16.699999999999818,
+    "adapter": {
+      "vendor": "nvidia",
+      "architecture": "turing",
+      "device": "",
+      "description": ""
+    },
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Safari/537.36"
+  },
+  "presence": {
+    "start": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    },
+    "end": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    }
+  },
+  "errors": [],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "rafCallbackIntervalMs": {
+    "count": 9,
+    "median": 1016.5999999999985,
+    "p95": 1016.7000000000007,
+    "p99": 1016.7000000000007,
+    "max": 1016.7000000000007
+  },
+  "encodeAndSubmitMs": {
+    "count": 10,
+    "median": 3.5,
+    "p95": 21.5,
+    "p99": 21.5,
+    "max": 21.5
+  },
+  "splitEnabled": true,
+  "split": {
+    "prepareMs": {
+      "count": 10,
+      "median": 2.7000000029802322,
+      "p95": 20.799999997019768,
+      "p99": 20.799999997019768,
+      "max": 20.799999997019768
+    },
+    "submitMs": {
+      "count": 10,
+      "median": 0.6000000089406967,
+      "p95": 0.9000000059604645,
+      "p99": 0.9000000059604645,
+      "max": 0.9000000059604645
+    },
+    "acknowledgeMs": {
+      "count": 10,
+      "median": 0,
+      "p95": 0.09999999403953552,
+      "p99": 0.09999999403953552,
+      "max": 0.09999999403953552
+    },
+    "gpuMs": {
+      "count": 2,
+      "median": 3.4000000059604645,
+      "p95": 7.600000008940697,
+      "p99": 7.600000008940697,
+      "max": 7.600000008940697
+    }
+  },
+  "ceilingMs": 33.3,
+  "intervalsPlusOne": 10,
+  "run": {
+    "t0": 4770.5,
+    "windowStartMs": 9770.90000000596,
+    "windowEndMs": 19784.20000000298,
+    "driverSteps": 10,
+    "revisedMoves": 0,
+    "framesSubmitted": 10,
+    "lifecycle": "ready",
+    "recoveryAttempts": 0,
+    "measurements": {
+      "active": false,
+      "capacity": 8192,
+      "encodeAndSubmitMs": [
+        3.300000011920929,
+        3.8999999910593033,
+        3.5,
+        3.1000000089406967,
+        21.5,
+        3.2000000029802322,
+        3.4000000059604645,
+        20.099999994039536,
+        3.5,
+        4.399999991059303
+      ],
+      "frameIntervalsMs": [
+        1000,
+        1016.6000000000004,
+        1016.7000000000007,
+        1000,
+        1016.5999999999985,
+        1016.7000000000007,
+        1016.5999999999985,
+        1000.1000000000022,
+        1000.0999999999985
+      ],
+      "droppedSamples": {
+        "encodeAndSubmitMs": 0,
+        "frameIntervalsMs": 0
+      },
+      "startedAtMs": 9771.10000000894,
+      "endedAtMs": 19784
+    },
+    "split": {
+      "prepareMs": [
+        2.5,
+        3,
+        2.7000000029802322,
+        2.5,
+        20.799999997019768,
+        2.5999999940395355,
+        2.5999999940395355,
+        19.399999991059303,
+        2.7999999970197678,
+        3.3999999910593033
+      ],
+      "submitMs": [
+        0.5,
+        0.8999999910593033,
+        0.7000000029802322,
+        0.6000000089406967,
+        0.7000000029802322,
+        0.6000000089406967,
+        0.6000000089406967,
+        0.7000000029802322,
+        0.5999999940395355,
+        0.9000000059604645
+      ],
+      "acknowledgeMs": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0.09999999403953552
+      ],
+      "gpuMs": [
+        3.4000000059604645,
+        7.600000008940697
+      ]
+    },
+    "longTasksAvailable": true,
+    "longTasks": []
+  }
+}
