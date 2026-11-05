@@ -21,6 +21,18 @@ Unit AR-U4 of the [alpha release plan](../plans/alpha-release-plan.md) (V-23): t
    - Checks the moved frame, exactly one undo step for the edit, one layer-tree row, the kernel WASM served with HTTP 200, and no failed request or page error.
    - With `--channel`, it also counts the red pixels of the presented frame before and after the edit. It reads them through the backend's frame capture, which the host enables with the factory's public `backendOptions` and `afterInitialize` stage.
 
+## Later script changes
+
+Review r1 tightened the script after these runs. The changes:
+
+- The pixel check now requires the move to be (150, 50) times the device pixel ratio, within 1 pixel. It used to check only the direction.
+- On a GPU, a backend warning or error diagnostic now fails the check.
+- A port that is already in use fails the run.
+- `--tgz` must hold exactly the eleven alpha tarballs.
+- Windows arguments are quoted.
+
+The GPU values below meet the stricter checks: a (150, 50) move at ratio 1, and no diagnostics.
+
 ## Runs
 
 | Run | Machine | Browser | Vite | Next.js |
@@ -53,6 +65,6 @@ Everything except pixels passed in both hosts, with the same document, history, 
 ## Not covered
 
 - Edge, other GPUs (integrated graphics stays unmeasured by the user's 2026-11-05 decision) and device pixel ratios other than 1.
-- Dev servers (`vite`, `next dev`): checked in the container only, functionally, not by the script. AR-U2's review checked their asset handling.
+- Dev servers (`vite`, `next dev`): the script checks production builds only. AR-U2's review checked the dev servers' asset handling.
 - Installing from GitHub Packages. That is AR-U5, after the user's go-ahead, and needs the scope decision AR-Q4.
 - Text layout (`@vector-studio/text-dom`) and persistence (`@vector-studio/persistence-idb`). They were installed but not exercised.

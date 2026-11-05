@@ -123,15 +123,23 @@ export async function drive(browser, url, { pixels, screenshot }) {
     expect(before.count > 0, `no red pixels before the edit (${JSON.stringify(before)})`);
     expect(after.count > 0, `no red pixels after the edit (${JSON.stringify(after)})`);
     if (before.box !== null && after.box !== null) {
-      // The move is (150, 50) page units: in device pixels the box moves right and down by 3:1.
+      // The move is (150, 50) page units; at the default zoom 1 that is (150, 50) CSS pixels, so
+      // the box moves by that times the frame's device pixel ratio (frame width over 800 CSS px).
+      const ratio = before.size[0] / 800;
       const dx = after.box[0] - before.box[0];
       const dy = after.box[1] - before.box[1];
-      expect(dx > 0 && Math.abs(dx - 3 * dy) <= 3, `the red box moved by (${dx}, ${dy})`);
+      expect(
+        Math.abs(dx - MOVE.dx * ratio) <= 1 && Math.abs(dy - MOVE.dy * ratio) <= 1,
+        `the red box moved by (${dx}, ${dy}), not (${MOVE.dx * ratio}, ${MOVE.dy * ratio})`,
+      );
       expect(
         Math.abs(after.count - before.count) <= before.count * 0.02,
         `the red area changed from ${before.count} to ${after.count}`,
       );
     }
+    // On a real GPU the backend must report no warning or error (a device loss, for example).
+    const problems = diagnostics.filter((diagnostic) => diagnostic.severity !== 'info');
+    expect(problems.length === 0, `backend diagnostics: ${JSON.stringify(problems)}`);
   }
   return {
     url,

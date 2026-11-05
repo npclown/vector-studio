@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium } from '@playwright/test';
-import { ALPHA_PACKAGES } from './alpha-packages.mjs';
+import { ALPHA_PACKAGES, ALPHA_VERSION } from './alpha-packages.mjs';
 import { drive } from './alpha-install-check/drive.mjs';
 
 // AR-U4 (alpha release plan): the install check. It packs every alpha package (`pnpm pack`, so
@@ -35,7 +35,11 @@ const out = path.resolve(
   argument('--out') ?? path.join(tmpdir(), `vector-studio-alpha-${Date.now()}`),
 );
 const channel = argument('--channel');
-if (out.startsWith(root + path.sep)) throw new Error('--out must be outside the workspace');
+const inside = (child, parent) => {
+  const relative = path.relative(parent, child);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+};
+if (inside(out, root)) throw new Error('--out must be outside the workspace');
 
 // The host dependencies, pinned to the versions of the first passing run.
 const HOSTS = {
@@ -79,9 +83,16 @@ const HOSTS = {
   },
 };
 
+// On Windows the commands run through the shell (npm, npx and pnpm are .cmd files), which joins
+// the arguments unquoted, so arguments with spaces (a %TEMP% under a user name with a space) are
+// quoted here.
+const shellArguments = (command) =>
+  windows ? command.map((part) => (/[\s&()^]/.test(part) ? `"${part}"` : part)) : command;
+
 function run(command, cwd) {
   console.log(`$ ${command.join(' ')}  (${cwd})`);
-  const result = spawnSync(command[0], command.slice(1), { cwd, stdio: 'inherit', shell: windows });
+  const [file, ...rest] = shellArguments(command);
+  const result = spawnSync(file, rest, { cwd, stdio: 'inherit', shell: windows });
   if (result.status !== 0)
     throw new Error(`${command.join(' ')} exited with ${String(result.status)}`);
 }
@@ -94,19 +105,38 @@ function pack(destination) {
   return destination;
 }
 
+async function answers(port) {
+  try {
+    await fetch(`http://127.0.0.1:${port}/`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function serve(command, cwd, port) {
-  const child = spawn(command[0], command.slice(1), {
+  // A server left on the port (an interrupted run) would otherwise be checked instead of this build.
+  if (await answers(port))
+    throw new Error(`port ${port} is already in use; stop that server first`);
+  const [file, ...rest] = shellArguments(command);
+  let exited = false;
+  const child = spawn(file, rest, {
     cwd,
     shell: windows,
     detached: !windows,
     stdio: 'ignore',
   });
+  child.on('exit', () => {
+    exited = true;
+  });
   const stop = () => {
+    if (exited) return;
     if (windows)
       spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
     else process.kill(-child.pid, 'SIGTERM');
   };
   for (let attempt = 0; attempt < 120; attempt += 1) {
+    if (exited) throw new Error(`${command.join(' ')} exited before serving port ${port}`);
     try {
       const response = await fetch(`http://127.0.0.1:${port}/`);
       if (response.ok) return stop;
@@ -120,14 +150,23 @@ async function serve(command, cwd, port) {
 }
 
 mkdirSync(out, { recursive: true });
-run(['pnpm', 'build'], root);
-const tgz = argument('--tgz') ? path.resolve(argument('--tgz')) : pack(path.join(out, 'tgz'));
-const tarballs = readdirSync(tgz)
-  .filter((name) => name.endsWith('.tgz'))
-  .map((name) => path.join(tgz, name));
-if (tarballs.length !== ALPHA_PACKAGES.length) {
-  throw new Error(`${tgz} holds ${tarballs.length} tarballs, not ${ALPHA_PACKAGES.length}`);
+let tgz = argument('--tgz');
+if (tgz === undefined) {
+  run(['pnpm', 'build'], root);
+  tgz = pack(path.join(out, 'tgz'));
+} else {
+  tgz = path.resolve(tgz);
 }
+// Exactly one tarball per alpha package, at the alpha version (stale tarballs fail here).
+const tarballs = ALPHA_PACKAGES.map((directory) => {
+  const name = `vector-studio-${path.basename(directory)}-${ALPHA_VERSION}.tgz`;
+  if (!existsSync(path.join(tgz, name))) throw new Error(`${tgz} has no ${name}`);
+  return path.join(tgz, name);
+});
+const extra = readdirSync(tgz).filter(
+  (name) => name.endsWith('.tgz') && !tarballs.includes(path.join(tgz, name)),
+);
+if (extra.length > 0) throw new Error(`${tgz} holds other tarballs: ${extra.join(', ')}`);
 
 const browser = await chromium.launch(
   channel === undefined
