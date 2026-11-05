@@ -104,7 +104,7 @@ export const CONSTRAINTS: readonly Constraint[] = Object.freeze([
 ]);
 
 /** The selected lines. */
-export const lineNodes = (nodes: readonly NodeV6[]) =>
+export const lineNodes = (nodes: readonly NodeV6[]): Extract<NodeV6, { type: 'line' }>[] =>
   nodes.filter((node): node is Extract<NodeV6, { type: 'line' }> => node.type === 'line');
 
 /**

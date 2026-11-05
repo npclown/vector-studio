@@ -1,13 +1,29 @@
 {
   "name": "@vector-studio/model",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "private": true,
+  "description": "The Vector Studio document model.",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/npclown/vector-studio.git",
+    "directory": "packages/model"
+  },
   "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
+  },
+  "files": [
+    "dist",
+    "src",
+    "!dist/*.tsbuildinfo"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "tag": "alpha"
   },
   "scripts": {
     "build": "tsc --build"
