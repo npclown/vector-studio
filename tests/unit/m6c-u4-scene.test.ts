@@ -534,16 +534,20 @@ describe('M6c-U4 host raster log (src/renderer-options.ts, review S2)', () => {
 
   it('gives the logged port to the host service only under ?test=1, never to the probe', () => {
     const source = readFileSync(path.join(appDir, 'src/webgpu-renderer.ts'), 'utf8');
-    expect(source).toMatch(
-      /const rasterLog = testing \? createGlyphRasterLog\(glyphRaster\) : null;/u,
+    // AR-U1: @vector-studio/webgpu-host creates the service with the wrapped port; next-host
+    // wraps it only under `?test=1`, and the probe's service keeps the unwrapped one.
+    const host = readFileSync(path.join(appDir, '../../packages/webgpu-host/src/index.ts'), 'utf8');
+    expect(host).toMatch(
+      /const servicePort = options\.wrapGlyphRaster\?\.\(glyphRaster\) \?\? glyphRaster;/u,
     );
-    expect(source).toMatch(/\.\.\.hostRendererOptions\(rasterLog\?\.port \?\? glyphRaster\)/u);
+    expect(host).toMatch(/\.\.\.editorRendererOptions\(servicePort\)/u);
+    expect(source).toMatch(
+      /if \(!testing\) return port;\s+rasterLog = createGlyphRasterLog\(port\);\s+return rasterLog\.port;/u,
+    );
     expect(source).toMatch(
       /new core\.PrimitiveRendererService\(target, hostRendererOptions\(glyphRaster\)\)/u,
     );
-    expect(source).toMatch(
-      /rasterLog!\.setGeneration\(\(\) => recorder\.newestTextGeneration\(\)\)/u,
-    );
+    expect(source).toMatch(/log\.setGeneration\(\(\) => recorder\.newestTextGeneration\(\)\)/u);
   });
 });
 

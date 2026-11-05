@@ -1,0 +1,21 @@
+{
+  "name": "@vector-studio/webgpu-host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@vector-studio/contracts": "workspace:*",
+    "@vector-studio/geometry-wasm": "workspace:*",
+    "@vector-studio/renderer-core": "workspace:*",
+    "@vector-studio/renderer-webgpu": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc --build"
+  }
+}

@@ -24,6 +24,18 @@ export const boundaries = new Map([
   // M8-B1, M8-B2; ARCHITECTURE.md, `ui -> react`).
   ['@vector-studio/ui', new Set(['@vector-studio/react'])],
   [
+    // AR-U1 (alpha release plan, ADR 0004): the packaged WebGPU editor renderer is a host
+    // composition root: it injects geometry-wasm's ports into renderer-core's service on the
+    // renderer-webgpu backend. Renderer packages still never import geometry-wasm.
+    '@vector-studio/webgpu-host',
+    new Set([
+      '@vector-studio/contracts',
+      '@vector-studio/geometry-wasm',
+      '@vector-studio/renderer-core',
+      '@vector-studio/renderer-webgpu',
+    ]),
+  ],
+  [
     // P-B1 (P3 V2): the host composition root may depend on geometry-wasm.
     // The playground manifest edge itself lands in V4 with its first import.
     '@vector-studio/playground',
@@ -50,6 +62,8 @@ export const boundaries = new Map([
       '@vector-studio/text-dom',
       // MVP M8-U3: the host composes the UI package (M8 contract, M8-B2, M8-N1).
       '@vector-studio/ui',
+      // AR-U1: the host's renderer is the packaged composition with its test and bench hooks.
+      '@vector-studio/webgpu-host',
     ]),
   ],
 ]);
@@ -68,6 +82,8 @@ export const externalDenied = new Map([
   ['@vector-studio/text-dom', new Set(UI_PACKAGES)],
   // MVP M8-U3: the UI package uses `react` but names neither react-dom nor next (M8-B2).
   ['@vector-studio/ui', new Set(['react-dom', 'next'])],
+  // AR-U1: the packaged renderer composition names no UI package (ADR 0004).
+  ['@vector-studio/webgpu-host', new Set(UI_PACKAGES)],
 ]);
 
 export const packageDirectories = [
@@ -82,6 +98,7 @@ export const packageDirectories = [
   'packages/renderer-webgpu',
   'packages/text-dom',
   'packages/ui',
+  'packages/webgpu-host',
   'apps/next-host',
   'apps/playground',
 ];

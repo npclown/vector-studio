@@ -41,3 +41,7 @@ The editor passed the pre-alpha gate with disclosed misses ([exit record](../evi
 | AR-Q2 | Many packages or one bundled package? | (a) Publish the packages as they are with one version: `contracts`, `model`, `editor-core`, `react`, `ui`, `renderer-core`, `renderer-webgpu`, `geometry-wasm`, `text-dom`, `persistence-idb` and AR-U1's `webgpu-host` (not `geometry-reference`). (b) One `@vector-studio/editor` bundle. **Recommended (a)**: keeps the boundaries the repository checks; revisit after the alpha. |
 | AR-Q3 | Licence. **User decides** (needed for AR-Q1 (b) only). | — |
 | AR-Q4 | Which npm scope? GitHub Packages only accepts a scope equal to the owning user or organization, and the repository is `npclown/vector-studio` while every package is `@vector-studio/*`. | (a) Rename the scope to `@npclown/*` (imports, boundary checker, docs). (b) Move the repository to a GitHub organization named `vector-studio`, if the name is free, and keep the names. **Recommended (b)** if the organization can be created, since the names then also fit a later public release; otherwise (a). **User decides** before AR-U3. |
+
+## 5. Progress
+
+- 2026-11-05: plan merged (#505). AR-U1 implemented: `@vector-studio/webgpu-host` with `createWebGpuRendererFactory`, `WebGpuUnavailableError` (insecure-context and missing-API hints) and `GeometryWasmUnavailableError`; next-host's factory now runs through it with its test and bench stages ([ADR 0004](../decisions/0004-packaged-webgpu-host-composition.md)).
