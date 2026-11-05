@@ -84,8 +84,9 @@ export const createWebGpuRenderer: RendererFactory = async (canvas, size) => {
       return rasterLog.port;
     },
     beforeInitialize: testing
-      ? async ({ backend, service, glyphRaster }) => {
-          const releases: (() => void)[] = [];
+      ? async ({ backend, service, glyphRaster, addRelease }) => {
+          // Each release is registered as it is created, so a throw here still cleans up.
+          const releases = { push: addRelease };
           const diagnostics: NextHostDiagnostic[] = [];
           const subscription = backend.subscribeDiagnostics(({ code, severity, message }) => {
             diagnostics.push({ code, severity, message });
@@ -138,19 +139,15 @@ export const createWebGpuRenderer: RendererFactory = async (canvas, size) => {
                 new core.PrimitiveRendererService(target, hostRendererOptions(glyphRaster)),
             }),
           );
-          return {
-            renderer,
-            release: () => {
-              for (const release of releases.splice(0).reverse()) release();
-            },
-          };
+          return { renderer };
         }
       : undefined,
     afterInitialize:
       bench !== null
-        ? ({ backend, renderer }) => {
+        ? ({ backend, renderer, addRelease }) => {
             bench.attach(backend, canvas);
-            return { renderer: bench.wrapRenderer(renderer), release: () => bench.detach() };
+            addRelease(() => bench.detach());
+            return { renderer: bench.wrapRenderer(renderer) };
           }
         : undefined,
   });

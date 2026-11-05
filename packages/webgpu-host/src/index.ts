@@ -36,11 +36,16 @@ export function editorRendererOptions(glyphRaster: EditorGlyphRaster): EditorRen
 }
 
 /**
- * Where the geometry kernel WASM comes from: a URL the page can fetch, its bytes, or a function
- * that returns them.
+ * Where the geometry kernel WASM comes from: a URL the page can fetch, its bytes, a compiled
+ * `WebAssembly.Module` (compiled once and instantiated for each port), or a function that returns
+ * one of those.
  */
 export type GeometryWasmSource =
-  string | URL | ArrayBuffer | Uint8Array | (() => Promise<ArrayBuffer | Uint8Array>);
+  | string
+  | URL
+  | WebAssembly.Module
+  | BufferSource
+  | (() => Promise<WebAssembly.Module | BufferSource>);
 
 export type WebGpuRendererCanvasSize = Readonly<{
   width: number;
@@ -63,9 +68,17 @@ export type WebGpuRendererParts = Readonly<{
   renderer: RendererSceneSynchronization;
   canvas: HTMLCanvasElement;
   size: WebGpuRendererCanvasSize;
+  /**
+   * Registers a release for something the stage created. Register each one as soon as it exists:
+   * releases run in reverse order on `dispose`, and also when the stage or a later step throws.
+   */
+  addRelease(release: () => void): void;
 }>;
 
-/** What a stage hook may return: a wrapper around the renderer, and a release for its own state. */
+/**
+ * What a stage hook may return: a wrapper around the renderer, and a release for its own state
+ * (registered after the stage resolves; prefer `parts.addRelease` so a throwing stage cleans up).
+ */
 export type WebGpuRendererStageResult = Readonly<{
   renderer?: RendererSceneSynchronization;
   release?: () => void;
@@ -122,9 +135,24 @@ export function webGpuUnavailableMessage(diagnostic: RendererDiagnostic): string
   return base;
 }
 
-async function loadWasm(source: GeometryWasmSource): Promise<ArrayBuffer | Uint8Array> {
-  if (typeof source === 'function') return source();
-  if (source instanceof ArrayBuffer || source instanceof Uint8Array) return source;
+function isBinary(source: unknown): source is WebAssembly.Module | BufferSource {
+  // Tag checks rather than `instanceof`, so bytes or modules from another realm are recognized.
+  if (ArrayBuffer.isView(source)) return true;
+  const tag = Object.prototype.toString.call(source);
+  return (
+    tag === '[object ArrayBuffer]' ||
+    tag === '[object SharedArrayBuffer]' ||
+    tag === '[object WebAssembly.Module]'
+  );
+}
+
+async function loadWasm(source: GeometryWasmSource): Promise<WebAssembly.Module | BufferSource> {
+  if (typeof source === 'function') {
+    // `WebAssembly.Module` has no members, so `typeof` narrows to `Function` too; a function source
+    // is always the loader.
+    return (source as () => Promise<WebAssembly.Module | BufferSource>)();
+  }
+  if (isBinary(source)) return source;
   const url = String(source);
   let response: Response;
   try {
@@ -143,11 +171,6 @@ async function loadWasm(source: GeometryWasmSource): Promise<ArrayBuffer | Uint8
   return response.arrayBuffer();
 }
 
-function toArrayBuffer(bytes: ArrayBuffer | Uint8Array): ArrayBuffer {
-  if (bytes instanceof ArrayBuffer) return bytes;
-  return bytes.slice().buffer;
-}
-
 /**
  * Returns a renderer factory for `EditorCanvas` (`createRenderer`): the editor's WebGPU renderer
  * with the geometry kernel's fill and stroke mesh ports. Each call creates and owns its own
@@ -163,16 +186,22 @@ export function createWebGpuRendererFactory(
       import('@vector-studio/renderer-core'),
       import('@vector-studio/renderer-webgpu'),
     ]);
-    const bytes = toArrayBuffer(await loadWasm(options.wasm));
+    const loaded = await loadWasm(options.wasm);
+    // Compile once; each port instantiates the module with its own linear memory.
+    const kernel: WebAssembly.Module =
+      loaded instanceof WebAssembly.Module ||
+      Object.prototype.toString.call(loaded) === '[object WebAssembly.Module]'
+        ? loaded
+        : await WebAssembly.compile(loaded);
     const releases: (() => void)[] = [];
     const dispose = () => {
       for (const release of releases.splice(0).reverse()) release();
     };
     try {
       // Two instances of the one kernel: each port owns its own linear memory.
-      const fill = await geometry.createFillMeshPort(bytes);
+      const fill = await geometry.createFillMeshPort(kernel);
       releases.push(() => fill.dispose());
-      const stroke = await geometry.createStrokeMeshPort(bytes);
+      const stroke = await geometry.createStrokeMeshPort(kernel);
       releases.push(() => stroke.dispose());
       const backendOptions =
         typeof options.backendOptions === 'function'
@@ -193,7 +222,15 @@ export function createWebGpuRendererFactory(
       let renderer: RendererSceneSynchronization = service;
       const runStage = async (stage: WebGpuRendererStage | undefined) => {
         if (stage === undefined) return;
-        const result = await stage({ backend, service, glyphRaster, renderer, canvas, size });
+        const result = await stage({
+          backend,
+          service,
+          glyphRaster,
+          renderer,
+          canvas,
+          size,
+          addRelease: (release) => releases.push(release),
+        });
         if (result?.release !== undefined) releases.push(result.release);
         if (result?.renderer !== undefined) renderer = result.renderer;
       };

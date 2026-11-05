@@ -13,7 +13,7 @@ The composition cannot move into `renderer-webgpu`: [ARCHITECTURE.md](../../ARCH
 ## Decision
 
 - A new package `@vector-studio/webgpu-host` is a **host composition root shipped as a package**. It may depend on `contracts`, `geometry-wasm`, `renderer-core` and `renderer-webgpu`, and on no UI package (`react`, `react-dom`, `next`). Renderer and core packages still never import `geometry-wasm`, and nothing but host composition roots (playground, next-host) may depend on `webgpu-host`.
-- Its entry exports `createWebGpuRendererFactory(options)`, which returns a function of the shape of `@vector-studio/react`'s `RendererFactory` (structural typing; no import). Options: the WASM source (`wasm`: URL, bytes or a loader), backend options, a glyph raster wrapper and two stage hooks (`beforeInitialize`, `afterInitialize`) through which a host adds its own wrappers and releases. It also exports `editorRendererOptions` (the editor's service options) and two error classes: `GeometryWasmUnavailableError`, and `WebGpuUnavailableError`, whose message names the cause and, for an insecure context or a missing API, what to do.
+- Its entry exports `createWebGpuRendererFactory(options)`, which returns a function of the shape of `@vector-studio/react`'s `RendererFactory` (structural typing; no import). Options: the WASM source (`wasm`: URL, bytes, a compiled `WebAssembly.Module` or a loader; the kernel is compiled once for both ports), backend options, a glyph raster wrapper and two stage hooks (`beforeInitialize`, `afterInitialize`) through which a host adds its own renderer wrappers and registers releases with `addRelease` as it creates them, so a throwing stage still cleans up. The stage parts expose the concrete backend and service, so the hooks are experimental for the alpha and may narrow before a public release. It also exports `editorRendererOptions` (the editor's service options) and two error classes: `GeometryWasmUnavailableError`, and `WebGpuUnavailableError`, whose message names the cause and, for an insecure context or a missing API, what to do.
 - Renderer modules are still loaded by dynamic `import()` inside the factory, so importing the package evaluates no browser code during server rendering.
 - next-host's `createWebGpuRenderer` becomes this factory plus its test and bench stages, in the order they ran before.
 
@@ -28,6 +28,13 @@ The composition cannot move into `renderer-webgpu`: [ARCHITECTURE.md](../../ARCH
 - One more package to publish in the alpha set (alpha plan, AR-Q2).
 - The playground keeps its own per-page compositions; it may move to this factory later, which needs no new edge.
 - A host still supplies the WASM bytes or URL until AR-U2 ships the kernel in `geometry-wasm`.
+
+## Migration impact
+
+- next-host: `createWebGpuRenderer` keeps its name, signature, `?test=1` and `?bench=1` behavior, creation order and reverse disposal order; only its body moves onto the package factory. Its `renderer-options.ts` re-exports the package's options under the old names.
+- Playground: unchanged.
+- Tests that read next-host's renderer source now read the package source for the service options (`m6c-u2`, `m6c-u4`); the geometry-wasm allowlist test lists the new package.
+- Hosts outside the repository: none yet (no package is published before AR-U5).
 
 ## Affected documents
 

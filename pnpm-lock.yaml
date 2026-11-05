@@ -29,6 +29,9 @@ importers:
       '@vector-studio/editor-core':
         specifier: workspace:*
         version: link:packages/editor-core
+      '@vector-studio/geometry-wasm':
+        specifier: workspace:*
+        version: link:packages/geometry-wasm
       '@vector-studio/model':
         specifier: workspace:*
         version: link:packages/model
