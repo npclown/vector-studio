@@ -1,7 +1,7 @@
 {
   "item": "PA-U9 (pre-alpha gate plan, PA-A01 to A05 and A10) pre-alpha sitting on the main PC",
   "head": "eadc1d75d0e26872128584445333572fa649f089",
-  "checkout": "origin/main detached; git status --porcelain empty before every timed part. Untracked agent and test leftovers (.claude/launch.json, docs/evidence/e3-a04-readback-2026-10-24/, ten unignored artifacts/ entries) were moved to D:GIT\u000bector-studio-untracked-2026-11-05 before the sitting and put back after it.",
+  "checkout": "origin/main detached; git status --porcelain empty before every timed part. Untracked agent and test leftovers (.claude/launch.json, docs/evidence/e3-a04-readback-2026-10-24/, ten unignored artifacts/ entries) were moved to D:\\GIT\\vector-studio-untracked-2026-11-05 before the sitting and put back after it.",
   "machine": {
     "host": "DESKTOP-DKVUSAV",
     "os": "Windows 11 Pro 10.0.26200",
