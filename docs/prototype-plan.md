@@ -190,7 +190,7 @@ P5 completion authorizes planning the remaining editor work; it does not establi
 ## Accepted implementation constraints
 
 1. Production runtime code does not depend on third-party rendering, scene-graph, or tessellation engines. Comparison libraries are test-only.
-2. The current development PC is the first reference machine; every result records hardware and browser metadata. A lower-tier GPU gate is added before alpha distribution.
+2. The current development PC is the first reference machine; every result records hardware and browser metadata. A lower-tier GPU gate is added before alpha distribution. On 2026-11-05 the user decided no lower-tier check runs before the alpha release ([alpha plan](plans/alpha-release-plan.md#2-recorded-user-decisions)).
 3. The prototype is WebGPU-only and reports a structured capability error on unsupported systems.
 4. The 10,000-node stress scene has an initial 256 MB combined working-memory ceiling.
 
