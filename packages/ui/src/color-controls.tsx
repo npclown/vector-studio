@@ -59,21 +59,33 @@ export function ColorWell({
   // kept in `pending` and compared with the value shown when the picker opened.
   const pending = useRef<string | null>(null);
   const opened = useRef<string | null>(value);
-  const open = () => {
+  // Focus starts a pick; a click (which also reopens a focused picker by keyboard) only
+  // records the target again, so a click on the picker that closes its popup keeps the pick.
+  const focus = () => {
     opened.current = value;
     pending.current = null;
     onOpen?.();
   };
+  const click = () => {
+    if (pending.current === null) opened.current = value;
+    onOpen?.();
+  };
+  // Between picks the opening value follows the document (an undo, another selection).
+  useEffect(() => {
+    if (pending.current === null) opened.current = value;
+  }, [value]);
   useEffect(() => {
     const element = input.current;
     if (element === null) return;
     // React's onChange follows every `input` event while the picker is open; the native
     // `change` fires once, when the choice is made.
     const onChange = () => {
-      const hex = pending.current ?? element.value;
+      // Only a value the user picked commits: a popup closed without a pick may still fire
+      // `change` with the value React wrote in meanwhile (review r3).
+      const hex = pending.current;
       pending.current = null;
       setDraft(null);
-      if (hex !== opened.current) {
+      if (hex !== null && hex !== opened.current) {
         opened.current = hex;
         void latest.current(hex);
       }
@@ -99,8 +111,8 @@ export function ColorWell({
         pending.current = event.target.value;
         setDraft(event.target.value);
       }}
-      onFocus={open}
-      onClick={open}
+      onFocus={focus}
+      onClick={click}
       onBlur={(event: FocusEvent<HTMLInputElement>) => {
         if (textEdit !== undefined && !inTextEditFocus(event.relatedTarget)) textEdit.onLeave();
       }}
