@@ -167,6 +167,14 @@ export type EditorOptions = Readonly<{
    * (a)). Defaults to false, the M2 behaviour: a drawing tool stays active.
    */
   returnToSelect?: boolean;
+  /**
+   * V-25 slice 4: when true, the drawing tools create a node in the innermost frame under the
+   * press point (inside the scope when it holds the point), and a select-tool move that ends with
+   * the pointer over a frame moves the dragged nodes into it, or out of their frame onto the
+   * page, in the same undo step (`moveNodes`, page placement kept). A group's child stays in its
+   * group and a top-level frame stays on the page. Defaults to false (M2-Q10: no adoption).
+   */
+  adoptIntoFrames?: boolean;
 }>;
 
 /** A tool receives input and acts only through the editor's commands and the gesture API. */
@@ -899,14 +907,22 @@ class EditorCore implements Editor {
     this.snapshot = this.buildSnapshot();
     this.tools.set(
       'select',
-      createSelectTool((node) => this.extensions.geometry(node), this.expansions, this.textSupport),
+      createSelectTool(
+        (node) => this.extensions.geometry(node),
+        this.expansions,
+        this.textSupport,
+        options.adoptIntoFrames === true,
+      ),
     );
-    const back = options.returnToSelect === true ? () => true : () => false;
-    this.tools.set('rectangle', createBoxTool('createRectangle', back));
-    this.tools.set('ellipse', createBoxTool('createEllipse', back));
-    this.tools.set('frame', createBoxTool('createFrame', back));
-    this.tools.set('line', createLineTool(back));
-    this.tools.set('path', createPathTool(back));
+    const draw = {
+      returnToSelect: options.returnToSelect === true,
+      adoptIntoFrames: options.adoptIntoFrames === true,
+    };
+    this.tools.set('rectangle', createBoxTool('createRectangle', draw));
+    this.tools.set('ellipse', createBoxTool('createEllipse', draw));
+    this.tools.set('frame', createBoxTool('createFrame', draw));
+    this.tools.set('line', createLineTool(draw));
+    this.tools.set('path', createPathTool(draw));
     this.tools.set(
       'text',
       createTextTool((node) => this.extensions.geometry(node), this.expansions, this.textSupport),

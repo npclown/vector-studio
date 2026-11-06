@@ -1,6 +1,6 @@
 # V-25: editor UI usability plan
 
-Status: slice 1 DONE 2026-11-06 (#511, `82002c1`; review r1 NOT READY applied, r2 READY WITH FOLLOW-UPS applied); slice 2 DONE 2026-11-06 (#512, `f2c48d5`; review r1 NOT READY fixed, r2 READY WITH FOLLOW-UPS fixed); slice 3 IN REVIEW 2026-11-06; slices 4 to 6 proposed. Tier: Full (product UI behaviour, new `@vector-studio/ui` exports). Track: visualization.
+Status: slice 1 DONE 2026-11-06 (#511, `82002c1`; review r1 NOT READY applied, r2 READY WITH FOLLOW-UPS applied); slice 2 DONE 2026-11-06 (#512, `f2c48d5`; review r1 NOT READY fixed, r2 READY WITH FOLLOW-UPS fixed); slice 3 DONE 2026-11-06 (#513, `b41a9b6`; review r1 READY WITH FOLLOW-UPS applied); slice 4 IN REVIEW 2026-11-06; slices 5 to 7 proposed. Tier: Full (product UI behaviour, new `@vector-studio/ui` exports). Track: visualization.
 
 ## Request
 
@@ -22,7 +22,7 @@ The M8 layout is kept on purpose for specs and benches: its canvas origin, row h
 
 The engine already has most of it: the viewport is unbounded (pan, wheel and pinch zoom, zoom to fit and to selection), documents have pages, and `frame` nodes are containers with fill and stroke. What is missing is UI.
 
-Recommendation: no new artboard node type and no schema change. A top-level frame on a page is an artboard, as in Figma. Artboard features (slice 2) are UI over existing frames; export per artboard (slice 6) is a new feature with its own contract.
+Recommendation: no new artboard node type and no schema change. A top-level frame on a page is an artboard, as in Figma. Artboard features (slice 2) are UI over existing frames; export per artboard (slice 7) is a new feature with its own contract.
 
 ## Slices
 
@@ -30,12 +30,13 @@ Recommendation: no new artboard node type and no schema change. A top-level fram
 | --- | --- | --- |
 | 1 | Full-window studio layout: canvas fills the window; top bar with file controls, one-row icon toolbar with tooltips naming each control and its shortcut from the live keymap, zoom menu; left sidebar with pages and a full-height layer tree; right sidebar with properties and extension panels; one-line status bar | Done (#511, `82002c1`) |
 | 2 | Artboards: frame names on the canvas (click selects, double-click renames), frame size presets in the frame tool, an artboard list that selects and zooms | Done (#512, `f2c48d5`) |
-| 3 | Easy colour picking (swatches and the browser colour picker) and the drawing tools returning to Select after a shape | In review |
-| 4 | Property panel: X/Y/W/H grid, collapsible sections | Proposed |
-| 5 | Context menu (right click): group, arrange, delete, symbol actions | Proposed |
-| 6 | Export per artboard (SVG, PNG) | Proposed; needs its own contract |
+| 3 | Easy colour picking (swatches and the browser colour picker) and the drawing tools returning to Select after a shape | Done (#513, `b41a9b6`) |
+| 4 | Frame adoption: a shape drawn in a frame becomes its child; a shape dropped on a frame moves into it, or out onto the page | In review |
+| 5 | Property panel: X/Y/W/H grid, collapsible sections | Proposed |
+| 6 | Context menu (right click): group, arrange, delete, symbol actions | Proposed |
+| 7 | Export per artboard (SVG, PNG) | Proposed; needs its own contract |
 
-The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2 (artboards) next, then asked for slice 3 ("make colour picking easy, and always switch to Select when a shape is drawn"), which takes the colour swatches out of the old property panel slice.
+The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2 (artboards) next, then asked for slice 3 ("make colour picking easy, and always switch to Select when a shape is drawn"), which takes the colour swatches out of the old property panel slice. Slice 4 answers the user's question the same day ("how do I put a shape inside a Frame? I can't find a way"): the only way was cut and paste with the frame selected or entered.
 
 ## Slice 1 design
 
@@ -112,3 +113,27 @@ The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2
 - Unit: `tests/unit/v25-color-tool-return.test.ts` (each drawing tool with and without the option, no-op click and Escape, `solidFromHex`, the panel markup).
 - Full unit suite: 5280 passed; the one failure, `p3-b0r-identity`, fails on main too under the container's Node 22 (environment, not a regression).
 - Headed: the studio on the main PC after merge (the relaunch on :4194).
+
+## Slice 4 design: frame adoption
+
+- Request (2026-11-06): the user could not find how to put a shape inside a frame. Before this slice a shape drawn over a frame went on the page, a drop changed no parent (M2-Q10, deferred) and the layer tree has no drag and drop (M8-Q7); only cut, then paste with the frame selected or entered (M2 section 6), did it.
+- `EditorOptions.adoptIntoFrames` (default false), set by next-host in the studio layout only, so the M8 layout under `?test=1`, `?bench=1` and `?layout=legacy` keeps M2-Q10 for every headed spec and bench. Logic in `packages/editor-core/src/adopt.ts`.
+- Owner at a point (`adoptionOwner`): the innermost visible `frame` whose box holds the point, front first, searching through groups; a frame's children only when the point is inside it, since frames clip. Symbols, mask groups and instances are not entered. With a session scope, the scope's subtree is searched only when the point is in the scope's visible part (inside the scope if it is a frame and inside every frame above it); then the scope itself is the owner when no frame inside it is. Otherwise the page's frames, else the page.
+- Drawing: the rectangle, ellipse and frame tools take the owner at the press point and draw the box in the owner's axes (created from its page placement, then resized parent-locally with `setFrames`); the line tool takes the owner at its start, the path tool at its first anchor. One `create` with `parent`, so one undo step as before. When the owner refuses the node (clip or tree depth), it is created on the page, as without adoption.
+- Dropping: when a select-tool move or Alt-drag duplicate that moved ends, the owner at the release point (the dragged nodes and their subtrees excluded) adopts each dragged node whose parent is the page or a frame and differs from it, through one `moveNodes` (page placement kept, on top of the owner's children) applied to the gesture before its commit, so the move and the reparent are one undo step. The owner is the page or a frame; nodes in a symbol source and owners in one are left alone (M7 rules), a group's child stays in its group, and a group scope as owner adopts nothing. A top-level frame (an artboard) moves into the frame under the pointer only when its whole box lies inside that frame (a larger frame further out is not tried; review r2 follow-up, accepted), so artboards dragged past each other never nest while a frame can still be nested deliberately. A node dropped out of the session scope ends the scope (set to null after the commit). A drop `moveNodes` refuses (clip or tree depth) leaves the plain move, with no message (review r1 F3, accepted).
+
+## Acceptance criteria (slice 4)
+
+| ID | Criterion | Method |
+| --- | --- | --- |
+| V25-A17 | With `adoptIntoFrames`, a rectangle, ellipse, frame, line or path drawn inside a frame (the innermost, nested frames included) is created as its child at the drawn page place, one undo step; outside every frame on the page | Unit tests against a real editor |
+| V25-A18 | A move dropped on a frame moves the dragged node into it, and one dropped outside its frame moves it onto the page, page placement kept, one undo step with the move | Unit tests |
+| V25-A19 | A top-level frame partly over another frame stays on the page and one wholly inside it nests; a group's child stays in its group; a drop out of the scope ends the scope; a press in a scope frame's clipped-away part never reaches its children | Unit tests |
+| V25-A20 | Without the option (default) nothing is adopted (M2-Q10), and next-host sets it in the studio layout only | Unit test; review of `page.tsx` |
+
+## Validation (slice 4)
+
+- Unit: `tests/unit/v25-frame-adoption.test.ts` (nested and rotated frame drawing in local coordinates, page fallback, line and path, drop in and out with undo, artboard partly over and wholly inside, scope clipping and scope exit, Alt-drag copy, group child, option off).
+- Review r1 NOT READY (B1: a frame scope's child frame was reachable in its clipped-away part): fixed with the visible-part rule above, with F1 (scope exit), F2 (symbol sources), F3 (draw fallback) and F4 (artboards nest when wholly inside) and the F5 tests. Review r2 READY WITH FOLLOW-UPS: the artboard rule is worded as the frame under the pointer.
+- Full unit suite: 5290 passed; the only failure is the Node 22 `p3-b0r-identity` environment case, as on main.
+- Headed: on the main PC after merge (relaunch on :4194).

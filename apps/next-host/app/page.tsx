@@ -836,6 +836,8 @@ export default function Page() {
         extraExtensions: faultPanelsQuery(window.location.search) ? [testUiExtension] : [],
         // V-25 slice 3: in the studio layout a drawing tool hands over to Select after a shape.
         returnToSelect: studioLayout(window.location.search),
+        // V-25 slice 4: and drawing or dropping a shape on a frame puts it inside the frame.
+        adoptIntoFrames: studioLayout(window.location.search),
         textFixture:
           textFixtureQuery(window.location.search) || benchTextFont(window.location.search),
         // M9-U1: `?bench=1&doc=m9-v2` lists the test family as the fallback family.

@@ -7,7 +7,8 @@ import {
 import type { Tool, ToolContext } from './editor.js';
 import { ExpansionCache } from './expansion.js';
 import { deepFreeze } from './freeze.js';
-import { apply, invertRigid, rotate } from './geometry.js';
+import { adoptionOwner, dropAdoption } from './adopt.js';
+import { IDENTITY, apply, invertRigid, relocate, rotate, type Matrix } from './geometry.js';
 import {
   HANDLES,
   activeHandles,
@@ -49,7 +50,7 @@ import {
   type SnapSet,
   type ValueIndex,
 } from './snap.js';
-import { documentTree, isAncestor, isContainer, spaceOf } from './tree.js';
+import { childrenOf, documentTree, isAncestor, isContainer, spaceOf } from './tree.js';
 import type {
   InputEvent,
   Modifiers,
@@ -159,28 +160,57 @@ function boxOf(a: PagePoint, b: PagePoint): Frame {
 }
 
 /**
- * Whether a drawing tool hands over to `select` once it has created a node (V-25 slice 3,
- * `EditorOptions.returnToSelect`); read at each creation. Defaults to never.
+ * The drawing tools' options (V-25): `returnToSelect` (slice 3) hands over to `select` once a
+ * node is created, `adoptIntoFrames` (slice 4) creates it in the innermost frame under the press
+ * point (`adoptionOwner`). Both default to off, the M2 behaviour.
  */
-export type ReturnToSelect = () => boolean;
-
-const NEVER: ReturnToSelect = () => false;
+export type DrawOptions = Readonly<{ returnToSelect?: boolean; adoptIntoFrames?: boolean }>;
 
 /**
- * Selects the nodes a drawing tool just created and, when `back` says so, sets the tool to
+ * Selects the nodes a drawing tool just created and, with `returnToSelect`, sets the tool to
  * `select` (V-25 slice 3): both are session commands, so the creation stays one undo step.
  */
-function selectCreated(context: ToolContext, ids: readonly string[], back: ReturnToSelect): void {
+function selectCreated(context: ToolContext, ids: readonly string[], options: DrawOptions): void {
   context.execute({ type: 'setSelection', ids });
-  if (back()) context.execute({ type: 'setTool', tool: 'select' });
+  if (options.returnToSelect === true) context.execute({ type: 'setTool', tool: 'select' });
+}
+
+/**
+ * Where a drawing tool creates at `point` (V-25 slice 4): with `adoptIntoFrames`, the owner from
+ * `adoptionOwner` with its page placement, or null for the page (the M2 default, no `parent`).
+ */
+type DrawTarget = Readonly<{ parent: string; matrix: Matrix; toLocal: Matrix; rotation: number }>;
+
+function drawTarget(
+  context: ToolContext,
+  point: PagePoint,
+  options: DrawOptions,
+): DrawTarget | null {
+  if (options.adoptIntoFrames !== true) return null;
+  const document = context.query({ type: 'document' });
+  const page = context.query({ type: 'activePage' });
+  const parent = adoptionOwner(document, page, context.query({ type: 'scope' }), point);
+  if (parent === page) return null;
+  const space = spaceOf(documentTree(document), parent);
+  return {
+    parent,
+    matrix: space.matrix,
+    toLocal: invertRigid(space.matrix),
+    rotation: space.rotation,
+  };
 }
 
 /** The rectangle, ellipse and frame tools: a drag from a to b creates the box between them. */
 export function createBoxTool(
   type: 'createRectangle' | 'createEllipse' | 'createFrame' = 'createRectangle',
-  back: ReturnToSelect = NEVER,
+  options: DrawOptions = {},
 ): Tool {
-  let drag: { start: PagePoint; id: string | null; candidates: () => SnapSet } | null = null;
+  let drag: {
+    start: PagePoint;
+    id: string | null;
+    candidates: () => SnapSet;
+    target: DrawTarget | null;
+  } | null = null;
   return {
     input(event, context) {
       if (event.kind === 'keydown') {
@@ -193,7 +223,12 @@ export function createBoxTool(
       }
       if (event.kind === 'pointerdown') {
         if (drag !== null || !context.gesture.begin()) return false;
-        drag = { start: event.point, id: null, candidates: lazySnapSet(context, []) };
+        drag = {
+          start: event.point,
+          id: null,
+          candidates: lazySnapSet(context, []),
+          target: drawTarget(context, event.point, options),
+        };
         return true;
       }
       if (!isMoveOrUp(event) || drag === null) return false;
@@ -201,12 +236,48 @@ export function createBoxTool(
       // corner snaps (section 4.2).
       const end = snappedPoint(context, event.point, event.modifiers, drag.candidates);
       if (drag.id !== null || distance(end.point, drag.start) > 0) {
-        const frame = boxOf(drag.start, end.point);
-        if (drag.id === null) {
-          const result = context.gesture.update({ type, frame });
-          if (result.ok) drag.id = result.ids[0] ?? null;
+        const target = drag.target;
+        if (target === null) {
+          const frame = boxOf(drag.start, end.point);
+          if (drag.id === null) {
+            const result = context.gesture.update({ type, frame });
+            if (result.ok) drag.id = result.ids[0] ?? null;
+          } else {
+            context.gesture.update({ type: 'setFrames', frames: [{ id: drag.id, frame }] });
+          }
         } else {
-          context.gesture.update({ type: 'setFrames', frames: [{ id: drag.id, frame }] });
+          // V-25 slice 4: the box is drawn in the owner's axes; it is created from its page
+          // placement and then resized in the owner's space (`setFrames` is parent-local).
+          const a = apply(target.toLocal, drag.start.x, drag.start.y);
+          const b = apply(target.toLocal, end.point.x, end.point.y);
+          const local = boxOf(a, b);
+          if (drag.id === null) {
+            const placed = relocate(local, 0, target.matrix, target.rotation, IDENTITY, 0);
+            const result = context.gesture.update({
+              type,
+              frame: placed.frame,
+              rotation: placed.rotation,
+              parent: target.parent,
+            });
+            if (result.ok) {
+              drag.id = result.ids[0] ?? null;
+              if (drag.id !== null) {
+                context.gesture.update({
+                  type: 'setFrames',
+                  frames: [{ id: drag.id, frame: local, rotation: 0 }],
+                });
+              }
+            } else {
+              // The owner refused it (clip or tree depth): the page holds it, as without
+              // adoption.
+              drag.target = null;
+              const frame = boxOf(drag.start, end.point);
+              const page = context.gesture.update({ type, frame });
+              if (page.ok) drag.id = page.ids[0] ?? null;
+            }
+          } else {
+            context.gesture.update({ type: 'setFrames', frames: [{ id: drag.id, frame: local }] });
+          }
         }
         context.snap(end.overlay);
       }
@@ -215,7 +286,7 @@ export function createBoxTool(
         const id = drag.id;
         drag = null;
         context.gesture.commit();
-        if (id !== null) selectCreated(context, [id], back);
+        if (id !== null) selectCreated(context, [id], options);
       }
       return true;
     },
@@ -251,8 +322,13 @@ function lineEnd(start: PagePoint, point: PagePoint, shift: boolean): PagePoint 
 }
 
 /** The line tool: a drag from start to end creates the line; Shift constrains it to 45° steps. */
-export function createLineTool(back: ReturnToSelect = NEVER): Tool {
-  let drag: { start: PagePoint; id: string | null; candidates: () => SnapSet } | null = null;
+export function createLineTool(options: DrawOptions = {}): Tool {
+  let drag: {
+    start: PagePoint;
+    id: string | null;
+    candidates: () => SnapSet;
+    parent: string | null;
+  } | null = null;
   return {
     input(event, context) {
       if (event.kind === 'keydown') {
@@ -265,7 +341,12 @@ export function createLineTool(back: ReturnToSelect = NEVER): Tool {
       }
       if (event.kind === 'pointerdown') {
         if (drag !== null || !context.gesture.begin()) return false;
-        drag = { start: event.point, id: null, candidates: lazySnapSet(context, []) };
+        drag = {
+          start: event.point,
+          id: null,
+          candidates: lazySnapSet(context, []),
+          parent: drawTarget(context, event.point, options)?.parent ?? null,
+        };
         return true;
       }
       if (!isMoveOrUp(event) || drag === null) return false;
@@ -277,8 +358,19 @@ export function createLineTool(back: ReturnToSelect = NEVER): Tool {
       const end = snapped.point;
       if (drag.id !== null || distance(end, drag.start) > 0) {
         if (drag.id === null) {
-          const result = context.gesture.update({ type: 'createLine', start: drag.start, end });
+          const result = context.gesture.update({
+            type: 'createLine',
+            start: drag.start,
+            end,
+            ...(drag.parent === null ? {} : { parent: drag.parent }),
+          });
           if (result.ok) drag.id = result.ids[0] ?? null;
+          else if (drag.parent !== null) {
+            // The owner refused it (clip or tree depth): the page holds it.
+            drag.parent = null;
+            const page = context.gesture.update({ type: 'createLine', start: drag.start, end });
+            if (page.ok) drag.id = page.ids[0] ?? null;
+          }
         } else {
           context.gesture.edit({ kind: 'line', id: drag.id, start: drag.start, end });
         }
@@ -289,7 +381,7 @@ export function createLineTool(back: ReturnToSelect = NEVER): Tool {
         const id = drag.id;
         drag = null;
         context.gesture.commit();
-        if (id !== null) selectCreated(context, [id], back);
+        if (id !== null) selectCreated(context, [id], options);
       }
       return true;
     },
@@ -428,7 +520,7 @@ export function createTextTool(
 
 type Anchor = { point: PagePoint; in: PagePoint | null; out: PagePoint | null };
 
-export function createPathTool(back: ReturnToSelect = NEVER): Tool {
+export function createPathTool(options: DrawOptions = {}): Tool {
   let anchors: Anchor[] = [];
   let pressed: Anchor | null = null;
 
@@ -453,11 +545,22 @@ export function createPathTool(back: ReturnToSelect = NEVER): Tool {
     }
     // The whole creation is one transaction, sent only now (plan section 4.4); a failed create
     // keeps the anchors.
-    const result = context.execute({ type: 'createPath', verbs, points });
+    // V-25 slice 4: the owner under the first anchor holds the path.
+    const parent = drawTarget(context, anchors[0]!.point, options)?.parent;
+    let result = context.execute({
+      type: 'createPath',
+      verbs,
+      points,
+      ...(parent === undefined ? {} : { parent }),
+    });
+    // The owner refused it (clip or tree depth): the page holds it.
+    if (!result.ok && parent !== undefined) {
+      result = context.execute({ type: 'createPath', verbs, points });
+    }
     if (!result.ok) return;
     anchors = [];
     pressed = null;
-    selectCreated(context, result.ids, back);
+    selectCreated(context, result.ids, options);
   }
 
   return {
@@ -725,6 +828,8 @@ export function createSelectTool(
   custom: CustomGeometry,
   expansions: ExpansionCache = new ExpansionCache(),
   text: TextEditSupport | null = null,
+  /** V-25 slice 4: a finished move drops its nodes into the frame under the pointer. */
+  adoptIntoFrames = false,
 ): Tool {
   let state: SelectState = { kind: 'idle' };
 
@@ -1478,9 +1583,44 @@ export function createSelectTool(
     if (gesture(state.kind)) pointerMove(event, context);
     const current = state;
     state = { kind: 'idle' };
+    let leavesScope = false;
     if (gesture(current.kind)) {
+      // V-25 slice 4: a move (or an Alt-drag's copies) dropped onto a frame moves into it, or
+      // out of its frame onto the page, in the same step; `moveNodes` keeps page placement.
+      if (adoptIntoFrames && (current.kind === 'move' || current.kind === 'duplicate')) {
+        const moving = current.kind === 'move' ? current.frames : current.copies?.frames;
+        if (current.moved && moving !== undefined && moving.size > 0) {
+          const document = context.query({ type: 'document' });
+          const drop = dropAdoption(
+            document,
+            context.query({ type: 'activePage' }),
+            context.query({ type: 'scope' }),
+            [...moving.keys()],
+            event.point,
+          );
+          if (drop !== null) {
+            const index = childrenOf(documentTree(document), drop.parent).filter(
+              (id) => !drop.ids.includes(id),
+            ).length;
+            const result = context.gesture.update({
+              type: 'moveNodes',
+              ids: drop.ids,
+              parent: drop.parent,
+              index,
+            });
+            // A node dropped out of the session scope ends the scope, which then no longer
+            // holds the selection (applied after the commit, as the scope's other changes).
+            const scope = context.query({ type: 'scope' });
+            if (result.ok && scope !== null) {
+              const tree = documentTree(context.query({ type: 'document' }));
+              leavesScope = drop.ids.some((id) => !isAncestor(tree, scope, id));
+            }
+          }
+        }
+      }
       // An Alt-drag commits the duplicate and the move as one step.
       context.gesture.commit();
+      if (leavesScope) context.execute({ type: 'setScope', id: null });
       // A click without movement selects the target hit, even inside a larger selection.
       if (current.kind === 'move' && !current.moved) {
         context.execute({ type: 'setSelection', ids: [current.hit] });
