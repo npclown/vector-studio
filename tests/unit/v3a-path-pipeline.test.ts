@@ -12,6 +12,7 @@ import { E_MAX } from '../../packages/renderer-core/src/path-buckets.js';
 import { buildPathFringe, pathFringeBytes } from '../../packages/renderer-core/src/path-fringe.js';
 import {
   PATH_MESH_LIMITS,
+  WORK_LIMIT_COARSER_STEPS,
   pathMeshNoticeDiagnostic,
   type PathFringeBuilder,
   type PathMeshNotice,
@@ -518,10 +519,11 @@ describe('V3a failure classes, memo and notices', () => {
     for (let index = 0; index < 100; index += 1) {
       expect(h.prepare().notices).toEqual([]);
     }
-    expect(port.callCount).toBe(1);
+    // V-25: b's work-limit is retried once per coarser step in the first prepare.
+    expect(port.callCount).toBe(1 + WORK_LIMIT_COARSER_STEPS);
     h.replace([pathNode('a', 0), pathNode('b', 21), pathNode('c', 40)]);
     expect(h.drawnIds()).toEqual(['a', 'b', 'c']);
-    expect(port.callCount).toBe(2);
+    expect(port.callCount).toBe(2 + WORK_LIMIT_COARSER_STEPS);
     expect(tagsOf(port)).toEqual([21]);
   });
 
@@ -758,8 +760,10 @@ describe('V3a failure classes, memo and notices', () => {
     expect(h.statistics()).toMatchObject({ memoEntries: 3, memoOverCapFrames: 1 });
     h.replace(nodes);
     h.prepare();
-    expect(port.callCount).toBe(2);
-    expect(tagsOf(port)).toEqual([0, 20]);
+    // V-25: each work-limit is retried once per coarser step: 5 paths, then the 2 evicted ones.
+    expect(port.callCount).toBe(2 + 7 * WORK_LIMIT_COARSER_STEPS);
+    // The batch for the 2 evicted paths comes before their 2 sets of single-request retries.
+    expect(tagsOf(port, -1 - 2 * WORK_LIMIT_COARSER_STEPS)).toEqual([0, 20]);
     expect(PATH_MESH_LIMITS.memoCapacity).toBe(4_096);
   });
 

@@ -502,6 +502,11 @@ const BATCH_CODES: ReadonlySet<string> = new Set([
   'internal-error',
 ]);
 const PAINTS: readonly PathPaint[] = ['fill', 'stroke'];
+/**
+ * V-25: coarser tolerance exponents tried after a work-limit, each doubling the tolerance. The
+ * pen path of the 2026-11-06 report drew again one or two steps up.
+ */
+export const WORK_LIMIT_COARSER_STEPS = 3;
 
 let injectNoReuse: (pipeline: PathMeshPipeline) => void;
 let readReusedPaths: (pipeline: PathMeshPipeline) => number;
@@ -517,6 +522,12 @@ export function disablePathReuseForTesting(pipeline: PathMeshPipeline): void {
 /** Test seam (E26-U5c): the paths served from a kept outcome so far. */
 export function reusedPathsForTesting(pipeline: PathMeshPipeline): number {
   return readReusedPaths(pipeline);
+}
+
+let readCoarseFallbacks: (pipeline: PathMeshPipeline) => number;
+/** Test seam (V-25): the requests published from a coarser retry after a work-limit. */
+export function coarseFallbacksForTesting(pipeline: PathMeshPipeline): number {
+  return readCoarseFallbacks(pipeline);
 }
 
 let readReconcileCounts: (
@@ -569,6 +580,8 @@ export class PathMeshPipeline {
   #lastRevisions: ReadonlyMap<string, number> = new Map();
   #reuse = true;
   #reusedPaths = 0;
+  /** V-25: requests published from a coarser retry after a work-limit (`#coarser`). */
+  #coarseFallbacks = 0;
   #reconcileCounts = { full: 0, changed: 0 };
   /**
    * E26 contract, U5d-2: the last prepare's draws, when every path in it served its kept outcome
@@ -608,6 +621,7 @@ export class PathMeshPipeline {
       pipeline.#reuse = false;
     };
     readReusedPaths = (pipeline) => pipeline.#reusedPaths;
+    readCoarseFallbacks = (pipeline) => pipeline.#coarseFallbacks;
     readReconcileCounts = (pipeline) => Object.freeze({ ...pipeline.#reconcileCounts });
   }
 
@@ -1698,12 +1712,51 @@ export class PathMeshPipeline {
       if (verdict.kind === 'ok' || verdict.kind === 'empty') {
         this.#publish(request, verdict.kind === 'ok' ? verdict : null);
       } else if (verdict.kind === 'failed') {
-        this.#memoize(request, 'path', verdict.code, now);
+        const coarse = verdict.code === 'work-limit' ? this.#coarser(channel, request) : null;
+        if (coarse !== null) {
+          this.#coarseFallbacks += 1;
+          this.#publish(request, coarse === 'empty' ? null : coarse);
+        } else this.#memoize(request, 'path', verdict.code, now);
       } else {
         this.#memoize(request, 'renderer', verdict.kind, now);
       }
     });
     return 'settled';
+  }
+
+  /**
+   * V-25 (user report 2026-11-06, a pen path with a tight hairpin closing curve drew nothing):
+   * a request the kernel refuses with `work-limit` is built again at up to
+   * WORK_LIMIT_COARSER_STEPS coarser tolerance exponents, one request per call. The first ok or
+   * empty result is returned and published under the requested exponent, so the path draws
+   * slightly coarser instead of not at all. Null when every retry fails (the caller memoizes
+   * the original work-limit) or a retry's response is not a valid result.
+   */
+  #coarser(
+    channel: PortChannel,
+    request: PendingRequest,
+  ): Readonly<{ mesh: FillMesh; bytes: number }> | 'empty' | null {
+    for (let step = 1; step <= WORK_LIMIT_COARSER_STEPS; step += 1) {
+      const e = request.e + step;
+      if (e > E_MAX) return null;
+      const retry: PendingRequest = Object.freeze({ ...request, e });
+      channel.calls += 1;
+      let verdict: Verdict;
+      try {
+        const result: unknown = channel.build([retry]);
+        if (typeof result !== 'object' || result === null) return null;
+        const record = result as Record<string, unknown>;
+        if (record.status !== 'ok' || !Array.isArray(record.results)) return null;
+        if (record.results.length !== 1) return null;
+        verdict = classifyResult(retry, record.results[0], 0, channel.failureCodes);
+      } catch {
+        return null;
+      }
+      if (verdict.kind === 'ok') return Object.freeze({ mesh: verdict.mesh, bytes: verdict.bytes });
+      if (verdict.kind === 'empty') return 'empty';
+      if (verdict.kind !== 'failed' || verdict.code !== 'work-limit') return null;
+    }
+    return null;
   }
 
   #publish(

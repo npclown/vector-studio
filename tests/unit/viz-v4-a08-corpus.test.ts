@@ -16,6 +16,7 @@ import {
   physicalSize,
   type VizV4MeshCall,
 } from '../../apps/playground/src/viz-v4-a08-cases.js';
+import { WORK_LIMIT_COARSER_STEPS } from '../../packages/renderer-core/src/path-mesh-pipeline.js';
 import { ScriptedFillMeshPort, failedResult } from '../support/v3a-path-harness.js';
 import {
   callKey,
@@ -254,8 +255,9 @@ describe('expected status (section 5.1), scripted ports only', () => {
     for (const variant of VIZ_V4_VARIANTS) {
       const rejected = expectedEntry(fill, portsAnswering('work-limit'), variant);
       expect(rejected.status).toBe('KERNEL-REJECTED');
-      expect(rejected.calls).toHaveLength(1);
-      expect(rejected.calls[0]).toMatch(/ failed:work-limit$/u);
+      // V-25: a work-limit is retried at each coarser tolerance step; it stays KERNEL-REJECTED.
+      expect(rejected.calls).toHaveLength(1 + WORK_LIMIT_COARSER_STEPS);
+      for (const call of rejected.calls) expect(call).toMatch(/ failed:work-limit$/u);
       expect(expectedEntry(fill, portsAnswering('empty'), variant)).toMatchObject({
         status: 'EMPTY-CROP',
         reason: 'port-empty',
