@@ -63,6 +63,7 @@ import {
 import { CanvasSide, hostContributions } from '../src/m8-layout';
 import { faultPanelsQuery, testUiExtension } from '../src/m8-test-panels';
 import { StudioShell, studioLayout, type StudioCanvasSize } from '../src/v25-studio';
+import { canvasTextStyle, caretColour, readableTextStyle } from '../src/v25-text-colour-default';
 import { textEditBox } from '../src/v25-text-box';
 import { SelectionOverlay } from '../src/overlay';
 import { createWebGpuRenderer } from '../src/webgpu-renderer';
@@ -643,6 +644,40 @@ function Surface({
     }
     setRotating(zone);
   };
+  // V-25 slice 7: the empty canvas is black, so the studio starts the text tool white (a plain-text
+  // paste outside text edit mode uses it too); a press then picks black or white from its backdrop.
+  useEffect(() => {
+    if (!studio) return;
+    const style = canvasTextStyle(editor.getSnapshot().textStyle);
+    if (style !== null) editor.execute({ type: 'setTextToolStyle', style });
+  }, [editor, studio]);
+  // V-25 slice 7: before a text tool press reaches the canvas, the studio switches the text tool
+  // between black and white so new text reads against what lies under the press.
+  const readableText = (event: PointerEvent<HTMLDivElement>) => {
+    const current = editor.getSnapshot();
+    const canvas = event.currentTarget.querySelector('canvas');
+    if (event.button !== 0 || current.tool !== 'text' || current.textEdit !== null) return;
+    if (canvas === null) return;
+    const { position, zoom } = current.viewport;
+    const rect = canvas.getBoundingClientRect();
+    const point = {
+      x: position.x + (event.clientX - rect.left - canvas.clientLeft) / zoom,
+      y: position.y + (event.clientY - rect.top - canvas.clientTop) / zoom,
+    };
+    const style = readableTextStyle(current.document, current.activePage, point, current.textStyle);
+    if (style !== null) editor.execute({ type: 'setTextToolStyle', style });
+  };
+  // V-25 slice 7: the caret contrasts with what lies under it (the empty canvas is black).
+  const studioCaretColour = () => {
+    if (textEdit?.caret == null) return undefined;
+    const { position, zoom } = snapshot.viewport;
+    const { x1, y1, x2, y2 } = textEdit.caret;
+    const point = {
+      x: position.x + (x1 + x2) / 2 / zoom,
+      y: position.y + (y1 + y2) / 2 / zoom,
+    };
+    return caretColour(snapshot.document, snapshot.activePage, point);
+  };
   // V-25: the canvas host, at the fixed size of the M8 layout or the studio's measured size.
   const canvasHost = (size: StudioCanvasSize) => (
     <div
@@ -650,6 +685,7 @@ function Surface({
       data-cursor={rotating ? 'rotate' : 'default'}
       style={{ width: size.width, cursor: rotating ? ROTATE_CURSOR : undefined }}
       onPointerMove={hover}
+      onPointerDownCapture={studio ? readableText : undefined}
       onPointerLeave={() => setRotating(false)}
     >
       <EditorCanvas
@@ -670,6 +706,7 @@ function Surface({
           pathOverlay={pathOverlay}
           textEdit={textEdit}
           textBox={studio ? textEditBox(snapshot) : null}
+          caretColour={(studio ? studioCaretColour() : undefined) ?? '#000'}
           width={size.width}
           height={size.height}
         />

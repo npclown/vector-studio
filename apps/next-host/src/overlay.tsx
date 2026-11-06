@@ -35,6 +35,8 @@ type Props = Readonly<{
   textEdit?: TextEditMarkers | null;
   /** V-25 slice 6: the edited text's box outline in CSS px (studio layout only, else null). */
   textBox?: readonly (readonly [number, number])[] | null;
+  /** V-25 slice 7: the caret's stroke (black by default, the M6b look). */
+  caretColour?: string;
 }>;
 
 type ToScreen = (x: number, y: number) => [number, number];
@@ -77,7 +79,13 @@ function ToolShape({ overlay, toScreen }: { overlay: ToolOverlay; toScreen: ToSc
 const SNAP_COLOUR = '#e0218a';
 const TEXT_COLOUR = '#1e78ff';
 
-function TextEditShapes({ markers }: { markers: TextEditMarkers }) {
+function TextEditShapes({
+  markers,
+  caretColour,
+}: {
+  markers: TextEditMarkers;
+  caretColour: string;
+}) {
   return (
     <g data-testid="text-edit" data-id={markers.id ?? ''}>
       {markers.selection.map((points, index) => (
@@ -107,7 +115,7 @@ function TextEditShapes({ markers }: { markers: TextEditMarkers }) {
           data-x2={markers.caret.x2}
           data-y2={markers.caret.y2}
           {...markers.caret}
-          stroke="#000"
+          stroke={caretColour}
           strokeWidth={1}
         />
       )}
@@ -235,6 +243,7 @@ export function SelectionOverlay({
   pathOverlay = null,
   textEdit = null,
   textBox = null,
+  caretColour = '#000',
 }: Props) {
   const { position, zoom } = snapshot.viewport;
   const toScreen = (x: number, y: number): [number, number] => [
@@ -295,7 +304,7 @@ export function SelectionOverlay({
           stroke={TEXT_COLOUR}
         />
       )}
-      {textEdit === null ? null : <TextEditShapes markers={textEdit} />}
+      {textEdit === null ? null : <TextEditShapes markers={textEdit} caretColour={caretColour} />}
       {snapshot.overlay === null ? null : (
         <ToolShape overlay={snapshot.overlay} toScreen={toScreen} />
       )}
