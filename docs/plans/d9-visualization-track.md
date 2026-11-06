@@ -34,7 +34,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | V-22 | Pre-alpha gate plan: MVP performance rows, P1 A09/A10, P2 A08, lower-tier GPU gate | Full | Done | Done 2026-11-05: exit accepted by the user with the misses disclosed ([exit record](../evidence/pre-alpha-exit-2026-11-05.md)); plan APPROVED 2026-11-02 (#458) ([plan](pre-alpha-gate-plan.md)) |
 | V-23 | Alpha release as npm packages: renderer and WASM packaging, metadata, install check, publish | Full | R6 | Plan merged 2026-11-05 (#505); AR-U1 done (#506); AR-U2 done (#507); AR-U3 done (#508, scope pending AR-Q4); AR-U4 in review (install check PASS); registry GitHub Packages private (AR-Q1 (a)) ([plan](alpha-release-plan.md)) |
 | V-24 | Resize past zero flips the shape (Figma-style), corner and edge handles; text glyphs, instance content and custom data not mirrored | Full | Done | Done 2026-11-06 (#510; review r2 READY; headed check NOT RUN) ([M1 section 4.4 amendment](mvp-m1-document-v2-contract.md#44-resize-rules)) |
-| V-25 | Editor UI usability: full-window studio layout, icon toolbar, then artboards (top-level frames), property panel, context menu, export | Full | Active | Slice 1 implemented 2026-11-06 ([plan](viz-v25-editor-ui-plan.md)) |
+| V-25 | Editor UI usability: full-window studio layout, icon toolbar, then artboards (top-level frames), property panel, context menu, export | Full | Active | Slice 1 in review 2026-11-06; slice 2 (artboards) chosen next by the user 2026-11-06 ([plan](viz-v25-editor-ui-plan.md)) |
 
 ## V-1: path appearance editing
 

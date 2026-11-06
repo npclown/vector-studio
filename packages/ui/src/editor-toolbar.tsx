@@ -10,11 +10,18 @@ import {
   type CommandResult,
   type EditorSnapshot,
 } from '@vector-studio/react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from 'react';
 import {
   actionName,
   actionShortcut,
   actionTitle,
+  nextMenuIndex,
   toolTitle,
   zoomPercent,
 } from './editor-toolbar-model.js';
@@ -111,11 +118,11 @@ export function EditorToolbar({ children }: EditorToolbarProps) {
   const byId = new Map(
     [...edits, ...symbolActions(selection, types)].map((button) => [button.testId, button]),
   );
-  const groups = [
-    ['undo', 'redo'],
-    ['group', 'ungroup', 'mask'],
-    ['create-symbol', 'create-instance', 'detach'],
-    ['toggle-closed', 'delete'],
+  const groups: readonly (readonly [string, readonly string[]])[] = [
+    ['history', ['undo', 'redo']],
+    ['grouping', ['group', 'ungroup', 'mask']],
+    ['symbols', ['create-symbol', 'create-instance', 'detach']],
+    ['edit', ['toggle-closed', 'delete']],
   ];
   const run = (button: ActionButton) => show(runAction(execute, button));
   return (
@@ -132,8 +139,8 @@ export function EditorToolbar({ children }: EditorToolbarProps) {
           />
         ))}
       </span>
-      {groups.map((ids) => (
-        <span key={ids[0]} role="group" style={ROW}>
+      {groups.map(([label, ids]) => (
+        <span key={label} role="group" aria-label={label} style={ROW}>
           <Divider />
           {ids.map((id) => {
             const button = byId.get(id)!;
@@ -163,7 +170,10 @@ export function EditorToolbar({ children }: EditorToolbarProps) {
 /**
  * The zoom menu (V-25): a button with the zoom as a whole percentage (`zoom`, `data-zoom` the
  * exact value) that opens a menu of zoom in, zoom out, fit, selection and 100% (the M8 row 2
- * commands and test IDs), each with its shortcut. Escape, a pick or a press outside closes it.
+ * commands and test IDs), each with its shortcut. It follows the menu button pattern: opening
+ * (click, or ArrowDown on the button) focuses the first enabled item, ArrowUp, ArrowDown, Home
+ * and End move between enabled items, Escape or a pick closes it with focus back on the button,
+ * and Tab or a press outside closes it.
  * A refused command shows its code (`zoom-refusal`).
  */
 export function ZoomMenu() {
@@ -174,24 +184,58 @@ export function ZoomMenu() {
   const [open, setOpen] = useState(false);
   const [refusal, show] = useRefusal();
   const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const buttons = zoomActions(selection.length);
+  /** Closes the menu; `refocus` returns focus to its button (Escape, a pick). */
+  const close = (refocus: boolean) => {
+    setOpen(false);
+    if (refocus) trigger.current?.focus();
+  };
+  const focusItem = (index: number) => {
+    const items = menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
+    items?.[index]?.focus();
+  };
+  // On open, focus moves to the first enabled item (the WAI-ARIA menu button pattern).
+  useEffect(() => {
+    if (!open) return;
+    const first = nextMenuIndex(
+      buttons.map((button) => !button.disabled),
+      -1,
+      'ArrowDown',
+    );
+    if (first !== null) focusItem(first);
+    // Only on opening; the items' enable state is read again on each key press.
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     const outside = (event: PointerEvent) => {
       if (!(event.target instanceof Node) || !root.current?.contains(event.target)) setOpen(false);
     };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
     document.addEventListener('pointerdown', outside);
-    document.addEventListener('keydown', escape);
-    return () => {
-      document.removeEventListener('pointerdown', outside);
-      document.removeEventListener('keydown', escape);
-    };
+    return () => document.removeEventListener('pointerdown', outside);
   }, [open]);
+  const onMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape' || event.key === 'Tab') {
+      if (event.key === 'Escape') event.preventDefault();
+      close(event.key === 'Escape');
+      return;
+    }
+    const items = [...(menu.current?.querySelectorAll('[role="menuitem"]') ?? [])];
+    const current = items.indexOf(document.activeElement as Element);
+    const next = nextMenuIndex(
+      buttons.map((button) => !button.disabled),
+      current,
+      event.key,
+    );
+    if (next === null) return;
+    event.preventDefault();
+    focusItem(next);
+  };
   return (
     <div ref={root} className="vs-zoom" style={{ position: 'relative' }}>
       <button
+        ref={trigger}
         type="button"
         className="vs-zoom-button"
         data-testid="zoom"
@@ -200,6 +244,12 @@ export function ZoomMenu() {
         aria-expanded={open}
         title="Zoom"
         onClick={() => setOpen((value) => !value)}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown' && !open) {
+            event.preventDefault();
+            setOpen(true);
+          }
+        }}
       >
         {zoomPercent(zoom)}
         <span aria-hidden className="vs-caret">
@@ -208,22 +258,25 @@ export function ZoomMenu() {
       </button>
       {open ? (
         <div
+          ref={menu}
           role="menu"
           aria-label="zoom"
           className="vs-menu"
+          onKeyDown={onMenuKeyDown}
           style={{ position: 'absolute', right: 0, zIndex: 10 }}
         >
-          {zoomActions(selection.length).map((button) => (
+          {buttons.map((button) => (
             <button
               key={button.testId}
               type="button"
               role="menuitem"
               className="vs-menu-item"
               data-testid={button.testId}
+              tabIndex={-1}
               disabled={button.disabled}
               onClick={() => {
                 show(runAction(execute, button));
-                setOpen(false);
+                close(true);
               }}
             >
               <span>{actionName(button.testId)}</span>

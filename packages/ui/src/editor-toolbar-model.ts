@@ -145,3 +145,31 @@ export function actionTitle(testId: string, bindings: readonly KeyBinding[]): st
 export function zoomPercent(zoom: number): string {
   return `${Math.round(zoom * 100)}%`;
 }
+
+/**
+ * The menu item a key moves focus to (WAI-ARIA menu pattern): ArrowDown and ArrowUp to the next
+ * or previous enabled item, wrapping; Home and End to the first or last enabled one. Null for
+ * another key or when no item is enabled. `current` is the focused index, -1 for none.
+ */
+export function nextMenuIndex(
+  enabled: readonly boolean[],
+  current: number,
+  key: string,
+): number | null {
+  const indexes = enabled.flatMap((on, index) => (on ? [index] : []));
+  if (indexes.length === 0) return null;
+  switch (key) {
+    case 'Home':
+      return indexes[0]!;
+    case 'End':
+      return indexes[indexes.length - 1]!;
+    case 'ArrowDown':
+      return indexes.find((index) => index > current) ?? indexes[0]!;
+    case 'ArrowUp':
+      return (
+        [...indexes].reverse().find((index) => index < current) ?? indexes[indexes.length - 1]!
+      );
+    default:
+      return null;
+  }
+}

@@ -70,7 +70,7 @@ function useSettledSize(): [(element: HTMLDivElement | null) => void, StudioCanv
   return [setElement, size];
 }
 
-/** What the status bar shows besides the editor's own state. */
+/** What the status bar shows besides the editor's own state; repeated errors show once. */
 export type StudioStatusProps = Readonly<{
   errors: readonly string[];
   /** The persistence status label and its discard control, when there is one. */
@@ -99,11 +99,13 @@ function StudioStatus({ errors, persistence, file }: StudioStatusProps) {
       {scopeName === null ? null : <span>Inside {scopeName} (Esc to leave)</span>}
       {persistence}
       {file === '' ? null : <span>File {file}</span>}
-      {[...errors, ...panelErrors.map((error) => `${error.code} ${error.panel}`)].map((error) => (
-        <span key={error} className="vs-error">
-          {error}
-        </span>
-      ))}
+      {[...new Set([...errors, ...panelErrors.map((error) => `${error.code} ${error.panel}`)])].map(
+        (error) => (
+          <span key={error} className="vs-error">
+            {error}
+          </span>
+        ),
+      )}
     </footer>
   );
 }
@@ -219,6 +221,7 @@ const STUDIO_CSS = `
 }
 .vs-topbar-start, .vs-topbar-end { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .vs-topbar-end { justify-content: flex-end; }
+.vs-topbar-start button { white-space: nowrap; }
 .vs-brand { font-size: 13px; margin-right: 8px; white-space: nowrap; }
 .vs-icon-button { width: 32px; height: 32px; display: grid; place-items: center; padding: 0 !important; }
 .vs-icon-text { font-size: 11px; max-width: 30px; overflow: hidden; text-overflow: ellipsis; }

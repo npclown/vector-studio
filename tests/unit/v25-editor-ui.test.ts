@@ -16,6 +16,7 @@ import {
   actionShortcut,
   actionTitle,
   chordLabel,
+  nextMenuIndex,
   shortcutFor,
   toolTitle,
   zoomPercent,
@@ -110,6 +111,22 @@ describe('V-25 shortcut labels', () => {
   });
 });
 
+describe('V-25 zoom menu keys', () => {
+  it('moves between enabled items, wrapping, and ignores other keys', () => {
+    // fit, selection (disabled), 100%: as zoomActions with nothing selected, minus in and out.
+    const enabled = [true, true, true, false, true];
+    expect(nextMenuIndex(enabled, -1, 'ArrowDown')).toBe(0);
+    expect(nextMenuIndex(enabled, 2, 'ArrowDown')).toBe(4);
+    expect(nextMenuIndex(enabled, 4, 'ArrowDown')).toBe(0);
+    expect(nextMenuIndex(enabled, 4, 'ArrowUp')).toBe(2);
+    expect(nextMenuIndex(enabled, 0, 'ArrowUp')).toBe(4);
+    expect(nextMenuIndex(enabled, 2, 'Home')).toBe(0);
+    expect(nextMenuIndex(enabled, 0, 'End')).toBe(4);
+    expect(nextMenuIndex(enabled, 0, 'a')).toBeNull();
+    expect(nextMenuIndex([false, false], -1, 'ArrowDown')).toBeNull();
+  });
+});
+
 describe('V-25 EditorToolbar and ZoomMenu markup', () => {
   it('renders named icon buttons with the M8 test IDs and enable rules', () => {
     const target = editor();
@@ -127,6 +144,9 @@ describe('V-25 EditorToolbar and ZoomMenu markup', () => {
       expect(html).toMatch(new RegExp(`data-testid="${id}"[^>]*disabled=""`, 'u'));
     }
     expect(html).toContain('<svg aria-hidden="true"');
+    for (const group of ['tool', 'history', 'grouping', 'symbols', 'edit']) {
+      expect(html).toContain(`role="group" aria-label="${group}"`);
+    }
   });
 
   it('enables the selection actions once something is selected', () => {
