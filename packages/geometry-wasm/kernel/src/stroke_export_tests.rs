@@ -508,7 +508,7 @@ fn assert_area(mesh: &Decoded, expected: f64, tolerance: f64, name: &str) {
 #[test]
 fn identity_constants_match_section_7_1() {
     assert_eq!(STROKE_V0_VERSION, 0);
-    assert_eq!(STROKE_V0_REVISION, 7);
+    assert_eq!(STROKE_V0_REVISION, 8);
     assert_eq!(STROKE_INPUT_MAGIC, 0x3054_4756);
     assert_eq!(STROKE_OUTPUT_MAGIC, 0x3055_4756);
     assert_eq!(STROKE_INPUT_MAGIC.to_le_bytes(), *b"VGT0");
@@ -1270,9 +1270,10 @@ fn former_interim_cubics_are_ok_through_the_export() {
         .width(0.125)
         .exponent(-8);
     assert_eq!(status_of(f16), STROKE_PATH_OK);
-    // ST-U3's own interim fixture (w = 2, e = -3) is now also a current-cap `work-limit`.
+    // ST-U3's own interim fixture (w = 2, e = -3) was a current-cap `work-limit` up to `r7`;
+    // since the E35 retry (`r8`) its near-cusp leaves are grouped and it is `ok`.
     let interim = TestPath::new(4)
         .m(0.0, 0.0)
         .c([1.0, 1.0, 0.0, 1.0, 1.0, 0.0]);
-    assert_eq!(status_of(interim), STROKE_PATH_WORK_LIMIT);
+    assert_eq!(status_of(interim), STROKE_PATH_OK);
 }

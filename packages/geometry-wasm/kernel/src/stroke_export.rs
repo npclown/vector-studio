@@ -36,7 +36,10 @@ pub const STROKE_V0_VERSION: u32 = 0;
 /// Revision 7 (2026-10-25): the merged contours first try the family-B rung, Alt-A1 rung 0 on a
 /// separate stroke instance (D9 E2 unit E2-U3, E2-K3); a proved path is published with rung 0's
 /// mesh, and every other path takes family A as before.
-pub const STROKE_V0_REVISION: u32 = 7;
+/// Revision 8 (2026-11-06): a path that ends in `work-limit` is built once more with the E35
+/// retry (D9 E35: near-cusp fans as two side hulls, the relative cone guard, near-reversal
+/// disks); every path that was `ok` keeps its mesh.
+pub const STROKE_V0_REVISION: u32 = 8;
 /// Bytes `VGT0`.
 pub const STROKE_INPUT_MAGIC: u32 = 0x3054_4756;
 /// Bytes `VGU0`.

@@ -39,6 +39,7 @@ fn context(magnitude: f64, r: f64) -> LeafContext {
         end_fixed: false,
         split_length: 0.0,
         factor: 4.0,
+        relative_guard: false,
     }
 }
 

@@ -11,9 +11,9 @@ import { createStrokeHarness, pathStroke, strokedNode } from '../support/st-u6-s
 // V-25 (user report 2026-11-06): a closed pen path drew nothing. Its last cubic runs from the
 // last anchor (a corner) out to the first anchor's in handle about 40 px away and back to the
 // first anchor, a tight hairpin. The stroke-v0 kernel answers work-limit for it at exponents -2
-// and finer (the renderer asked for -3 at zoom 1), so the whole path was hidden. The renderer
-// now retries at coarser exponents (path-mesh-pipeline `#coarser`); the kernel itself is fixed
-// on the rendering track, whose change flips the first expectation below.
+// and finer at stroke-v0+r7 (the renderer asked for -3 at zoom 1), so the whole path was hidden.
+// The renderer retries at coarser exponents (path-mesh-pipeline `#coarser`), and since
+// stroke-v0+r8 (D9 E35) the kernel builds both paths at -3 itself, so no coarser retry is used.
 
 /** The user's node-5: unit-box points scaled by its frame (494.4 x 508.8). */
 const UNIT = [
@@ -37,7 +37,7 @@ beforeAll(async () => {
 });
 
 describe('V-25 hairpin pen path (work-limit fallback)', () => {
-  it('the stroke kernel refuses the path at -2 and builds it at -1', async () => {
+  it('the stroke kernel builds the path at -3, -2 and -1 (E35)', async () => {
     const port = await createStrokeMeshPort(module);
     const status = (toleranceExponent: number) => {
       const batch = port.buildStrokeMeshes([
@@ -56,7 +56,7 @@ describe('V-25 hairpin pen path (work-limit fallback)', () => {
       const result = batch.results[0]!;
       return result.status === 'failed' ? result.code : result.status;
     };
-    expect([status(-3), status(-2), status(-1)]).toEqual(['work-limit', 'work-limit', 'ok']);
+    expect([status(-3), status(-2), status(-1)]).toEqual(['ok', 'ok', 'ok']);
   });
 
   it('draws the stroke through the pipeline with the real ports', async () => {
@@ -75,7 +75,7 @@ describe('V-25 hairpin pen path (work-limit fallback)', () => {
     const frame = h.prepare();
     expect(frame.draws.map((draw) => `${draw.nodeId}:${draw.paint}`)).toEqual(['node-5:stroke']);
     expect(frame.notices).toEqual([]);
-    expect(coarseFallbacksForTesting(h.pipeline)).toBe(1);
+    expect(coarseFallbacksForTesting(h.pipeline)).toBe(0);
   });
 
   it('draws a triangle with a cubic anchor of 1 px handles (the #520 case) the same way', async () => {
@@ -96,6 +96,6 @@ describe('V-25 hairpin pen path (work-limit fallback)', () => {
       'tiny:stroke',
     ]);
     expect(frame.notices).toEqual([]);
-    expect(coarseFallbacksForTesting(h.pipeline)).toBe(1);
+    expect(coarseFallbacksForTesting(h.pipeline)).toBe(0);
   });
 });

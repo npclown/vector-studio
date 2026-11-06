@@ -284,6 +284,8 @@ Amended 2026-10-20, ST-A0 amendment (S1), the hull argument in full. Let a band 
   - **Result.** The hull term is below `δ < 2·r·sin α` in the non-crossing case too. ST-O1 stays as the independent check on every dumped output; no residual remains for `θ < π/2` apart from the stated assumption of the crossing case.
 - **Carry to the union.** The per-piece bound carries to the union by §3's union bullet, with the metric named there.
 
+Amended 2026-11-06 (D9 E35): after a `work-limit`, the retry of §7.1's E35 amendment may group consecutive leaves into `fan-side` pieces (E35-K1) and uses a relative cone guard away from reversal splits (E35-K2, ST-OB7); its error argument is in the [E35 record](../evidence/e35-hairpin-stroke-2026-11-06.md), section 3. The first build is unchanged.
+
 ### 4.6 Stationary classification
 
 All in exact arithmetic on the Float64 controls. Let `D(t) = C'(t)`, a quadratic in each component.
@@ -294,6 +296,8 @@ All in exact arithmetic on the Float64 controls. Let `D(t) = C'(t)`, a quadratic
 
 - **ST-G5, cusp and turning-point guard.** `|c − C(t*)| ≤ eta = 64·2^-53·M`. The cusp disk piece then lies within `2·eta` of the ideal disk plus the neighbouring sweep (the sweep over `[t̃, t*]` lies inside the disk of radius `r + eta` at `C(t*)`), which must satisfy `2·eta ≤ 2^(e−4)`, else `numeric-range`.
 - A classification case that the code cannot decide is an internal error, never a silent routing: with the cases above the classification is complete for cubics.
+
+Amended 2026-11-06 (D9 E35): in the retry after a `work-limit`, a leaf with nearly opposite end directions within `2^e` of one point is emitted as a `reversal-disk` of radius `r` (E35-K3), an inexact reversal treated as ST-G5 treats a cusp disk ([E35 record](../evidence/e35-hairpin-stroke-2026-11-06.md), section 3).
 
 ### 4.7 Guards and `numeric-range`
 
@@ -431,6 +435,8 @@ Amended 2026-10-24 (D9 E2 unit E2-U1, the seam merge E2-K1 of the [E2 contract](
 Amended 2026-10-25 (D9 E2 unit E2-U2, the band leaf rule E2-K2 of the [E2 contract](d9-e2-stroke-fast-rung-contract.md#5-e2-k2-the-band-leaf-rule)): full-cone cubic leaves may also be accepted by E2-K2, which changes `ok` meshes, so the identity is now `'geometry-wasm/stroke-v0+r6'` with `stroke_v0_revision() == 6`, superseding revision 5 in the same three places.
 
 Amended 2026-10-25 (D9 E2 unit E2-U3, the family-B rung E2-K3 of the [E2 contract](d9-e2-stroke-fast-rung-contract.md#6-e2-k3-the-family-b-rung-and-its-fallback)): a path whose merged contours pass rung 0 is published with rung 0's mesh instead of family A's, which changes `ok` meshes, so the identity is now `'geometry-wasm/stroke-v0+r7'` with `stroke_v0_revision() == 7`, superseding revision 6 in the same three places.
+
+Amended 2026-11-06 (D9 rendering-track item E35, [record](../evidence/e35-hairpin-stroke-2026-11-06.md)): a path whose build ends in `work-limit` is built once more with near-cusp fans (E35-K1), the relative cone guard of ST-OB7 (E35-K2) and near-reversal disks (E35-K3), each within the curve share `2^e`; a path that was `ok` keeps its mesh. Former `work-limit` paths can now be `ok`, so the identity is now `'geometry-wasm/stroke-v0+r8'` with `stroke_v0_revision() == 8`, superseding revision 7 in the same three places.
 
 ### 7.2 Exports
 
