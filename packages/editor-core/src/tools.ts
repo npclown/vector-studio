@@ -651,6 +651,8 @@ export function createPathTool(options: DrawOptions = {}): Tool {
         // Press-and-drag makes a cubic anchor with symmetric handles; with Alt (V-25 slice 8)
         // only the out handle follows, so the curve turns a corner at the anchor.
         const { point } = pressed;
+        // Not latched: a drag that comes back within the threshold is a click again, so the pen
+        // never makes a handle shorter than PEN_DRAG_THRESHOLD.
         const moved = distance(event.point, point) * zoomOf(context) >= PEN_DRAG_THRESHOLD;
         pressed.out = moved ? event.point : null;
         if (!event.modifiers.alt || !moved) {
