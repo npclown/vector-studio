@@ -484,9 +484,10 @@ pub(crate) fn measure_leaf(q: [Point; 4], depth: u32, context: LeafContext) -> L
     let eps = (4.0 * level + 16.0 * split) * UNIT * m;
     let length = norm(v) * SLACK_UP + LENGTH_FLOOR;
     let absolute = if context.relative_guard && context.split_length == 0.0 {
-        // E35-K2: the dot and cross products of the computed `V` and `Di` round by at most
-        // `4.1u·|V|·|Di|` (p3-fill-stroke-meshes ST-G4 (1)); the control error stays in
-        // `perturbation`. Away from a reversal split no limit-direction term applies. The
+        // E35-K2: the computed `V` and `Di` against the exact differences of the computed
+        // controls (about `2u` relative) and the dot and cross products' rounding
+        // (`4.1u·|V|·|Di|`, p3-fill-stroke-meshes ST-G4 (1)) fit in `8u·|V|·max|Di|`; the
+        // controls' own error against the exact subcurve stays in `perturbation`. Away from a reversal split no limit-direction term applies. The
         // smallest normal number covers products that underflow.
         let largest = cone
             .iter()
@@ -570,6 +571,11 @@ pub(crate) fn measure_reversal(
     depth: u32,
     context: LeafContext,
 ) -> Option<(Point, f64)> {
+    // Next to a reversal split the end directions carry the split's limit-direction and
+    // reparameterization terms, which this test does not charge: no disk there.
+    if context.split_length > 0.0 {
+        return None;
+    }
     let d = [
         scale3(sub(q[1], q[0])),
         scale3(sub(q[2], q[1])),

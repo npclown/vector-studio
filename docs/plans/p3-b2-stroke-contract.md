@@ -284,6 +284,8 @@ Amended 2026-10-20, ST-A0 amendment (S1), the hull argument in full. Let a band 
   - **Result.** The hull term is below `δ < 2·r·sin α` in the non-crossing case too. ST-O1 stays as the independent check on every dumped output; no residual remains for `θ < π/2` apart from the stated assumption of the crossing case.
 - **Carry to the union.** The per-piece bound carries to the union by §3's union bullet, with the metric named there.
 
+Amended 2026-11-06 (D9 E35): after a `work-limit`, the retry of §7.1's E35 amendment may group consecutive leaves into `fan-side` pieces (E35-K1) and uses a relative cone guard away from reversal splits (E35-K2, ST-OB7); its error argument is in the [E35 record](../evidence/e35-hairpin-stroke-2026-11-06.md), section 3. The first build is unchanged.
+
 ### 4.6 Stationary classification
 
 All in exact arithmetic on the Float64 controls. Let `D(t) = C'(t)`, a quadratic in each component.
@@ -294,6 +296,8 @@ All in exact arithmetic on the Float64 controls. Let `D(t) = C'(t)`, a quadratic
 
 - **ST-G5, cusp and turning-point guard.** `|c − C(t*)| ≤ eta = 64·2^-53·M`. The cusp disk piece then lies within `2·eta` of the ideal disk plus the neighbouring sweep (the sweep over `[t̃, t*]` lies inside the disk of radius `r + eta` at `C(t*)`), which must satisfy `2·eta ≤ 2^(e−4)`, else `numeric-range`.
 - A classification case that the code cannot decide is an internal error, never a silent routing: with the cases above the classification is complete for cubics.
+
+Amended 2026-11-06 (D9 E35): in the retry after a `work-limit`, a leaf with nearly opposite end directions within `2^e` of one point is emitted as a `reversal-disk` of radius `r` (E35-K3), an inexact reversal treated as ST-G5 treats a cusp disk ([E35 record](../evidence/e35-hairpin-stroke-2026-11-06.md), section 3).
 
 ### 4.7 Guards and `numeric-range`
 

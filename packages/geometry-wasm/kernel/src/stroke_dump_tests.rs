@@ -201,6 +201,10 @@ fn dump_case(workspace: &mut StrokeWorkspace, case: &Case) -> String {
     {
         let defects = workspace.defects_mut();
         *defects = crate::stroke_outline::StrokeDefects::default();
+        // ST-O1 knows the section 4.2 pieces, not E35's `fan-side` and `reversal-disk`, so the
+        // dump stays on the `r7` build: every `ok` mesh is the same at `r8`, and only former
+        // `work-limit` cases differ (E35 record, section 3).
+        defects.no_retry = true;
         for flag in &case.flags {
             match flag.as_str() {
                 "knot-join" => defects.knot_join = true,

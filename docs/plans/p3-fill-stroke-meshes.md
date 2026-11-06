@@ -2390,6 +2390,7 @@ Deviations and open items:
 - **Test-only wide limits** appear only in `cfg(test)` code and the dump's `wide` flag. No production path can reach them.
 - **No export, adapter, ABI or contract change** beyond the dated notes. The release WASM's stroke code is still dead code there, until ST-U5.
 - **ST-OB7.** The measured `DepthLimit` cases suggest that the deferred tighter bound would recover slow-speed leaves. It stays deferred.
+  - Addition, 2026-11-06 (D9 E35, [record](../evidence/e35-hairpin-stroke-2026-11-06.md)): the relative guard `8u·|V|·max|Di|` is used in the E35 retry after a `work-limit` (E35-K2), away from reversal splits; the frozen `768u·M²` stays on the first build, so `ok` meshes are unchanged.
   - Addition, 2026-10-21 (V4 review M1, [cusp shared triple follow-up](#b2-st-u4-cusp-shared-triple-review-follow-up)): another listed `DepthLimit` (`work-limit`) class is a reversal very near a segment end. At `s = 2^-20` from the start or the end, both orientations stop with `Front(DepthLimit)`. At `2^-2`, `2^-6` and `2^-10` the review's probes are `ok`, and at `2^-40` they are `work-limit` too. This is an ST-OB7 input.
 
 ### B2 ST-U3b scaling probe

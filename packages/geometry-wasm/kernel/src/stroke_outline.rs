@@ -925,7 +925,12 @@ impl StrokeWorkspace {
         self.fan_mode = true;
         let retried = self.build_once(request, verbs, point_bytes);
         self.fan_mode = false;
-        retried
+        // The retry only ever adds a mesh: any other answer keeps the first build's
+        // `work-limit`, so the renderer's coarser retry still sees it.
+        match retried {
+            Ok(StrokeOutcome::Mesh) | Ok(StrokeOutcome::Status(STROKE_PATH_EMPTY)) => retried,
+            _ => Ok(outcome),
+        }
     }
 
     fn build_once(
@@ -1650,11 +1655,13 @@ impl StrokeWorkspace {
                 )),
             };
             let mut measure = measure;
+            let mut banded = false;
             if !measure.accepted && !self.defects.no_band_rule() && !self.defects.unmerged() {
                 // E2-K2: the band leaf rule, kept only when the emitted quad is a band quad.
                 let band = measure_band(q, depth, context, self.defects.band_rule());
                 if band.accepted && is_band_quad(start, end_triple(band)?)? {
                     measure = band;
+                    banded = true;
                 }
             }
             if !measure.accepted && self.fan_mode {
@@ -1709,8 +1716,13 @@ impl StrokeWorkspace {
                     y: q.iter().fold(f64::NEG_INFINITY, |m, p| m.max(p.y)),
                 },
             };
-            if self.fan_mode {
+            if self.fan_mode && !banded {
                 self.push_fan_leaf(index, fan_leaf, r, tolerances)?;
+            } else if self.fan_mode {
+                // E35-K1 groups only leaves accepted by section 4.5's test, whose
+                // `4·r·sin(alpha) <= 2^e` the fan bound uses; an E2-K2 band leaf stays alone.
+                self.flush_fan(index)?;
+                self.emit_leaf(index, fan_leaf)?;
             } else {
                 self.emit_leaf(index, fan_leaf)?;
             }
@@ -1796,9 +1808,10 @@ impl StrokeWorkspace {
         // `dUp + g <= 2^(e-1)`, and the total stays within the curve share `2^e`.
         let m = magnitude(&self.segments[index].controls);
         let g_off = self.g_off;
+        // `eps` takes the split term `16u·M` on every leaf (an upper bound off a split range).
         let fits = |lo: Point, hi: Point, depth: u32, error: f64| {
             let (w, h) = (hi.x - lo.x, hi.y - lo.y);
-            let eps = 4.0 * f64::from(depth) * UNIT * m;
+            let eps = (4.0 * f64::from(depth) + 16.0) * UNIT * m;
             let diameter = (w * w + h * h).sqrt() * SLACK_UP + 3.0 * eps;
             let guard = g_off + 3.0 * r * error + 8.0 * UNIT * (m + r);
             matches!(

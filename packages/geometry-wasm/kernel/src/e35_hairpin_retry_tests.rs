@@ -1,5 +1,5 @@
 //! D9 rendering-track item E35 (`docs/evidence/e35-hairpin-stroke-2026-11-06.md`): the stroke
-//! retry after a `work-limit` (`stroke-v0+r8`). The fixtures are the four pen paths from the
+//! retry after a `work-limit` (`stroke-v0+r8`). The fixtures are the five pen paths from the
 //! user's editor (2026-11-06) that drew nothing at `stroke-v0+r7`, in document coordinates
 //! (unit path points times the frame plus its origin), width 1, butt, miter 4, and the V-25
 //! triangle whose cubic has a 1 px handle. In each the last cubic is a hairpin: the editor paths'
@@ -16,7 +16,7 @@ use crate::stroke_outline::{
 };
 use crate::stroke_outline_tests::{request, PathSpec};
 
-const CASES: [&str; 5] = ["node5", "node3a", "node3b", "node7", "triangle"];
+const CASES: [&str; 6] = ["node5", "node3a", "node3b", "node7", "node6", "triangle"];
 
 fn case(name: &str) -> PathSpec {
     match name {
@@ -329,6 +329,121 @@ fn case(name: &str) -> PathSpec {
                 72.0,
             ])
             .z(),
+        "node6" => PathSpec::new()
+            .m(380.00006103515625, 75.99999237060547)
+            .c([
+                348.800048828125,
+                117.59999084472656,
+                308.0001220703125,
+                179.20001220703125,
+                303.2000732421875,
+                207.1999969482422,
+            ])
+            .c([
+                298.4000244140625,
+                235.19998168945312,
+                378.3999938964844,
+                163.20001220703125,
+                306.4000244140625,
+                253.60000610351562,
+            ])
+            .c([
+                234.40005493164062,
+                344.0,
+                144.800048828125,
+                348.0,
+                156.800048828125,
+                384.0,
+            ])
+            .c([
+                168.800048828125,
+                420.0,
+                21.60003662109375,
+                433.6000061035156,
+                257.60003662109375,
+                446.3999938964844,
+            ])
+            .c([
+                493.60003662109375,
+                459.1999816894531,
+                628.0001220703125,
+                557.5999755859375,
+                615.2000732421875,
+                435.1999816894531,
+            ])
+            .c([
+                602.4000244140625,
+                312.79998779296875,
+                420.0001220703125,
+                140.79998779296875,
+                411.2000732421875,
+                132.79998779296875,
+            ])
+            .c([
+                402.4000244140625,
+                124.79998779296875,
+                338.4000244140625,
+                20.0,
+                452.800048828125,
+                95.19999694824219,
+            ])
+            .c([
+                567.2000732421875,
+                170.39999389648438,
+                832.7999877929688,
+                160.80001831054688,
+                606.4000244140625,
+                245.60000610351562,
+            ])
+            .c([
+                380.00006103515625,
+                330.3999938964844,
+                83.20001220703125,
+                236.0,
+                442.4000244140625,
+                332.0,
+            ])
+            .c([
+                801.6000366210938,
+                428.0,
+                760.0000610351562,
+                507.1999816894531,
+                804.0000610351562,
+                428.7999877929688,
+            ])
+            .c([
+                848.0000610351562,
+                350.3999938964844,
+                967.2000122070312,
+                153.5999984741211,
+                762.4000244140625,
+                98.39999389648438,
+            ])
+            .c([
+                557.6000366210938,
+                43.199989318847656,
+                584.0001220703125,
+                37.59999084472656,
+                519.2000732421875,
+                49.59999084472656,
+            ])
+            .c([
+                454.4000244140625,
+                61.59999084472656,
+                451.20001220703125,
+                40.79999542236328,
+                413.60003662109375,
+                55.99999237060547,
+            ])
+            .c([
+                376.00006103515625,
+                71.19998931884766,
+                411.2000732421875,
+                34.399993896484375,
+                380.00006103515625,
+                75.99999237060547,
+            ])
+            .z(),
         "triangle" => PathSpec::new()
             .m(0.0, 0.0)
             .c([0.0, 0.0, 99.0, 0.4, 100.0, 0.0])
@@ -407,9 +522,9 @@ fn count(ws: &StrokeWorkspace, kind: PieceKind) -> usize {
         .count()
 }
 
-/// E35-A1: the user's paths at zoom 1, DPR 1 (`e = -3`), or at `e = -2` for node3b, whose
-/// `e = -3` stroke still meets the arrangement's node cap (the renderer's coarser retry reaches
-/// `-2`), were `work-limit` at `r7` and are `ok` at `r8`.
+/// E35-A1: the user's paths at zoom 1, DPR 1 (`e = -3`) were `work-limit` at `r7` and are `ok`
+/// at `r8`; node3b at `e = -2` and node6 (945 px wide) at `e = -1`, where the renderer's
+/// coarser retry finds them, because finer they meet the arrangement's vertex and node caps.
 #[test]
 fn e35_user_paths_build_after_the_retry() {
     let mut ws = StrokeWorkspace::new().expect("workspace");
@@ -421,6 +536,7 @@ fn e35_user_paths_build_after_the_retry() {
         ("node3b", -2),
         ("node7", -3),
         ("node7", -4),
+        ("node6", -1),
     ] {
         let path = case(name);
         let (before, _) = build(&mut ws, &path, exponent, true);
@@ -479,9 +595,10 @@ fn e35_ok_meshes_are_unchanged() {
                     assert_eq!(count(&ws, PieceKind::FanSide), 0, "{name} e={exponent}");
                     compared += 1;
                 } else {
+                    assert_eq!(before, STROKE_PATH_WORK_LIMIT, "{name} e={exponent}");
                     assert!(
-                        after == STROKE_PATH_OK || after == before,
-                        "{name} e={exponent}: {before} became {after}"
+                        after == STROKE_PATH_OK || after == STROKE_PATH_WORK_LIMIT,
+                        "{name} e={exponent}: work-limit became {after}"
                     );
                 }
             }
@@ -530,4 +647,3 @@ fn e35_grouped_pieces_stay_near_the_curve() {
         }
     }
 }
-
