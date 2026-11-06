@@ -45,6 +45,27 @@ describe('V-25 text box outline in text edit mode', () => {
     expect(bottomRight![1]).toBeCloseTo(311);
   });
 
+  it('follows a node nested in a rotated frame, where the selection box is', () => {
+    const host = textHost();
+    const created = host.editor.execute({
+      type: 'createFrame',
+      frame: { x: 0, y: 0, width: 100, height: 80 },
+    });
+    if (!created.ok) throw new Error(created.code);
+    const [frame] = created.ids;
+    host.editor.execute({ type: 'moveNodes', ids: ['t'], parent: frame!, index: 0 });
+    host.editor.execute({ type: 'rotateNodes', ids: [frame!], angle: Math.PI / 6 });
+    host.editor.execute({ type: 'setSelection', ids: ['t'] });
+    const handles = host.editor.query({ type: 'handles' })!;
+    host.editor.execute({ type: 'enterTextEdit', id: 't', anchor: 0, focus: 0 });
+    const box = textEditBox(host.editor.getSnapshot())!;
+    // The default camera maps page to CSS px one to one.
+    box.forEach(([x, y], index) => {
+      expect(x).toBeCloseTo(handles.corners[index]!.x);
+      expect(y).toBeCloseTo(handles.corners[index]!.y);
+    });
+  });
+
   it("outlines a pending node's frame before its first character", () => {
     const host = textHost();
     host.editor.execute({ type: 'setTool', tool: 'text' });

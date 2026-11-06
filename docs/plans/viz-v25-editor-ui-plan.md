@@ -179,5 +179,6 @@ The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2
 
 ## Validation (slice 6)
 
-- Unit: `tests/unit/v25-text-box.test.ts` (5 tests: none outside edit mode, CSS px at a camera and growth on typing, a rotated node, a pending node, the overlay draws it only when the page passes it).
+- Unit: `tests/unit/v25-text-box.test.ts` (6 tests: none outside edit mode, CSS px at a camera and growth on typing, a rotated node, a node in a rotated frame matching its selection box, a pending node, the overlay draws it only when the page passes it).
+- Review r1 READY WITH FOLLOW-UPS: the nested case and the include-list order applied. Headed check to look at a pending node in a rotated scope (the outline is the page-space frame the contract names; it should not jump on the first character).
 - Headed: on the main PC after merge.
