@@ -63,3 +63,7 @@ Arrangement nodes on node5's closing cubic at `e = -3`: 53,306 (r7, wide limits)
 - The star outline `unsupported-geometry` found by V-25 (#523) is a separate refusal class (near-mirrored vertices), recorded as backlog candidate E36.
 - Caps above, and node3b at `e = -3`. The user's fifth path (node6, 945 x 538 px, 14 cubics) builds at `r8` only from `e = -1`: at `e = -3` its merged outline has 1,358 vertices against `max_input_vertices` 1,024, and at `e = -2` it meets the output caps. Its closing hairpin alone builds from `+2` to `-4`. Raising §7.6's caps is a separate decision.
 - Follow-ups from the review: ST-O1 for `fan-side` and `reversal-disk`; a test of the inward half and of bitwise seam sharing; a fan that reaches `FAN_MAX_LEAVES`; a reversal disk at a source end.
+
+## 6. Headed evidence
+
+Headed run on the main PC (DESKTOP-DKVUSAV, Chrome) at main 8f10383 with the r8 kernel: viz-v1 DPR 2, viz-v2 DPR 1 and 2 and viz-v3 DPR 1 and 2 pass. p3-b2-strokes (DPR 1, 2, 3) and viz-v1 DPR 1 failed on stale expectations only: strokes that stopped at `work-limit` now mesh, through E35 or the renderer's coarser retry (#522). #525 (3ec23c9) re-baselined both specs (viz-v1 N1 now strokes at width 64, `work-limit` at every exponent from −3 to +2), and the headed re-run passed 5/5.
