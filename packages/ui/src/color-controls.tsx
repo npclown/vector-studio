@@ -25,8 +25,8 @@ function inTextEditFocus(node: EventTarget | null): boolean {
  * The browser's colour picker beside a hex field. It shows the colour live while the picker is
  * open but commits once, on the input's native `change` (the picker closes or the choice is
  * confirmed), so one pick is one command and one undo step (M4-Q13 (a): no live preview in the
- * document). A mixed value shows black; a new document value drops a draft a dismissed picker
- * left.
+ * document). A mixed value shows black; a new document value drops the shown draft, but the
+ * pick itself (`pending`) still commits when `change` comes.
  */
 export function ColorWell({
   label,
@@ -53,18 +53,34 @@ export function ColorWell({
   useEffect(() => {
     latest.current = commit;
   });
+  // Review r2: the pick is kept apart from the shown value. Closing Chrome's popup by a click
+  // outside it queues `change` after that click, whose blur or caret move can change `value`
+  // first, and React then writes the new value into the element; so the last `input` value is
+  // kept in `pending` and compared with the value shown when the picker opened.
+  const pending = useRef<string | null>(null);
+  const opened = useRef<string | null>(value);
+  const open = () => {
+    opened.current = value;
+    pending.current = null;
+    onOpen?.();
+  };
   useEffect(() => {
     const element = input.current;
     if (element === null) return;
     // React's onChange follows every `input` event while the picker is open; the native
     // `change` fires once, when the choice is made.
     const onChange = () => {
+      const hex = pending.current ?? element.value;
+      pending.current = null;
       setDraft(null);
-      if (element.value !== value) void latest.current(element.value);
+      if (hex !== opened.current) {
+        opened.current = hex;
+        void latest.current(hex);
+      }
     };
     element.addEventListener('change', onChange);
     return () => element.removeEventListener('change', onChange);
-  }, [value]);
+  }, []);
   const [source, setSource] = useState(value);
   if (source !== value) {
     setSource(value);
@@ -79,9 +95,12 @@ export function ColorWell({
       title={label}
       disabled={disabled}
       value={draft ?? value ?? '#000000'}
-      onChange={(event) => setDraft(event.target.value)}
-      onFocus={onOpen}
-      onClick={onOpen}
+      onChange={(event) => {
+        pending.current = event.target.value;
+        setDraft(event.target.value);
+      }}
+      onFocus={open}
+      onClick={open}
       onBlur={(event: FocusEvent<HTMLInputElement>) => {
         if (textEdit !== undefined && !inTextEditFocus(event.relatedTarget)) textEdit.onLeave();
       }}

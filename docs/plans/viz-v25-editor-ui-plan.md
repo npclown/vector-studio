@@ -156,6 +156,7 @@ The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2
 
 - Unit: `tests/unit/v25-text-colour.test.ts` (markup, alpha rule, a pick committed to its opening range after edit mode ended); the slice 3 tests still pass with the shared controls.
 - Review r1 NOT READY (B1: the picker's queued `change` could land on the whole text or a moved caret): fixed by the opening-range capture; S1 (keyboard swatches left edit mode) and S2 (write tests) applied.
-- Headed (V25-A22): pick a colour on a selection and close the popup by a click on blank panel space, a click on the canvas and Enter; only the selection changes.
+- Review r2 NOT READY (B2: that click can change the shown colour first, and React writes it into the input before `change`): the picker keeps the last `input` value apart (`pending`) and compares it with the colour shown when it opened. Checked in the container's Chromium on next-host `?test=1` (DOM only): "Hello " red and "world" black, "world" selected, focus and click the picker, an `input` of `#0000ff`, a blur that ends edit mode (the element then shows `#000000`), then `change`: "world" becomes blue and "Hello " stays red.
+- Headed (V25-A22): pick a colour on a selection and close the popup by a click on blank panel space, a click on the canvas and Enter; only the selection changes, also when the selection's colour differs from the rest. macOS (a non-modal colour panel) is not covered.
 - Full unit suite: 5298 passed; the only failure is the Node 22 `p3-b0r-identity` environment case, as on main.
 - Headed: on the main PC after merge.
