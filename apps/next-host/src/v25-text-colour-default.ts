@@ -64,27 +64,33 @@ function inside(document: DocumentV6, node: NodeV6, point: PagePoint): boolean {
   return local.x >= 0 && local.y >= 0 && local.x <= width && local.y <= height;
 }
 
-/** A node's fill colour when it is mostly opaque (node opacity included), else null. */
-function opaqueFill(node: NodeV6): Color | null {
+/** A node's fill colour when mostly opaque (its and its ancestors' opacity included), else null. */
+function opaqueFill(node: NodeV6, inherited: number): Color | null {
   if (!('fill' in node) || node.fill === null) return null;
   const color = paintColor(node.fill);
-  return color.a * node.opacity >= 0.5 ? color : null;
+  return color.a * node.opacity * inherited >= 0.5 ? color : null;
 }
 
 /** The frontmost backdrop fill under `point` among `ids` (back to front), or null. */
-function backdropIn(document: DocumentV6, ids: readonly string[], point: PagePoint): Color | null {
+function backdropIn(
+  document: DocumentV6,
+  ids: readonly string[],
+  point: PagePoint,
+  inherited: number,
+): Color | null {
   for (let i = ids.length - 1; i >= 0; i -= 1) {
     const node = document.nodes[ids[i]!];
     if (node === undefined || node.visible === false) continue;
     if (node.type === 'group') {
-      const found = backdropIn(document, node.children, point);
+      const found = backdropIn(document, node.children, point, inherited * node.opacity);
       if (found !== null) return found;
     } else if (node.type === 'frame') {
       if (!inside(document, node, point)) continue;
-      return backdropIn(document, node.children, point) ?? opaqueFill(node);
+      const inner = backdropIn(document, node.children, point, inherited * node.opacity);
+      return inner ?? opaqueFill(node, inherited);
     } else if (node.type === 'rectangle' || node.type === 'ellipse') {
       if (!inside(document, node, point)) continue;
-      const fill = opaqueFill(node);
+      const fill = opaqueFill(node, inherited);
       if (fill !== null) return fill;
     }
   }
@@ -94,7 +100,7 @@ function backdropIn(document: DocumentV6, ids: readonly string[], point: PagePoi
 /** The colour under the page point `point` of page `page`: a backdrop fill or the canvas. */
 export function backdropColor(document: DocumentV6, page: string, point: PagePoint): Color {
   const children = document.pages.find((p) => p.id === page)?.children ?? [];
-  return backdropIn(document, children, point) ?? CANVAS_BACKDROP;
+  return backdropIn(document, children, point, 1) ?? CANVAS_BACKDROP;
 }
 
 /** WCAG relative luminance of a colour's sRGB channels. */
@@ -119,6 +125,15 @@ export function readableTextStyle(
   if (!same(style.color, BLACK) && !same(style.color, WHITE)) return null;
   const color = luminance(backdropColor(document, page, point)) < 0.179 ? WHITE : BLACK;
   return same(color, style.color) ? null : { ...style, color };
+}
+
+/**
+ * The text tool style over the empty (black) canvas, for the studio's start: white when the
+ * style is the default black, else null (any other colour is kept). A plain-text paste outside
+ * text edit mode uses the tool style, so it reads on the canvas too.
+ */
+export function canvasTextStyle(style: TextStyle): TextStyle | null {
+  return same(style.color, BLACK) ? { ...style, color: WHITE } : null;
 }
 
 /**

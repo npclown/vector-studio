@@ -63,7 +63,7 @@ import {
 import { CanvasSide, hostContributions } from '../src/m8-layout';
 import { faultPanelsQuery, testUiExtension } from '../src/m8-test-panels';
 import { StudioShell, studioLayout, type StudioCanvasSize } from '../src/v25-studio';
-import { caretColour, readableTextStyle } from '../src/v25-text-colour-default';
+import { canvasTextStyle, caretColour, readableTextStyle } from '../src/v25-text-colour-default';
 import { textEditBox } from '../src/v25-text-box';
 import { SelectionOverlay } from '../src/overlay';
 import { createWebGpuRenderer } from '../src/webgpu-renderer';
@@ -644,12 +644,20 @@ function Surface({
     }
     setRotating(zone);
   };
+  // V-25 slice 7: the empty canvas is black, so the studio starts the text tool white (a plain-text
+  // paste outside text edit mode uses it too); a press then picks black or white from its backdrop.
+  useEffect(() => {
+    if (!studio) return;
+    const style = canvasTextStyle(editor.getSnapshot().textStyle);
+    if (style !== null) editor.execute({ type: 'setTextToolStyle', style });
+  }, [editor, studio]);
   // V-25 slice 7: before a text tool press reaches the canvas, the studio switches the text tool
   // between black and white so new text reads against what lies under the press.
   const readableText = (event: PointerEvent<HTMLDivElement>) => {
     const current = editor.getSnapshot();
     const canvas = event.currentTarget.querySelector('canvas');
-    if (current.tool !== 'text' || current.textEdit !== null || canvas === null) return;
+    if (event.button !== 0 || current.tool !== 'text' || current.textEdit !== null) return;
+    if (canvas === null) return;
     const { position, zoom } = current.viewport;
     const rect = canvas.getBoundingClientRect();
     const point = {

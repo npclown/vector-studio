@@ -9,6 +9,8 @@ import { describe, expect, it } from 'vitest';
 import {
   CANVAS_BACKDROP,
   backdropColor,
+  canvasTextStyle,
+  caretColour,
   luminance,
   readableTextStyle,
 } from '../../apps/next-host/src/v25-text-colour-default.js';
@@ -90,6 +92,38 @@ describe('V-25 readable default text colour', () => {
     expect(at(target, 50, 50)).toEqual(CANVAS_BACKDROP);
     ok(target, { type: 'setNodeProps', id: ellipse, props: { fill: white, visible: false } });
     expect(at(target, 50, 50)).toEqual(CANVAS_BACKDROP);
+  });
+
+  it("counts a group's or frame's opacity into its children's fills", () => {
+    const target = editor();
+    const frame = ok(target, {
+      type: 'createFrame',
+      frame: { x: 0, y: 0, width: 100, height: 100 },
+    });
+    ok(target, {
+      type: 'createRectangle',
+      frame: { x: 0, y: 0, width: 100, height: 100 },
+      fill: white,
+      parent: frame,
+    });
+    expect(at(target, 50, 50)).toEqual(white);
+    ok(target, { type: 'setNodeProps', id: frame, props: { opacity: 0.1 } });
+    expect(at(target, 50, 50)).toEqual(CANVAS_BACKDROP);
+  });
+
+  it('starts the studio text tool white and picks the caret colour', () => {
+    expect(canvasTextStyle(style)?.color).toEqual(white);
+    expect(canvasTextStyle({ ...style, color: white })).toBeNull();
+    expect(canvasTextStyle({ ...style, color: { r: 1, g: 0, b: 0, a: 1 } })).toBeNull();
+    const target = editor();
+    ok(target, {
+      type: 'createFrame',
+      frame: { x: 0, y: 0, width: 100, height: 100 },
+      fill: white,
+    });
+    const document = target.getSnapshot().document;
+    expect(caretColour(document, 'p1', { x: 50, y: 50 })).toBe('#000000');
+    expect(caretColour(document, 'p1', { x: 150, y: 50 })).toBe('#ffffff');
   });
 
   it('keeps a colour the user chose', () => {
