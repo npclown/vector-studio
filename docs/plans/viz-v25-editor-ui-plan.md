@@ -1,6 +1,6 @@
 # V-25: editor UI usability plan
 
-Status: slice 1 DONE 2026-11-06 (#511, `82002c1`; review r1 NOT READY applied, r2 READY WITH FOLLOW-UPS applied); slice 2 DONE 2026-11-06 (#512, `f2c48d5`; review r1 NOT READY fixed, r2 READY WITH FOLLOW-UPS fixed); slice 3 DONE 2026-11-06 (#513, `b41a9b6`; review r1 READY WITH FOLLOW-UPS applied); slice 4 DONE 2026-11-06 (#514, `f95ea08`; review r1 NOT READY fixed, r2 READY WITH FOLLOW-UPS applied); slice 5 IN REVIEW 2026-11-06; slices 6 to 8 proposed. Tier: Full (product UI behaviour, new `@vector-studio/ui` exports). Track: visualization.
+Status: slice 1 DONE 2026-11-06 (#511, `82002c1`; review r1 NOT READY applied, r2 READY WITH FOLLOW-UPS applied); slice 2 DONE 2026-11-06 (#512, `f2c48d5`; review r1 NOT READY fixed, r2 READY WITH FOLLOW-UPS fixed); slice 3 DONE 2026-11-06 (#513, `b41a9b6`; review r1 READY WITH FOLLOW-UPS applied); slice 4 DONE 2026-11-06 (#514, `f95ea08`; review r1 NOT READY fixed, r2 READY WITH FOLLOW-UPS applied); slices 5 to 7 DONE 2026-11-06 (#515 `41acd8a`, #516 `a4e6b4c`, #517 `351e0cd`); slice 8 (pen paths and curves) IN REVIEW 2026-11-06; slices 9 to 11 proposed. Tier: Full (product UI behaviour, new `@vector-studio/ui` exports). Track: visualization.
 
 ## Request
 
@@ -22,7 +22,7 @@ The M8 layout is kept on purpose for specs and benches: its canvas origin, row h
 
 The engine already has most of it: the viewport is unbounded (pan, wheel and pinch zoom, zoom to fit and to selection), documents have pages, and `frame` nodes are containers with fill and stroke. What is missing is UI.
 
-Recommendation: no new artboard node type and no schema change. A top-level frame on a page is an artboard, as in Figma. Artboard features (slice 2) are UI over existing frames; export per artboard (slice 10) is a new feature with its own contract.
+Recommendation: no new artboard node type and no schema change. A top-level frame on a page is an artboard, as in Figma. Artboard features (slice 2) are UI over existing frames; export per artboard (slice 11) is a new feature with its own contract.
 
 ## Slices
 
@@ -34,10 +34,11 @@ Recommendation: no new artboard node type and no schema change. A top-level fram
 | 4 | Frame adoption: a shape drawn in a frame becomes its child; a shape dropped on a frame moves into it, or out onto the page | Done (#514, `f95ea08`) |
 | 5 | Text colour: the colour picker and swatches for the text run colour | Done (#515, `41acd8a`) |
 | 6 | Text box outline: text edit mode outlines the edited text's box | Done (#516, `a4e6b4c`) |
-| 7 | Readable text on the black canvas: new text and the caret contrast with what lies under them; the outline clears the caret | In review |
-| 8 | Property panel: X/Y/W/H grid, collapsible sections | Proposed |
-| 9 | Context menu (right click): group, arrange, delete, symbol actions | Proposed |
-| 10 | Export per artboard (SVG, PNG) | Proposed; needs its own contract |
+| 7 | Readable text on the black canvas: new text and the caret contrast with what lies under them; the outline clears the caret | Done (#517, `351e0cd`) |
+| 8 | Pen paths and curves: a new line or path is stroked to read on what lies under it; the pen previews its pending curves, the last anchor's handles and the next segment to the pointer; Alt-drag breaks the handles | In review |
+| 9 | Property panel: X/Y/W/H grid, collapsible sections | Proposed |
+| 10 | Context menu (right click): group, arrange, delete, symbol actions | Proposed |
+| 11 | Export per artboard (SVG, PNG) | Proposed; needs its own contract |
 
 The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2 (artboards) next, then asked for slice 3 ("make colour picking easy, and always switch to Select when a shape is drawn"), which takes the colour swatches out of the old property panel slice. Slice 4 answers the user's question the same day ("how do I put a shape inside a Frame? I can't find a way"): the only way was cut and paste with the frame selected or entered.
 
@@ -205,4 +206,26 @@ The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2
 - Unit: `tests/unit/v25-text-box.test.ts` (7 tests, with the outset) and `tests/unit/v25-text-colour-default.test.ts` (7 tests: the canvas, a white artboard and a dark child, hidden, transparent and elliptic nodes, ancestor opacity, the studio start and the caret colour, a kept colour, luminance).
 - Review r1 READY WITH FOLLOW-UPS, applied: ancestor (group and frame) opacity counts into a fill's opacity; only a primary-button press switches the style; the studio starts the text tool white over the black canvas, so a plain-text paste outside text edit mode reads too. Kept as limits: symbols, instances, paths, lines and other leaves are not read as backdrops (white text over a white instance card stays possible), and a press on existing text also recomputes the tool style (harmless: the next creating press recomputes it).
 - DOM check in the container's Chromium on the studio layout (renderer down, DOM only): text tool, click, type `asdfsadf`: the text colour is `#ffffff`, the outline is `299,199 361.48,199 361.48,220.2 299,220.2` and the white caret is at x 360.48, inside it.
+- Headed: on the main PC after merge.
+
+## Slice 8 design: pen paths and curves
+
+- Request (2026-11-06): "a path draws, but its stroke or fill sometimes shows and sometimes does not; also make curves possible".
+- Cause, reproduced on the main PC (:4194): a pen path is created with no fill and the editor's default path stroke, black 1 px (`DEFAULT_PATH_STROKE`, P5 plan section 14). Over the black canvas (the renderer's clear colour, slice 7) it is invisible; over a white artboard it shows, hence "sometimes". A fill or stroke chosen in the property panel rendered correctly every time (closed triangle, blue fill, white stroke). Lines had the same default.
+- Fix: a new editor option `drawStrokeColor(document, page, point)` gives the line and path tools the stroke colour for the first point; the default stroke takes that colour, one undo step as before. Without the option, or when it returns null, throws or returns something that is not a colour, the command's default (black) is kept, so the M8 layout, the specs and the benches are unchanged. The studio passes `readableStrokeColor` (`v25-text-colour-default.ts`): white over a dark backdrop, black over a light one, by the slice 7 backdrop rule. A new pen path still has no fill, as in Figma; the property panel sets one.
+- Curves: the path tool already made a cubic anchor on press-and-drag (symmetric handles, M2), but the overlay drew a polyline through the anchor points, so a curve looked straight until Enter. The overlay now draws the pending path as the tool will create it (a line where neither end has a handle, else the cubic), the last anchor's handles, and in the studio and M8 layouts the next segment from the last anchor to the pointer (host hover, `v25-pen-preview.ts`; the editor gets no hover events). Over the first anchor of two or more the first anchor fills to show that a press closes the path. With Alt held during the drag only the out handle follows the pointer, so the path turns a corner at the anchor (a cusp); the in handle keeps its last symmetric position.
+- Unchanged: Enter finishes an open path, a press on the first anchor closes it, Escape drops the pending anchors (M2).
+
+## Acceptance criteria (slice 8)
+
+| ID | Criterion | Method |
+| --- | --- | --- |
+| V25-A29 | In the studio a new path or line over the black canvas or a dark fill is stroked white, over a light fill black; without the option (M8 layout) the stroke stays black; a failing or invalid host colour keeps black | Unit tests against a real editor; headed check |
+| V25-A30 | The pending pen path is drawn with its curves, the last anchor's handles and the next segment to the pointer, and shows the close over the first anchor | Unit tests (preview and overlay markup); headed check |
+| V25-A31 | Alt during a pen drag moves only the out handle; the created path has the cubic segments | Unit test against a real editor |
+
+## Validation (slice 8)
+
+- Unit: `tests/unit/v25-pen-paths.test.ts` (8 tests: white path on the canvas, black line on a white artboard, the black default without or with a failing host colour, symmetric and Alt-broken handles with the created verbs, preview lines and curves, the next segment and the close, the overlay markup at zoom 2).
+- DOM check in the container's Chromium on the studio layout (renderer down, DOM only): pen, click, then press-and-drag, then hover: the pending path is `M 200 200 C 200 200 300 140 350 200` with both handles of the last anchor and the next segment curving out of the out handle to the pointer; hovering the first anchor sets `data-closing`, a press there closes and selects the path, and the property panel shows its stroke `#ffffff`.
 - Headed: on the main PC after merge.

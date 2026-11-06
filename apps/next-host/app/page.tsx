@@ -3,6 +3,7 @@
 import {
   type Editor,
   type EditorEvent,
+  type PagePoint,
   type PathEditOverlay,
   type Platform,
   type TextStyle,
@@ -63,7 +64,12 @@ import {
 import { CanvasSide, hostContributions } from '../src/m8-layout';
 import { faultPanelsQuery, testUiExtension } from '../src/m8-test-panels';
 import { StudioShell, studioLayout, type StudioCanvasSize } from '../src/v25-studio';
-import { canvasTextStyle, caretColour, readableTextStyle } from '../src/v25-text-colour-default';
+import {
+  canvasTextStyle,
+  caretColour,
+  readableStrokeColor,
+  readableTextStyle,
+} from '../src/v25-text-colour-default';
 import { textEditBox } from '../src/v25-text-box';
 import { SelectionOverlay } from '../src/overlay';
 import { createWebGpuRenderer } from '../src/webgpu-renderer';
@@ -627,11 +633,21 @@ function Surface({
   // The rotate cursor over the select tool's rotate zone while no button is held (hover only:
   // EditorCanvas forwards no move without a press). Set only when it changes.
   const [rotating, setRotating] = useState(false);
+  const [penCursor, setPenCursor] = useState<PagePoint | null>(null);
   const hover = (event: PointerEvent<HTMLDivElement>) => {
     const canvas = event.currentTarget.querySelector('canvas');
     if (canvas === null || event.buttons !== 0) return;
     const current = editor.getSnapshot();
     const box = editor.query({ type: 'handles' });
+    // V-25 slice 8: the pen previews its next segment to the pointer.
+    if (current.overlay?.kind === 'path') {
+      const { position, zoom } = current.viewport;
+      const rect = canvas.getBoundingClientRect();
+      setPenCursor({
+        x: position.x + (event.clientX - rect.left - canvas.clientLeft) / zoom,
+        y: position.y + (event.clientY - rect.top - canvas.clientTop) / zoom,
+      });
+    } else setPenCursor(null);
     let zone = false;
     if (current.tool === 'select' && box !== null) {
       const { position, zoom } = current.viewport;
@@ -686,7 +702,10 @@ function Surface({
       style={{ width: size.width, cursor: rotating ? ROTATE_CURSOR : undefined }}
       onPointerMove={hover}
       onPointerDownCapture={studio ? readableText : undefined}
-      onPointerLeave={() => setRotating(false)}
+      onPointerLeave={() => {
+        setRotating(false);
+        setPenCursor(null);
+      }}
     >
       <EditorCanvas
         width={size.width}
@@ -707,6 +726,7 @@ function Surface({
           textEdit={textEdit}
           textBox={studio ? textEditBox(snapshot) : null}
           caretColour={(studio ? studioCaretColour() : undefined) ?? '#000'}
+          penCursor={snapshot.overlay?.kind === 'path' ? penCursor : null}
           width={size.width}
           height={size.height}
         />
@@ -877,6 +897,8 @@ export default function Page() {
         returnToSelect: studioLayout(window.location.search),
         // V-25 slice 4: and drawing or dropping a shape on a frame puts it inside the frame.
         adoptIntoFrames: studioLayout(window.location.search),
+        // V-25 slice 8: and a new line or path is stroked to read on what lies under it.
+        ...(studioLayout(window.location.search) ? { drawStrokeColor: readableStrokeColor } : {}),
         textFixture:
           textFixtureQuery(window.location.search) || benchTextFont(window.location.search),
         // M9-U1: `?bench=1&doc=m9-v2` lists the test family as the fallback family.

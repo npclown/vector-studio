@@ -1,11 +1,14 @@
 import {
   normalizeRotation,
+  type Color,
+  type Stroke,
   type DocumentV6,
   type Frame,
   type PathNodeV6,
 } from '@vector-studio/model';
 import type { Tool, ToolContext } from './editor.js';
 import { ExpansionCache } from './expansion.js';
+import { DEFAULT_PATH_STROKE } from './edits.js';
 import { deepFreeze } from './freeze.js';
 import { adoptionOwner, dropAdoption } from './adopt.js';
 import { IDENTITY, apply, invertRigid, relocate, rotate, type Matrix } from './geometry.js';
@@ -164,7 +167,42 @@ function boxOf(a: PagePoint, b: PagePoint): Frame {
  * node is created, `adoptIntoFrames` (slice 4) creates it in the innermost frame under the press
  * point (`adoptionOwner`). Both default to off, the M2 behaviour.
  */
-export type DrawOptions = Readonly<{ returnToSelect?: boolean; adoptIntoFrames?: boolean }>;
+export type DrawOptions = Readonly<{
+  returnToSelect?: boolean;
+  adoptIntoFrames?: boolean;
+  /** V-25 slice 8: the stroke colour of a new line or path whose first point is `point`. */
+  strokeColor?: (document: DocumentV6, page: string, point: PagePoint) => Color | null;
+}>;
+
+const unitChannel = (value: unknown) =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+
+/**
+ * The `stroke` a line or path tool creates with (V-25 slice 8): the default path stroke in the
+ * host's colour for the first point, or nothing (the command's own default) without a colour, or
+ * when the host's function throws or returns something that is not a colour.
+ */
+function drawStroke(
+  context: ToolContext,
+  point: PagePoint,
+  options: DrawOptions,
+): Readonly<{ stroke?: Stroke }> {
+  if (options.strokeColor === undefined) return {};
+  let color: Color | null;
+  try {
+    color = options.strokeColor(
+      context.query({ type: 'document' }),
+      context.query({ type: 'activePage' }),
+      point,
+    );
+  } catch {
+    return {};
+  }
+  if (color === null || typeof color !== 'object') return {};
+  const { r, g, b, a } = color;
+  if (![r, g, b, a].every(unitChannel)) return {};
+  return { stroke: { ...DEFAULT_PATH_STROKE, color: { r, g, b, a } } };
+}
 
 /**
  * Selects the nodes a drawing tool just created and, with `returnToSelect`, sets the tool to
@@ -328,6 +366,7 @@ export function createLineTool(options: DrawOptions = {}): Tool {
     id: string | null;
     candidates: () => SnapSet;
     parent: string | null;
+    style: ReturnType<typeof drawStroke>;
   } | null = null;
   return {
     input(event, context) {
@@ -346,6 +385,7 @@ export function createLineTool(options: DrawOptions = {}): Tool {
           id: null,
           candidates: lazySnapSet(context, []),
           parent: drawTarget(context, event.point, options)?.parent ?? null,
+          style: drawStroke(context, event.point, options),
         };
         return true;
       }
@@ -362,13 +402,19 @@ export function createLineTool(options: DrawOptions = {}): Tool {
             type: 'createLine',
             start: drag.start,
             end,
+            ...drag.style,
             ...(drag.parent === null ? {} : { parent: drag.parent }),
           });
           if (result.ok) drag.id = result.ids[0] ?? null;
           else if (drag.parent !== null) {
             // The owner refused it (clip or tree depth): the page holds it.
             drag.parent = null;
-            const page = context.gesture.update({ type: 'createLine', start: drag.start, end });
+            const page = context.gesture.update({
+              type: 'createLine',
+              start: drag.start,
+              end,
+              ...drag.style,
+            });
             if (page.ok) drag.id = page.ids[0] ?? null;
           }
         } else {
@@ -547,15 +593,18 @@ export function createPathTool(options: DrawOptions = {}): Tool {
     // keeps the anchors.
     // V-25 slice 4: the owner under the first anchor holds the path.
     const parent = drawTarget(context, anchors[0]!.point, options)?.parent;
+    // V-25 slice 8: the host's stroke colour for the first anchor (readable on its backdrop).
+    const style = drawStroke(context, anchors[0]!.point, options);
     let result = context.execute({
       type: 'createPath',
       verbs,
       points,
+      ...style,
       ...(parent === undefined ? {} : { parent }),
     });
     // The owner refused it (clip or tree depth): the page holds it.
     if (!result.ok && parent !== undefined) {
-      result = context.execute({ type: 'createPath', verbs, points });
+      result = context.execute({ type: 'createPath', verbs, points, ...style });
     }
     if (!result.ok) return;
     anchors = [];
@@ -594,13 +643,16 @@ export function createPathTool(options: DrawOptions = {}): Tool {
         return true;
       }
       if (event.kind === 'pointermove' && pressed !== null) {
-        // Press-and-drag makes a cubic anchor with symmetric handles.
+        // Press-and-drag makes a cubic anchor with symmetric handles; with Alt (V-25 slice 8)
+        // only the out handle follows, so the curve turns a corner at the anchor.
         const { point } = pressed;
         const moved = distance(event.point, point) > 0;
         pressed.out = moved ? event.point : null;
-        pressed.in = moved
-          ? { x: 2 * point.x - event.point.x, y: 2 * point.y - event.point.y }
-          : null;
+        if (!event.modifiers.alt || !moved) {
+          pressed.in = moved
+            ? { x: 2 * point.x - event.point.x, y: 2 * point.y - event.point.y }
+            : null;
+        }
         return true;
       }
       if (event.kind === 'pointerup' && pressed !== null) {

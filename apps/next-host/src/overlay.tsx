@@ -8,6 +8,7 @@ import type {
 } from '@vector-studio/editor-core';
 import { degreesLabel, nodePageCorners } from './m2-geometry';
 import { pathMarkers } from './m3-path-overlay';
+import { penPreview } from './v25-pen-preview';
 import type { TextEditMarkers } from './m6b-text-edit';
 
 // P5-U6: the host's selection and tool overlay (P5 plan, section 4.5). It is drawn in CSS pixels
@@ -23,6 +24,8 @@ import type { TextEditMarkers } from './m6b-text-edit';
 // M6b-U9: the text edit caret, selection and composition underline from the `textEditOverlay`
 // query (M6b contract, section 4.5), drawn in DOM over the canvas; the text itself is GPU work
 // (M6-Q14 (a), M6c), so in M6b the edited box shows no glyphs. The caret does not blink.
+// V-25 slice 8: the path tool's pending anchors are drawn as the path they make (curves, the last
+// anchor's handles and the segment to the pointer, `v25-pen-preview.ts`), not as a polyline.
 
 type Props = Readonly<{
   snapshot: EditorSnapshot;
@@ -37,11 +40,21 @@ type Props = Readonly<{
   textBox?: readonly (readonly [number, number])[] | null;
   /** V-25 slice 7: the caret's stroke (black by default, the M6b look). */
   caretColour?: string;
+  /** V-25 slice 8: the pointer's page point over the canvas, for the pen's next segment. */
+  penCursor?: PagePoint | null;
 }>;
 
 type ToScreen = (x: number, y: number) => [number, number];
 
-function ToolShape({ overlay, toScreen }: { overlay: ToolOverlay; toScreen: ToScreen }) {
+function ToolShape({
+  overlay,
+  cursor,
+  toScreen,
+}: {
+  overlay: ToolOverlay;
+  cursor: PagePoint | null;
+  toScreen: ToScreen;
+}) {
   if (overlay.kind === 'marquee') {
     const [x, y] = toScreen(overlay.frame.x, overlay.frame.y);
     const [x2, y2] = toScreen(
@@ -61,16 +74,36 @@ function ToolShape({ overlay, toScreen }: { overlay: ToolOverlay; toScreen: ToSc
       />
     );
   }
-  const points = overlay.anchors.map((anchor) => toScreen(anchor.point.x, anchor.point.y));
+  const preview = penPreview(overlay.anchors, cursor, toScreen);
+  if (preview === null) return null;
   return (
-    <g data-testid="path-anchors">
-      <polyline
-        points={points.map(([x, y]) => `${x},${y}`).join(' ')}
-        fill="none"
-        stroke="#1e78ff"
-      />
-      {points.map(([x, y], index) => (
-        <circle key={index} cx={x} cy={y} r={3} fill="#fff" stroke="#1e78ff" />
+    <g data-testid="path-anchors" data-closing={preview.closing}>
+      <path data-testid="pen-path" d={preview.path} fill="none" stroke="#1e78ff" />
+      {preview.next === null ? null : (
+        <path data-testid="pen-next" d={preview.next} fill="none" stroke="#1e78ff" />
+      )}
+      {preview.handles.map(({ from, to }, index) => (
+        <g key={`h-${index}`}>
+          <line x1={from[0]} y1={from[1]} x2={to[0]} y2={to[1]} stroke="#1e78ff" />
+          <circle
+            data-testid="pen-handle"
+            cx={to[0]}
+            cy={to[1]}
+            r={3}
+            fill="#1e78ff"
+            stroke="#fff"
+          />
+        </g>
+      ))}
+      {preview.anchors.map(([x, y], index) => (
+        <circle
+          key={index}
+          cx={x}
+          cy={y}
+          r={index === 0 && preview.closing ? 5 : 3}
+          fill={index === 0 && preview.closing ? '#1e78ff' : '#fff'}
+          stroke="#1e78ff"
+        />
       ))}
     </g>
   );
@@ -244,6 +277,7 @@ export function SelectionOverlay({
   textEdit = null,
   textBox = null,
   caretColour = '#000',
+  penCursor = null,
 }: Props) {
   const { position, zoom } = snapshot.viewport;
   const toScreen = (x: number, y: number): [number, number] => [
@@ -306,7 +340,7 @@ export function SelectionOverlay({
       )}
       {textEdit === null ? null : <TextEditShapes markers={textEdit} caretColour={caretColour} />}
       {snapshot.overlay === null ? null : (
-        <ToolShape overlay={snapshot.overlay} toScreen={toScreen} />
+        <ToolShape overlay={snapshot.overlay} cursor={penCursor} toScreen={toScreen} />
       )}
       {snapshot.snap === null ? null : (
         <SnapShapes snap={snapshot.snap} handles={handles} toScreen={toScreen} />
