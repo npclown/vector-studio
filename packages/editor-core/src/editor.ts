@@ -2128,15 +2128,36 @@ class EditorCore implements Editor {
   private editGesture(edit: GestureEdit): CommandResult {
     const gesture = this.gestureState;
     if (gesture === null) return failure('editor.invalid-command');
+    let document = this.document;
+    let touched: readonly string[] = [];
+    if (edit.kind === 'mirror') {
+      // The resize's frames first, as `update` applies them, so the flipped frame and its
+      // mirrored content land as one update (V-24).
+      const frames = edit.frames;
+      const sized = this.gestureStep(gesture, document, () =>
+        applyEdit(
+          document,
+          { type: 'setFrames', frames },
+          { ...this.context(false), resizeBase: gesture.base },
+        ),
+      );
+      if (!sized.ok) return sized;
+      document = sized.document;
+      touched = sized.touched;
+    }
     const result = applyGestureEdit(
-      this.document,
+      document,
       gesture.base,
       edit,
       this.extensions,
       this.expansions,
       this.layout,
     );
-    return this.applyGestureResult(gesture, result);
+    if (!result.ok || touched.length === 0) return this.applyGestureResult(gesture, result);
+    return this.applyGestureResult(gesture, {
+      ...result,
+      touched: [...new Set([...touched, ...result.touched])],
+    });
   }
 
   private applyGestureResult(gesture: Gesture, result: EditResult): CommandResult {

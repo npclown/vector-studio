@@ -559,6 +559,11 @@ type SelectState =
       handles: HandleBox;
       handle: Handle;
       moved: boolean;
+      /**
+       * Whether an update of this gesture flipped an axis: from then on every update mirrors the
+       * content from its pre-gesture state, so dragging back unflips it.
+       */
+      flipped: boolean;
       /** The pre-gesture page-aligned bounds when the handle box is page-aligned, else null. */
       bounds: Box | null;
       candidates: () => SnapSet;
@@ -670,13 +675,28 @@ function scaled(origin: number, value: number, scale: number): number {
 
 /**
  * One axis of a box resize: the box scales about the opposite handle; an axis of size 0 or an
- * edge handle's other axis is not scaled, and the scale clamps at 0, so sizes do too.
+ * edge handle's other axis is not scaled. Dragging a handle past the opposite one gives a
+ * negative scale: the box flips over the anchor and the handle keeps following the pointer.
  */
 function axis(fraction: number, origin: number, size: number, delta: number) {
   if (fraction === 0.5 || size === 0) return { origin, scale: 1 };
   const anchor = origin + (1 - fraction) * size;
   const from = origin + fraction * size;
-  return { origin: anchor, scale: Math.max(0, (from + delta - anchor) / (from - anchor)) };
+  return { origin: anchor, scale: (from + delta - anchor) / (from - anchor) };
+}
+
+/** A frame scaled about `(ox, oy)` by signed scales, with sizes at least 0. */
+function scaledFrame(frame: Frame, ox: number, sx: number, oy: number, sy: number): Frame {
+  const x = scaled(ox, frame.x, sx);
+  const y = scaled(oy, frame.y, sy);
+  const width = frame.width * sx;
+  const height = frame.height * sy;
+  return {
+    x: width < 0 ? x + width : x,
+    y: height < 0 ? y + height : y,
+    width: Math.abs(width),
+    height: Math.abs(height),
+  };
 }
 
 /**
@@ -1057,6 +1077,7 @@ export function createSelectTool(
           handles,
           handle,
           moved: false,
+          flipped: false,
           bounds: bounds === null ? null : boxOfFrame(bounds),
           candidates: lazySnapSet(context, selection),
         };
@@ -1198,27 +1219,40 @@ export function createSelectTool(
         sx,
         sy,
       );
-      context.gesture.update({ type: 'setFrames', frames: [{ id: handles.id, frame }] });
+      resizeFrames(current, [{ id: handles.id, frame }], sx < 0, sy < 0, context);
       return;
     }
     const x = axis(handle[0], box.x, box.width, dx);
     const y = axis(handle[1], box.y, box.height, dy);
     if (handles.mode === 'map') {
-      // Several nodes: each maps by the box scale as in a group resize (section 4.4).
+      // Several nodes: each maps by the box scale as in a group resize (section 4.4); a negative
+      // scale mirrors them about the anchor.
       const map = scaleAbout(x.scale, y.scale, { x: x.origin, y: y.origin });
       context.gesture.edit({ kind: 'map', ids: [...current.frames.keys()], map });
       return;
     }
     const frames = [...current.frames].map(([id, frame]) => ({
       id,
-      frame: {
-        x: scaled(x.origin, frame.x, x.scale),
-        y: scaled(y.origin, frame.y, y.scale),
-        width: frame.width * x.scale,
-        height: frame.height * y.scale,
-      },
+      frame: scaledFrame(frame, x.origin, x.scale, y.origin, y.scale),
     }));
-    context.gesture.update({ type: 'setFrames', frames });
+    resizeFrames(current, frames, x.scale < 0, y.scale < 0, context);
+  }
+
+  /**
+   * A `setFrames` resize update; once a gesture has flipped an axis (V-24), a `mirror` edit
+   * instead, which applies the frames and sets the content again from the pre-gesture state,
+   * mirrored along the flipped axes, in one update, so dragging back restores it.
+   */
+  function resizeFrames(
+    current: Extract<SelectState, { kind: 'resize' }>,
+    frames: readonly { id: string; frame: Frame }[],
+    x: boolean,
+    y: boolean,
+    context: ToolContext,
+  ): void {
+    if (x || y) current.flipped = true;
+    if (current.flipped) context.gesture.edit({ kind: 'mirror', frames, x, y });
+    else context.gesture.update({ type: 'setFrames', frames });
   }
 
   /**

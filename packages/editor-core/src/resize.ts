@@ -3,6 +3,7 @@ import {
   type Constraint,
   type Frame,
   type NodeV6,
+  type Paint,
   type TextNode,
 } from '@vector-studio/model';
 import {
@@ -42,8 +43,8 @@ const BOTH_AXES: ScaleAxes = { x: true, y: true };
 
 /**
  * An axis-aligned scale in a **scale space** whose axes are turned by `psi` against the current
- * space: a point with scale-space coordinates `q` maps to `t + s·(q − o)` per axis. Scales are at
- * least 0.
+ * space: a point with scale-space coordinates `q` maps to `t + s·(q − o)` per axis. A negative
+ * scale flips that axis (`mapNode` mirrors the node about `o` first, then scales by `|s|`).
  */
 export type ScaleMap = Readonly<{
   sx: number;
@@ -107,7 +108,9 @@ export function approximateSize(
 /**
  * The frame of a node of `frame` and `rotation` scaled by `(sx, sy)` in its own axes about the
  * point at fractions `(fx, fy)` of its box (the opposite handle), which stays in place in the
- * parent's space (section 4.4, rotated node, single selection).
+ * parent's space (section 4.4, rotated node, single selection). A negative scale flips the box
+ * past the anchor; the returned frame has sizes at least 0, and the caller mirrors the node's
+ * content (`mirrorContent`) on each flipped axis.
  */
 export function resizeInOwnAxes(
   frame: Frame,
@@ -120,21 +123,133 @@ export function resizeInOwnAxes(
   const width = frame.width * sx;
   const height = frame.height * sy;
   if (rotation === 0) {
+    const x = frame.x + fx * frame.width - fx * width;
+    const y = frame.y + fy * frame.height - fy * height;
     return {
-      x: frame.x + fx * frame.width - fx * width,
-      y: frame.y + fy * frame.height - fy * height,
-      width,
-      height,
+      x: width < 0 ? x + width : x,
+      y: height < 0 ? y + height : y,
+      width: Math.abs(width),
+      height: Math.abs(height),
     };
   }
   const anchor = apply(localTransform(frame, rotation), fx * frame.width, fy * frame.height);
   const offset = rotate(rotation, (fx - 0.5) * width, (fy - 0.5) * height);
   return {
-    x: anchor.x - offset.x - width / 2,
-    y: anchor.y - offset.y - height / 2,
-    width,
-    height,
+    x: anchor.x - offset.x - Math.abs(width) / 2,
+    y: anchor.y - offset.y - Math.abs(height) / 2,
+    width: Math.abs(width),
+    height: Math.abs(height),
   };
+}
+
+/** A paint mirrored in the unit box: a gradient's transform flips, a colour stays. */
+function mirrorPaint(paint: Paint, mx: boolean, my: boolean): Paint {
+  if (!('kind' in paint)) return paint;
+  const [a, b, c, d, e, f] = paint.transform;
+  return {
+    ...paint,
+    transform: [mx ? -a : a, my ? -b : b, mx ? -c : c, my ? -d : d, mx ? 1 - e : e, my ? 1 - f : f],
+  };
+}
+
+function swapEnds(constraint: Constraint): Constraint {
+  return constraint === 'start' ? 'end' : constraint === 'end' ? 'start' : constraint;
+}
+
+/** Unit-box points `[x0, y0, x1, y1, ...]` mirrored about the box's centre lines. */
+function mirrorUnit(points: readonly number[], mx: boolean, my: boolean): number[] {
+  return points.map((value, i) => ((i % 2 === 0 ? mx : my) ? 1 - value : value));
+}
+
+/**
+ * Mirrors the content of node `id` inside its own box along its own x axis (`mx`) and/or y axis
+ * (`my`), keeping its frame and rotation: path and line points, corner radii and gradient paints
+ * flip, and a container's children are reflected about its box's centre (`reflectNode`), a frame
+ * child's `start` and `end` constraints swapping on each mirrored axis. Text glyphs, instance
+ * content and custom nodes (data and paints) are not mirrored: the model has no flip, so those
+ * keep their own orientation; reflected as children they move and take the reflected angle.
+ */
+export function mirrorContent(tree: WritableTree, id: string, mx: boolean, my: boolean): void {
+  const node = tree.node(id);
+  if (node === undefined || (!mx && !my)) return;
+  if (isGroup(node) || isFrameLike(node)) {
+    const centre = { x: node.frame.width / 2, y: node.frame.height / 2 };
+    for (const child of node.children) {
+      reflectNode(tree, child, 0, centre, mx, my);
+      // A frame child keeps its mirrored layout under later resizes: `start` and `end` swap
+      // on each mirrored axis.
+      const reflected = tree.node(child);
+      if (isFrameLike(node) && reflected !== undefined) {
+        const { horizontal, vertical } = reflected.constraints;
+        const constraints = {
+          horizontal: mx ? swapEnds(horizontal) : horizontal,
+          vertical: my ? swapEnds(vertical) : vertical,
+        };
+        if (constraints.horizontal !== horizontal || constraints.vertical !== vertical) {
+          tree.set({ ...reflected, constraints });
+        }
+      }
+    }
+  }
+  // A custom node's geometry lives in its `data`, which is not mirrored, so its paints stay too.
+  if (node.type === 'custom') return;
+  let next: NodeV6 = node;
+  if ('fill' in next && next.fill !== null)
+    next = { ...next, fill: mirrorPaint(next.fill, mx, my) };
+  if ('stroke' in next && next.stroke !== null) {
+    const stroke = next.stroke as { color: Paint };
+    next = { ...next, stroke: { ...stroke, color: mirrorPaint(stroke.color, mx, my) } } as NodeV6;
+  }
+  if (next.type === 'path') {
+    next = { ...next, path: { ...next.path, points: mirrorUnit(next.path.points, mx, my) } };
+  } else if (next.type === 'line') {
+    const [x0, y0, x1, y1] = mirrorUnit(next.points, mx, my);
+    next = { ...next, points: [x0!, y0!, x1!, y1!] };
+  } else if (next.type === 'rectangle') {
+    let [tl, tr, br, bl] = next.cornerRadii;
+    if (mx) [tl, tr, br, bl] = [tr, tl, bl, br];
+    if (my) [tl, tr, br, bl] = [bl, br, tr, tl];
+    next = { ...next, cornerRadii: [tl, tr, br, bl] };
+  }
+  if (next !== node) tree.set(next);
+}
+
+/**
+ * Reflects node `id` (in its parent's space) about the lines through `origin` of a scale space
+ * turned by `psi`: across the line parallel to the scale-space y axis when `fx`, the one parallel
+ * to its x axis when `fy`. The node's centre reflects and its size stays; one flipped axis turns
+ * its angle to the scale space from θ to −θ and mirrors its content along the matching own axis
+ * (`R·Rot(θ) = Rot(−θ)·R`); both axes keep the angle and mirror both own axes (a half turn).
+ */
+export function reflectNode(
+  tree: WritableTree,
+  id: string,
+  psi: number,
+  origin: PagePoint,
+  fx: boolean,
+  fy: boolean,
+): void {
+  const node = tree.node(id);
+  if (node === undefined || (!fx && !fy)) return;
+  const { width, height } = node.frame;
+  let frame: Frame;
+  if (psi === 0 && node.rotation === 0) {
+    frame = {
+      x: fx ? 2 * origin.x - node.frame.x - width : node.frame.x,
+      y: fy ? 2 * origin.y - node.frame.y - height : node.frame.y,
+      width,
+      height,
+    };
+  } else {
+    const q = rotate(-psi, node.frame.x + width / 2, node.frame.y + height / 2);
+    const c = rotate(psi, fx ? 2 * origin.x - q.x : q.x, fy ? 2 * origin.y - q.y : q.y);
+    frame = { x: c.x - width / 2, y: c.y - height / 2, width, height };
+  }
+  const one = fx !== fy;
+  const rotation = one ? normalizeRotation(2 * psi - node.rotation) : node.rotation;
+  tree.set({ ...node, frame, rotation });
+  if (one) mirrorContent(tree, id, fx, fy);
+  else mirrorContent(tree, id, true, true);
 }
 
 function isAligned(theta: number): boolean {
@@ -169,6 +284,12 @@ export function mapNode(
   map: ScaleMap,
   axes: ScaleAxes = BOTH_AXES,
 ): void {
+  if (map.sx < 0 || map.sy < 0) {
+    // A flip: mirror about the map's origin, then scale by the magnitudes (s·(q − o) equals
+    // |s|·(F(q) − o) with F the reflection about o).
+    reflectNode(tree, id, map.psi, { x: map.ox, y: map.oy }, map.sx < 0, map.sy < 0);
+    map = { ...map, sx: Math.abs(map.sx), sy: Math.abs(map.sy) };
+  }
   const node = tree.node(id);
   if (node === undefined) return;
   if (map.sx === 1 && map.sy === 1) {
