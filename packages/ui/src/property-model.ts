@@ -12,7 +12,14 @@ import type {
   TextNode,
   TextRun,
 } from '@vector-studio/react';
-import { numberText, parseNumber, toDegrees, toRadians, type Common } from './appearance-model.js';
+import {
+  numberText,
+  parseHex,
+  parseNumber,
+  toDegrees,
+  toRadians,
+  type Common,
+} from './appearance-model.js';
 
 // MVP M8 contract, section 7.3 (M8-R2 to M8-R5, M8-U5): the pure side of the property panel's
 // transform, layer, line, constraint, text and symbol sections, internal to the package and
@@ -344,3 +351,31 @@ export function runPropertyAction(
 /** A refused command's code and path as the panel shows it, or '' for a success. */
 export const refusalText = (result: CommandResult): string =>
   result.ok ? '' : `${result.code} ${result.path ?? ''}`.trimEnd();
+
+/**
+ * V-25 slice 5: the run colour a hex field, picker or swatch writes: `hex` with the shown run
+ * colour's alpha, opaque when it is mixed or none; null when `hex` is not `#rrggbb`.
+ */
+export function runColor(hex: string, shown: Common<Color>): Color | null {
+  return parseHex(hex, shown.state === 'one' ? shown.value.a : 1);
+}
+
+/**
+ * V-25 slice 5 (review r1): the `setTextStyle` a colour picker commits to the run range it was
+ * opened on, so a later focus or caret move (closing Chrome's popup by a click outside it blurs
+ * the picker and can end edit mode before the queued `change`) does not move the pick elsewhere.
+ */
+export function pickedColorCommand(
+  target: Readonly<{ id: string; start: number; end: number; shown: Common<Color> }>,
+  hex: string,
+): Command | null {
+  const color = runColor(hex, target.shown);
+  if (color === null) return null;
+  return {
+    type: 'setTextStyle',
+    id: target.id,
+    start: target.start,
+    end: target.end,
+    style: { color },
+  };
+}

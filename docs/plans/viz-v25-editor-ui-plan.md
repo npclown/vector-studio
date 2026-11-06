@@ -143,7 +143,7 @@ The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2
 
 - Request (2026-11-06): "the text colour should use the colour picker too".
 - The picker and swatches move to `packages/ui/src/color-controls.tsx` (not exported from the package), shared by the appearance panel's solid paints and the text section. The text section's run colour gets the browser colour picker ("Text colour picker") after its hex field, so Tab from Font size still reaches Text colour as the M8 headed spec presses, and the twelve swatches ("Text swatches") below the row. Each writes one `setTextStyle` with the shown colour's alpha (opaque when mixed), on the text edit selection or the whole text, as the hex field.
-- Text edit mode (M8-R4): the picker carries `data-text-edit-focus` and exits edit mode when focus leaves it for outside that target, as the run fields; a swatch press never takes focus (`mousedown` default prevented), so the canvas keeps the text edit selection. Both are disabled for a collapsed caret, as the other run fields (M8-Q9 (a)). The fill and stroke swatches now also keep focus where it was.
+- Text edit mode (M8-R4): the picker and the swatches carry `data-text-edit-focus` and exit edit mode when focus leaves them for outside that target, as the run fields; a swatch mouse press never takes focus (`mousedown` default prevented), so the canvas keeps the text edit selection. The picker records the run range when it takes focus or is clicked and commits its pick there (`pickedColorCommand`): Chrome's popup on Windows closes on a click outside it and queues its `change` after that click, whose blur can end edit mode or move the caret first (review r1). Both are disabled for a collapsed caret, as the other run fields (M8-Q9 (a)). The fill and stroke swatches now also keep focus where it was.
 
 ## Acceptance criteria (slice 5)
 
@@ -154,6 +154,8 @@ The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2
 
 ## Validation (slice 5)
 
-- Unit: `tests/unit/v25-text-colour.test.ts`; the slice 3 tests still pass with the shared controls.
+- Unit: `tests/unit/v25-text-colour.test.ts` (markup, alpha rule, a pick committed to its opening range after edit mode ended); the slice 3 tests still pass with the shared controls.
+- Review r1 NOT READY (B1: the picker's queued `change` could land on the whole text or a moved caret): fixed by the opening-range capture; S1 (keyboard swatches left edit mode) and S2 (write tests) applied.
+- Headed (V25-A22): pick a colour on a selection and close the popup by a click on blank panel space, a click on the canvas and Enter; only the selection changes.
 - Full unit suite: 5298 passed; the only failure is the Node 22 `p3-b0r-identity` environment case, as on main.
 - Headed: on the main PC after merge.

@@ -34,6 +34,7 @@ export function ColorWell({
   value,
   disabled = false,
   textEdit,
+  onOpen,
   commit,
 }: {
   label: string;
@@ -42,6 +43,8 @@ export function ColorWell({
   value: string | null;
   disabled?: boolean;
   textEdit?: TextEditFocus;
+  /** Called as the picker takes focus or is clicked, before it opens, to capture its target. */
+  onOpen?: () => void;
   commit: (hex: string) => boolean;
 }) {
   const input = useRef<HTMLInputElement>(null);
@@ -77,6 +80,8 @@ export function ColorWell({
       disabled={disabled}
       value={draft ?? value ?? '#000000'}
       onChange={(event) => setDraft(event.target.value)}
+      onFocus={onOpen}
+      onClick={onOpen}
       onBlur={(event: FocusEvent<HTMLInputElement>) => {
         if (textEdit !== undefined && !inTextEditFocus(event.relatedTarget)) textEdit.onLeave();
       }}
@@ -95,6 +100,7 @@ export function Swatches({
   testId,
   current,
   disabled = false,
+  textEdit,
   pick,
 }: {
   /** The group's name prefix, as "Fill" in "Fill swatches" and "Fill swatch #000000". */
@@ -104,6 +110,8 @@ export function Swatches({
   /** The shared colour, or null when there is none. */
   current: string | null;
   disabled?: boolean;
+  /** Text run swatches: in the text edit focus target, so keyboard focus keeps edit mode. */
+  textEdit?: TextEditFocus;
   pick: (hex: string) => void;
 }) {
   return (
@@ -124,6 +132,10 @@ export function Swatches({
           disabled={disabled}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => pick(hex)}
+          onBlur={(event: FocusEvent<HTMLButtonElement>) => {
+            if (textEdit !== undefined && !inTextEditFocus(event.relatedTarget)) textEdit.onLeave();
+          }}
+          data-text-edit-focus={textEdit === undefined ? undefined : ''}
           style={{
             width: 18,
             height: 18,
