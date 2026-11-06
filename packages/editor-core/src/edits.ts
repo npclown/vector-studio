@@ -52,7 +52,7 @@ import {
   removePathAnchors,
   setPathHandle,
 } from './paths.js';
-import { mapNodeInPageSpace, resizeContainer, type ScaleMap } from './resize.js';
+import { mapNodeInPageSpace, mirrorContent, resizeContainer, type ScaleMap } from './resize.js';
 import {
   frameRule,
   isAuto,
@@ -476,10 +476,13 @@ export function refitGesture(
  * Package-internal gesture edits for the built-in tools, for placements no public command
  * expresses (M1 contract, section 4.4 and 7): `map` resizes a multi-selection by a page-space
  * scale, each node mapped from its pre-gesture state as in a group resize; `line` moves the
- * endpoints of a line to page points.
+ * endpoints of a line to page points; `mirror` follows a `setFrames` update of a resize dragged past
+ * the opposite side: each node's content returns to its pre-gesture state and is then mirrored
+ * along the flipped own axes (`mirrorContent`), so updates do not compound.
  */
 export type GestureEdit =
   | Readonly<{ kind: 'map'; ids: readonly string[]; map: ScaleMap }>
+  | Readonly<{ kind: 'mirror'; ids: readonly string[]; x: boolean; y: boolean }>
   | Readonly<{ kind: 'line'; id: string; start: PagePoint; end: PagePoint }>;
 
 /**
@@ -511,6 +514,24 @@ export function applyGestureEdit(
       }
     }
     for (const id of edit.ids) mapNodeInPageSpace(draft, id, edit.map);
+  } else if (edit.kind === 'mirror') {
+    if (edit.ids.some((id) => nodeOf(document, id) === undefined)) {
+      return fail('editor.unknown-node');
+    }
+    const baseTree = documentTree(base);
+    for (const id of edit.ids) {
+      // The content `setFrames` keeps from the live node comes back from the pre-gesture node; a
+      // resized container's subtree was already restored by `setFrames`.
+      const node = draft.node(id)!;
+      const original = baseTree.node(id);
+      if (original === undefined) continue;
+      const restored: Record<string, unknown> = { ...node };
+      for (const key of CONTENT_KEYS) {
+        if (key in original) restored[key] = (original as Record<string, unknown>)[key];
+      }
+      draft.set(restored as NodeV6);
+      mirrorContent(draft, id, edit.x === true, edit.y === true);
+    }
   } else {
     const node = nodeOf(document, edit.id);
     if (node === undefined) return fail('editor.unknown-node');
@@ -532,6 +553,9 @@ export function applyGestureEdit(
     [],
   );
 }
+
+/** The fields of a node that hold content in its unit box, which a flip mirrors. */
+const CONTENT_KEYS = ['path', 'points', 'cornerRadii', 'fill', 'stroke'] as const;
 
 type CreateCommand = Extract<
   DocumentCommand,

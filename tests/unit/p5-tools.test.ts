@@ -322,11 +322,11 @@ describe('P5-A03 resize', () => {
     expect(frame(target, b)).toEqual({ x: 35, y: 10, width: 5, height: 30 });
   });
 
-  it('clamps sizes at 0 when dragged past the opposite handle', () => {
+  it('flips over the opposite handle when dragged past it (V-24, was a clamp at 0)', () => {
     const { target, a, b } = twoSelected();
     drag(target, [40, 20], [-50, 20]);
-    expect(frame(target, a)).toEqual({ x: 0, y: 0, width: 0, height: 10 });
-    expect(frame(target, b)).toEqual({ x: 0, y: 10, width: 0, height: 30 });
+    expect(frame(target, a)).toEqual({ x: -12.5, y: 0, width: 12.5, height: 10 });
+    expect(frame(target, b)).toEqual({ x: -50, y: 10, width: 12.5, height: 30 });
     ok(target, { type: 'undo' });
     expect(frame(target, b)).toEqual({ x: 30, y: 10, width: 10, height: 30 });
   });
