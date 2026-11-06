@@ -44,6 +44,11 @@ export type HostCompositionOptions = Readonly<{
    * `?test=1&faults=1` (MVP M8 contract, M8-N2); none by default.
    */
   extraExtensions?: readonly Extension[];
+  /**
+   * V-25 slice 3: the drawing tools return to `select` after each shape (the studio layout);
+   * false keeps the M2 behaviour every spec and bench was written for.
+   */
+  returnToSelect?: boolean;
 }>;
 
 /** Creates the text-dom instance and the editor it feeds, in that order. */
@@ -55,6 +60,7 @@ export function composeHost(options: HostCompositionOptions): HostComposition {
       extensions: [starExtension, ...(options.extraExtensions ?? [])],
       platform: options.platform,
       textLayout: textDom,
+      returnToSelect: options.returnToSelect === true,
     });
   } catch (error) {
     textDom.dispose();

@@ -161,6 +161,12 @@ export type EditorOptions = Readonly<{
    * invalid style throws. Defaults to Arial 16 black (M6b-Q7 (a)).
    */
   textStyle?: TextStyle;
+  /**
+   * V-25 slice 3: when true, the rectangle, ellipse, frame, line and path tools set the tool to
+   * `select` after each node they create, as design tools do; the text tool always does (M6b-Q5
+   * (a)). Defaults to false, the M2 behaviour: a drawing tool stays active.
+   */
+  returnToSelect?: boolean;
 }>;
 
 /** A tool receives input and acts only through the editor's commands and the gesture API. */
@@ -895,11 +901,12 @@ class EditorCore implements Editor {
       'select',
       createSelectTool((node) => this.extensions.geometry(node), this.expansions, this.textSupport),
     );
-    this.tools.set('rectangle', createBoxTool('createRectangle'));
-    this.tools.set('ellipse', createBoxTool('createEllipse'));
-    this.tools.set('frame', createBoxTool('createFrame'));
-    this.tools.set('line', createLineTool());
-    this.tools.set('path', createPathTool());
+    const back = options.returnToSelect === true ? () => true : () => false;
+    this.tools.set('rectangle', createBoxTool('createRectangle', back));
+    this.tools.set('ellipse', createBoxTool('createEllipse', back));
+    this.tools.set('frame', createBoxTool('createFrame', back));
+    this.tools.set('line', createLineTool(back));
+    this.tools.set('path', createPathTool(back));
     this.tools.set(
       'text',
       createTextTool((node) => this.extensions.geometry(node), this.expansions, this.textSupport),

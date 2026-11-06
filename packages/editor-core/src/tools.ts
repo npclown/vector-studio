@@ -158,9 +158,27 @@ function boxOf(a: PagePoint, b: PagePoint): Frame {
   };
 }
 
+/**
+ * Whether a drawing tool hands over to `select` once it has created a node (V-25 slice 3,
+ * `EditorOptions.returnToSelect`); read at each creation. Defaults to never.
+ */
+export type ReturnToSelect = () => boolean;
+
+const NEVER: ReturnToSelect = () => false;
+
+/**
+ * Selects the nodes a drawing tool just created and, when `back` says so, sets the tool to
+ * `select` (V-25 slice 3): both are session commands, so the creation stays one undo step.
+ */
+function selectCreated(context: ToolContext, ids: readonly string[], back: ReturnToSelect): void {
+  context.execute({ type: 'setSelection', ids });
+  if (back()) context.execute({ type: 'setTool', tool: 'select' });
+}
+
 /** The rectangle, ellipse and frame tools: a drag from a to b creates the box between them. */
 export function createBoxTool(
   type: 'createRectangle' | 'createEllipse' | 'createFrame' = 'createRectangle',
+  back: ReturnToSelect = NEVER,
 ): Tool {
   let drag: { start: PagePoint; id: string | null; candidates: () => SnapSet } | null = null;
   return {
@@ -197,7 +215,7 @@ export function createBoxTool(
         const id = drag.id;
         drag = null;
         context.gesture.commit();
-        if (id !== null) context.execute({ type: 'setSelection', ids: [id] });
+        if (id !== null) selectCreated(context, [id], back);
       }
       return true;
     },
@@ -233,7 +251,7 @@ function lineEnd(start: PagePoint, point: PagePoint, shift: boolean): PagePoint 
 }
 
 /** The line tool: a drag from start to end creates the line; Shift constrains it to 45° steps. */
-export function createLineTool(): Tool {
+export function createLineTool(back: ReturnToSelect = NEVER): Tool {
   let drag: { start: PagePoint; id: string | null; candidates: () => SnapSet } | null = null;
   return {
     input(event, context) {
@@ -271,7 +289,7 @@ export function createLineTool(): Tool {
         const id = drag.id;
         drag = null;
         context.gesture.commit();
-        if (id !== null) context.execute({ type: 'setSelection', ids: [id] });
+        if (id !== null) selectCreated(context, [id], back);
       }
       return true;
     },
@@ -410,7 +428,7 @@ export function createTextTool(
 
 type Anchor = { point: PagePoint; in: PagePoint | null; out: PagePoint | null };
 
-export function createPathTool(): Tool {
+export function createPathTool(back: ReturnToSelect = NEVER): Tool {
   let anchors: Anchor[] = [];
   let pressed: Anchor | null = null;
 
@@ -439,7 +457,7 @@ export function createPathTool(): Tool {
     if (!result.ok) return;
     anchors = [];
     pressed = null;
-    context.execute({ type: 'setSelection', ids: result.ids });
+    selectCreated(context, result.ids, back);
   }
 
   return {

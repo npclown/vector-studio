@@ -212,6 +212,36 @@ export function colorHex(color: Color): string {
   return `#${hexByte(color.r)}${hexByte(color.g)}${hexByte(color.b)}`;
 }
 
+/**
+ * V-25 slice 3: the colour swatches under a solid or empty paint, one click each: black, white,
+ * two greys, then red, orange, yellow, green, teal, blue, purple and pink.
+ */
+export const PANEL_SWATCHES: readonly string[] = Object.freeze([
+  '#000000',
+  '#ffffff',
+  '#757575',
+  '#d9d9d9',
+  '#f24822',
+  '#ff8a00',
+  '#ffcd29',
+  '#14ae5c',
+  '#0fa5a0',
+  '#0d99ff',
+  '#9747ff',
+  '#ff24bd',
+]);
+
+/**
+ * V-25 slice 3: the solid paint a swatch or the colour picker writes: `hex` with the alpha of the
+ * first solid paint (opaque when there is none, so an empty fill becomes visible), or null when
+ * `hex` is not `#rrggbb`.
+ */
+export function solidFromHex(hex: string, paints: readonly (Paint | null)[]): Color | null {
+  const first = paints.find((paint) => paint !== null && !isGradient(paint));
+  const alpha = first !== undefined && first !== null && !isGradient(first) ? first.a : 1;
+  return parseHex(hex, alpha);
+}
+
 /** `#rrggbb` (or `rrggbb`, any case) with `alpha` as a colour, or null when it is not one. */
 export function parseHex(text: string, alpha: number): Color | null {
   const match = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/iu.exec(text.trim());
