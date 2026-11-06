@@ -10,8 +10,9 @@ import {
   type TextNode,
 } from '@vector-studio/react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { colorHex, parseHex, parseNumber, type Common } from './appearance-model.js';
+import { colorHex, parseNumber, type Common } from './appearance-model.js';
 import { AppearancePanel } from './appearance-panel.js';
+import { ColorWell, Swatches } from './color-controls.js';
 import { Choice, Row, TextField } from './fields.js';
 import {
   ARROWS,
@@ -42,6 +43,8 @@ import {
   textPropsCommand,
   textRange,
   textStyleCommand,
+  pickedColorCommand,
+  runColor,
   transformCommand,
   transformValue,
   type PropertyAction,
@@ -219,6 +222,25 @@ function TextSection({
   const runIdentity = `${fieldIdentity(texts)} ${textEdit?.anchor ?? ''}-${textEdit?.focus ?? ''}`;
   const setStyle = (style: Parameters<typeof textStyleCommand>[2]) =>
     only !== null && range !== null && run(textStyleCommand(only, range, style));
+  // V-25 slice 5: the hex field, the colour picker and the swatches write the run colour with
+  // the shown colour's alpha (opaque when mixed), one `setTextStyle` each.
+  const colorValue = color.state === 'one' ? colorHex(color.value) : null;
+  const setColor = (hex: string) => {
+    const value = runColor(hex, color);
+    return value !== null && setStyle({ color: value });
+  };
+  // The picker commits to the range it was opened on (review r1): Chrome queues its `change`
+  // after the click that closes the popup, which may first end edit mode or move the caret.
+  const picked = useRef<Parameters<typeof pickedColorCommand>[0] | null>(null);
+  const openPicker = () => {
+    picked.current =
+      only !== null && range !== null ? { id: only.id, ...range, shown: color } : null;
+  };
+  const pickColor = (hex: string) => {
+    const target = picked.current;
+    const command = target === null ? null : pickedColorCommand(target, hex);
+    return command !== null && run(command);
+  };
   return (
     <Section legend="Text">
       <Row>
@@ -291,16 +313,29 @@ function TextSection({
         <TextField
           identity={runIdentity}
           label="Text colour"
-          value={color.state === 'one' ? colorHex(color.value) : null}
+          value={colorValue}
           disabled={runsDisabled}
           onLeaveTextEdit={exitTextEdit}
-          commit={(text) => {
-            const alpha = color.state === 'one' ? color.value.a : 1;
-            const value = parseHex(text, alpha);
-            return value !== null && setStyle({ color: value });
-          }}
+          commit={setColor}
+        />
+        <ColorWell
+          label="Text colour picker"
+          testId="text-colour-picker"
+          value={colorValue}
+          disabled={runsDisabled}
+          textEdit={{ onLeave: exitTextEdit }}
+          onOpen={openPicker}
+          commit={pickColor}
         />
       </Row>
+      <Swatches
+        name="Text"
+        testId="text"
+        current={colorValue}
+        disabled={runsDisabled}
+        textEdit={{ onLeave: exitTextEdit }}
+        pick={(hex) => void setColor(hex)}
+      />
     </Section>
   );
 }
