@@ -7,7 +7,7 @@ import {
   useTool,
   useViewport,
 } from '@vector-studio/react';
-import { useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { nodePageCorners } from './m2-geometry';
 
 // V-25 slice 2 (artboards): an artboard is a top-level frame of the active page, as in Figma; no
@@ -102,6 +102,25 @@ export function renameCommand(board: Artboard, value: string): Command | null {
   return { type: 'setNodeProps', id: board.id, props: { name } };
 }
 
+/**
+ * The rename guard: `open` starts an opening for an artboard; the first `close` of that opening
+ * returns its command (`value` null cancels, giving null) and ends it, so a later close of the
+ * same opening (the blur of a textbox that Enter or Escape already closed) returns null.
+ */
+export function createRenameGuard() {
+  let open: string | null = null;
+  return {
+    open(id: string): void {
+      open = id;
+    },
+    close(board: Artboard, value: string | null): Command | null {
+      if (open !== board.id) return null;
+      open = null;
+      return value === null ? null : renameCommand(board, value);
+    },
+  };
+}
+
 const documentOf = (snapshot: EditorSnapshot) => snapshot.document;
 const toggles = (event: MouseEvent) => event.shiftKey || event.ctrlKey || event.metaKey;
 
@@ -123,14 +142,21 @@ export function ArtboardLabels() {
   const selection = useSelection();
   const { position, zoom } = useViewport();
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
-  const commit = (board: Artboard) => {
-    if (renaming === null || renaming.id !== board.id) return;
-    const command = renameCommand(board, renaming.value);
+  // Enter or Escape closes the textbox, and the browser then blurs it as it unmounts: the guard
+  // lets only the first close of an opening act (as `useRename` in packages/ui/src/layers.tsx).
+  const [guard] = useState(createRenameGuard);
+  const layer = useRef<HTMLDivElement>(null);
+  /** Gives the keyboard back to the canvas, so shortcuts work after a label click or rename. */
+  const focusCanvas = () => layer.current?.parentElement?.querySelector('canvas')?.focus();
+  const close = (board: Artboard, value: string | null) => {
+    const command = guard.close(board, value);
     setRenaming(null);
     if (command !== null) execute(command);
+    focusCanvas();
   };
   return (
     <div
+      ref={layer}
       className="vs-artboard-labels"
       data-testid="artboard-labels"
       style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}
@@ -159,10 +185,10 @@ export function ArtboardLabels() {
               style={style}
               onChange={(event) => setRenaming({ id: board.id, value: event.target.value })}
               onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
-                if (event.key === 'Enter') commit(board);
-                else if (event.key === 'Escape') setRenaming(null);
+                if (event.key === 'Enter') close(board, renaming.value);
+                else if (event.key === 'Escape') close(board, null);
               }}
-              onBlur={() => commit(board)}
+              onBlur={() => close(board, renaming.value)}
             />
           );
         }
@@ -175,13 +201,19 @@ export function ArtboardLabels() {
             aria-pressed={selection.includes(board.id)}
             title={`${board.name} (${board.frame.width} × ${board.frame.height})`}
             style={style}
-            onClick={(event) =>
+            // The label never takes focus from the canvas, so the canvas shortcuts keep working.
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={(event) => {
               execute({
                 type: 'setSelection',
                 ids: artboardClickIds(selection, board.id, toggles(event)),
-              })
-            }
-            onDoubleClick={() => setRenaming({ id: board.id, value: board.name })}
+              });
+              focusCanvas();
+            }}
+            onDoubleClick={() => {
+              guard.open(board.id);
+              setRenaming({ id: board.id, value: board.name });
+            }}
           >
             {board.name}
           </button>

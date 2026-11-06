@@ -11,9 +11,10 @@ import {
 import { useEffect, useState, type ReactNode } from 'react';
 import { ArtboardLabels, ArtboardList, ArtboardPresets } from './v25-artboards';
 
-// V-25 (editor UI usability, slice 1; slice 2 adds the artboards, src/v25-artboards.tsx): next-host's full-window "studio" layout, the default for a
+// V-25 (editor UI usability, slice 1): next-host's full-window "studio" layout, the default for a
 // person opening the page. The canvas fills the space between a top bar (file controls, the
-// icon toolbar, the zoom menu), a left sidebar (pages, then the layer tree filling the rest) and
+// icon toolbar, the zoom menu), a left sidebar (pages, artboards, then the layer tree filling the
+// rest; slice 2 adds the artboards, src/v25-artboards.tsx) and
 // a right sidebar (properties, then the extension panels), with a one-line status bar below.
 // `?test=1`, `?bench=1` and `?layout=legacy` keep the M8 layout, so every headed spec, the
 // M8-N3 budget and the bench measurements see the page they were written for.

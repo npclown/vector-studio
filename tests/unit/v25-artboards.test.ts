@@ -147,6 +147,29 @@ describe('V-25 artboards: top-level frames of the active page', () => {
   });
 });
 
+describe('V-25 artboard rename guard', () => {
+  const board = { id: 'a', name: 'Home', frame: { x: 0, y: 0, width: 1, height: 1 } };
+  it('acts on the first close of an opening only', () => {
+    const guard = boards.createRenameGuard();
+    // Enter, then the unmount blur: one command.
+    guard.open('a');
+    expect(guard.close(board, 'Landing')).toEqual({
+      type: 'setNodeProps',
+      id: 'a',
+      props: { name: 'Landing' },
+    });
+    expect(guard.close(board, 'Landing')).toBeNull();
+    // Escape, then the unmount blur with the draft: nothing.
+    guard.open('a');
+    expect(guard.close(board, null)).toBeNull();
+    expect(guard.close(board, 'Draft')).toBeNull();
+    // A close without an opening, or for another artboard: nothing.
+    expect(guard.close(board, 'Other')).toBeNull();
+    guard.open('b');
+    expect(guard.close(board, 'Other')).toBeNull();
+  });
+});
+
 describe('V-25 artboard markup', () => {
   it('labels each artboard at its corner in canvas px, the selected one pressed', () => {
     const { target, a, b } = scene();

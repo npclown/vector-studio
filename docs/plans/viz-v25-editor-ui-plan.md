@@ -71,7 +71,7 @@ The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2
 ## Slice 2 design: artboards
 
 - An artboard is a top-level frame of the active page (`artboardsOf`, front first like the layer tree); nested frames are not artboards. No schema, command or `ui` export change: everything is in `apps/next-host/src/v25-artboards.tsx`, mounted by the studio layout only.
-- Labels: each artboard's name sits just above its top-left corner on the canvas (the corner from `nodePageCorners`, so a rotated artboard's label follows its corner; the label itself is not rotated). A click selects it (`setSelection`), Shift or Mod toggles it, a double-click opens a rename textbox (`setNodeProps name` on Enter or blur, trimmed, nothing sent when empty or unchanged, Escape cancels). Only the labels take pointer events.
+- Labels: each artboard's name sits just above its top-left corner on the canvas (the corner from `nodePageCorners`, so a rotated artboard's label follows its corner; the label itself is not rotated). A click selects it (`setSelection`), Shift or Mod toggles it, a double-click opens a rename textbox (`setNodeProps name` on Enter or blur, trimmed, nothing sent when empty or unchanged, Escape cancels). Only the labels take pointer events; a label never takes keyboard focus from the canvas, and the canvas gets it back after a rename. Only the first close of a rename acts (Enter or Escape, then the unmount blur, as `useRename` in the layer tree). The label sits over the strip above a selected artboard's top-left corner, so a press there selects rather than starting a resize or rotate from outside the corner; Figma has the same overlap, accepted.
 - List: an Artboards section in the left sidebar between Pages and Layers, each row with the name and size; a click selects the artboard and zooms to it (`zoomTo selection`). With none, a hint.
 - Presets: while the frame tool is active the right sidebar starts with seven sizes (Desktop 1440 by 1024, Laptop 1280 by 832, Tablet 834 by 1194, Phone 393 by 852, A4 595 by 842, Letter 612 by 792, Square 1080 by 1080). A pick runs one `createFrame` (one undo step) named after the preset, placed 100 units right of the page's artboards and top-aligned with them, or centred in the view when there are none; then it selects the new artboard, returns to the Select tool and zooms to it (session commands).
 
@@ -87,5 +87,6 @@ The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2
 
 ## Validation (slice 2)
 
-- Unit: `tests/unit/v25-artboards.test.ts`.
+- Unit: `tests/unit/v25-artboards.test.ts` (artboards, placement, preset commands and undo, click and rename rules, the rename guard, markup).
 - Layout: the containers fixture in the container's Chromium after a Phone preset: the Phone artboard is placed, selected, labelled and listed, the tool is back on Select.
+- Label interactions at the review r1 fix, container Chromium (Playwright, DOM only): a label click selects with focus on the canvas; double-click, type, Enter renames once (one undo restores the old name) with focus back on the canvas; double-click, type, Escape leaves the name unchanged.
