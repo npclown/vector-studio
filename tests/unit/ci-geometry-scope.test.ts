@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { geometryFree, needsGeometry } from '../../tooling/ci-geometry-scope.mjs';
+import { diffArgs, geometryFree, needsGeometry } from '../../tooling/ci-geometry-scope.mjs';
 
 // CI scope (2026-11-06): the geometry jobs are skipped only when every changed file is on the
 // geometry-free allow-list.
@@ -18,7 +18,6 @@ describe('CI geometry scope', () => {
         'docs/plans/mvp-m8-host-api-ui-contract.md',
         'docs/plans/d9-visualization-track.md',
         'docs/host-api.md',
-        'tsconfig.json',
       ]),
     ).toBe(false);
   });
@@ -39,12 +38,26 @@ describe('CI geometry scope', () => {
       '.github/workflows/validate.yml',
       'package.json',
       'pnpm-lock.yaml',
+      'tsconfig.json',
       'tsconfig.base.json',
+      'apps/next-host/package.json',
+      'packages/ui/package.json',
       'docs/plans/viz-v25-editor-ui-plan.md.bak',
     ]) {
       expect(geometryFree(file), file).toBe(false);
     }
     expect(needsGeometry(['apps/next-host/app/page.tsx', 'tsconfig.base.json'])).toBe(true);
     expect(needsGeometry([])).toBe(true);
+  });
+
+  it('lists both paths of a move (review r1 B1)', () => {
+    expect(diffArgs('b', 'h')).toEqual(['diff', '--name-only', '--no-renames', 'b...h']);
+    // A geometry contract moved onto the list still counts its old path.
+    expect(
+      needsGeometry([
+        'docs/plans/p3-native-projection-readiness.md',
+        'docs/plans/viz-native-projection-readiness.md',
+      ]),
+    ).toBe(true);
   });
 });

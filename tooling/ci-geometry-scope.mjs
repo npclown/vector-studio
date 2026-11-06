@@ -23,14 +23,14 @@ export const GEOMETRY_FREE = Object.freeze([
   /^docs\/plans\/(viz-|mvp-)[^/]*\.md$/u,
   'docs/plans/d9-visualization-track.md',
   'docs/host-api.md',
-  // The root typecheck project (`noEmit`, its include list); `tsc --build` in the static job
-  // checks it. The geometry suites are `.ts` files that Vitest transforms without its JSX
-  // options, and `tsconfig.base.json` (shared compiler options) stays outside the list.
-  'tsconfig.json',
 ]);
 
-/** Whether `file` (a repository path with `/`) is in the geometry-free list. */
+/**
+ * Whether `file` (a repository path with `/`) is in the geometry-free list. A `package.json`
+ * never is: the geometry jobs run `pnpm build`, which runs every package's build script.
+ */
 export function geometryFree(file) {
+  if (file === 'package.json' || file.endsWith('/package.json')) return false;
   return GEOMETRY_FREE.some((entry) =>
     typeof entry === 'string'
       ? entry.endsWith('/')
@@ -45,13 +45,19 @@ export function needsGeometry(files) {
   return files.length === 0 || files.some((file) => !geometryFree(file));
 }
 
+/**
+ * The git arguments listing the PR's changed files. `--no-renames` lists both sides of a move,
+ * so a file moved out of a geometry path onto the list still counts its old path.
+ */
+export function diffArgs(base, head) {
+  return ['diff', '--name-only', '--no-renames', `${base}...${head}`];
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const [base, head] = process.argv.slice(2);
   let geometry = true;
   if (base && head) {
-    const out = execFileSync('git', ['diff', '--name-only', `${base}...${head}`], {
-      encoding: 'utf8',
-    });
+    const out = execFileSync('git', diffArgs(base, head), { encoding: 'utf8' });
     const files = out.split('\n').filter((line) => line.length > 0);
     geometry = needsGeometry(files);
     console.error(`${files.length} changed files; geometry jobs: ${geometry ? 'run' : 'skip'}`);
