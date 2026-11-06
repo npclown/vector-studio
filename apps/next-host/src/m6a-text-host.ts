@@ -49,6 +49,8 @@ export type HostCompositionOptions = Readonly<{
    * false keeps the M2 behaviour every spec and bench was written for.
    */
   returnToSelect?: boolean;
+  /** V-25 slice 4: shapes drawn or dropped on a frame go into it (the studio layout). */
+  adoptIntoFrames?: boolean;
 }>;
 
 /** Creates the text-dom instance and the editor it feeds, in that order. */
@@ -61,6 +63,7 @@ export function composeHost(options: HostCompositionOptions): HostComposition {
       platform: options.platform,
       textLayout: textDom,
       returnToSelect: options.returnToSelect === true,
+      adoptIntoFrames: options.adoptIntoFrames === true,
     });
   } catch (error) {
     textDom.dispose();
