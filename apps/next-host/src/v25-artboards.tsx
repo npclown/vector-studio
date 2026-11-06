@@ -146,13 +146,18 @@ export function ArtboardLabels() {
   // lets only the first close of an opening act (as `useRename` in packages/ui/src/layers.tsx).
   const [guard] = useState(createRenameGuard);
   const layer = useRef<HTMLDivElement>(null);
-  /** Gives the keyboard back to the canvas, so shortcuts work after a label click or rename. */
+  /**
+   * Gives the keyboard back to the canvas, so shortcuts work after a label click or rename. The
+   * labels are mounted as the canvas host's sibling inside the studio's canvas cell (v25-studio.tsx),
+   * so the cell holds the one canvas.
+   */
   const focusCanvas = () => layer.current?.parentElement?.querySelector('canvas')?.focus();
-  const close = (board: Artboard, value: string | null) => {
+  /** Ends a rename; `refocus` (Enter, Escape, or a blur to nowhere) returns focus to the canvas. */
+  const close = (board: Artboard, value: string | null, refocus: boolean) => {
     const command = guard.close(board, value);
     setRenaming(null);
     if (command !== null) execute(command);
-    focusCanvas();
+    if (refocus) focusCanvas();
   };
   return (
     <div
@@ -185,10 +190,11 @@ export function ArtboardLabels() {
               style={style}
               onChange={(event) => setRenaming({ id: board.id, value: event.target.value })}
               onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
-                if (event.key === 'Enter') close(board, renaming.value);
-                else if (event.key === 'Escape') close(board, null);
+                if (event.key === 'Enter') close(board, renaming.value, true);
+                else if (event.key === 'Escape') close(board, null, true);
               }}
-              onBlur={() => close(board, renaming.value)}
+              // A blur to another control (a field the user clicked) leaves focus there.
+              onBlur={(event) => close(board, renaming.value, event.relatedTarget === null)}
             />
           );
         }
