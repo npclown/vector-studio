@@ -636,6 +636,8 @@ function Surface({
   const [penCursor, setPenCursor] = useState<PagePoint | null>(null);
   const hover = (event: PointerEvent<HTMLDivElement>) => {
     const canvas = event.currentTarget.querySelector('canvas');
+    // V-25 slice 8: no pen segment to the pointer while a button is held (a handle drag).
+    if (event.buttons !== 0) setPenCursor(null);
     if (canvas === null || event.buttons !== 0) return;
     const current = editor.getSnapshot();
     const box = editor.query({ type: 'handles' });

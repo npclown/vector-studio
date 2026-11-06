@@ -12,7 +12,7 @@ import {
   type PathAnchor,
 } from '@vector-studio/editor-core';
 import { SelectionOverlay } from '../../apps/next-host/src/overlay.js';
-import { penPreview } from '../../apps/next-host/src/v25-pen-preview.js';
+import { PEN_CLOSE_RADIUS, penPreview } from '../../apps/next-host/src/v25-pen-preview.js';
 import { readableStrokeColor } from '../../apps/next-host/src/v25-text-colour-default.js';
 
 // V-25 slice 8 (pen paths and curves): a new line or path takes its stroke colour from the host
@@ -106,6 +106,24 @@ describe('V-25 pen stroke colour', () => {
   });
 });
 
+describe('V-25 pen stroke colour, undo', () => {
+  it('creates a coloured line and a coloured path in one undo step each', () => {
+    const target = editor({ drawStrokeColor: readableStrokeColor });
+    ok(target, { type: 'setTool', tool: 'line' });
+    press(target, { x: 10, y: 10 }, { x: 50, y: 50 });
+    expect(Object.keys(target.getSnapshot().document.nodes)).toHaveLength(1);
+    ok(target, { type: 'undo' });
+    expect(Object.keys(target.getSnapshot().document.nodes)).toHaveLength(0);
+    ok(target, { type: 'setTool', tool: 'path' });
+    press(target, { x: 10, y: 10 });
+    press(target, { x: 60, y: 40 });
+    enter(target);
+    expect(Object.keys(target.getSnapshot().document.nodes)).toHaveLength(1);
+    ok(target, { type: 'undo' });
+    expect(Object.keys(target.getSnapshot().document.nodes)).toHaveLength(0);
+  });
+});
+
 describe('V-25 pen curves', () => {
   it('makes symmetric handles on a drag and breaks them with Alt', () => {
     const target = editor();
@@ -144,6 +162,79 @@ describe('V-25 pen curves', () => {
     enter(target);
     const node = drawn(target);
     expect(node.type === 'path' && node.path.verbs).toEqual(['move', 'cubic', 'cubic']);
+  });
+});
+
+describe('V-25 pen curves, Alt and close', () => {
+  const pending = (target: Editor) => {
+    const overlay = target.getSnapshot().overlay;
+    return overlay?.kind === 'path' ? overlay.anchors : [];
+  };
+
+  it('has no in handle with Alt from the first move, and symmetric again without Alt', () => {
+    const target = editor();
+    ok(target, { type: 'setTool', tool: 'path' });
+    press(target, { x: 0, y: 0 }, { x: 10, y: 10 }, alt);
+    expect(pending(target)[0]).toEqual({
+      point: { x: 0, y: 0 },
+      in: null,
+      out: { x: 10, y: 10 },
+    });
+    target.execute({
+      type: 'input',
+      event: { kind: 'pointerdown', point: { x: 100, y: 0 }, modifiers: alt },
+    });
+    target.execute({
+      type: 'input',
+      event: { kind: 'pointermove', point: { x: 110, y: 0 }, modifiers: alt },
+    });
+    target.execute({
+      type: 'input',
+      event: { kind: 'pointermove', point: { x: 100, y: 20 }, modifiers: none },
+    });
+    target.execute({
+      type: 'input',
+      event: { kind: 'pointerup', point: { x: 100, y: 20 }, modifiers: none },
+    });
+    expect(pending(target)[1]).toEqual({
+      point: { x: 100, y: 0 },
+      in: { x: 100, y: -20 },
+      out: { x: 100, y: 20 },
+    });
+  });
+
+  it('closes with a cubic into a curved first anchor, as the preview shows', () => {
+    const target = editor();
+    ok(target, { type: 'setTool', tool: 'path' });
+    press(target, { x: 0, y: 0 }, { x: 10, y: 0 });
+    press(target, { x: 100, y: 0 });
+    press(target, { x: 50, y: 80 });
+    const preview = penPreview(pending(target), { x: 1, y: 1 }, (x, y) => [x, y])!;
+    expect(preview.closing).toBe(true);
+    expect(preview.next).toBe('M 50 80 C 50 80 -10 0 0 0');
+    press(target, { x: 1, y: 1 });
+    const node = drawn(target);
+    expect(node.type === 'path' && node.path.verbs).toEqual([
+      'move',
+      'cubic',
+      'line',
+      'cubic',
+      'close',
+    ]);
+  });
+
+  it("matches the tool's close radius", () => {
+    for (const [distance, closes] of [
+      [PEN_CLOSE_RADIUS, true],
+      [PEN_CLOSE_RADIUS + 0.5, false],
+    ] as const) {
+      const target = editor();
+      ok(target, { type: 'setTool', tool: 'path' });
+      press(target, { x: 0, y: 0 });
+      press(target, { x: 100, y: 0 });
+      press(target, { x: distance, y: 0 });
+      expect(target.getSnapshot().overlay === null).toBe(closes);
+    }
   });
 });
 

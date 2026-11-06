@@ -188,20 +188,19 @@ function drawStroke(
   options: DrawOptions,
 ): Readonly<{ stroke?: Stroke }> {
   if (options.strokeColor === undefined) return {};
-  let color: Color | null;
   try {
-    color = options.strokeColor(
+    const color: unknown = options.strokeColor(
       context.query({ type: 'document' }),
       context.query({ type: 'activePage' }),
       point,
     );
+    if (color === null || typeof color !== 'object') return {};
+    const { r, g, b, a } = color as Color;
+    if (![r, g, b, a].every(unitChannel)) return {};
+    return { stroke: { ...DEFAULT_PATH_STROKE, color: { r, g, b, a } } };
   } catch {
     return {};
   }
-  if (color === null || typeof color !== 'object') return {};
-  const { r, g, b, a } = color;
-  if (![r, g, b, a].every(unitChannel)) return {};
-  return { stroke: { ...DEFAULT_PATH_STROKE, color: { r, g, b, a } } };
 }
 
 /**
