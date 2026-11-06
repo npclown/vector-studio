@@ -33,6 +33,8 @@ type Props = Readonly<{
   pathOverlay?: PathEditOverlay | null;
   /** The `textEditOverlay` query result in CSS px (null outside text edit mode). */
   textEdit?: TextEditMarkers | null;
+  /** V-25 slice 6: the edited text's box outline in CSS px (studio layout only, else null). */
+  textBox?: readonly (readonly [number, number])[] | null;
 }>;
 
 type ToScreen = (x: number, y: number) => [number, number];
@@ -232,6 +234,7 @@ export function SelectionOverlay({
   height,
   pathOverlay = null,
   textEdit = null,
+  textBox = null,
 }: Props) {
   const { position, zoom } = snapshot.viewport;
   const toScreen = (x: number, y: number): [number, number] => [
@@ -284,6 +287,14 @@ export function SelectionOverlay({
         />
       ))}
       {pathOverlay === null ? null : <PathShapes overlay={pathOverlay} snapshot={snapshot} />}
+      {textBox === null ? null : (
+        <polygon
+          data-testid="text-edit-box"
+          points={textBox.map(([x, y]) => `${x},${y}`).join(' ')}
+          fill="none"
+          stroke={TEXT_COLOUR}
+        />
+      )}
       {textEdit === null ? null : <TextEditShapes markers={textEdit} />}
       {snapshot.overlay === null ? null : (
         <ToolShape overlay={snapshot.overlay} toScreen={toScreen} />

@@ -22,7 +22,7 @@ The M8 layout is kept on purpose for specs and benches: its canvas origin, row h
 
 The engine already has most of it: the viewport is unbounded (pan, wheel and pinch zoom, zoom to fit and to selection), documents have pages, and `frame` nodes are containers with fill and stroke. What is missing is UI.
 
-Recommendation: no new artboard node type and no schema change. A top-level frame on a page is an artboard, as in Figma. Artboard features (slice 2) are UI over existing frames; export per artboard (slice 8) is a new feature with its own contract.
+Recommendation: no new artboard node type and no schema change. A top-level frame on a page is an artboard, as in Figma. Artboard features (slice 2) are UI over existing frames; export per artboard (slice 9) is a new feature with its own contract.
 
 ## Slices
 
@@ -32,10 +32,11 @@ Recommendation: no new artboard node type and no schema change. A top-level fram
 | 2 | Artboards: frame names on the canvas (click selects, double-click renames), frame size presets in the frame tool, an artboard list that selects and zooms | Done (#512, `f2c48d5`) |
 | 3 | Easy colour picking (swatches and the browser colour picker) and the drawing tools returning to Select after a shape | Done (#513, `b41a9b6`) |
 | 4 | Frame adoption: a shape drawn in a frame becomes its child; a shape dropped on a frame moves into it, or out onto the page | Done (#514, `f95ea08`) |
-| 5 | Text colour: the colour picker and swatches for the text run colour | In review |
-| 6 | Property panel: X/Y/W/H grid, collapsible sections | Proposed |
-| 7 | Context menu (right click): group, arrange, delete, symbol actions | Proposed |
-| 8 | Export per artboard (SVG, PNG) | Proposed; needs its own contract |
+| 5 | Text colour: the colour picker and swatches for the text run colour | Done (#515, `41acd8a`) |
+| 6 | Text box outline: text edit mode outlines the edited text's box | In review |
+| 7 | Property panel: X/Y/W/H grid, collapsible sections | Proposed |
+| 8 | Context menu (right click): group, arrange, delete, symbol actions | Proposed |
+| 9 | Export per artboard (SVG, PNG) | Proposed; needs its own contract |
 
 The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2 (artboards) next, then asked for slice 3 ("make colour picking easy, and always switch to Select when a shape is drawn"), which takes the colour swatches out of the old property panel slice. Slice 4 answers the user's question the same day ("how do I put a shape inside a Frame? I can't find a way"): the only way was cut and paste with the frame selected or entered.
 
@@ -160,4 +161,24 @@ The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2
 - Review r3 READY WITH FOLLOW-UPS: only a value the user picked (an `input` since focus) commits, so a popup closed without a pick never writes the colour React put in the input; the opening value follows the document between picks, and a click on the picker that closes its popup keeps the pick. The same DOM check with no `input` leaves both runs unchanged.
 - Headed (V25-A22): pick a colour on a selection and close the popup by a click on blank panel space, a click on the canvas over a run of another colour and Enter, with and without picking; only the selection changes, and nothing changes without a pick. macOS (a non-modal colour panel) is not covered.
 - Full unit suite: 5298 passed; the only failure is the Node 22 `p3-b0r-identity` environment case, as on main.
+- Headed: on the main PC after merge.
+
+## Slice 6 design: text box outline
+
+- Request (2026-11-06): "while typing text the text box border is not visible, which is inconvenient".
+- The `handles` query is null in text edit mode (M6b-S1), so the selection box disappears while typing. In the studio layout the page now outlines the edited text's box in the selection blue (`text-edit-box` in the overlay), as Figma does: the edited node's page corners (rotation and nesting included), following the node as typing grows it, or a pending node's page-space frame before its first character (a zero-width line for an `autoWidth` click).
+- Host only (`apps/next-host/src/v25-text-box.ts`, `overlay.tsx`, `page.tsx`): the editor, the `textEditOverlay` query (M6b section 4.5) and the M8 layout (`?test=1`, `?bench=1`, `?layout=legacy`) are unchanged.
+
+## Acceptance criteria (slice 6)
+
+| ID | Criterion | Method |
+| --- | --- | --- |
+| V25-A23 | In the studio layout, text edit mode draws the edited text's box outline in CSS px for the current camera: the node's rotated box, or a pending node's frame; none outside edit mode | Unit tests against a real editor; headed check |
+| V25-A24 | The outline follows the node as typing changes its frame | Unit test |
+| V25-A25 | The M8 layout draws no outline | Unit markup test; review of `page.tsx` |
+
+## Validation (slice 6)
+
+- Unit: `tests/unit/v25-text-box.test.ts` (6 tests: none outside edit mode, CSS px at a camera and growth on typing, a rotated node, a node in a rotated frame matching its selection box, a pending node, the overlay draws it only when the page passes it).
+- Review r1 READY WITH FOLLOW-UPS: the nested case and the include-list order applied. Headed check to look at a pending node in a rotated scope (the outline is the page-space frame the contract names; it should not jump on the first character).
 - Headed: on the main PC after merge.
