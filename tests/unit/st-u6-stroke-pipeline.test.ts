@@ -1,7 +1,10 @@
 import type { FillMesh } from '@vector-studio/contracts';
 import { describe, expect, it } from 'vitest';
 import { buildPathFringe } from '../../packages/renderer-core/src/path-fringe.js';
-import type { PathMeshNotice } from '../../packages/renderer-core/src/path-mesh-pipeline.js';
+import {
+  WORK_LIMIT_COARSER_STEPS,
+  type PathMeshNotice,
+} from '../../packages/renderer-core/src/path-mesh-pipeline.js';
 import type { MeshResourceId } from '../../packages/renderer-core/src/primitive-packet.js';
 import {
   ScriptedFillMeshPort,
@@ -275,7 +278,8 @@ describe('ST-U6 failures, isolation and memo (sections 9.4 and 9.6)', () => {
     // b's fill mesh is cached: a, b and c fills plus a's stroke.
     expect(h.statistics()).toMatchObject({ entries: 4, memoEntries: 1 });
     for (let index = 0; index < 100; index += 1) h.prepare();
-    expect([fill.callCount, stroke.callCount]).toEqual([1, 1]);
+    // V-25: the work-limit is retried once per coarser step in the first prepare, then memoized.
+    expect([fill.callCount, stroke.callCount]).toEqual([1, 1 + WORK_LIMIT_COARSER_STEPS]);
     // A key change retries once; the fill is served from the cache.
     h.replace([
       strokedNode('a', 0),
@@ -284,7 +288,7 @@ describe('ST-U6 failures, isolation and memo (sections 9.4 and 9.6)', () => {
     ]);
     stroke.script = {};
     expect(h.drawn()).toEqual(['a:fill', 'a:stroke', 'b:fill', 'b:stroke', 'c:fill']);
-    expect([fill.callCount, stroke.callCount]).toEqual([1, 2]);
+    expect([fill.callCount, stroke.callCount]).toEqual([1, 2 + WORK_LIMIT_COARSER_STEPS]);
   });
 
   it('ST-A10: invalid-stroke is a per-path stroke code; the same code from the fill port is invalid-response', () => {
@@ -422,7 +426,8 @@ describe('ST-U6 review B1 and S1: an undrawable path never calls a port every fr
     });
     expect(h.prepare().draws).toEqual([]);
     const calls = [fill.callCount, stroke.callCount];
-    expect(calls).toEqual([1, 1]);
+    // V-25: the fill's work-limit is retried at each coarser step before it is memoized.
+    expect(calls).toEqual([1 + WORK_LIMIT_COARSER_STEPS, 1]);
     for (let index = 0; index < 5; index += 1) expect(h.prepare().draws).toEqual([]);
     expect([fill.callCount, stroke.callCount]).toEqual(calls);
   });
