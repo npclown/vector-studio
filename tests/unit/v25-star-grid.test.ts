@@ -7,7 +7,7 @@ import { starExtension } from '../../packages/editor-core/src/star.js';
 // The vertices are now snapped to a 2^-16 px grid; tests/geometry/v25-star-stroke.test.ts runs
 // the real kernel on them.
 
-const toScene = starExtension.nodeTypes[0]!.toScene;
+const toScene = (starExtension.nodeTypes ?? [])[0]!.toScene;
 const frame = (width: number, height: number) => ({ x: 0, y: 0, width, height });
 
 describe('V-25 star vertices on a dyadic grid', () => {

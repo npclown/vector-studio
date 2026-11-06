@@ -18,7 +18,7 @@ beforeAll(async () => {
   module = await WebAssembly.compile(new Uint8Array(await readFile(process.env.P2_WASM_PATH)));
 });
 
-const toScene = starExtension.nodeTypes[0]!.toScene;
+const toScene = (starExtension.nodeTypes ?? [])[0]!.toScene;
 
 describe('V-25 star stroke and fill on the real kernel', () => {
   it('builds the fill and a 1 px stroke of each join for the stars that failed', async () => {
