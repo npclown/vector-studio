@@ -90,6 +90,23 @@ describe('V-25 return to Select after a shape', () => {
     expect(snapshot.history.undoDepth).toBe(1);
   });
 
+  it('path: a press on the first anchor closes it, then the release and undo act on Select', () => {
+    const target = editor(true);
+    ok(target, { type: 'setTool', tool: 'path' });
+    click(target, { x: 10, y: 10 });
+    click(target, { x: 100, y: 10 });
+    click(target, { x: 100, y: 100 });
+    click(target, { x: 10, y: 10 });
+    const snapshot = target.getSnapshot();
+    expect(created(target)).toHaveLength(1);
+    expect(snapshot.selection).toEqual(created(target));
+    expect(snapshot.tool).toBe('select');
+    expect(snapshot.history.undoDepth).toBe(1);
+    ok(target, { type: 'undo' });
+    expect(created(target)).toEqual([]);
+    expect(target.getSnapshot().tool).toBe('select');
+  });
+
   it('a click without movement creates nothing and keeps the tool', () => {
     const target = editor(true);
     ok(target, { type: 'setTool', tool: 'rectangle' });
@@ -184,5 +201,33 @@ describe('V-25 colour picking', () => {
     });
     expect(gradient).not.toContain('Fill swatches');
     expect(gradient).not.toContain('Fill colour picker');
+  });
+
+  it('hides the swatches when a mixed selection includes a gradient', () => {
+    const target = editor();
+    const frame = { x: 0, y: 0, width: 10, height: 10 };
+    const [a] = ok(target, { type: 'createRectangle', frame });
+    const [b] = ok(target, { type: 'createRectangle', frame });
+    ok(target, {
+      type: 'setStyle',
+      ids: [b!],
+      style: {
+        fill: {
+          kind: 'radial',
+          transform: [1, 0, 0, 1, 0, 0],
+          stops: [
+            { offset: 0, color: { r: 0, g: 0, b: 0, a: 1 } },
+            { offset: 1, color: { r: 1, g: 1, b: 1, a: 1 } },
+          ],
+          spread: 'pad',
+        },
+      },
+    });
+    ok(target, { type: 'setSelection', ids: [a!, b!] });
+    const html = renderToString(
+      createElement(EditorProvider, { editor: target }, createElement(PropertyPanel)),
+    );
+    expect(html).toContain('Fill type');
+    expect(html).not.toContain('Fill swatches');
   });
 });

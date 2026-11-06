@@ -142,7 +142,7 @@ function PaintControls({
           />
         </Row>
       )}
-      {kind !== 'linear' && kind !== 'radial' && (
+      {!paints.some(isGradient) && (
         <Swatches
           prefix={prefix}
           lower={lower}
@@ -196,6 +196,12 @@ function ColorWell({
     element.addEventListener('change', onChange);
     return () => element.removeEventListener('change', onChange);
   }, [value]);
+  // A new document value (an undo, another selection) drops a draft a dismissed picker left.
+  const [source, setSource] = useState(value);
+  if (source !== value) {
+    setSource(value);
+    setDraft(null);
+  }
   return (
     <input
       ref={input}
@@ -211,7 +217,8 @@ function ColorWell({
 }
 
 /**
- * V-25 slice 3: one-click colours (`PANEL_SWATCHES`) under an empty, solid or mixed paint. A
+ * V-25 slice 3: one-click colours (`PANEL_SWATCHES`) under empty and solid paints (never when
+ * any selected paint is a gradient, which a swatch would replace). A
  * click writes the solid colour, keeping the alpha of the first solid paint (opaque from none),
  * as one `setStyle`.
  */
