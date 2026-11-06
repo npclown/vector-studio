@@ -10,6 +10,7 @@ import {
 } from '@vector-studio/ui';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ArtboardLabels, ArtboardList, ArtboardPresets } from './v25-artboards';
+import { PathDebugPanel } from './v25-path-debug';
 
 // V-25 (editor UI usability, slice 1): next-host's full-window "studio" layout, the default for a
 // person opening the page. The canvas fills the space between a top bar (file controls, the
@@ -158,6 +159,7 @@ export function StudioShell({ canvas, fileControls, ...status }: StudioShellProp
       <aside className="vs-right" aria-label="design">
         <ArtboardPresets />
         <PropertyPanel />
+        <PathDebugPanel />
         <EditorPanels />
       </aside>
       <StudioStatus {...status} />
@@ -261,6 +263,9 @@ const STUDIO_CSS = `
   border-right: 1px solid var(--vs-border);
 }
 .vs-right { grid-area: right; border-left: 1px solid var(--vs-border); }
+.vs-path-debug { border-top: 1px solid var(--vs-border); padding: 4px 12px 8px; }
+.vs-path-debug .vs-heading { display: flex; justify-content: space-between; padding: 6px 0; }
+.vs-path-debug textarea { width: 100%; box-sizing: border-box; font: 11px/1.3 ui-monospace, monospace; resize: vertical; }
 .vs-heading { margin: 0; padding: 10px 12px 6px; font-weight: 600; }
 .vs-pages { border-bottom: 1px solid var(--vs-border); padding-bottom: 6px; max-height: 40%; overflow-y: auto; }
 .vs-pages [role='group'][aria-label='pages'] { flex-direction: column; align-items: stretch; gap: 0 !important; padding: 0 4px !important; }
