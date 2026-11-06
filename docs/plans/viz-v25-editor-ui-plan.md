@@ -1,6 +1,6 @@
 # V-25: editor UI usability plan
 
-Status: slice 1 IN REVIEW 2026-11-06 (implemented, independent review r1 NOT READY on docs, applied; headed check done); slices 2 to 5 proposed. Tier: Full (product UI behaviour, new `@vector-studio/ui` exports). Track: visualization.
+Status: slice 1 IN REVIEW 2026-11-06 (implemented, independent review r1 NOT READY on docs, applied; r2 READY WITH FOLLOW-UPS, applied; headed check done); slices 2 to 5 proposed. Tier: Full (product UI behaviour, new `@vector-studio/ui` exports). Track: visualization.
 
 ## Request
 
@@ -59,6 +59,7 @@ The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2
 - Unit: `tests/unit/v25-editor-ui.test.ts` (shortcut labels against a real editor's keymap per platform and with a host layer; toolbar and zoom menu markup and enable rules; the studio switch and canvas sizing); the M8 export lists gain the new names.
 - Layout: screenshot of the studio in the container's Chromium (no WebGPU there, so the canvas is empty and the status shows the renderer error).
 - Headed: the studio on the main PC (DESKTOP-DKVUSAV) at `ca070af` with the real WebGPU renderer, 2026-11-06: the containers fixture renders; drawing a rectangle selects it and fills the property panel and layer tree; the zoom menu opens; resizing the window from 1440 by 900 to 1100 by 700 resizes the canvas (the renderer is recreated, with a short blank frame). Not an automated spec.
+- Zoom menu keys (V25-A04) at `dba53d1` in the container's Chromium (the menu needs no GPU): a click opens it with focus on Zoom in; ArrowDown, End, ArrowDown (wraps to Zoom in) and ArrowUp (wraps to 100%) move focus; Escape closes it with focus on the zoom button; ArrowDown on the button opens it; Enter on Zoom in zooms to 200% and returns focus to the button.
 - Unchanged by construction: every headed spec opens `?test=1` or `?bench=1`.
 
 ## Follow-ups seen in slice 1

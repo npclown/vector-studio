@@ -113,7 +113,7 @@ describe('V-25 shortcut labels', () => {
 
 describe('V-25 zoom menu keys', () => {
   it('moves between enabled items, wrapping, and ignores other keys', () => {
-    // fit, selection (disabled), 100%: as zoomActions with nothing selected, minus in and out.
+    // zoom in, zoom out, fit, selection (disabled), 100%: zoomActions with nothing selected.
     const enabled = [true, true, true, false, true];
     expect(nextMenuIndex(enabled, -1, 'ArrowDown')).toBe(0);
     expect(nextMenuIndex(enabled, 2, 'ArrowDown')).toBe(4);
