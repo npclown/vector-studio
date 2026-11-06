@@ -1,6 +1,6 @@
 # V-25: editor UI usability plan
 
-Status: slice 1 DONE 2026-11-06 (#511, `82002c1`; review r1 NOT READY applied, r2 READY WITH FOLLOW-UPS applied); slice 2 IN REVIEW 2026-11-06; slices 3 to 5 proposed. Tier: Full (product UI behaviour, new `@vector-studio/ui` exports). Track: visualization.
+Status: slice 1 DONE 2026-11-06 (#511, `82002c1`; review r1 NOT READY applied, r2 READY WITH FOLLOW-UPS applied); slice 2 DONE 2026-11-06 (#512, `f2c48d5`; review r1 NOT READY fixed, r2 READY WITH FOLLOW-UPS fixed); slice 3 IN REVIEW 2026-11-06; slices 4 to 6 proposed. Tier: Full (product UI behaviour, new `@vector-studio/ui` exports). Track: visualization.
 
 ## Request
 
@@ -22,19 +22,20 @@ The M8 layout is kept on purpose for specs and benches: its canvas origin, row h
 
 The engine already has most of it: the viewport is unbounded (pan, wheel and pinch zoom, zoom to fit and to selection), documents have pages, and `frame` nodes are containers with fill and stroke. What is missing is UI.
 
-Recommendation: no new artboard node type and no schema change. A top-level frame on a page is an artboard, as in Figma. Artboard features (slice 2) are UI over existing frames; export per artboard (slice 5) is a new feature with its own contract.
+Recommendation: no new artboard node type and no schema change. A top-level frame on a page is an artboard, as in Figma. Artboard features (slice 2) are UI over existing frames; export per artboard (slice 6) is a new feature with its own contract.
 
 ## Slices
 
 | Slice | Content | State |
 | --- | --- | --- |
 | 1 | Full-window studio layout: canvas fills the window; top bar with file controls, one-row icon toolbar with tooltips naming each control and its shortcut from the live keymap, zoom menu; left sidebar with pages and a full-height layer tree; right sidebar with properties and extension panels; one-line status bar | Done (#511, `82002c1`) |
-| 2 | Artboards: frame names on the canvas (click selects, double-click renames), frame size presets in the frame tool, an artboard list that selects and zooms | In review |
-| 3 | Property panel: X/Y/W/H grid, colour swatches, collapsible sections | Proposed |
-| 4 | Context menu (right click): group, arrange, delete, symbol actions | Proposed |
-| 5 | Export per artboard (SVG, PNG) | Proposed; needs its own contract |
+| 2 | Artboards: frame names on the canvas (click selects, double-click renames), frame size presets in the frame tool, an artboard list that selects and zooms | Done (#512, `f2c48d5`) |
+| 3 | Easy colour picking (swatches and the browser colour picker) and the drawing tools returning to Select after a shape | In review |
+| 4 | Property panel: X/Y/W/H grid, collapsible sections | Proposed |
+| 5 | Context menu (right click): group, arrange, delete, symbol actions | Proposed |
+| 6 | Export per artboard (SVG, PNG) | Proposed; needs its own contract |
 
-The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2 (artboards) next.
+The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2 (artboards) next, then asked for slice 3 ("make colour picking easy, and always switch to Select when a shape is drawn"), which takes the colour swatches out of the old property panel slice.
 
 ## Slice 1 design
 
@@ -65,7 +66,7 @@ The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2
 ## Follow-ups seen in slice 1
 
 - The canvas outside the document is the renderer's opaque black clear; a grey pasteboard needs a clear-colour renderer option (rendering track).
-- A shape tool stays active after drawing (editor behaviour since M1); Figma returns to Select. A product behaviour change for a later slice.
+- A shape tool stays active after drawing (editor behaviour since M1); Figma returns to Select. Done in slice 3 for the studio layout.
 - Each settled canvas resize disposes and recreates the renderer (WASM fetched and compiled again, a new device, the glyph atlas rebuilt), with a short blank frame. Bounded by the 120 ms settle; a renderer resize path or a cached compiled kernel is a rendering-track follow-up.
 
 ## Slice 2 design: artboards
@@ -90,3 +91,24 @@ The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2
 - Unit: `tests/unit/v25-artboards.test.ts` (artboards, placement, preset commands and undo, click and rename rules, the rename guard, markup).
 - Layout: the containers fixture in the container's Chromium after a Phone preset: the Phone artboard is placed, selected, labelled and listed, the tool is back on Select.
 - Label interactions at the review r1 fix, container Chromium (Playwright, DOM only): a label click selects with focus on the canvas; double-click, type, Enter renames once (one undo restores the old name) with focus back on the canvas; double-click, type, Escape leaves the name unchanged.
+
+## Slice 3 design: colour picking and return to Select
+
+- Return to Select: `EditorOptions.returnToSelect` (default false). When true, the rectangle, ellipse, frame, line and path tools set the tool to `select` after each node they create, right after selecting it; both are session commands, so the shape stays one undo step. A click that creates nothing, an Escape during a drag and a path still collecting anchors keep the tool. The text tool already returns to Select (M6b-Q5 (a)). next-host passes `returnToSelect` in the studio layout only, so the M8 layout under `?test=1`, `?bench=1` and `?layout=legacy` keeps the M2 behaviour every headed spec and bench was written for. This amends M2 (section 1.3 of the M8 contract records it).
+- Colour picking, in the shared appearance panel (so the M8 layout shows it too): a solid fill or stroke gets the browser's colour picker (`<input type="color">`, name "Fill colour picker" or "Stroke colour picker") before its hex field. It shows the colour live while the picker is open and commits once on the input's native `change`, so a pick is one `setStyle` and one undo step, as M4-Q13 (a) asks (no live preview in the document). Under an empty, solid or mixed fill, and a solid stroke, a row of twelve swatches (black, white, two greys, red, orange, yellow, green, teal, blue, purple, pink; group "Fill swatches", buttons "Fill swatch #rrggbb") writes that colour in one click, keeping the alpha of the first solid paint, opaque from none, so a node with no fill gets one without first changing the type. Gradients show neither (a swatch would replace the gradient). The M4 names, test IDs and commit rules of the existing fields are unchanged.
+
+## Acceptance criteria (slice 3)
+
+| ID | Criterion | Method |
+| --- | --- | --- |
+| V25-A12 | With `returnToSelect`, a drag with the rectangle, ellipse, frame or line tool, or a finished path, creates one node in one undo step, selects it and sets the tool to `select`; a click that creates nothing or an Escape keeps the tool | Unit tests against a real editor |
+| V25-A13 | Without `returnToSelect` (default) or with false, a drawing tool stays active (M2) | Unit test |
+| V25-A14 | next-host passes `returnToSelect` in the studio layout only | Review of `page.tsx` (`studioLayout`) |
+| V25-A15 | A swatch writes its colour as one solid paint with the first solid paint's alpha, opaque from none; the swatches show under an empty, solid or mixed paint and not under a gradient, the current one pressed | Unit model and markup tests; headed check |
+| V25-A16 | The colour picker shows the solid colour and commits one `setStyle` on its native `change` only | Unit markup test; review; headed check |
+
+## Validation (slice 3)
+
+- Unit: `tests/unit/v25-color-tool-return.test.ts` (each drawing tool with and without the option, no-op click and Escape, `solidFromHex`, the panel markup).
+- Full unit suite: 5280 passed; the one failure, `p3-b0r-identity`, fails on main too under the container's Node 22 (environment, not a regression).
+- Headed: the studio on the main PC after merge (the relaunch on :4194).

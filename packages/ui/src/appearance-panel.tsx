@@ -23,6 +23,7 @@ import {
   linearTransform,
   numberText,
   PANEL_MAX_STOPS,
+  PANEL_SWATCHES,
   paintForKind,
   paintKind,
   parseDash,
@@ -30,6 +31,7 @@ import {
   parseNumber,
   radiiFor,
   removeStop,
+  solidFromHex,
   strokeOf,
   styleCommand,
   toDegrees,
@@ -86,6 +88,9 @@ function PaintControls({
   const lower = prefix.toLowerCase();
   const lead = leadGradient(paints);
   const kind = kindValue;
+  const hexValue = sameText((paint) =>
+    paint === null || isGradient(paint) ? null : colorHex(paint),
+  );
   return (
     <>
       <Row>
@@ -101,11 +106,18 @@ function PaintControls({
       </Row>
       {kind === 'solid' && (
         <Row>
+          <ColorWell
+            label={`${prefix} colour picker`}
+            testId={`${lower}-colour-picker`}
+            value={hexValue}
+            commit={(hex) => {
+              const color = solidFromHex(hex, paints);
+              return color !== null && write(color);
+            }}
+          />
           <TextField
             label={`${prefix} colour`}
-            value={sameText((paint) =>
-              paint === null || isGradient(paint) ? null : colorHex(paint),
-            )}
+            value={hexValue}
             commit={(text) => {
               const first = paints.find((paint) => paint !== null && !isGradient(paint));
               const alpha =
@@ -130,10 +142,119 @@ function PaintControls({
           />
         </Row>
       )}
+      {kind !== 'linear' && kind !== 'radial' && (
+        <Swatches
+          prefix={prefix}
+          lower={lower}
+          current={kind === 'solid' ? hexValue : null}
+          pick={(hex) => {
+            const color = solidFromHex(hex, paints);
+            if (color !== null) void write(color);
+          }}
+        />
+      )}
       {(kind === 'linear' || kind === 'radial') && lead !== null && (
         <GradientControls prefix={prefix} lower={lower} lead={lead} paints={paints} write={write} />
       )}
     </>
+  );
+}
+
+/**
+ * V-25 slice 3: the browser's colour picker for a solid paint, beside its hex field. It shows the
+ * colour live while the picker is open but commits once, on the input's native `change` (the
+ * picker closes or the choice is confirmed), so one pick is one `setStyle` and one undo step
+ * (M4-Q13 (a): no live preview in the document). A mixed value shows black.
+ */
+function ColorWell({
+  label,
+  testId,
+  value,
+  commit,
+}: {
+  label: string;
+  testId: string;
+  /** `#rrggbb`, or null when mixed. */
+  value: string | null;
+  commit: (hex: string) => boolean;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const [draft, setDraft] = useState<string | null>(null);
+  const latest = useRef(commit);
+  useEffect(() => {
+    latest.current = commit;
+  });
+  useEffect(() => {
+    const element = input.current;
+    if (element === null) return;
+    // React's onChange follows every `input` event while the picker is open; the native
+    // `change` fires once, when the choice is made.
+    const onChange = () => {
+      setDraft(null);
+      if (element.value !== value) void latest.current(element.value);
+    };
+    element.addEventListener('change', onChange);
+    return () => element.removeEventListener('change', onChange);
+  }, [value]);
+  return (
+    <input
+      ref={input}
+      type="color"
+      aria-label={label}
+      data-testid={testId}
+      title={label}
+      value={draft ?? value ?? '#000000'}
+      onChange={(event) => setDraft(event.target.value)}
+      style={{ width: 28, height: 24, padding: 0, border: 'none', background: 'none' }}
+    />
+  );
+}
+
+/**
+ * V-25 slice 3: one-click colours (`PANEL_SWATCHES`) under an empty, solid or mixed paint. A
+ * click writes the solid colour, keeping the alpha of the first solid paint (opaque from none),
+ * as one `setStyle`.
+ */
+function Swatches({
+  prefix,
+  lower,
+  current,
+  pick,
+}: {
+  prefix: 'Fill' | 'Stroke';
+  lower: string;
+  /** The shared solid colour, or null when there is none. */
+  current: string | null;
+  pick: (hex: string) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={`${prefix} swatches`}
+      data-testid={`${lower}-swatches`}
+      style={{ display: 'flex', flexWrap: 'wrap', gap: 4, margin: '4px 0' }}
+    >
+      {PANEL_SWATCHES.map((hex) => (
+        <button
+          key={hex}
+          type="button"
+          aria-label={`${prefix} swatch ${hex}`}
+          aria-pressed={current === hex}
+          data-testid={`${lower}-swatch-${hex.slice(1)}`}
+          title={hex}
+          onClick={() => pick(hex)}
+          style={{
+            width: 18,
+            height: 18,
+            padding: 0,
+            borderRadius: 3,
+            border: current === hex ? '2px solid #0d99ff' : '1px solid rgba(128, 128, 128, 0.6)',
+            background: hex,
+            cursor: 'pointer',
+          }}
+        />
+      ))}
+    </div>
   );
 }
 
