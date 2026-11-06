@@ -104,6 +104,12 @@ const ROTATE_RADIUS = 18;
 /** The Shift step of the rotate gesture: 15° (M2 contract, section 4.1). */
 const ROTATE_STEP = Math.PI / 12;
 const CLOSE_RADIUS = 4;
+/**
+ * V-25 slice 8 follow-up: a pen press that moves less than this many CSS px is a click (a corner
+ * anchor). A click's hand jitter made a cubic with handles about 1 px long, which the renderer
+ * draws as nothing (fill and stroke), so the path looked empty.
+ */
+const PEN_DRAG_THRESHOLD = 4;
 
 function distance(a: PagePoint, b: PagePoint): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -645,7 +651,7 @@ export function createPathTool(options: DrawOptions = {}): Tool {
         // Press-and-drag makes a cubic anchor with symmetric handles; with Alt (V-25 slice 8)
         // only the out handle follows, so the curve turns a corner at the anchor.
         const { point } = pressed;
-        const moved = distance(event.point, point) > 0;
+        const moved = distance(event.point, point) * zoomOf(context) >= PEN_DRAG_THRESHOLD;
         pressed.out = moved ? event.point : null;
         if (!event.modifiers.alt || !moved) {
           pressed.in = moved

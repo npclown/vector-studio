@@ -165,6 +165,34 @@ describe('V-25 pen curves', () => {
   });
 });
 
+describe('V-25 pen drag threshold', () => {
+  it('treats a press that moves under 4 CSS px as a click, at the camera zoom', () => {
+    const target = editor();
+    ok(target, { type: 'setViewport', camera: { position: { x: 0, y: 0 }, zoom: 2 } });
+    ok(target, { type: 'setTool', tool: 'path' });
+    press(target, { x: 0, y: 0 });
+    // 1.5 page units at zoom 2 is 3 CSS px: hand jitter, a corner anchor.
+    press(target, { x: 50, y: 0 }, { x: 51.5, y: 0 });
+    let overlay = target.getSnapshot().overlay;
+    expect(overlay?.kind === 'path' && overlay.anchors[1]).toEqual({
+      point: { x: 50, y: 0 },
+      in: null,
+      out: null,
+    });
+    // 2 page units is 4 CSS px: a drag, a cubic anchor.
+    press(target, { x: 100, y: 0 }, { x: 102, y: 0 });
+    overlay = target.getSnapshot().overlay;
+    expect(overlay?.kind === 'path' && overlay.anchors[2]).toEqual({
+      point: { x: 100, y: 0 },
+      in: { x: 98, y: 0 },
+      out: { x: 102, y: 0 },
+    });
+    enter(target);
+    const node = drawn(target);
+    expect(node.type === 'path' && node.path.verbs).toEqual(['move', 'line', 'cubic']);
+  });
+});
+
 describe('V-25 pen curves, Alt and close', () => {
   const pending = (target: Editor) => {
     const overlay = target.getSnapshot().overlay;
