@@ -9,10 +9,12 @@ import {
   usePanelErrors,
 } from '@vector-studio/ui';
 import { useEffect, useState, type ReactNode } from 'react';
+import { ArtboardLabels, ArtboardList, ArtboardPresets } from './v25-artboards';
 
 // V-25 (editor UI usability, slice 1): next-host's full-window "studio" layout, the default for a
 // person opening the page. The canvas fills the space between a top bar (file controls, the
-// icon toolbar, the zoom menu), a left sidebar (pages, then the layer tree filling the rest) and
+// icon toolbar, the zoom menu), a left sidebar (pages, artboards, then the layer tree filling the
+// rest; slice 2 adds the artboards, src/v25-artboards.tsx) and
 // a right sidebar (properties, then the extension panels), with a one-line status bar below.
 // `?test=1`, `?bench=1` and `?layout=legacy` keep the M8 layout, so every headed spec, the
 // M8-N3 budget and the bench measurements see the page they were written for.
@@ -135,10 +137,14 @@ export function StudioShell({ canvas, fileControls, ...status }: StudioShellProp
           <ZoomMenu />
         </div>
       </header>
-      <aside className="vs-left" aria-label="pages and layers">
+      <aside className="vs-left" aria-label="pages, artboards and layers">
         <section className="vs-pages">
           <h2 className="vs-heading">Pages</h2>
           <PageList />
+        </section>
+        <section className="vs-artboards">
+          <h2 className="vs-heading">Artboards</h2>
+          <ArtboardList />
         </section>
         <section className="vs-layers">
           <h2 className="vs-heading">Layers</h2>
@@ -147,8 +153,10 @@ export function StudioShell({ canvas, fileControls, ...status }: StudioShellProp
       </aside>
       <div ref={cell} className="vs-canvas" data-testid="studio-canvas">
         {size === null ? null : canvas(size)}
+        {size === null ? null : <ArtboardLabels />}
       </div>
       <aside className="vs-right" aria-label="design">
+        <ArtboardPresets />
         <PropertyPanel />
         <EditorPanels />
       </aside>
@@ -259,6 +267,26 @@ const STUDIO_CSS = `
 .vs-pages nav { flex-direction: column; gap: 0 !important; }
 .vs-pages nav button { text-align: left; padding: 4px 8px; }
 .vs-pages [role='group'][aria-label='pages'] > button { text-align: left; color: var(--vs-muted); }
+.vs-artboards { border-bottom: 1px solid var(--vs-border); padding-bottom: 6px; max-height: 30%; overflow-y: auto; }
+.vs-artboard-list { list-style: none; margin: 0; padding: 0 4px; }
+.vs-artboard-list button, .vs-presets button { display: flex; width: 100%; justify-content: space-between; gap: 8px; text-align: left; padding: 4px 8px; }
+.vs-muted { color: var(--vs-muted); font-size: 11px; }
+.vs-empty, .vs-hint { margin: 0; padding: 0 12px 6px; color: var(--vs-muted); }
+.vs-presets { border-bottom: 1px solid var(--vs-border); padding: 0 4px 8px; }
+.vs-presets .vs-heading { padding-left: 8px; padding-right: 8px; }
+.vs-presets .vs-hint { padding: 0 8px 4px; }
+.vs-artboard-label {
+  font-size: 11px !important;
+  color: var(--vs-muted) !important;
+  background: transparent !important;
+  padding: 0 0 2px !important;
+  border: 0 !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vs-artboard-label:hover, .vs-artboard-label[aria-pressed='true'] { color: var(--vs-accent) !important; }
+.vs-artboard-input { font-size: 11px !important; padding: 0 2px !important; }
 .vs-layers { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .vs-layers > [data-testid='layers'] { flex: 1; min-height: 0; }
 .vs-layers [role='toolbar'][aria-label='arrange'] { padding: 0 8px 4px; gap: 2px !important; flex-wrap: wrap; }

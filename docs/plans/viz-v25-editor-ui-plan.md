@@ -1,6 +1,6 @@
 # V-25: editor UI usability plan
 
-Status: slice 1 IN REVIEW 2026-11-06 (implemented, independent review r1 NOT READY on docs, applied; r2 READY WITH FOLLOW-UPS, applied; headed check done); slices 2 to 5 proposed. Tier: Full (product UI behaviour, new `@vector-studio/ui` exports). Track: visualization.
+Status: slice 1 DONE 2026-11-06 (#511, `82002c1`; review r1 NOT READY applied, r2 READY WITH FOLLOW-UPS applied); slice 2 IN REVIEW 2026-11-06; slices 3 to 5 proposed. Tier: Full (product UI behaviour, new `@vector-studio/ui` exports). Track: visualization.
 
 ## Request
 
@@ -28,8 +28,8 @@ Recommendation: no new artboard node type and no schema change. A top-level fram
 
 | Slice | Content | State |
 | --- | --- | --- |
-| 1 | Full-window studio layout: canvas fills the window; top bar with file controls, one-row icon toolbar with tooltips naming each control and its shortcut from the live keymap, zoom menu; left sidebar with pages and a full-height layer tree; right sidebar with properties and extension panels; one-line status bar | In review |
-| 2 | Artboards: frame names on the canvas (click selects, double-click renames), frame size presets in the frame tool, go to an artboard from the layer tree | Proposed, recommended next |
+| 1 | Full-window studio layout: canvas fills the window; top bar with file controls, one-row icon toolbar with tooltips naming each control and its shortcut from the live keymap, zoom menu; left sidebar with pages and a full-height layer tree; right sidebar with properties and extension panels; one-line status bar | Done (#511, `82002c1`) |
+| 2 | Artboards: frame names on the canvas (click selects, double-click renames), frame size presets in the frame tool, an artboard list that selects and zooms | In review |
 | 3 | Property panel: X/Y/W/H grid, colour swatches, collapsible sections | Proposed |
 | 4 | Context menu (right click): group, arrange, delete, symbol actions | Proposed |
 | 5 | Export per artboard (SVG, PNG) | Proposed; needs its own contract |
@@ -67,3 +67,26 @@ The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2
 - The canvas outside the document is the renderer's opaque black clear; a grey pasteboard needs a clear-colour renderer option (rendering track).
 - A shape tool stays active after drawing (editor behaviour since M1); Figma returns to Select. A product behaviour change for a later slice.
 - Each settled canvas resize disposes and recreates the renderer (WASM fetched and compiled again, a new device, the glyph atlas rebuilt), with a short blank frame. Bounded by the 120 ms settle; a renderer resize path or a cached compiled kernel is a rendering-track follow-up.
+
+## Slice 2 design: artboards
+
+- An artboard is a top-level frame of the active page (`artboardsOf`, front first like the layer tree); nested frames are not artboards. No schema, command or `ui` export change: everything is in `apps/next-host/src/v25-artboards.tsx`, mounted by the studio layout only.
+- Labels: each artboard's name sits just above its top-left corner on the canvas (the corner from `nodePageCorners`, so a rotated artboard's label follows its corner; the label itself is not rotated). A click selects it (`setSelection`), Shift or Mod toggles it, a double-click opens a rename textbox (`setNodeProps name` on Enter or blur, trimmed, nothing sent when empty or unchanged, Escape cancels). Only the labels take pointer events; a label never takes keyboard focus from the canvas, and the canvas gets it back after a rename. Only the first close of a rename acts (Enter or Escape, then the unmount blur, as `useRename` in the layer tree). The label sits over the strip above a selected artboard's top-left corner, so a press there selects rather than starting a resize or rotate from outside the corner; Figma has the same overlap, accepted.
+- List: an Artboards section in the left sidebar between Pages and Layers, each row with the name and size; a click selects the artboard and zooms to it (`zoomTo selection`). With none, a hint.
+- Presets: while the frame tool is active the right sidebar starts with seven sizes (Desktop 1440 by 1024, Laptop 1280 by 832, Tablet 834 by 1194, Phone 393 by 852, A4 595 by 842, Letter 612 by 792, Square 1080 by 1080). A pick runs one `createFrame` (one undo step) named after the preset, placed 100 units right of the page's artboards and top-aligned with them, or centred in the view when there are none; then it selects the new artboard, returns to the Select tool and zooms to it (session commands).
+
+## Acceptance criteria (slice 2)
+
+| ID | Criterion | Method |
+| --- | --- | --- |
+| V25-A07 | The artboards are the active page's top-level frames, front first, per page | Unit tests against a real editor |
+| V25-A08 | A preset creates one frame (one undo step) with the preset's name and size at the stated place, then selects it, returns to Select and zooms to it | Unit tests; headed check |
+| V25-A09 | Labels sit at each artboard's corner in canvas px for the current camera; click, toggle and rename follow the rules above | Unit markup and model tests; headed check |
+| V25-A10 | The list shows each artboard with its size and a click selects and zooms to it | Unit markup test; headed check |
+| V25-A11 | The M8 layout (`?test=1`, `?bench=1`, `?layout=legacy`) mounts none of it | Review: only `v25-studio.tsx` imports the module |
+
+## Validation (slice 2)
+
+- Unit: `tests/unit/v25-artboards.test.ts` (artboards, placement, preset commands and undo, click and rename rules, the rename guard, markup).
+- Layout: the containers fixture in the container's Chromium after a Phone preset: the Phone artboard is placed, selected, labelled and listed, the tool is back on Select.
+- Label interactions at the review r1 fix, container Chromium (Playwright, DOM only): a label click selects with focus on the canvas; double-click, type, Enter renames once (one undo restores the old name) with focus back on the canvas; double-click, type, Escape leaves the name unchanged.
