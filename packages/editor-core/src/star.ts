@@ -36,6 +36,16 @@ function isStarData(data: JsonValue): data is StarData {
   );
 }
 
+/**
+ * V-25 (user report 2026-11-06, "Create star" drew nothing whatever its fill and stroke): cos and
+ * sin leave rounding noise (the top vertex of a 120 px star at x = 60.00000000000001), and the
+ * stroke-v0 kernel refused such nearly symmetric outlines as `unsupported-geometry`, which hides
+ * the fill too. Every vertex is snapped to this dyadic grid (2^-16 frame px), so mirrored vertices
+ * are exactly mirrored; the shape moves by at most 2^-17 px.
+ */
+const STAR_GRID = 65_536;
+const snap = (value: number) => Math.round(value * STAR_GRID) / STAR_GRID;
+
 /** A star inscribed in the frame, first point at the top, outer and inner vertices alternating. */
 function starPath(data: JsonValue, frame: Frame) {
   if (!isStarData(data)) throw new Error('ext.star: invalid data');
@@ -45,7 +55,7 @@ function starPath(data: JsonValue, frame: Frame) {
   for (let i = 0; i < data.points * 2; i += 1) {
     const angle = -Math.PI / 2 + (i * Math.PI) / data.points;
     const scale = i % 2 === 0 ? 1 : data.innerRatio;
-    points.push(rx + Math.cos(angle) * rx * scale, ry + Math.sin(angle) * ry * scale);
+    points.push(snap(rx + Math.cos(angle) * rx * scale), snap(ry + Math.sin(angle) * ry * scale));
   }
   return {
     verbs: [
