@@ -395,6 +395,8 @@ mod stroke_cubic_tests;
 // P3 B2 unit ST-U3b: the B2-Q8 native scaling probe, test-only; appended for the same reason as
 // above.
 #[cfg(test)]
+mod e35_hairpin_retry_tests;
+#[cfg(test)]
 mod stroke_probe_tests;
 // P3 B2 unit ST-U5 (docs/plans/p3-b2-stroke-contract.md, section 7): the stroke-mesh transport
 // v0. A third module-level engine; it shares no state with GLOBAL_ENGINE or GLOBAL_FILL_ENGINE.

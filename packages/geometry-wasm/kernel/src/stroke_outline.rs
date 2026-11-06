@@ -24,8 +24,8 @@ use crate::geometry::{validate_path, Point, VERB_CLOSE, VERB_CUBIC, VERB_LINE, V
 use crate::line_fill::LineFillRule;
 use crate::rounded_line_fill::{RoundedFillError, RoundedFillLimits, RoundedFillWorkspace};
 use crate::stroke_cubic::{
-    classify_cubic, evaluate, measure_band, measure_leaf, split_at, split_half, stationary_guard,
-    BandRule, CubicClass, LeafContext, LeafMeasure, MAX_LEAF_DEPTH,
+    classify_cubic, evaluate, measure_band, measure_leaf, measure_reversal, split_at, split_half,
+    stationary_guard, BandRule, CubicClass, LeafContext, LeafMeasure, MAX_LEAF_DEPTH,
 };
 use crate::stroke_merge::{is_band_quad, SeamMerge};
 
@@ -104,6 +104,7 @@ const UNIT: f64 = 1.0 / 9_007_199_254_740_992.0; // 2^-53
 /// `C_ARC > pi^2 / 2` (section 4.4).
 const C_ARC: f64 = 4.934_802_3;
 const SLACK_DOWN: f64 = 1.0 - 1.0 / 1_099_511_627_776.0; // 1 - 2^-40
+const SLACK_UP: f64 = 1.0 + 1.0 / 1_099_511_627_776.0; // 1 + 2^-40
 /// ST-G3 tightening (ST-U3 proof, see the plan entry): a kept miter needs `L <= 2^24`.
 const MAX_GUARDED_MITER_LIMIT: f64 = 16_777_216.0;
 /// Quadrant-I directions at level 6: 65 entries from `(1, 0)` to `(0, 1)`.
@@ -325,6 +326,11 @@ pub(crate) enum PieceKind {
     CubicLeaf,
     /// ST-P5 at an interior reversal or collinear turning point (ST-S8).
     CuspDisk,
+    /// E35-K1: one side of a near-cusp fan, the hull of a run of leaves' centres and their
+    /// offset points on that side.
+    FanSide,
+    /// E35-K3: the disk at a near reversal, in place of the leaves that would resolve it.
+    ReversalDisk,
 }
 
 impl PieceKind {
@@ -332,6 +338,8 @@ impl PieceKind {
         match self {
             Self::CubicLeaf => "cubic-leaf",
             Self::CuspDisk => "cusp-disk",
+            Self::FanSide => "fan-side",
+            Self::ReversalDisk => "reversal-disk",
             Self::LineSweep => "line-sweep",
             Self::Bevel => "bevel",
             Self::Miter => "miter",
@@ -455,6 +463,10 @@ pub(crate) struct StrokeDefects {
     /// Not a defect: the `stroke-v0+r6` path (no E2-K3) for the E2-G1 and E2-G2 A/B runs.
     #[cfg(test)]
     pub(crate) no_family_b: bool,
+    /// Not a defect: the `stroke-v0+r7` path (no E35 retry). The older baselines above also
+    /// have no retry.
+    #[cfg(test)]
+    pub(crate) no_retry: bool,
 }
 
 #[cfg(test)]
@@ -489,6 +501,7 @@ impl StrokeDefects {
     defect!(band_half_bound);
     defect!(no_band_rule);
     defect!(no_family_b);
+    defect!(no_retry);
 }
 
 impl StrokeDefects {
@@ -583,6 +596,10 @@ impl StrokeDefects {
     pub(crate) fn no_family_b(self) -> bool {
         false
     }
+    #[inline(always)]
+    pub(crate) fn no_retry(self) -> bool {
+        false
+    }
 }
 
 /// Tolerances of one request (section 3), built from exponent bits.
@@ -628,6 +645,10 @@ pub(crate) struct StrokeWorkspace {
     meta: PieceMeta,
     /// Depth-first leaf stack: controls, depth, index.
     leaf_stack: Vec<LeafEntry>,
+    /// E35-K1: whether the current build groups near-cusp leaves (the retry after a
+    /// work-limit), and the pending run of accepted leaves.
+    fan_mode: bool,
+    fan: Vec<FanLeaf>,
     /// ST-G1 `g_off` of the current path.
     g_off: f64,
     /// E2-K1 seam merge storage and the merged contours.
@@ -650,6 +671,27 @@ pub(crate) struct StrokeWorkspace {
 }
 
 type LeafEntry = ([Point; 4], u32, u32);
+
+/// E35-K1: the most leaves one fan groups (two hulls of at most `FAN_MAX_LEAVES + 1` centres
+/// and offset points each stay within `MAX_CANDIDATES`).
+const FAN_MAX_LEAVES: usize = 64;
+const _: () = assert!(2 * (FAN_MAX_LEAVES + 1) <= MAX_CANDIDATES);
+
+/// One accepted leaf waiting in a fan (E35-K1).
+#[derive(Clone, Copy, Debug)]
+struct FanLeaf {
+    start: Triple,
+    end: Triple,
+    t0: f64,
+    t1: f64,
+    depth: u32,
+    index: u32,
+    range: (f64, f64),
+    lo: Point,
+    hi: Point,
+    /// The larger normal error bound of the leaf's two triples.
+    error: f64,
+}
 
 /// One subdivided parameter range of a cubic (section 4.5).
 #[derive(Clone, Copy, Debug)]
@@ -716,6 +758,8 @@ impl StrokeWorkspace {
             extra_count: 0,
             meta: PieceMeta::default(),
             leaf_stack: reserve(LEAF_STACK)?,
+            fan_mode: false,
+            fan: reserve(FAN_MAX_LEAVES)?,
             g_off: 0.0,
             merge: SeamMerge::reserve()?,
             rung: FastRung::reserve_with(STROKE_RUNG_CAPS)?,
@@ -740,6 +784,7 @@ impl StrokeWorkspace {
             workspace.candidates.capacity() * size_of::<Point>(),
             workspace.hull.capacity() * size_of::<Point>(),
             workspace.leaf_stack.capacity() * size_of::<LeafEntry>(),
+            workspace.fan.capacity() * size_of::<FanLeaf>(),
             workspace.merge.allocated_bytes(),
             workspace.rung.allocated_bytes(),
         ]
@@ -847,6 +892,7 @@ impl StrokeWorkspace {
         self.extra_count = 0;
         self.meta = PieceMeta::default();
         self.leaf_stack.clear();
+        self.fan.clear();
         self.g_off = 0.0;
         self.merge.clear();
         self.fast_published = false;
@@ -861,6 +907,28 @@ impl StrokeWorkspace {
     /// Runs the per-path stage order of section 7.8 for one path. `Err` is a batch
     /// `internal-error`.
     pub(crate) fn build(
+        &mut self,
+        request: StrokeRequest,
+        verbs: &[u8],
+        point_bytes: &[u8],
+    ) -> Result<StrokeOutcome, SelfCheckFailure> {
+        self.fan_mode = false;
+        let outcome = self.build_once(request, verbs, point_bytes)?;
+        let baseline = self.defects.unmerged()
+            || self.defects.no_band_rule()
+            || self.defects.no_family_b()
+            || self.defects.no_retry();
+        if outcome != StrokeOutcome::Status(STROKE_PATH_WORK_LIMIT) || baseline {
+            return Ok(outcome);
+        }
+        // E35-K1: a work-limit path is built once more with near-cusp fans grouped.
+        self.fan_mode = true;
+        let retried = self.build_once(request, verbs, point_bytes);
+        self.fan_mode = false;
+        retried
+    }
+
+    fn build_once(
         &mut self,
         request: StrokeRequest,
         verbs: &[u8],
@@ -1570,6 +1638,7 @@ impl StrokeWorkspace {
                 end_fixed: last && leaves.source_end.is_some(),
                 split_length,
                 factor,
+                relative_guard: self.fan_mode,
             };
             let measure = measure_leaf(q, depth, context);
             let start = current.0;
@@ -1588,6 +1657,25 @@ impl StrokeWorkspace {
                     measure = band;
                 }
             }
+            if !measure.accepted && self.fan_mode {
+                if let Some((direction, end_error)) = measure_reversal(q, depth, context) {
+                    let end = match (last, leaves.source_end) {
+                        (true, Some(end)) => end,
+                        _ => triple(q[3], offset(unit_vector(direction)?, r)),
+                    };
+                    let end_error = if last && leaves.source_end.is_some() {
+                        0.0
+                    } else {
+                        end_error
+                    };
+                    let t0 = leaves.range.0 + width * (f64::from(leaf) * scale);
+                    let t1 = leaves.range.0 + width * (f64::from(leaf + 1) * scale);
+                    self.flush_fan(index)?;
+                    self.emit_reversal_disk(index, start, end, (t0, t1), r, tolerances)?;
+                    current = (end, end_error);
+                    continue;
+                }
+            }
             if !measure.accepted {
                 if depth >= MAX_LEAF_DEPTH {
                     return Err(FrontEndError::DepthLimit);
@@ -1601,33 +1689,186 @@ impl StrokeWorkspace {
                 continue;
             }
             let end = end_triple(measure)?;
-            self.candidates.clear();
-            for point in [
-                start.minus,
-                start.center,
-                start.plus,
-                end.minus,
-                end.center,
-                end.plus,
-            ] {
-                self.push_candidate(point)?;
-            }
-            self.meta = PieceMeta {
-                part: 0,
-                range: leaves.range,
-                depth,
-                index: leaf,
-                samples: [start, end],
-            };
             let t0 = leaves.range.0 + width * (f64::from(leaf) * scale);
             let t1 = leaves.range.0 + width * (f64::from(leaf + 1) * scale);
-            self.emit_hull(PieceKind::CubicLeaf, index, t0, t1, 0)?;
+            let fan_leaf = FanLeaf {
+                start,
+                end,
+                t0,
+                t1,
+                depth,
+                index: leaf,
+                range: leaves.range,
+                error: current.1.max(measure.end_error),
+                lo: Point {
+                    x: q.iter().fold(f64::INFINITY, |m, p| m.min(p.x)),
+                    y: q.iter().fold(f64::INFINITY, |m, p| m.min(p.y)),
+                },
+                hi: Point {
+                    x: q.iter().fold(f64::NEG_INFINITY, |m, p| m.max(p.x)),
+                    y: q.iter().fold(f64::NEG_INFINITY, |m, p| m.max(p.y)),
+                },
+            };
+            if self.fan_mode {
+                self.push_fan_leaf(index, fan_leaf, r, tolerances)?;
+            } else {
+                self.emit_leaf(index, fan_leaf)?;
+            }
             if !last && self.defects.knot_join() {
                 self.emit_knot_join(request, index, end, r, tolerances)?;
             }
             current = (end, measure.end_error);
         }
+        self.flush_fan(index)?;
         Ok(current)
+    }
+
+    /// E35-K3: the disk of radius `r` at a near reversal's start centre, sharing the start
+    /// triple's offset points like a cusp disk and holding the end triple's points.
+    fn emit_reversal_disk(
+        &mut self,
+        index: usize,
+        start: Triple,
+        end: Triple,
+        parameters: (f64, f64),
+        r: f64,
+        tolerances: Tolerances,
+    ) -> Result<(), FrontEndError> {
+        let center = start.center;
+        self.candidates.clear();
+        let level = self.push_disk(center, r, tolerances)?;
+        self.share_disk_vertices(center, r, level, &[start.minus, start.plus]);
+        let disk = self.candidates.len();
+        for point in [end.minus, end.center, end.plus] {
+            self.push_candidate(point)?;
+        }
+        self.meta = PieceMeta {
+            samples: [start, end],
+            ..PieceMeta::default()
+        };
+        self.emit_hull(
+            PieceKind::ReversalDisk,
+            index,
+            parameters.0,
+            parameters.1,
+            disk,
+        )
+        .map(|_| ())
+    }
+
+    /// One accepted leaf as its own piece (section 4.5).
+    fn emit_leaf(&mut self, index: usize, leaf: FanLeaf) -> Result<(), FrontEndError> {
+        self.candidates.clear();
+        for point in [
+            leaf.start.minus,
+            leaf.start.center,
+            leaf.start.plus,
+            leaf.end.minus,
+            leaf.end.center,
+            leaf.end.plus,
+        ] {
+            self.push_candidate(point)?;
+        }
+        self.meta = PieceMeta {
+            part: 0,
+            range: leaf.range,
+            depth: leaf.depth,
+            index: leaf.index,
+            samples: [leaf.start, leaf.end],
+        };
+        self.emit_hull(PieceKind::CubicLeaf, index, leaf.t0, leaf.t1, 0)
+            .map(|_| ())
+    }
+
+    /// E35-K1: adds an accepted leaf to the pending fan, flushing the fan first when the leaf
+    /// would take its control box past the fan bound.
+    fn push_fan_leaf(
+        &mut self,
+        index: usize,
+        leaf: FanLeaf,
+        r: f64,
+        tolerances: Tolerances,
+    ) -> Result<(), FrontEndError> {
+        // E35-K1's bound: a fan's two side hulls lie within `d + 2·r·sin(alpha) + g` of its
+        // leaves' ideal sweep, two-sided, where `d` is the diameter of the fan's controls,
+        // `2·r·sin(alpha) <= 2^(e-1)` by each leaf's own test, and `g` covers the computed
+        // controls (`2√2·eps`), normals (`3·r·dN`) and offset points (`gOff`). So a fan keeps
+        // `dUp + g <= 2^(e-1)`, and the total stays within the curve share `2^e`.
+        let m = magnitude(&self.segments[index].controls);
+        let g_off = self.g_off;
+        let fits = |lo: Point, hi: Point, depth: u32, error: f64| {
+            let (w, h) = (hi.x - lo.x, hi.y - lo.y);
+            let eps = 4.0 * f64::from(depth) * UNIT * m;
+            let diameter = (w * w + h * h).sqrt() * SLACK_UP + 3.0 * eps;
+            let guard = g_off + 3.0 * r * error + 8.0 * UNIT * (m + r);
+            matches!(
+                (diameter + guard).partial_cmp(&(tolerances.half * SLACK_DOWN)),
+                Some(Ordering::Less | Ordering::Equal)
+            )
+        };
+        if !fits(leaf.lo, leaf.hi, leaf.depth, leaf.error) {
+            self.flush_fan(index)?;
+            return self.emit_leaf(index, leaf);
+        }
+        if !self.fan.is_empty() {
+            let mut lo = leaf.lo;
+            let mut hi = leaf.hi;
+            let mut depth = leaf.depth;
+            let mut error = leaf.error;
+            for other in &self.fan {
+                lo = Point {
+                    x: lo.x.min(other.lo.x),
+                    y: lo.y.min(other.lo.y),
+                };
+                hi = Point {
+                    x: hi.x.max(other.hi.x),
+                    y: hi.y.max(other.hi.y),
+                };
+                depth = depth.max(other.depth);
+                error = error.max(other.error);
+            }
+            if !fits(lo, hi, depth, error) || self.fan.len() >= FAN_MAX_LEAVES {
+                self.flush_fan(index)?;
+            }
+        }
+        self.fan.push(leaf);
+        Ok(())
+    }
+
+    /// E35-K1: emits the pending fan: one leaf as itself, more as two side hulls.
+    fn flush_fan(&mut self, index: usize) -> Result<(), FrontEndError> {
+        match self.fan.len() {
+            0 => return Ok(()),
+            1 => {
+                let leaf = self.fan[0];
+                self.fan.clear();
+                return self.emit_leaf(index, leaf);
+            }
+            _ => {}
+        }
+        let first = self.fan[0];
+        let last = self.fan[self.fan.len() - 1];
+        for side in [false, true] {
+            self.candidates.clear();
+            let start = first.start;
+            self.push_candidate(start.center)?;
+            self.push_candidate(if side { start.plus } else { start.minus })?;
+            for k in 0..self.fan.len() {
+                let end = self.fan[k].end;
+                self.push_candidate(end.center)?;
+                self.push_candidate(if side { end.plus } else { end.minus })?;
+            }
+            self.meta = PieceMeta {
+                part: 0,
+                range: first.range,
+                depth: first.depth,
+                index: first.index,
+                samples: [first.start, last.end],
+            };
+            self.emit_hull(PieceKind::FanSide, index, first.t0, last.t1, 0)?;
+        }
+        self.fan.clear();
+        Ok(())
     }
 
     /// ST-D6 seeded defect only: the user join at a generated knot.

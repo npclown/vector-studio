@@ -415,6 +415,10 @@ pub(crate) struct LeafContext {
     pub(crate) split_length: f64,
     /// 4 in production; 2 under the ST-D8 seeded defect.
     pub(crate) factor: f64,
+    /// E35-K2 (the retry after a work-limit): the cone's rounding guard relative to the leaf,
+    /// `8u·|V|·max|Di|`, instead of the frozen absolute `768u·M²`, on leaves not next to a
+    /// reversal split (ST-OB7).
+    pub(crate) relative_guard: bool,
 }
 
 /// The test's outcome and the direction of an accepted leaf's computed end normal.
@@ -479,7 +483,18 @@ pub(crate) fn measure_leaf(q: [Point; 4], depth: u32, context: LeafContext) -> L
     let split = if context.split_range { 1.0 } else { 0.0 };
     let eps = (4.0 * level + 16.0 * split) * UNIT * m;
     let length = norm(v) * SLACK_UP + LENGTH_FLOOR;
-    let absolute = 768.0 * UNIT * m * m;
+    let absolute = if context.relative_guard && context.split_length == 0.0 {
+        // E35-K2: the dot and cross products of the computed `V` and `Di` round by at most
+        // `4.1u·|V|·|Di|` (p3-fill-stroke-meshes ST-G4 (1)); the control error stays in
+        // `perturbation`. Away from a reversal split no limit-direction term applies. The
+        // smallest normal number covers products that underflow.
+        let largest = cone
+            .iter()
+            .fold(0.0f64, |most, direction| most.max(norm(*direction)));
+        8.0 * UNIT * length * (largest * SLACK_UP) + f64::MIN_POSITIVE
+    } else {
+        768.0 * UNIT * m * m
+    };
     let perturbation = 20.0 * eps * length;
     let a_low = a * SLACK_DOWN - absolute - perturbation;
     if a_low.partial_cmp(&0.0) != Some(Ordering::Greater) {
@@ -532,6 +547,73 @@ pub(crate) fn measure_leaf(q: [Point; 4], depth: u32, context: LeafContext) -> L
         start_error,
         end_error,
     }
+}
+
+/// E35-K3 (the retry after a work-limit): a near reversal. A subcurve whose controls lie within
+/// `delta` of `Q0` and whose end directions are nearly opposite turns through at least
+/// `pi - beta` (its hodograph does not vanish, the reversal is not exact), so its sweep, with
+/// both normal sides, covers every direction but two wedges of `beta`. The disk of radius `r`
+/// at `Q0` is then within `delta + r·sin(beta)` of the subcurve's ideal sweep (two-sided), the
+/// argument of ST-G5 for a cusp disk with an inexact reversal. Accepted when
+///
+/// ```text
+/// deltaUp + r·sinUp + gOff ≤ 2^e (1 − 2^-40),   dot(Ds, De) < 0
+/// ```
+///
+/// with `Ds`, `De` the leaf's end directions (the cone rule's choice at a stationary end),
+/// `sinUp` their `|cross| / (|Ds|·|De|)` plus the direction error `2·g/|D|` of each, `g =
+/// 9ε + 17uM` the per-direction error of the computed hodograph against the exact one, and
+/// `deltaUp` the largest control distance from `Q0` plus `4ε + 4uM`. Returns the end
+/// direction and its normal error bound.
+pub(crate) fn measure_reversal(
+    q: [Point; 4],
+    depth: u32,
+    context: LeafContext,
+) -> Option<(Point, f64)> {
+    let d = [
+        scale3(sub(q[1], q[0])),
+        scale3(sub(q[2], q[1])),
+        scale3(sub(q[3], q[2])),
+    ];
+    let start = if context.stationary_start {
+        first_nonzero([d[1], d[2]])
+    } else {
+        first_nonzero([d[0], d[1]])
+    };
+    let end = if context.stationary_end {
+        first_nonzero([d[1], d[0]])
+    } else {
+        first_nonzero([d[2], d[1]])
+    };
+    let (start_norm, end_norm) = (norm(start), norm(end));
+    if !(start_norm > 0.0 && end_norm > 0.0) {
+        return None;
+    }
+    if start.x * end.x + start.y * end.y >= 0.0 {
+        return None;
+    }
+    let m = context.magnitude;
+    let split = if context.split_range { 1.0 } else { 0.0 };
+    let eps = (4.0 * f64::from(depth) + 16.0 * split) * UNIT * m;
+    let g = 9.0 * eps + 17.0 * UNIT * m;
+    let cross = (start.x * end.y - start.y * end.x).abs();
+    let sin_up = (cross / (start_norm * end_norm) * SLACK_UP * SLACK_UP
+        + 2.0 * g / (start_norm * SLACK_DOWN)
+        + 2.0 * g / (end_norm * SLACK_DOWN)
+        + 8.0 * UNIT)
+        .min(1.0);
+    let reach = q
+        .iter()
+        .fold(0.0f64, |most, point| most.max(norm(sub(*point, q[0]))));
+    let delta_up = reach * SLACK_UP + 4.0 * eps + 4.0 * UNIT * m;
+    let total = delta_up + context.r * sin_up + context.g_off;
+    if !matches!(
+        total.partial_cmp(&(context.full * SLACK_DOWN)),
+        Some(Ordering::Less | Ordering::Equal)
+    ) {
+        return None;
+    }
+    Some((end, 2.0 * g / (end_norm * SLACK_DOWN) + 8.0 * UNIT))
 }
 
 /// E2-K2 test variants: production checks the fold bound and uses the full chord bound; the
