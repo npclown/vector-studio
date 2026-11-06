@@ -48,13 +48,8 @@ const PAGES = { display: 'flex', gap: 8, padding: '0 8px' } as const;
 // A rename textbox no wider than a typical page button, so row 2 keeps its width budget, in the
 // browser's control font like the buttons around it, so row 2 keeps its height (M8-N3; M8-U6).
 const NAME_INPUT = { width: '8em' } as const;
-// M8-N3: the layer tree has a fixed height of 240 px; its list scrolls.
-const TREE = {
-  display: 'flex',
-  flexDirection: 'column',
-  height: 240,
-  boxSizing: 'border-box',
-} as const;
+// M8-N3: the layer tree has a fixed height of 240 px by default; its list scrolls.
+const TREE_HEIGHT = 240;
 const LIST = { flex: 1, minHeight: 0, overflowY: 'auto', margin: 0, padding: 0 } as const;
 const LIST_ROWS = { margin: 0, padding: 0 } as const;
 const INDENT = 12;
@@ -217,6 +212,12 @@ export function PageList() {
   );
 }
 
+/** Props of `LayerTree` (V-25). */
+export type LayerTreeProps = Readonly<{
+  /** The tree's CSS height: 240 px by default (M8-N3), or e.g. `'100%'` to fill its parent. */
+  height?: number | string;
+}>;
+
 /** Shift or Mod (Ctrl or Meta), as the canvas reads them, toggles a row in the selection. */
 const toggles = (event: MouseEvent) => event.shiftKey || event.ctrlKey || event.metaKey;
 
@@ -346,8 +347,11 @@ function rowIndexOf(target: EventTarget | null): number | null {
  * rename and the focused row (and its neighbours, so Tab and Shift+Tab always find the next
  * row). Before the measurement, and in `renderToString`, the first `UNMEASURED_ROWS` rows are
  * mounted in normal flow.
+ *
+ * V-25: `height` sets the tree's height (default 240 px, M8-N3); a host that sizes the tree
+ * itself passes `'100%'` and gives the parent a definite height.
  */
-export function LayerTree() {
+export function LayerTree({ height = TREE_HEIGHT }: LayerTreeProps = {}) {
   countRender('layers');
   const execute = useEditorCommands();
   const document = useEditorSelector(documentOf);
@@ -444,7 +448,11 @@ export function LayerTree() {
   );
 
   return (
-    <section aria-label="layers" data-testid="layers" style={TREE}>
+    <section
+      aria-label="layers"
+      data-testid="layers"
+      style={{ display: 'flex', flexDirection: 'column', height, boxSizing: 'border-box' }}
+    >
       <div role="toolbar" aria-label="arrange" style={ROW}>
         <Actions
           buttons={reorderActions(selection)}

@@ -62,6 +62,7 @@ import {
 } from '../src/e26-bench';
 import { CanvasSide, hostContributions } from '../src/m8-layout';
 import { faultPanelsQuery, testUiExtension } from '../src/m8-test-panels';
+import { StudioShell, studioLayout, type StudioCanvasSize } from '../src/v25-studio';
 import { SelectionOverlay } from '../src/overlay';
 import { createWebGpuRenderer } from '../src/webgpu-renderer';
 import type { ClusterRead, ClusterRect, FrameCrop, TextScene } from '../src/m6c-text-probe';
@@ -417,6 +418,22 @@ function FileControls({ onFileStatus }: { onFileStatus: (status: string) => void
   );
 }
 
+/** V-25: the persistence status and its discard control, for the studio's status bar. */
+function StudioPersistence({ persistence }: { persistence: PersistenceView }) {
+  const { status } = persistence;
+  if (status === null) return null;
+  return (
+    <span data-persist={status.state}>
+      {persistStatusLabel(status)}{' '}
+      {offersDiscard(status) && (
+        <button type="button" onClick={persistence.discard}>
+          Discard stored document
+        </button>
+      )}
+    </span>
+  );
+}
+
 function Status({
   errors,
   renderer,
@@ -623,6 +640,51 @@ function Surface({
     }
     setRotating(zone);
   };
+  // V-25: the canvas host, at the fixed size of the M8 layout or the studio's measured size.
+  const canvasHost = (size: StudioCanvasSize) => (
+    <div
+      data-testid="canvas-host"
+      data-cursor={rotating ? 'rotate' : 'default'}
+      style={{ width: size.width, cursor: rotating ? ROTATE_CURSOR : undefined }}
+      onPointerMove={hover}
+      onPointerLeave={() => setRotating(false)}
+    >
+      <EditorCanvas
+        width={size.width}
+        height={size.height}
+        createRenderer={createWebGpuRenderer}
+        onRendererError={(error) => {
+          setRenderer('error');
+          setErrors((list) => [...list, String(error)]);
+        }}
+        onRendererReady={() => setRenderer('ready')}
+        onPressChange={persistence.onPressChange}
+        style={{ border: '1px solid #ccc' }}
+      >
+        <SelectionOverlay
+          snapshot={snapshot}
+          handles={handles}
+          pathOverlay={pathOverlay}
+          textEdit={textEdit}
+          width={size.width}
+          height={size.height}
+        />
+      </EditorCanvas>
+    </div>
+  );
+  // V-25: the studio layout for a person opening the page; the M8 layout for specs and benches.
+  const studio = useMemo(() => bench === null && studioLayout(window.location.search), [bench]);
+  if (studio) {
+    return (
+      <StudioShell
+        canvas={canvasHost}
+        fileControls={<FileControls onFileStatus={setFile} />}
+        errors={errors}
+        file={file}
+        persistence={<StudioPersistence persistence={persistence} />}
+      />
+    );
+  }
   return (
     <>
       <ToolbarPrimaryRow>
@@ -635,35 +697,7 @@ function Surface({
         <ToolbarSecondaryRow />
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-        <div
-          data-testid="canvas-host"
-          data-cursor={rotating ? 'rotate' : 'default'}
-          style={{ width, cursor: rotating ? ROTATE_CURSOR : undefined }}
-          onPointerMove={hover}
-          onPointerLeave={() => setRotating(false)}
-        >
-          <EditorCanvas
-            width={width}
-            height={height}
-            createRenderer={createWebGpuRenderer}
-            onRendererError={(error) => {
-              setRenderer('error');
-              setErrors((list) => [...list, String(error)]);
-            }}
-            onRendererReady={() => setRenderer('ready')}
-            onPressChange={persistence.onPressChange}
-            style={{ border: '1px solid #ccc' }}
-          >
-            <SelectionOverlay
-              snapshot={snapshot}
-              handles={handles}
-              pathOverlay={pathOverlay}
-              textEdit={textEdit}
-              width={width}
-              height={height}
-            />
-          </EditorCanvas>
-        </div>
+        {canvasHost({ width, height })}
         <CanvasSide bench={benchAside(bench?.query ?? null)} height={height} />
       </div>
       <Status

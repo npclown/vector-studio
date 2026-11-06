@@ -17,6 +17,7 @@
     "apps/next-host/src/m6c-text-reference.ts",
     "apps/next-host/src/m8-layout.tsx",
     "apps/next-host/src/m8-star-panel.tsx",
+    "apps/next-host/src/v25-studio.tsx",
     "apps/next-host/src/m8-test-panels.tsx",
     "apps/next-host/src/renderer-options.ts",
     "playwright*.config.ts",

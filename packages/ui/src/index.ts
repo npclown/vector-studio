@@ -202,8 +202,11 @@ export {
 export { ToolbarPrimaryRow, ToolbarSecondaryRow, type ToolbarRowProps } from './toolbar.js';
 
 // Section 7.2: the layer panel's page list and layer tree.
-export { LayerTree, PageList } from './layers.js';
+export { LayerTree, PageList, type LayerTreeProps } from './layers.js';
 
 // Section 7.3: the property panel, with the M4 appearance panel moved here (M8-U5).
 export { AppearancePanel, type AppearancePanelProps } from './appearance-panel.js';
 export { PropertyPanel, PropertySections } from './property-panel.js';
+
+// V-25 (editor UI usability): a one-row icon toolbar and a zoom menu for a full-window editor.
+export { EditorToolbar, ZoomMenu, type EditorToolbarProps } from './editor-toolbar.js';
