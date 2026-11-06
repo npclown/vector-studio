@@ -22,7 +22,7 @@ The M8 layout is kept on purpose for specs and benches: its canvas origin, row h
 
 The engine already has most of it: the viewport is unbounded (pan, wheel and pinch zoom, zoom to fit and to selection), documents have pages, and `frame` nodes are containers with fill and stroke. What is missing is UI.
 
-Recommendation: no new artboard node type and no schema change. A top-level frame on a page is an artboard, as in Figma. Artboard features (slice 2) are UI over existing frames; export per artboard (slice 9) is a new feature with its own contract.
+Recommendation: no new artboard node type and no schema change. A top-level frame on a page is an artboard, as in Figma. Artboard features (slice 2) are UI over existing frames; export per artboard (slice 10) is a new feature with its own contract.
 
 ## Slices
 
@@ -33,10 +33,11 @@ Recommendation: no new artboard node type and no schema change. A top-level fram
 | 3 | Easy colour picking (swatches and the browser colour picker) and the drawing tools returning to Select after a shape | Done (#513, `b41a9b6`) |
 | 4 | Frame adoption: a shape drawn in a frame becomes its child; a shape dropped on a frame moves into it, or out onto the page | Done (#514, `f95ea08`) |
 | 5 | Text colour: the colour picker and swatches for the text run colour | Done (#515, `41acd8a`) |
-| 6 | Text box outline: text edit mode outlines the edited text's box | In review |
-| 7 | Property panel: X/Y/W/H grid, collapsible sections | Proposed |
-| 8 | Context menu (right click): group, arrange, delete, symbol actions | Proposed |
-| 9 | Export per artboard (SVG, PNG) | Proposed; needs its own contract |
+| 6 | Text box outline: text edit mode outlines the edited text's box | Done (#516, `a4e6b4c`) |
+| 7 | Readable text on the black canvas: new text and the caret contrast with what lies under them; the outline clears the caret | In review |
+| 8 | Property panel: X/Y/W/H grid, collapsible sections | Proposed |
+| 9 | Context menu (right click): group, arrange, delete, symbol actions | Proposed |
+| 10 | Export per artboard (SVG, PNG) | Proposed; needs its own contract |
 
 The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2 (artboards) next, then asked for slice 3 ("make colour picking easy, and always switch to Select when a shape is drawn"), which takes the colour swatches out of the old property panel slice. Slice 4 answers the user's question the same day ("how do I put a shape inside a Frame? I can't find a way"): the only way was cut and paste with the frame selected or entered.
 
@@ -181,4 +182,27 @@ The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2
 
 - Unit: `tests/unit/v25-text-box.test.ts` (6 tests: none outside edit mode, CSS px at a camera and growth on typing, a rotated node, a node in a rotated frame matching its selection box, a pending node, the overlay draws it only when the page passes it).
 - Review r1 READY WITH FOLLOW-UPS: the nested case and the include-list order applied. Headed check to look at a pending node in a rotated scope (the outline is the page-space frame the contract names; it should not jump on the first character).
+- Headed: on the main PC after merge.
+
+## Slice 7 design: readable text on the black canvas
+
+- Requests (2026-11-06): "the text box outline's right end is not closed properly" (with a screenshot) and "make the default text colour white when the background is black".
+- Cause of the first: the WebGPU renderer clears the canvas to opaque black (`native-primitive-scene.ts`, the primitive pass; the studio's grey CSS backdrop only shows when the renderer is down). The M6b caret is drawn black, and at the end of a line it lies exactly on the outline's right edge, so it covered that edge on screen and was itself invisible on black. Measured on the main PC at DPR 1: the glyphs end inside the outline (Arial 16 `asdfsadf`: glyphs to x 359, outline 360.48), so the text does not overflow the box.
+- The outline now sits 1 CSS px outside the box along its own axes (`TEXT_BOX_OUTSET`), so the caret never covers it.
+- In the studio the caret is white over a dark backdrop and black over a light one; the text tool starts white (the canvas is black), and a text tool press switches the text tool's colour between black and white the same way before it reaches the canvas (`v25-text-colour-default.ts`). The backdrop is the frontmost visible frame, rectangle or ellipse under the point with a mostly opaque fill (fill alpha times node opacity at least 0.5; a gradient by the mean of its stops), frames clipping their children and groups searched through, else the black canvas; dark means relative luminance below 0.179, where black and white text have equal contrast. A colour other than pure black or white (set by the user) is kept.
+- Host only; the renderer's clear colour, the editor's default text style and the M8 layout are unchanged. A lighter canvas (Figma's grey) would change the renderer's clear colour and the GPU evidence that compares against it; not done here.
+
+## Acceptance criteria (slice 7)
+
+| ID | Criterion | Method |
+| --- | --- | --- |
+| V25-A26 | The text edit outline sits 1 CSS px outside the box on every side, along the box's axes | Unit test |
+| V25-A27 | In the studio, a text tool press over the black canvas or a dark fill makes new text white, over a light fill black; a user-chosen colour is kept | Unit tests against a real editor; DOM check; headed check |
+| V25-A28 | In the studio the caret contrasts with the backdrop under it; the M8 layout keeps the black caret and draws no outline | Review of `page.tsx`; DOM check |
+
+## Validation (slice 7)
+
+- Unit: `tests/unit/v25-text-box.test.ts` (7 tests, with the outset) and `tests/unit/v25-text-colour-default.test.ts` (7 tests: the canvas, a white artboard and a dark child, hidden, transparent and elliptic nodes, ancestor opacity, the studio start and the caret colour, a kept colour, luminance).
+- Review r1 READY WITH FOLLOW-UPS, applied: ancestor (group and frame) opacity counts into a fill's opacity; only a primary-button press switches the style; the studio starts the text tool white over the black canvas, so a plain-text paste outside text edit mode reads too. Kept as limits: symbols, instances, paths, lines and other leaves are not read as backdrops (white text over a white instance card stays possible), and a press on existing text also recomputes the tool style (harmless: the next creating press recomputes it).
+- DOM check in the container's Chromium on the studio layout (renderer down, DOM only): text tool, click, type `asdfsadf`: the text colour is `#ffffff`, the outline is `299,199 361.48,199 361.48,220.2 299,220.2` and the white caret is at x 360.48, inside it.
 - Headed: on the main PC after merge.
