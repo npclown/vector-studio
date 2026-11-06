@@ -63,6 +63,7 @@ import {
 import { CanvasSide, hostContributions } from '../src/m8-layout';
 import { faultPanelsQuery, testUiExtension } from '../src/m8-test-panels';
 import { StudioShell, studioLayout, type StudioCanvasSize } from '../src/v25-studio';
+import { textEditBox } from '../src/v25-text-box';
 import { SelectionOverlay } from '../src/overlay';
 import { createWebGpuRenderer } from '../src/webgpu-renderer';
 import type { ClusterRead, ClusterRect, FrameCrop, TextScene } from '../src/m6c-text-probe';
@@ -616,6 +617,8 @@ function Surface({
       live = false;
     };
   }, [bench, execute, testFont]);
+  // V-25: the studio layout for a person opening the page; the M8 layout for specs and benches.
+  const studio = useMemo(() => bench === null && studioLayout(window.location.search), [bench]);
   // The handle box follows the snapshot: this component re-renders on every editor change.
   const handles = editor.query({ type: 'handles' });
   const pathOverlay = usePathOverlay();
@@ -666,14 +669,13 @@ function Surface({
           handles={handles}
           pathOverlay={pathOverlay}
           textEdit={textEdit}
+          textBox={studio ? textEditBox(snapshot) : null}
           width={size.width}
           height={size.height}
         />
       </EditorCanvas>
     </div>
   );
-  // V-25: the studio layout for a person opening the page; the M8 layout for specs and benches.
-  const studio = useMemo(() => bench === null && studioLayout(window.location.search), [bench]);
   if (studio) {
     return (
       <StudioShell
