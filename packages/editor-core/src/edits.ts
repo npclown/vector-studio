@@ -476,13 +476,19 @@ export function refitGesture(
  * Package-internal gesture edits for the built-in tools, for placements no public command
  * expresses (M1 contract, section 4.4 and 7): `map` resizes a multi-selection by a page-space
  * scale, each node mapped from its pre-gesture state as in a group resize; `line` moves the
- * endpoints of a line to page points; `mirror` follows a `setFrames` update of a resize dragged past
- * the opposite side: each node's content returns to its pre-gesture state and is then mirrored
- * along the flipped own axes (`mirrorContent`), so updates do not compound.
+ * endpoints of a line to page points; `mirror` is a resize dragged past the opposite side: the
+ * editor applies `frames` as a `setFrames` update, then each node's content returns to its
+ * pre-gesture state and is mirrored along the flipped own axes (`mirrorContent`), so updates do
+ * not compound; both land as one update. `applyGestureEdit` itself applies only the mirror step.
  */
 export type GestureEdit =
   | Readonly<{ kind: 'map'; ids: readonly string[]; map: ScaleMap }>
-  | Readonly<{ kind: 'mirror'; ids: readonly string[]; x: boolean; y: boolean }>
+  | Readonly<{
+      kind: 'mirror';
+      frames: readonly Readonly<{ id: string; frame: Frame }>[];
+      x: boolean;
+      y: boolean;
+    }>
   | Readonly<{ kind: 'line'; id: string; start: PagePoint; end: PagePoint }>;
 
 /**
@@ -515,11 +521,10 @@ export function applyGestureEdit(
     }
     for (const id of edit.ids) mapNodeInPageSpace(draft, id, edit.map);
   } else if (edit.kind === 'mirror') {
-    if (edit.ids.some((id) => nodeOf(document, id) === undefined)) {
-      return fail('editor.unknown-node');
-    }
+    const ids = edit.frames.map((entry) => entry.id);
+    if (ids.some((id) => nodeOf(document, id) === undefined)) return fail('editor.unknown-node');
     const baseTree = documentTree(base);
-    for (const id of edit.ids) {
+    for (const id of ids) {
       // The content `setFrames` keeps from the live node comes back from the pre-gesture node; a
       // resized container's subtree was already restored by `setFrames`.
       const node = draft.node(id)!;

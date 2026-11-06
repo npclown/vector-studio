@@ -1219,11 +1219,7 @@ export function createSelectTool(
         sx,
         sy,
       );
-      const result = context.gesture.update({
-        type: 'setFrames',
-        frames: [{ id: handles.id, frame }],
-      });
-      mirrorFlips(current, [handles.id], sx < 0, sy < 0, result.ok, context);
+      resizeFrames(current, [{ id: handles.id, frame }], sx < 0, sy < 0, context);
       return;
     }
     const x = axis(handle[0], box.x, box.width, dx);
@@ -1239,33 +1235,24 @@ export function createSelectTool(
       id,
       frame: scaledFrame(frame, x.origin, x.scale, y.origin, y.scale),
     }));
-    const result = context.gesture.update({ type: 'setFrames', frames });
-    mirrorFlips(
-      current,
-      frames.map((entry) => entry.id),
-      x.scale < 0,
-      y.scale < 0,
-      result.ok,
-      context,
-    );
+    resizeFrames(current, frames, x.scale < 0, y.scale < 0, context);
   }
 
   /**
-   * After a `setFrames` resize update, mirrors the content of a box dragged past its opposite
-   * side; once a gesture has flipped, every update sets the content again from the pre-gesture
-   * state, so dragging back restores it.
+   * A `setFrames` resize update; once a gesture has flipped an axis (V-24), a `mirror` edit
+   * instead, which applies the frames and sets the content again from the pre-gesture state,
+   * mirrored along the flipped axes, in one update, so dragging back restores it.
    */
-  function mirrorFlips(
+  function resizeFrames(
     current: Extract<SelectState, { kind: 'resize' }>,
-    ids: readonly string[],
+    frames: readonly { id: string; frame: Frame }[],
     x: boolean,
     y: boolean,
-    updated: boolean,
     context: ToolContext,
   ): void {
-    if (!updated) return;
     if (x || y) current.flipped = true;
-    if (current.flipped) context.gesture.edit({ kind: 'mirror', ids, x, y });
+    if (current.flipped) context.gesture.edit({ kind: 'mirror', frames, x, y });
+    else context.gesture.update({ type: 'setFrames', frames });
   }
 
   /**

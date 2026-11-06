@@ -152,6 +152,10 @@ function mirrorPaint(paint: Paint, mx: boolean, my: boolean): Paint {
   };
 }
 
+function swapEnds(constraint: Constraint): Constraint {
+  return constraint === 'start' ? 'end' : constraint === 'end' ? 'start' : constraint;
+}
+
 /** Unit-box points `[x0, y0, x1, y1, ...]` mirrored about the box's centre lines. */
 function mirrorUnit(points: readonly number[], mx: boolean, my: boolean): number[] {
   return points.map((value, i) => ((i % 2 === 0 ? mx : my) ? 1 - value : value));
@@ -160,17 +164,35 @@ function mirrorUnit(points: readonly number[], mx: boolean, my: boolean): number
 /**
  * Mirrors the content of node `id` inside its own box along its own x axis (`mx`) and/or y axis
  * (`my`), keeping its frame and rotation: path and line points, corner radii and gradient paints
- * flip, and a container's children are reflected about its box's centre (`reflectNode`). Text
- * glyphs, instance content and custom data are not mirrored: the model has no flip, so those
- * keep their own orientation and only move.
+ * flip, and a container's children are reflected about its box's centre (`reflectNode`), a frame
+ * child's `start` and `end` constraints swapping on each mirrored axis. Text glyphs, instance
+ * content and custom nodes (data and paints) are not mirrored: the model has no flip, so those
+ * keep their own orientation; reflected as children they move and take the reflected angle.
  */
 export function mirrorContent(tree: WritableTree, id: string, mx: boolean, my: boolean): void {
   const node = tree.node(id);
   if (node === undefined || (!mx && !my)) return;
   if (isGroup(node) || isFrameLike(node)) {
     const centre = { x: node.frame.width / 2, y: node.frame.height / 2 };
-    for (const child of node.children) reflectNode(tree, child, 0, centre, mx, my);
+    for (const child of node.children) {
+      reflectNode(tree, child, 0, centre, mx, my);
+      // A frame child keeps its mirrored layout under later resizes: `start` and `end` swap
+      // on each mirrored axis.
+      const reflected = tree.node(child);
+      if (isFrameLike(node) && reflected !== undefined) {
+        const { horizontal, vertical } = reflected.constraints;
+        const constraints = {
+          horizontal: mx ? swapEnds(horizontal) : horizontal,
+          vertical: my ? swapEnds(vertical) : vertical,
+        };
+        if (constraints.horizontal !== horizontal || constraints.vertical !== vertical) {
+          tree.set({ ...reflected, constraints });
+        }
+      }
+    }
   }
+  // A custom node's geometry lives in its `data`, which is not mirrored, so its paints stay too.
+  if (node.type === 'custom') return;
   let next: NodeV6 = node;
   if ('fill' in next && next.fill !== null)
     next = { ...next, fill: mirrorPaint(next.fill, mx, my) };

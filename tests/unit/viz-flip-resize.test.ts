@@ -5,6 +5,7 @@ import {
   createEditor,
   type Command,
   type Editor,
+  type EditorEvent,
 } from '../../packages/editor-core/src/index.js';
 
 // Resize past zero (Figma-style flip): dragging any resize handle past the opposite side flips
@@ -207,5 +208,83 @@ describe('resize past the opposite handle flips', () => {
     expect(points(target, p)).toEqual([1, 0, 0, 0, 0, 1]);
     // The rectangle mirrored over the left edge of the box.
     expect(node(target, r).frame.x).toBeCloseTo(2 * tl.x - 50, 9);
+  });
+
+  it('sends one document event per flipped move, already mirrored', () => {
+    const target = editor();
+    const p = triangle(target);
+    ok(target, { type: 'setSelection', ids: [p] });
+    pointer(target, 'pointerdown', 10, 10);
+    const seen: string[] = [];
+    const stop = target.subscribe((event: EditorEvent) => {
+      if (event.type === 'document') {
+        seen.push(event.cause);
+        expect(points(target, p)).toEqual([1, 0, 0, 0, 0, 1]);
+      }
+    });
+    pointer(target, 'pointermove', -20, 10);
+    stop();
+    pointer(target, 'pointerup', -20, 10);
+    expect(seen).toEqual(['gesture-update']);
+  });
+
+  it('swaps start and end constraints of a flipped frame’s children', () => {
+    const target = editor();
+    const [f] = ok(target, { type: 'createFrame', frame: { x: 0, y: 0, width: 100, height: 100 } });
+    const [c] = ok(target, {
+      type: 'createRectangle',
+      frame: { x: 10, y: 10, width: 10, height: 10 },
+      fill: red,
+      stroke: null,
+      parent: f!,
+    });
+    ok(target, {
+      type: 'setNodeProps',
+      id: c!,
+      props: { constraints: { horizontal: 'start', vertical: 'scale' } },
+    });
+    ok(target, { type: 'setSelection', ids: [f!] });
+    // Right edge handle (100, 50) to (−100, 50): x scale −1 about x 0.
+    drag(target, [100, 50], [-100, 50]);
+    expect(node(target, f!).frame).toEqual({ x: -100, y: 0, width: 100, height: 100 });
+    expect(node(target, c!).frame).toEqual({ x: 80, y: 10, width: 10, height: 10 });
+    expect(node(target, c!).constraints).toEqual({ horizontal: 'end', vertical: 'scale' });
+    // A later widening keeps the child 10 from the right edge.
+    ok(target, {
+      type: 'setFrames',
+      frames: [{ id: f!, frame: { x: -100, y: 0, width: 200, height: 100 } }],
+    });
+    expect(node(target, c!).frame.x).toBe(180);
+  });
+
+  it('moves a fixed text node over the anchor without mirroring its runs', () => {
+    const target = editor();
+    const run = { text: 'ab', family: 'sans-serif', size: 12, color: red };
+    const [t] = ok(target, {
+      type: 'createText',
+      frame: { x: 0, y: 0, width: 40, height: 20 },
+      runs: [run],
+      sizing: 'fixed',
+    });
+    const before = node(target, t!);
+    ok(target, { type: 'setSelection', ids: [t!] });
+    drag(target, [40, 10], [-40, 10]);
+    const after = node(target, t!);
+    expect(after.frame).toEqual({ x: -40, y: 0, width: 40, height: 20 });
+    expect(after.rotation).toBe(0);
+    expect(after.type === 'text' && after.runs).toEqual(before.type === 'text' && before.runs);
+  });
+
+  it('restores a multi-selection when dragged back within the gesture', () => {
+    const target = editor();
+    const p = triangle(target);
+    const r = rect(target, 20, 0, 10, 10);
+    ok(target, { type: 'rotateNodes', ids: [p], angle: 0.3 });
+    const before = [node(target, p), node(target, r)];
+    ok(target, { type: 'setSelection', ids: [p, r] });
+    const [tl, , br] = target.query({ type: 'handles' })!.corners;
+    const midY = (tl.y + br.y) / 2;
+    drag(target, [br.x, midY], [2 * tl.x - br.x, midY], [br.x, midY]);
+    expect([node(target, p), node(target, r)]).toEqual(before);
   });
 });
