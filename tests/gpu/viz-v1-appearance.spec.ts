@@ -61,9 +61,10 @@ const OBSERVED_NOTICES: Readonly<Record<string, readonly string[]>> = {
   s4: ['v1-zigzag stroke fringe-work-cap'],
   s5: [],
   // N1: v1-circle fill only, stroke on, stroke off (the log keeps its entry), stroke on again
-  // (the stroke is rebuilt and a second notice arrives). Since 2026-10-25 N1 strokes at
-  // width 48: at the initial width 8 the circle stroke meshes at stroke revision 6 and reports
-  // `fringe-work-cap`, so N1 would no longer exercise a path that is not drawn.
+  // (the stroke is rebuilt and a second notice arrives). Since 2026-10-25 N1 strokes at a wide
+  // width (48, then 64 from 2026-11-06): at the initial width 8 the circle stroke meshes at
+  // stroke revision 6 and reports `fringe-work-cap`, so N1 would no longer exercise a path that
+  // is not drawn.
   'n1.a-fill-only': [],
   'n1.b-stroke-on': ['v1-circle stroke work-limit'],
   'n1.c-stroke-off': ['v1-circle stroke work-limit'],
@@ -167,8 +168,12 @@ const CHEVRON_TIP_PROBE = at(CHEVRON, 0, -30 - 12);
 // v1-circle: the center of the cubic circle.
 const CIRCLE_CENTER = at(CIRCLE, 0, 0);
 // N1's stroke width: the radius-30 circle meshes up to width 24 and ends at work-limit from 32
-// at stroke revision 6 (every tolerance exponent from -6 to -2); 48 is inside that range.
-const N1_STROKE_WIDTH = '48';
+// at stroke revision 6 (every tolerance exponent from -6 to -2). Since 2026-11-06 the renderer
+// retries a work-limit at up to three coarser exponents (#522), and width 48 meshes at exponents
+// 0 to +2 (stroke revision 8), so DPR 1 (exponent -3, retried up to 0) drew it. Width 64 ends at
+// work-limit at every exponent from -3 to +2 (revision 8, native sweep), so N1 still exercises
+// a path that is not drawn at DPR 1 and 2.
+const N1_STROKE_WIDTH = '64';
 
 function sortedNotices(
   notices: ReadonlyArray<{ nodeId: string | null; paint: string | null; failureCode: string }>,
@@ -547,8 +552,9 @@ for (const dpr of [1, 2]) {
           { name: 'circle interior', at: CIRCLE_CENTER, expected: fill },
         ]);
         noticeSet('n1', 'a-fill-only', await snapshot());
-        // Stroke on at width 48 (butt, round): the whole path is not drawn. Width 8 meshes at stroke
-        // revision 6 (2026-10-25), so N1 sets a width that still ends at work-limit.
+        // Stroke on at width 64 (butt, round): the whole path is not drawn. Width 8 meshes at stroke
+        // revision 6 (2026-10-25) and width 48 after the coarser retry (2026-11-06), so N1 sets a
+        // width that still ends at work-limit.
         await commit(c.widthNumber, N1_STROKE_WIDTH);
         await settle();
         await c.strokeOn.check();
