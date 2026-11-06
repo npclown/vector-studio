@@ -67,16 +67,22 @@ type Expectation = Readonly<{
  * build their fringe too, so their notices are gone. Every probe is unchanged. Re-baselined
  * 2026-10-25 by E2-U3 (stroke revision 7) from the headed run at `dbc8b13`, identical in Chrome
  * and Edge: `fill-stroke-circle` at DPR 1 overview and zoom 0.25 now meshes through the family-B
- * rung and its fringe is built, so its `fringe-work-cap` notice is gone there; mesh draws and probes are unchanged. Keyed `dpr/view`.
+ * rung and its fringe is built, so its `fringe-work-cap` notice is gone there; mesh draws and probes are unchanged.
+ * Re-baselined 2026-11-06 for the renderer's coarser work-limit retry (#522) and E35 (stroke
+ * revision 8, #524), both merged without a headed run, from the headed run at main 8f10383:
+ * strokes that stopped at `work-limit` now mesh without a fringe (`fringe-work-cap`):
+ * `cusp-f16-large` at every overview, `wide-cubic` at DPR 1 zoom 2 and at DPR 2 and 3 overview,
+ * `cusp-f16p` at DPR 1 zoom 64, so those views have more mesh draws. No `work-limit` notice is
+ * left; every probe is unchanged. Keyed `dpr/view`.
  */
 const EXPECTED: Readonly<Record<string, Expectation>> = {
   '1/overview-zoom-1': {
     notices: [
       'cap-round stroke fringe-work-cap',
-      'cusp-f16-large stroke work-limit',
+      'cusp-f16-large stroke fringe-work-cap',
       'wide-cubic stroke fringe-work-cap',
     ],
-    meshDraws: 22,
+    meshDraws: 23,
   },
   '1/zoom-0.01': {
     notices: [],
@@ -90,17 +96,17 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
     notices: [
       'cusp-f16p stroke fringe-work-cap',
       'fill-stroke-circle stroke fringe-work-cap',
-      'wide-cubic stroke work-limit',
+      'wide-cubic stroke fringe-work-cap',
     ],
-    meshDraws: 10,
+    meshDraws: 11,
   },
   '1/zoom-4-joins': {
     notices: ['cap-round stroke fringe-work-cap'],
     meshDraws: 5,
   },
   '1/zoom-64-cusp': {
-    notices: ['cusp-f16p stroke work-limit'],
-    meshDraws: 0,
+    notices: ['cusp-f16p stroke fringe-work-cap'],
+    meshDraws: 1,
   },
   '1/zoom-64-extreme-miter-tip': {
     notices: [],
@@ -113,12 +119,12 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
   '2/overview-zoom-1': {
     notices: [
       'cap-round stroke fringe-work-cap',
-      'cusp-f16-large stroke work-limit',
+      'cusp-f16-large stroke fringe-work-cap',
       'cusp-f16p stroke fringe-work-cap',
       'fill-stroke-circle stroke fringe-work-cap',
-      'wide-cubic stroke work-limit',
+      'wide-cubic stroke fringe-work-cap',
     ],
-    meshDraws: 21,
+    meshDraws: 23,
   },
   '2/zoom-0.01': {
     notices: ['wide-cubic stroke fringe-work-cap'],
@@ -131,13 +137,13 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
   '3/overview-zoom-1': {
     notices: [
       'cap-round stroke fringe-work-cap',
-      'cusp-f16-large stroke work-limit',
+      'cusp-f16-large stroke fringe-work-cap',
       'cusp-f16p stroke fringe-work-cap',
       'fill-stroke-circle stroke fringe-work-cap',
       'thin-one-px stroke fringe-work-cap',
-      'wide-cubic stroke work-limit',
+      'wide-cubic stroke fringe-work-cap',
     ],
-    meshDraws: 21,
+    meshDraws: 23,
   },
   '3/zoom-0.01': {
     notices: ['wide-cubic stroke fringe-work-cap'],
