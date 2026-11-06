@@ -22,6 +22,7 @@
     "apps/next-host/src/v25-artboards.tsx",
     "apps/next-host/src/v25-studio.tsx",
     "apps/next-host/src/v25-text-box.ts",
+    "apps/next-host/src/v25-text-colour-default.ts",
     "apps/next-host/src/m8-test-panels.tsx",
     "apps/next-host/src/overlay.tsx",
     "apps/next-host/src/renderer-options.ts",
