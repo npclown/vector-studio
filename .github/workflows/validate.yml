@@ -15,6 +15,26 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Whether the geometry jobs run: always on a main push, and on a pull request unless every
+  # changed file is on the geometry-free allow-list of tooling/ci-geometry-scope.mjs.
+  scope:
+    name: Geometry job scope
+    runs-on: ubuntu-latest
+    outputs:
+      geometry: ${{ steps.scope.outputs.geometry }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide
+        id: scope
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: node tooling/ci-geometry-scope.mjs "$BASE" "$HEAD" >> "$GITHUB_OUTPUT"
+
   static:
     name: Static, unit and build
     runs-on: windows-latest
@@ -41,6 +61,8 @@ jobs:
 
   geometry-native:
     name: Geometry native Rust, WASM identity and census smoke
+    needs: scope
+    if: needs.scope.outputs.geometry == 'true'
     runs-on: windows-latest
     steps:
       - name: Check out repository
@@ -74,6 +96,8 @@ jobs:
 
   geometry-vitest:
     name: Geometry vitest shard ${{ matrix.shard }}/4
+    needs: scope
+    if: needs.scope.outputs.geometry == 'true'
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -103,18 +127,27 @@ jobs:
       - name: Validate geometry against native Rust and release WASM
         run: node tooling/test-geometry.mjs --shard=${{ matrix.shard }}/4
 
-  # Keeps the required check name of the former single job; passes only when every job above did.
+  # Keeps the required check name of the former single job; passes only when every job above did,
+  # the geometry jobs counting as passed when the scope job decided to skip them.
   validate:
     name: Static, unit, boundaries, and build
     if: always()
-    needs: [static, geometry-native, geometry-vitest]
+    needs: [scope, static, geometry-native, geometry-vitest]
     runs-on: ubuntu-latest
     steps:
       - name: Require every validation job to succeed
         env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
+          SCOPE: ${{ needs.scope.result }}
+          GEOMETRY: ${{ needs.scope.outputs.geometry }}
+          STATIC: ${{ needs.static.result }}
+          NATIVE: ${{ needs.geometry-native.result }}
+          VITEST: ${{ needs.geometry-vitest.result }}
         run: |
-          echo "Job results: $RESULTS"
-          for result in $RESULTS; do
-            if [ "$result" != "success" ]; then exit 1; fi
-          done
+          echo "scope=$SCOPE geometry=$GEOMETRY static=$STATIC native=$NATIVE vitest=$VITEST"
+          if [ "$SCOPE" != "success" ] || [ "$STATIC" != "success" ]; then exit 1; fi
+          if [ "$GEOMETRY" = "false" ]; then
+            if [ "$NATIVE" != "skipped" ] || [ "$VITEST" != "skipped" ]; then exit 1; fi
+            echo "Geometry jobs skipped: every changed file is geometry-free."
+            exit 0
+          fi
+          if [ "$NATIVE" != "success" ] || [ "$VITEST" != "success" ]; then exit 1; fi
