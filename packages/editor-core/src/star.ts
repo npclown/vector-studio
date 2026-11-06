@@ -41,7 +41,8 @@ function isStarData(data: JsonValue): data is StarData {
  * sin leave rounding noise (the top vertex of a 120 px star at x = 60.00000000000001), and the
  * stroke-v0 kernel refused such nearly symmetric outlines as `unsupported-geometry`, which hides
  * the fill too. Every vertex is snapped to this dyadic grid (2^-16 frame px), so mirrored vertices
- * are exactly mirrored; the shape moves by at most 2^-17 px.
+ * are exactly mirrored when the frame's half sizes are on the grid (and land on the grid either
+ * way); the shape moves by at most 2^-17 px.
  */
 const STAR_GRID = 65_536;
 const snap = (value: number) => Math.round(value * STAR_GRID) / STAR_GRID;

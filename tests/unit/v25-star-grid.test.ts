@@ -11,6 +11,7 @@ const toScene = (starExtension.nodeTypes ?? [])[0]!.toScene;
 const frame = (width: number, height: number) => ({ x: 0, y: 0, width, height });
 
 describe('V-25 star vertices on a dyadic grid', () => {
+  // The frames' half sizes are on the 2^-16 grid, so the top vertex lands exactly on the centre.
   it('snaps every vertex to 2^-16 px and makes the top vertex exactly centred', () => {
     for (const [points, innerRatio, width, height] of [
       [5, 0.5, 120, 120],
