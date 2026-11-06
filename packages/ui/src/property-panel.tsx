@@ -12,6 +12,7 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { colorHex, parseHex, parseNumber, type Common } from './appearance-model.js';
 import { AppearancePanel } from './appearance-panel.js';
+import { ColorWell, Swatches } from './color-controls.js';
 import { Choice, Row, TextField } from './fields.js';
 import {
   ARROWS,
@@ -219,6 +220,13 @@ function TextSection({
   const runIdentity = `${fieldIdentity(texts)} ${textEdit?.anchor ?? ''}-${textEdit?.focus ?? ''}`;
   const setStyle = (style: Parameters<typeof textStyleCommand>[2]) =>
     only !== null && range !== null && run(textStyleCommand(only, range, style));
+  // V-25 slice 5: the hex field, the colour picker and the swatches write the run colour with
+  // the shown colour's alpha (opaque when mixed), one `setTextStyle` each.
+  const colorValue = color.state === 'one' ? colorHex(color.value) : null;
+  const setColor = (hex: string) => {
+    const value = parseHex(hex, color.state === 'one' ? color.value.a : 1);
+    return value !== null && setStyle({ color: value });
+  };
   return (
     <Section legend="Text">
       <Row>
@@ -291,16 +299,27 @@ function TextSection({
         <TextField
           identity={runIdentity}
           label="Text colour"
-          value={color.state === 'one' ? colorHex(color.value) : null}
+          value={colorValue}
           disabled={runsDisabled}
           onLeaveTextEdit={exitTextEdit}
-          commit={(text) => {
-            const alpha = color.state === 'one' ? color.value.a : 1;
-            const value = parseHex(text, alpha);
-            return value !== null && setStyle({ color: value });
-          }}
+          commit={setColor}
+        />
+        <ColorWell
+          label="Text colour picker"
+          testId="text-colour-picker"
+          value={colorValue}
+          disabled={runsDisabled}
+          textEdit={{ onLeave: exitTextEdit }}
+          commit={setColor}
         />
       </Row>
+      <Swatches
+        name="Text"
+        testId="text"
+        current={colorValue}
+        disabled={runsDisabled}
+        pick={(hex) => void setColor(hex)}
+      />
     </Section>
   );
 }

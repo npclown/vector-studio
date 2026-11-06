@@ -1,6 +1,6 @@
 # V-25: editor UI usability plan
 
-Status: slice 1 DONE 2026-11-06 (#511, `82002c1`; review r1 NOT READY applied, r2 READY WITH FOLLOW-UPS applied); slice 2 DONE 2026-11-06 (#512, `f2c48d5`; review r1 NOT READY fixed, r2 READY WITH FOLLOW-UPS fixed); slice 3 DONE 2026-11-06 (#513, `b41a9b6`; review r1 READY WITH FOLLOW-UPS applied); slice 4 IN REVIEW 2026-11-06; slices 5 to 7 proposed. Tier: Full (product UI behaviour, new `@vector-studio/ui` exports). Track: visualization.
+Status: slice 1 DONE 2026-11-06 (#511, `82002c1`; review r1 NOT READY applied, r2 READY WITH FOLLOW-UPS applied); slice 2 DONE 2026-11-06 (#512, `f2c48d5`; review r1 NOT READY fixed, r2 READY WITH FOLLOW-UPS fixed); slice 3 DONE 2026-11-06 (#513, `b41a9b6`; review r1 READY WITH FOLLOW-UPS applied); slice 4 DONE 2026-11-06 (#514, `f95ea08`; review r1 NOT READY fixed, r2 READY WITH FOLLOW-UPS applied); slice 5 IN REVIEW 2026-11-06; slices 6 to 8 proposed. Tier: Full (product UI behaviour, new `@vector-studio/ui` exports). Track: visualization.
 
 ## Request
 
@@ -22,7 +22,7 @@ The M8 layout is kept on purpose for specs and benches: its canvas origin, row h
 
 The engine already has most of it: the viewport is unbounded (pan, wheel and pinch zoom, zoom to fit and to selection), documents have pages, and `frame` nodes are containers with fill and stroke. What is missing is UI.
 
-Recommendation: no new artboard node type and no schema change. A top-level frame on a page is an artboard, as in Figma. Artboard features (slice 2) are UI over existing frames; export per artboard (slice 7) is a new feature with its own contract.
+Recommendation: no new artboard node type and no schema change. A top-level frame on a page is an artboard, as in Figma. Artboard features (slice 2) are UI over existing frames; export per artboard (slice 8) is a new feature with its own contract.
 
 ## Slices
 
@@ -31,10 +31,11 @@ Recommendation: no new artboard node type and no schema change. A top-level fram
 | 1 | Full-window studio layout: canvas fills the window; top bar with file controls, one-row icon toolbar with tooltips naming each control and its shortcut from the live keymap, zoom menu; left sidebar with pages and a full-height layer tree; right sidebar with properties and extension panels; one-line status bar | Done (#511, `82002c1`) |
 | 2 | Artboards: frame names on the canvas (click selects, double-click renames), frame size presets in the frame tool, an artboard list that selects and zooms | Done (#512, `f2c48d5`) |
 | 3 | Easy colour picking (swatches and the browser colour picker) and the drawing tools returning to Select after a shape | Done (#513, `b41a9b6`) |
-| 4 | Frame adoption: a shape drawn in a frame becomes its child; a shape dropped on a frame moves into it, or out onto the page | In review |
-| 5 | Property panel: X/Y/W/H grid, collapsible sections | Proposed |
-| 6 | Context menu (right click): group, arrange, delete, symbol actions | Proposed |
-| 7 | Export per artboard (SVG, PNG) | Proposed; needs its own contract |
+| 4 | Frame adoption: a shape drawn in a frame becomes its child; a shape dropped on a frame moves into it, or out onto the page | Done (#514, `f95ea08`) |
+| 5 | Text colour: the colour picker and swatches for the text run colour | In review |
+| 6 | Property panel: X/Y/W/H grid, collapsible sections | Proposed |
+| 7 | Context menu (right click): group, arrange, delete, symbol actions | Proposed |
+| 8 | Export per artboard (SVG, PNG) | Proposed; needs its own contract |
 
 The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2 (artboards) next, then asked for slice 3 ("make colour picking easy, and always switch to Select when a shape is drawn"), which takes the colour swatches out of the old property panel slice. Slice 4 answers the user's question the same day ("how do I put a shape inside a Frame? I can't find a way"): the only way was cut and paste with the frame selected or entered.
 
@@ -137,3 +138,22 @@ The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2
 - Review r1 NOT READY (B1: a frame scope's child frame was reachable in its clipped-away part): fixed with the visible-part rule above, with F1 (scope exit), F2 (symbol sources), F3 (draw fallback) and F4 (artboards nest when wholly inside) and the F5 tests. Review r2 READY WITH FOLLOW-UPS: the artboard rule is worded as the frame under the pointer.
 - Full unit suite: 5290 passed; the only failure is the Node 22 `p3-b0r-identity` environment case, as on main.
 - Headed: on the main PC after merge (relaunch on :4194).
+
+## Slice 5 design: text colour picker
+
+- Request (2026-11-06): "the text colour should use the colour picker too".
+- The picker and swatches move to `packages/ui/src/color-controls.tsx` (not exported from the package), shared by the appearance panel's solid paints and the text section. The text section's run colour gets the browser colour picker ("Text colour picker") after its hex field, so Tab from Font size still reaches Text colour as the M8 headed spec presses, and the twelve swatches ("Text swatches") below the row. Each writes one `setTextStyle` with the shown colour's alpha (opaque when mixed), on the text edit selection or the whole text, as the hex field.
+- Text edit mode (M8-R4): the picker carries `data-text-edit-focus` and exits edit mode when focus leaves it for outside that target, as the run fields; a swatch press never takes focus (`mousedown` default prevented), so the canvas keeps the text edit selection. Both are disabled for a collapsed caret, as the other run fields (M8-Q9 (a)). The fill and stroke swatches now also keep focus where it was.
+
+## Acceptance criteria (slice 5)
+
+| ID | Criterion | Method |
+| --- | --- | --- |
+| V25-A21 | The text section shows the run colour in a colour picker after the hex field and the swatches, the current one pressed | Unit markup test |
+| V25-A22 | A pick or swatch writes the run colour on the text edit selection (or the whole text) in one `setTextStyle`; the picker is in the text edit focus target and both are disabled for a collapsed caret | Unit markup test; review; headed check |
+
+## Validation (slice 5)
+
+- Unit: `tests/unit/v25-text-colour.test.ts`; the slice 3 tests still pass with the shared controls.
+- Full unit suite: 5298 passed; the only failure is the Node 22 `p3-b0r-identity` environment case, as on main.
+- Headed: on the main PC after merge.
