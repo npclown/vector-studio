@@ -164,12 +164,14 @@ describe('V-25 dropping into and out of frames', () => {
     expect(pageChildren(target).at(-1)).toBe(rect);
   });
 
-  it('a top-level frame dragged onto another frame stays an artboard', () => {
+  it('a top-level frame partly over another frame stays an artboard; wholly inside, it nests', () => {
     const { target, f, h } = withRectangle(true);
-    drag(target, { x: 690, y: 190 }, { x: 300, y: 250 });
-    // H moved by (-390, +60) and stayed on the page, over F.
-    expect(node(target, h)).toMatchObject({ parent: 'p1', frame: { x: 110, y: 60 } });
-    expect(node(target, f).parent).toBe('p1');
+    drag(target, { x: 690, y: 190 }, { x: 300, y: 350 });
+    // H moved by (-390, +160): it hangs below F's bottom edge, so it stays on the page.
+    expect(node(target, h)).toMatchObject({ parent: 'p1', frame: { x: 110, y: 160 } });
+    drag(target, { x: 300, y: 350 }, { x: 300, y: 250 });
+    // Now H (110,60 200×200) lies inside F (0,0 400×300): it becomes F's child, in place.
+    expect(node(target, h)).toMatchObject({ parent: f, frame: { x: 110, y: 60 } });
   });
 
   it('without the option a drop changes no parent (M2-Q10)', () => {
@@ -179,5 +181,108 @@ describe('V-25 dropping into and out of frames', () => {
       parent: 'p1',
       frame: { x: 600, y: 100, width: 20, height: 20 },
     });
+  });
+});
+
+describe('V-25 adoption: rotation, scope, duplicates and groups', () => {
+  it('draws in a rotated frame in its axes', () => {
+    const { target, h } = editor(true);
+    ok(target, {
+      type: 'setFrames',
+      frames: [{ id: h, frame: { x: 500, y: 0, width: 200, height: 200 }, rotation: Math.PI / 2 }],
+    });
+    ok(target, { type: 'setTool', tool: 'rectangle' });
+    // H turned 90° about its centre (600, 100): page (600, 100) is local (100, 100) and page
+    // (580, 140) local (140, 120).
+    drag(target, { x: 600, y: 100 }, { x: 580, y: 140 });
+    const id = target.getSnapshot().selection[0]!;
+    const made = node(target, id);
+    expect(made.parent).toBe(h);
+    expect(made.rotation).toBe(0);
+    expect(made.frame.x).toBeCloseTo(100);
+    expect(made.frame.y).toBeCloseTo(100);
+    expect(made.frame.width).toBeCloseTo(40);
+    expect(made.frame.height).toBeCloseTo(20);
+  });
+
+  it('in a frame scope, a point outside the scope never reaches a child frame it clips', () => {
+    const { target, f } = editor(true);
+    // K overflows F's right edge; with F as the scope, a press in K's clipped part is the page's.
+    const [k] = ok(target, {
+      type: 'createFrame',
+      frame: { x: 350, y: 0, width: 300, height: 100 },
+      parent: f,
+    });
+    ok(target, { type: 'setScope', id: f });
+    ok(target, { type: 'setTool', tool: 'rectangle' });
+    drag(target, { x: 450, y: 400 }, { x: 470, y: 420 });
+    expect(node(target, target.getSnapshot().selection[0]!).parent).toBe('p1');
+    ok(target, { type: 'setScope', id: f });
+    ok(target, { type: 'setTool', tool: 'rectangle' });
+    drag(target, { x: 450, y: 20 }, { x: 470, y: 40 });
+    expect(node(target, target.getSnapshot().selection[0]!).parent).not.toBe(k);
+    ok(target, { type: 'setScope', id: f });
+    ok(target, { type: 'setTool', tool: 'rectangle' });
+    drag(target, { x: 360, y: 20 }, { x: 380, y: 40 });
+    expect(node(target, target.getSnapshot().selection[0]!).parent).toBe(k);
+  });
+
+  it('a node dropped out of the scope frame ends the scope', () => {
+    const { target, f } = editor(true);
+    const [r] = ok(target, {
+      type: 'createRectangle',
+      frame: { x: 200, y: 200, width: 20, height: 20 },
+      parent: f,
+    });
+    ok(target, { type: 'setScope', id: f });
+    ok(target, { type: 'setSelection', ids: [r!] });
+    drag(target, { x: 210, y: 210 }, { x: 210, y: 510 });
+    expect(node(target, r!).parent).toBe('p1');
+    expect(target.getSnapshot().scope).toBeNull();
+    expect(target.getSnapshot().selection).toEqual([r]);
+  });
+
+  it('an Alt-drag drops the copy into the frame and leaves the original, one step', () => {
+    const { target, h } = editor(true);
+    const [r] = ok(target, {
+      type: 'createRectangle',
+      frame: { x: 800, y: 400, width: 20, height: 20 },
+    });
+    const base = target.getSnapshot().history.undoDepth;
+    const alt = { ...none, alt: true };
+    for (const [kind, point] of [
+      ['pointerdown', { x: 810, y: 410 }],
+      ['pointermove', { x: 700, y: 300 }],
+      ['pointermove', { x: 610, y: 110 }],
+      ['pointerup', { x: 610, y: 110 }],
+    ] as const) {
+      ok(target, { type: 'input', event: { kind, point, modifiers: alt } });
+    }
+    const [copy] = target.getSnapshot().selection;
+    expect(copy).not.toBe(r);
+    expect(node(target, copy!).parent).toBe(h);
+    expect(node(target, r!).parent).toBe('p1');
+    expect(target.getSnapshot().history.undoDepth).toBe(base + 1);
+  });
+
+  it("a group's child dropped on a frame stays in its group; the group itself moves in", () => {
+    const { target, h } = editor(true);
+    const [a] = ok(target, {
+      type: 'createRectangle',
+      frame: { x: 800, y: 400, width: 20, height: 20 },
+    });
+    const [b] = ok(target, {
+      type: 'createRectangle',
+      frame: { x: 850, y: 400, width: 20, height: 20 },
+    });
+    const [group] = ok(target, { type: 'groupNodes', ids: [a!, b!], kind: 'group' });
+    ok(target, { type: 'setScope', id: group! });
+    ok(target, { type: 'setSelection', ids: [a!] });
+    drag(target, { x: 810, y: 410 }, { x: 610, y: 110 });
+    expect(node(target, a!).parent).toBe(group);
+    ok(target, { type: 'setScope', id: null });
+    ok(target, { type: 'setSelection', ids: [] });
+    drag(target, { x: 860, y: 410 }, { x: 610, y: 110 });
+    expect(node(target, group!).parent).toBe(h);
   });
 });

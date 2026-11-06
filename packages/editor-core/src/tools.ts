@@ -267,6 +267,13 @@ export function createBoxTool(
                   frames: [{ id: drag.id, frame: local, rotation: 0 }],
                 });
               }
+            } else {
+              // The owner refused it (clip or tree depth): the page holds it, as without
+              // adoption.
+              drag.target = null;
+              const frame = boxOf(drag.start, end.point);
+              const page = context.gesture.update({ type, frame });
+              if (page.ok) drag.id = page.ids[0] ?? null;
             }
           } else {
             context.gesture.update({ type: 'setFrames', frames: [{ id: drag.id, frame: local }] });
@@ -358,6 +365,12 @@ export function createLineTool(options: DrawOptions = {}): Tool {
             ...(drag.parent === null ? {} : { parent: drag.parent }),
           });
           if (result.ok) drag.id = result.ids[0] ?? null;
+          else if (drag.parent !== null) {
+            // The owner refused it (clip or tree depth): the page holds it.
+            drag.parent = null;
+            const page = context.gesture.update({ type: 'createLine', start: drag.start, end });
+            if (page.ok) drag.id = page.ids[0] ?? null;
+          }
         } else {
           context.gesture.edit({ kind: 'line', id: drag.id, start: drag.start, end });
         }
@@ -534,12 +547,16 @@ export function createPathTool(options: DrawOptions = {}): Tool {
     // keeps the anchors.
     // V-25 slice 4: the owner under the first anchor holds the path.
     const parent = drawTarget(context, anchors[0]!.point, options)?.parent;
-    const result = context.execute({
+    let result = context.execute({
       type: 'createPath',
       verbs,
       points,
       ...(parent === undefined ? {} : { parent }),
     });
+    // The owner refused it (clip or tree depth): the page holds it.
+    if (!result.ok && parent !== undefined) {
+      result = context.execute({ type: 'createPath', verbs, points });
+    }
     if (!result.ok) return;
     anchors = [];
     pressed = null;
@@ -1566,6 +1583,7 @@ export function createSelectTool(
     if (gesture(state.kind)) pointerMove(event, context);
     const current = state;
     state = { kind: 'idle' };
+    let leavesScope = false;
     if (gesture(current.kind)) {
       // V-25 slice 4: a move (or an Alt-drag's copies) dropped onto a frame moves into it, or
       // out of its frame onto the page, in the same step; `moveNodes` keeps page placement.
@@ -1584,17 +1602,25 @@ export function createSelectTool(
             const index = childrenOf(documentTree(document), drop.parent).filter(
               (id) => !drop.ids.includes(id),
             ).length;
-            context.gesture.update({
+            const result = context.gesture.update({
               type: 'moveNodes',
               ids: drop.ids,
               parent: drop.parent,
               index,
             });
+            // A node dropped out of the session scope ends the scope, which then no longer
+            // holds the selection (applied after the commit, as the scope's other changes).
+            const scope = context.query({ type: 'scope' });
+            if (result.ok && scope !== null) {
+              const tree = documentTree(context.query({ type: 'document' }));
+              leavesScope = drop.ids.some((id) => !isAncestor(tree, scope, id));
+            }
           }
         }
       }
       // An Alt-drag commits the duplicate and the move as one step.
       context.gesture.commit();
+      if (leavesScope) context.execute({ type: 'setScope', id: null });
       // A click without movement selects the target hit, even inside a larger selection.
       if (current.kind === 'move' && !current.moved) {
         context.execute({ type: 'setSelection', ids: [current.hit] });
