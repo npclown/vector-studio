@@ -56,13 +56,13 @@ The exact rung's workspace is reserved for the large tier and enforces the small
 
 1. **Storage.** `MAX_EDGE_OWNERS` becomes EX. The exact prefix arrays (`MAX_FLAT_COMMANDS`, `MAX_CONTOUR_POINTS`, `MAX_EXACT_FLAT_COMMANDS`), the rounded arrangement's arrays and the topology certificate's arrays (`ABSOLUTE_MAX_LEAVES` = EX, `LEAF_WORDS`, and the crossing array at X-Q3's ceiling) are sized for the large tier. Rung 0's caps (E0), `MAX_CONTOURS`, `MAX_SOURCE_SEGMENTS`, `ABSOLUTE_MAX_CUBICS` and the pre-B1 literal caps do not change.
 2. **Line-only paths keep E.** `MAX_LINE_SOURCE_SEGMENTS` and the line-only exact caps (E16-K1, `line_caps`) are decoupled from `MAX_EDGE_OWNERS` and stay at 256 segments and today's command and point counts. A line-only path builds no topology certificate and takes the rounded fill's all-pairs and insertion-sort paths above 64 edges and 256 events (`rounded_line_fill.rs`), so raising it is not in this unit. E16-K1 item 2 gets a dated note.
-3. **The small tier** is today's limits, exactly: `FILL_V0_LIMITS` at E (with `max_sections`, `max_work` and the byte caps at today's values), the topology leaf cap 256, pair cap 32,640 and crossing ceiling 32. Every attempt first runs the exact prefix with the large-tier command capacity. When the prefix has at most E flat edges, every later step of that attempt (the rounded arrangement, the topology certificate, the triangle-free scan) enforces the small tier. The checks compare against an active-limits value set per attempt instead of the constants. Widening the `LEAF_WORDS` bitset keeps iteration order and counts on small paths, because the extra words stay zero.
+3. **The small tier** is today's limits, exactly: `FILL_V0_LIMITS` at E (with `max_sections`, `max_work` and the byte caps at today's values), the topology leaf cap 256, pair cap 32,640 and crossing ceiling 32. **The tier is fixed once per request, at the request exponent e**: the attempt at e runs the exact prefix with the large-tier command capacity, and when that prefix has at most E flat edges the request is small. Every later step of a small request (the rounded arrangement, the topology certificate, the triangle-free scan, the fill scratch's checks and every E16-K2 retry, whose prefix runs with E caps and so returns today's `CommandLimit` or `OwnerLimit`, whichever comes first) enforces the small tier. For each attempt, every later step of that attempt (the rounded arrangement, the topology certificate, the triangle-free scan) enforces the small tier. The checks compare against an active-limits value set per attempt instead of the constants: the rounded arrangement's `self.limits` (as `b0r_set_budget` already swaps them in tests), the topology certificate's `self.limits` and its crossing ceiling (today `crossings.len()`), and the fill scratch's self-checks (`exact_slots`, the `collect_boundary` limit and `push_split`'s capacity check in `fill_export.rs`), which take the active tier so that a small path's overflow stays a self-check failure. Widening the `LEAF_WORDS` bitset keeps iteration order and counts on small paths, because the extra words stay zero.
 4. **The large tier** applies to an attempt whose prefix has E + 1 to EX flat edges:
    - edges, input vertices, pairs, events, nodes, cells, boundaries, contributors, vertices and triangles derived from EX as `FILL_V0_LIMITS` derives them from E;
    - `max_sections` fixed (X-K2);
    - `max_work` measured (X-K3);
    - topology leaves EX, pairs EX(EX − 1)/2, and crossings at X-Q3's ceiling.
-5. **Outcome mapping on large paths.** On a large path, any exact-rung outcome other than `ok` maps to `work-limit`, the outcome such a path has today. A large path therefore never becomes `unsupported-geometry` or `numeric-range`. Small paths keep today's mapping. A self-check failure stays an internal error in both tiers.
+5. **Outcomes on large paths are not remapped.** A large path's exact-rung error maps through `map_attempt_error` as on a small path: cap stops (`CommandLimit`, `OwnerLimit`, `Rounded(_)` limits, `Topology(WorkLimit)` and the crossing scan's new stop, X-K3) are `work-limit`; a topology failure such as `Unresolved` is `unsupported-geometry`; every result that maps to `Mapped::Internal` today stays internal; `invalid-tolerance` is unchanged. A blanket `work-limit` would contradict the P3 plan's bounded-work rule ("prevent blanket NUMERIC_RANGE/WORK_LIMIT from masking unsupported geometry", [P3 plan](p3-fill-stroke-meshes.md)), so a large path that ends in a topology failure moves from `work-limit` to `unsupported-geometry` and from the E11 class "fill stop in the exact rung's caps" to outside it, unless X-Q4 amends that class. The diagnostic (`e14_fill_limit_diag`, `"exact"` and `"retryStop"`) gains a `tier` field, and the A02 classifier (`pnpm e16:fill-diag`) reads it.
 6. **E16-K2 retries (E16-R4).**
    - A small path retries exactly as today. Each retry's prefix is enforced against E, so a retry stops at `CommandLimit` above E, as today. This keeps today's 215 F3 residuals and E16-F8 unchanged. Letting those retries reach EX is a separate decision (section 12, X-R4).
    - A large path gets no E16-K2 retry: one attempt at e, then the mapping of item 5. This bounds the cost of a failing large path to one cascade.
@@ -77,7 +77,7 @@ The exact rung's workspace is reserved for the large tier and enforces the small
    | `partners` | `simple_cubic_topology.rs` |
    | the test-only `touched` and `scratch` | `simple_cubic_topology.rs` |
 
-   A stage reads and writes only the prefix `[..n]` of each array and clears only that prefix, so a small path does not pay for clearing a full EX-sized array. The B0R size comments and the inline-size pins (`transverse_arrangement_tests.rs`, the `7_120` literals) are updated with the measured values.
+   A stage reads and writes only the prefix `[..n]` of each array and clears only that prefix, so a small path does not pay for clearing a full EX-sized array. `PairCandidates` moved into the workspace keeps today's visit order, so the B0R shadow comparison is unchanged. The B0R size comments and the inline-size pins (`transverse_arrangement_tests.rs`, the `7_120` literals) are updated with the measured values.
 
 ## 5. X-K2: the large tier's section budget is not quadratic
 
@@ -86,14 +86,14 @@ The exact rung's workspace is reserved for the large tier and enforces the small
 ## 6. X-K3: the large tier's work and the uncharged scan
 
 - **Work cap.** `max_work` in the large tier is measured, not derived from EX². X-U1 records the work units charged on the fixtures and on the scene and corpus paths that become `ok`. It sets the cap to the largest measured value × 4, rounded up to a power of two, and records the time of the slowest admitted fixture. The aim is about 250 ms natively for a path near EX. The probe's 512M is an exploration bound only.
-- **Crossing-triangle scan.** `closes_crossing_triangle` is O(C²) per crossing and is not charged today; its comment assumes 32 records. In the large tier each of its inner iterations is charged to the topology work counter. With 256 crossings the scan is about 16M operations per attempt and must sit inside the cap. The small tier is not charged, which keeps identity.
+- **Crossing-triangle scan.** `closes_crossing_triangle` is O(C²) per crossing and is not charged today; its comment assumes 32 records. `TopologyStats` holds only `leaves` and `pairs`, and `finish_pairs` and the B0R shadow budgets read `pairs`, so the scan gets **its own counter** `crossing_scan` with cap `MAX_CROSSING_SCAN` = 2^24 in the large tier. Reaching the cap stops the certificate with a new `TopologyError::ScanLimit`, mapped to `work-limit` like `Topology(WorkLimit)` and counted in the E11 cap-stop class. In the small tier the counter runs uncapped and is not read, which keeps identity.
 - **Allocation rules unchanged** (E14 §3 item 6). Every byte is reserved once at `fill_v0_reserve`, fallibly, and counted in `linearMemoryBytes()`. `fill_v0_process` allocates nothing and moves no storage.
 
 ## 7. Identity, documents and the precision label
 
 - **Revision.** `FILL_V0_REVISION` becomes 5 in `fill_export.rs` and `fill-adapter.ts`, and the operation id becomes `'geometry-wasm/fill-v0+r5'`. The X-U1 pull request finds every pin with a repository search for `fill-v0+r4` and fill revision 4, as E14-U1 did. That covers the five GPU specs and the adapter and export tests.
 - **Small paths are bit-identical** (X-K1 item 3): output, outcome, kernel error, retries and charged work, at every tier boundary inside the attempt.
-- **Large paths move only from `work-limit` to `ok`.** Their kernel error may change within `work-limit`, for example from `CommandLimit` to `SectionLimit`. Each such change is recorded per case.
+- **Large paths move from `work-limit` to `ok` or, on a topology failure, to `unsupported-geometry`** (X-K1 item 5, X-Q4). Their kernel error may also change within `work-limit`, for example from `CommandLimit` to `SectionLimit`. Each such change is recorded per case.
 - **AL-I1 set-aside.** On large paths the `attempt*` entries move from `CommandLimit` or `OwnerLimit` to a mesh. AL-I1's bit-identity is set aside for entries whose prefix exceeds E, listed per case. `tooling/compare-p3-fill-identity.mjs` gains that rule, and its self-test gains:
   - one passing case: a large-path entry that moves to `ok`;
   - two failing cases: a small-path entry that changes, and an `ok` record that changes.
@@ -109,8 +109,8 @@ The exact rung's workspace is reserved for the large tier and enforces the small
 
 - **X-G1, outcomes (deterministic).** Run `pnpm test:p3-fill-identity --failure-to-success --revision-change --base <merge base>` with section 7's set-aside.
   - Every small-path case is identical to `r4`.
-  - Every large-path case is identical or moves from `work-limit` to `ok`.
-  - No `ok` row changes, and no row moves to `unsupported-geometry`, `numeric-range` or an internal error.
+  - Every large-path case is identical or moves from `work-limit` to `ok`, or to `unsupported-geometry` with a `Topology(_)` kernel error, listed per case.
+  - No `ok` row changes, and no row moves to `numeric-range` or an internal error.
   - The identity tool's random corpus may hold few large paths, so the large tier is also gated by X-A2 and the X-A7 sweep.
 - **X-G2, cost (diagnostic A/B, native release, one machine).** These bounds follow E16-G2.
   - On paths that are `ok` at `r4` (the AL-I3 corpus, the scene and the corpus requests), the per-path median time of `build_path` at `r5` is at most 1.10 × the `r4` median, per corpus.
@@ -130,15 +130,16 @@ Fixtures are at zoom 1, nonzero, document coordinates. The user's two paths are 
 | Fixture | Path | Flat edges | Today | Expected at `r5` |
 | --- | --- | ---: | --- | --- |
 | X-F1 | A path that rung 0 refuses (self-crossing) with exactly E flat edges at its tolerance; literal found by search in X-U1 | E | recorded at `r4` | identical to `r4` (small tier control) |
-| X-F1b | The same shape with E + 1 flat edges | E + 1 | `work-limit` (`CommandLimit`) | `ok` or `work-limit`, never another outcome; recorded |
+| X-F1b | The same shape with E + 1 flat edges | E + 1 | `work-limit` (`CommandLimit`) | `ok`, or a stop with its kernel error listed; never `numeric-range` or internal |
 | X-F2 | The user's node-3 at `e` = −2, −3, −4 | 471 to 925 | `work-limit` (`MONOTONE`, `CommandLimit`) | `ok`, exact rung |
 | X-F3 | The user's node-8 at `e` = −2, −3, −4 | 386 to 766 | `work-limit` | `ok`, exact rung |
-| X-F4 | E14-F5 (scene path 3, looping, over E) at its recorded tolerance | recorded | `work-limit` | `ok` or `work-limit`; never `unsupported-geometry` |
-| X-F5 | E14-F7 (near-touching simple path) | recorded | `work-limit` | `ok` or `work-limit`; never `unsupported-geometry` |
+| X-F4 | E14-F5 (scene path 3, looping, over E) at its recorded tolerance | recorded | `work-limit` | `ok`, or a stop with its kernel error listed; never `numeric-range` or internal |
+| X-F5 | E14-F7 (near-touching simple path) | recorded | `work-limit` | `ok`, or a stop with its kernel error listed; never `numeric-range` or internal |
 | X-F6 | node-3 at `e = −5` | 1,314 | `work-limit` | `work-limit` (`CommandLimit`), the cap |
 | X-F7 | A path that rung 0 refuses with exactly EX flat edges, and its variant with EX + 1. Within 64 source segments, 4 contours and 64 cubics, so at least 16 leaves per cubic; literals found by search in X-U1 | EX, EX + 1 | `work-limit` | EX: `ok` or `work-limit`; EX + 1: `work-limit` (`CommandLimit`) |
 | X-F8 | E16-F8 (an F3 residual stopped at `CommandLimit` in a retry) | ≤ E at e | `unsupported-geometry` | identical (X-K1 item 6) |
-| X-F9 | A line-only path with E + 1 segments | E + 1 | `work-limit` (`SourceLimit`) | identical (X-K1 item 2) |
+| X-F9 | A self-crossing line-only path with E + 1 segments, so that rung 0 refuses it | E + 1 | `work-limit` (`SourceLimit`) | identical (X-K1 item 2) |
+| X-F10 | A small path that stops today at the 32-crossing ceiling (`Topology(WorkLimit)`); literal found by search in X-U1, or built as 33 crossing segment pairs within 64 sources | ≤ E | `work-limit` | identical (small tier) |
 
 | ID | Criterion |
 | --- | --- |
@@ -146,9 +147,9 @@ Fixtures are at zoom 1, nonzero, document coordinates. The user's two paths are 
 | X-A2 | The fixture table holds, with the rung, tier and kernel error read through `build_path` natively |
 | X-A3 | Every new exact-rung mesh of X-F2 to X-F5 and X-F7 passes SL-O2, the independent region and mesh validity check |
 | X-A4 | AL-I2 holds on every case; AL-I1 holds with only section 7's set-aside |
-| X-A5 | Seeded defects are caught through a `cfg(test)` limits override on the workspace constructor, which the X-U1 pull request names. Constants cannot be switched at test time; E14-U1 used a lowered work cap the same way. X-D1: large-tier `max_sections` quadratic (X-G3's byte check fails). X-D2: large-tier topology leaf cap 256 (X-F2 stops at `Topology(WorkLimit)`). X-D3: large-tier work cap below the measured value (an X-F2 case stops). X-D4: small paths run in the large tier (X-G1 fails on a small case, or a test with a small path that stops at today's crossing ceiling changes). X-D5: no outcome mapping on large paths (a large failing fixture returns `unsupported-geometry`) |
+| X-A5 | Seeded defects are caught through a `cfg(test)` limits override on the workspace constructor, which the X-U1 pull request names. Constants cannot be switched at test time; E14-U1 used a lowered work cap the same way. X-D1: large-tier `max_sections` quadratic (X-G3's byte check fails). X-D2: large-tier topology leaf cap 256 (X-F2 stops at `Topology(WorkLimit)`). X-D3: large-tier work cap below the measured value (an X-F2 case stops). X-D4: small paths run in the large tier (X-F10 meshes or changes its error). X-D5: the crossing scan uncapped in the large tier (a large path built through the override with more than 2^24 scan steps runs past the cap instead of returning `ScanLimit`) |
 | X-A6 | The release WASM meshes X-F2, X-F3 and X-F7 at EX through the adapter. X-U1 records the stack peak of those runs (the deepest frame, measured with a stack-pointer probe or the WASM's `__stack_pointer` low-water mark) and the list of moved arrays |
-| X-A7 | The A01 corpus sweep record (`pnpm e16:fill-diag`) is re-run. It reports, per stratum, the rows that leave "fill stop in the exact rung's caps" and E14-Q1 and the rows that stay. No row moves outside the closed list |
+| X-A7 | The A01 corpus sweep record (`pnpm e16:fill-diag`) is re-run. It reports, per stratum, the rows that leave "fill stop in the exact rung's caps" and E14-Q1 and the rows that stay. Rows that move from the cap-stop class to `unsupported-geometry` (X-K1 item 5) are listed per stratum with their kernel error; under X-Q4 (a) they stay in the amended class |
 | X-A8 | Headed GPU on the user's PC: the five specs that pin the operation id (`p3-v4-paths`, `viz-v2`, `viz-v3`, `p3-b2-strokes`, `viz-v1`) pass. The editor on :4194 draws node-3 and node-8 filled at the PC's DPR |
 
 **Validation.** `pnpm check`, `pnpm build`, `pnpm test:geometry` (native tests, fixtures and seeded defects), the identity tool in combined mode with its self-test, the X-G2 A/B run, the A01 sweep and the headed run.
@@ -171,6 +172,12 @@ Fixtures are at zoom 1, nonzero, document coordinates. The user's two paths are 
 - (a) **Recommended:** 256, the probe's value. Both paths need more than 32. X-U1 records each fixture's crossing count and the charged cost of the crossing-triangle scan (X-K3).
 - (b) EX / 2. That is the pre-B1 ratio, and it makes the uncharged-scan bound four times larger.
 
+**X-Q4. Large paths that end in a topology failure.** Today they are `work-limit` in the E11 class "fill stop in the exact rung's caps". At `r5` they reach the topology certificate and can end `unsupported-geometry`.
+
+- (a) **Recommended.** Report the true outcome (X-K1 item 5) and amend E11 §7.2's class by a dated note: a rejected fill row whose S1 prefix at e has E + 1 to EX flat edges, that rung 0 refused, and whose exact rung ended in a topology error (`Unresolved`, `KnotMismatch`, `TopologyAmbiguous` or another `Topology(_)` error) stays in the class. This sets aside, for that class only, the private contract's "named ordinary fixtures must succeed" as E14-Q1 (a) did. The A02 classifier reads the `tier` field.
+- (b) No amendment: such rows leave the closed list and fail A02 at the next snapshot.
+- (c) Map every non-`ok` large outcome to `work-limit`: rejected, because it contradicts the bounded-work rule quoted in X-K1 item 5.
+
 Approval-needed questions follow the user's standing instruction of 2026-10-24: the recommended option is adopted, recorded with its date, and the user is told.
 
 ## 11. Units
@@ -188,6 +195,9 @@ Approval-needed questions follow the user's standing instruction of 2026-10-24: 
 - **X-R4, small paths that stop in a retry.** E16's 215 F3 residuals stop at `CommandLimit` inside E16-K2's retries, at E. Letting retries use the large tier could mesh some of them, and could also change `unsupported-geometry` rows. That is left to a later decision with its own gate.
 
 ## 13. Review record
+
+- **Round 2, 2026-11-06: NOT READY.** The two-tier design was confirmed implementable with unchanged charge order on small paths. One blocking item, applied: the blanket `work-limit` mapping on large paths is dropped; outcomes map as today and X-Q4 amends the E11 class instead, quoting the bounded-work rule. Should-fix items applied: internal results and `invalid-tolerance` unchanged; the `tier` diagnostic field and the A02 classifier; the fill scratch's self-checks take the active tier; the crossing scan has its own counter, cap and error; fixtures X-F10 (32-crossing stop) and X-F9 refused by rung 0; the tier fixed once at e, with retries at E caps.
+
 
 - **Round 1, 2026-11-06: NOT READY.** Both blocking items were applied:
   - the E16-K2 retry composition (X-K1 item 6: small paths retry as today, large paths get one attempt and the `work-limit` mapping);
