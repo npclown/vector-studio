@@ -165,6 +165,72 @@ describe('V-25 pen curves', () => {
   });
 });
 
+describe('V-25 pen drag threshold', () => {
+  it('treats a press that moves under 4 CSS px as a click, at the camera zoom', () => {
+    const target = editor();
+    ok(target, { type: 'setViewport', camera: { position: { x: 0, y: 0 }, zoom: 2 } });
+    ok(target, { type: 'setTool', tool: 'path' });
+    press(target, { x: 0, y: 0 });
+    // 1.5 page units at zoom 2 is 3 CSS px: hand jitter, a corner anchor.
+    press(target, { x: 50, y: 0 }, { x: 51.5, y: 0 });
+    let overlay = target.getSnapshot().overlay;
+    expect(overlay?.kind === 'path' && overlay.anchors[1]).toEqual({
+      point: { x: 50, y: 0 },
+      in: null,
+      out: null,
+    });
+    // 2 page units is 4 CSS px: a drag, a cubic anchor.
+    press(target, { x: 100, y: 0 }, { x: 102, y: 0 });
+    overlay = target.getSnapshot().overlay;
+    expect(overlay?.kind === 'path' && overlay.anchors[2]).toEqual({
+      point: { x: 100, y: 0 },
+      in: { x: 98, y: 0 },
+      out: { x: 102, y: 0 },
+    });
+    enter(target);
+    const node = drawn(target);
+    expect(node.type === 'path' && node.path.verbs).toEqual(['move', 'line', 'cubic']);
+  });
+
+  it('measures in CSS px at zoom 0.5, and Alt under the threshold makes a corner too', () => {
+    const target = editor();
+    ok(target, { type: 'setViewport', camera: { position: { x: 0, y: 0 }, zoom: 0.5 } });
+    ok(target, { type: 'setTool', tool: 'path' });
+    press(target, { x: 0, y: 0 }, { x: 6, y: 0 });
+    press(target, { x: 100, y: 0 }, { x: 105, y: 0 }, alt);
+    press(target, { x: 200, y: 0 }, { x: 208, y: 0 });
+    const overlay = target.getSnapshot().overlay;
+    const anchors = overlay?.kind === 'path' ? overlay.anchors : [];
+    expect(anchors.map((anchor) => anchor.out)).toEqual([null, null, { x: 208, y: 0 }]);
+    expect(anchors.map((anchor) => anchor.in)).toEqual([null, null, { x: 192, y: 0 }]);
+  });
+
+  it('makes a corner when a drag comes back within the threshold', () => {
+    const target = editor();
+    ok(target, { type: 'setTool', tool: 'path' });
+    target.execute({
+      type: 'input',
+      event: { kind: 'pointerdown', point: { x: 0, y: 0 }, modifiers: none },
+    });
+    for (const x of [20, 1]) {
+      target.execute({
+        type: 'input',
+        event: { kind: 'pointermove', point: { x, y: 0 }, modifiers: none },
+      });
+    }
+    target.execute({
+      type: 'input',
+      event: { kind: 'pointerup', point: { x: 1, y: 0 }, modifiers: none },
+    });
+    const overlay = target.getSnapshot().overlay;
+    expect(overlay?.kind === 'path' && overlay.anchors[0]).toEqual({
+      point: { x: 0, y: 0 },
+      in: null,
+      out: null,
+    });
+  });
+});
+
 describe('V-25 pen curves, Alt and close', () => {
   const pending = (target: Editor) => {
     const overlay = target.getSnapshot().overlay;
