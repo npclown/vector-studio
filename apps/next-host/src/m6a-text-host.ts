@@ -2,6 +2,7 @@ import {
   createEditor,
   starExtension,
   type Editor,
+  type EditorOptions,
   type Extension,
   type Platform,
 } from '@vector-studio/editor-core';
@@ -51,6 +52,8 @@ export type HostCompositionOptions = Readonly<{
   returnToSelect?: boolean;
   /** V-25 slice 4: shapes drawn or dropped on a frame go into it (the studio layout). */
   adoptIntoFrames?: boolean;
+  /** V-25 slice 8: the line and path tools' stroke colour for a first point (the studio layout). */
+  drawStrokeColor?: EditorOptions['drawStrokeColor'];
 }>;
 
 /** Creates the text-dom instance and the editor it feeds, in that order. */
@@ -64,6 +67,9 @@ export function composeHost(options: HostCompositionOptions): HostComposition {
       textLayout: textDom,
       returnToSelect: options.returnToSelect === true,
       adoptIntoFrames: options.adoptIntoFrames === true,
+      ...(options.drawStrokeColor === undefined
+        ? {}
+        : { drawStrokeColor: options.drawStrokeColor }),
     });
   } catch (error) {
     textDom.dispose();

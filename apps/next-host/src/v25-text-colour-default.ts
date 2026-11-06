@@ -143,3 +143,12 @@ export function canvasTextStyle(style: TextStyle): TextStyle | null {
 export function caretColour(document: DocumentV6, page: string, point: PagePoint): string {
   return luminance(backdropColor(document, page, point)) < 0.179 ? '#ffffff' : '#000000';
 }
+
+/**
+ * V-25 slice 8: the stroke colour of a new line or path whose first point is `point`: white over
+ * a dark backdrop, black over a light one, so a pen path drawn on the black canvas shows (the
+ * editor's default stroke is black).
+ */
+export function readableStrokeColor(document: DocumentV6, page: string, point: PagePoint): Color {
+  return luminance(backdropColor(document, page, point)) < 0.179 ? WHITE : BLACK;
+}

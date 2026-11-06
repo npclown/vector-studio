@@ -8,6 +8,7 @@ import {
   MAX_TEXT_LENGTH,
   isValidId,
   validateAnyDocument,
+  type Color,
   type DocumentV6,
   type ParseResult,
   type TextNode,
@@ -175,6 +176,12 @@ export type EditorOptions = Readonly<{
    * group and a top-level frame stays on the page. Defaults to false (M2-Q10: no adoption).
    */
   adoptIntoFrames?: boolean;
+  /**
+   * V-25 slice 8: the stroke colour of a line or path the line and path tools create, from the
+   * document, the active page and the first point; null (or no function, the default) keeps the
+   * command's default stroke (black). A throw or a value that is not a colour counts as null.
+   */
+  drawStrokeColor?: (document: DocumentV6, page: string, point: PagePoint) => Color | null;
 }>;
 
 /** A tool receives input and acts only through the editor's commands and the gesture API. */
@@ -917,6 +924,7 @@ class EditorCore implements Editor {
     const draw = {
       returnToSelect: options.returnToSelect === true,
       adoptIntoFrames: options.adoptIntoFrames === true,
+      ...(options.drawStrokeColor === undefined ? {} : { strokeColor: options.drawStrokeColor }),
     };
     this.tools.set('rectangle', createBoxTool('createRectangle', draw));
     this.tools.set('ellipse', createBoxTool('createEllipse', draw));
