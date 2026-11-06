@@ -28,6 +28,7 @@ const REACT = 'packages/react';
 const OWN_VALUES = [
   'AppearancePanel',
   'EditorPanels',
+  'EditorToolbar',
   'LayerTree',
   'PageList',
   'PanelBoundary',
@@ -36,12 +37,15 @@ const OWN_VALUES = [
   'PropertySections',
   'ToolbarPrimaryRow',
   'ToolbarSecondaryRow',
+  'ZoomMenu',
   'resolvePanels',
   'usePanelErrors',
 ];
 /** The type exports of `ui` beyond `react`'s. */
 const OWN_TYPES = [
   'AppearancePanelProps',
+  'EditorToolbarProps',
+  'LayerTreeProps',
   'PanelBoundaryProps',
   'PanelBoundaryState',
   'PanelContribution',

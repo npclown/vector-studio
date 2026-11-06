@@ -36,6 +36,7 @@ Out of scope: drag and drop in the layer panel (M8-Q7); adopting nodes into a fr
 - M4 section 8: the panel and its helpers move from next-host to `@vector-studio/ui`; every M4 panel rule (one `setStyle` per commit, Enter and blur commit, mixed values, no live preview) is kept, and `tests/unit/m4-u4-next-host.test.ts` follows the moved helpers unchanged in its expectations.
 - M6b-H2 (amended in M8-U7, for M8-R4): the canvas, its textarea and the property panel's text run fields carry `data-text-edit-focus`. A canvas blur to such an element ends the composition and resets input but keeps edit mode, so a run field edits the text edit selection; a run field's blur to anything outside that set exits edit mode, except a window blur. Every other M6b-H2 rule holds. The marker is page-wide, so it assumes one editor per page (as next-host); a page with two editors is out of scope (M8-U7 notes).
 - P5, M1 to M7 headed specs: the next-host layout keeps the canvas origin (M8-N3); a spec changes only where a measured control position moved, each change listed in the U6 notes (M8-Q11).
+- V-25 amendment (2026-11-06, [plan](viz-v25-editor-ui-plan.md)): `@vector-studio/ui` adds `EditorToolbar`, `ZoomMenu` (with icons) and `LayerTree`'s optional `height` prop; M8-A02's list of `ui`'s own exports is extended by them, which V-25 owns. The M8 rows, their test IDs and the M8 next-host layout under `?test=1` and `?bench=1` are unchanged; next-host's default page becomes the V-25 studio layout.
 
 ## 2. Public type surface
 
