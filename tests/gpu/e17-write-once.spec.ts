@@ -187,13 +187,13 @@ test('E17-A5 fixtures: count at most 1, covered pixels counted once, 4x equals 1
         );
     }
     compared[key] = pixels;
-    // A fixture with no visible pixel covered once per sample in either variant has nothing to
-    // compare: C3/c02/T7 dpr2 (c = 0, contract section 1), and since E39 every T7 sliver whose
-    // mesh covers no sample or only part of a 4x pixel. Any other fixture with nothing compared
-    // is a failure.
+    // A fixture with no visible 4x pixel covered at every sample has nothing to compare:
+    // C3/c02/T7 dpr2 (c = 0, contract section 1), and since E39 every T7 sliver whose mesh covers
+    // no sample or only part of a 4x pixel (its 1x centre sample may still be covered). A
+    // fixture with such a 4x pixel and nothing compared is a failure.
     const solid = (c: Capture) =>
       c.red.some((red, pixel) => red > 0 && countsAt(c, pixel).every((count) => count === 1));
-    if (pixels === 0 && (solid(one) || solid(four))) fail(`1x-4x ${key}`, 'nothing compared');
+    if (pixels === 0 && solid(four)) fail(`1x-4x ${key}`, 'nothing compared');
   }
   for (const [key, x, y, variant, rule] of NAMED_PIXELS) {
     const one = captures.get(`fringe-1x ${key}`)!;

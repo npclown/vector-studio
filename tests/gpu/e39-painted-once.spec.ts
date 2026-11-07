@@ -11,12 +11,13 @@ import type { E39RenderResult, E39Scene } from '../../apps/playground/src/e39-pa
 //   pnpm exec playwright test -c playwright.gpu.config.ts tests/gpu/e39-painted-once.spec.ts
 //
 // At 1x and 4x, DPR 1 and 2, zoom 1, 4 and 8:
-// 1. Winding (nonzero and evenodd star fills), union (a self-crossing round-capped stroke) and
-//    joint (a star filled and stroked) fixtures, one path each: every sample counts at most 1,
-//    and every pixel at least 1 device pixel inside the reference region counts 1 at every
-//    sample and has the paint's colour, every pixel at least 1 device pixel outside counts 0
-//    and is the black clear. The joint's stroke-only and fill-only pixels have their own paint,
-//    and the stroke wins where both cover.
+// 1. Winding (nonzero and evenodd star fills) and union (a self-crossing round-capped stroke)
+//    fixtures, and a star filled and stroked at opacity 1 (two draws) and 0.5 (R6's joint
+//    draw), one path each: every pixel at least 1 device pixel inside the reference region has
+//    the paint's colour (the stroke wins where both hold) and each sample counts once per region
+//    holding it (2 where fill and stroke both hold: two draws, or R6's X then the stroke,
+//    contract section 10.2), every pixel at least 1 device pixel outside counts 0 and is the
+//    black clear, and no sample counts more than the fixture's region count.
 // 2. Leak: a star with a fully transparent fill, then a rectangle with a zero-alpha gradient,
 //    then an opaque rectangle over the same pixels: every pixel 1 device pixel inside the last
 //    rectangle has its colour, so neither transparent path left stencil behind.
@@ -64,13 +65,14 @@ function pathNode(
   fillRule: 'nonzero' | 'evenodd',
   fill: ScenePaint | null,
   stroke: Readonly<{ color: ScenePaint; width: number }> | null,
+  opacity = 1,
 ): RenderNodeSnapshot {
   return {
     id,
     parentId: null,
     transform: [1, 0, 0, 1, 0, 0],
     visible: true,
-    opacity: 1,
+    opacity,
     kind: 'path',
     geometry: {
       kind: 'path',
@@ -150,7 +152,11 @@ type Fixture = Readonly<{
   nodes: readonly RenderNodeSnapshot[];
   /** Colour regions, last wins; the union of all is the painted region. */
   regions: readonly Readonly<{ region: Region; colour: Rgb }>[];
-  /** Count checks apply to single-path fixtures only. */
+  /**
+   * Count checks apply to single-path fixtures only. A sample counts once per region that holds
+   * it: a filled and stroked path paints both where both hold, as two draws at opacity 1 and as
+   * R6's X then stroke below it (contract section 10.2).
+   */
   counted: boolean;
 }>;
 
@@ -174,11 +180,21 @@ const FIXTURES: readonly Fixture[] = [
     counted: true,
   },
   {
-    id: 'joint',
+    id: 'fill-and-stroke',
     nodes: [pathNode('star', STAR, true, 'nonzero', RED, { color: GREEN, width: 8 })],
     regions: [
       { region: fillRegion(STAR, 'nonzero'), colour: [255, 0, 0] },
       { region: strokeRegion(STAR, true, 8), colour: [0, 255, 0] },
+    ],
+    counted: true,
+  },
+  {
+    // At 0 < o < 1 the fill and the union stroke draw jointly (R6).
+    id: 'joint',
+    nodes: [pathNode('star', STAR, true, 'nonzero', RED, { color: GREEN, width: 8 }, 0.5)],
+    regions: [
+      { region: fillRegion(STAR, 'nonzero'), colour: [128, 0, 0] },
+      { region: strokeRegion(STAR, true, 8), colour: [0, 128, 0] },
     ],
     counted: true,
   },
@@ -256,7 +272,7 @@ function check(
     for (let x = 0; x < result.width; x += 1) {
       const pixel = y * result.width + x;
       const sampleCounts = Array.from(counts.subarray(pixel * samples, (pixel + 1) * samples));
-      if (fixture.counted && sampleCounts.some((count) => count > 1))
+      if (fixture.counted && sampleCounts.some((count) => count > fixture.regions.length))
         fail(`(${x},${y}) counts ${sampleCounts.join(',')}`);
       const wx = (x + 0.5) / scale + scene.camera.position.x;
       const wy = (y + 0.5) / scale + scene.camera.position.y;
@@ -272,13 +288,19 @@ function check(
         // Every region decided, or the last (winning) region covers the pixel outright.
         const winner = classes.lastIndexOf('in');
         expected = fixture.regions[winner]!.colour;
-        expectedCount = 1;
+        // A sample counts once per region holding it; with another region on an edge the count
+        // is not decided, but the winner's colour is.
+        expectedCount = classes.includes('edge') ? null : classes.filter((c) => c === 'in').length;
         inside += 1;
       }
       if (expected === null) continue;
       if (expected.some((value, i) => Math.abs(value - observed[i]!) > 2))
         fail(`(${x},${y}) rgb ${observed.join(',')} expected ${expected.join(',')}`);
-      if (fixture.counted && sampleCounts.some((count) => count !== expectedCount))
+      if (
+        fixture.counted &&
+        expectedCount !== null &&
+        sampleCounts.some((count) => count !== expectedCount)
+      )
         fail(`(${x},${y}) counts ${sampleCounts.join(',')} expected ${String(expectedCount)}`);
     }
   }
