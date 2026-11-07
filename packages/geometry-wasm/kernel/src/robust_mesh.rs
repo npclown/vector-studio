@@ -135,6 +135,10 @@ pub(crate) struct RobustMesh {
     /// The factor of the next coarsening (R4): 2 after a full buffer, more after a sweep far
     /// over its work budget.
     coarsening: f64,
+    /// The last `Full` came from the work budget, not a buffer.
+    over_work: bool,
+    /// The sweep's work budget of this attempt (`MAX_SWEEP_WORK`, or none, see `build`).
+    work_budget: u64,
     vertices: Vec<Point>,
     triangles: Vec<u32>,
     boundary: Vec<[u32; 2]>,
@@ -244,6 +248,8 @@ impl RobustMesh {
             open: Vec::new(),
             open_by_left: Vec::new(),
             coarsening: 2.0,
+            over_work: false,
+            work_budget: MAX_SWEEP_WORK,
             vertices: Vec::new(),
             triangles: Vec::new(),
             boundary: Vec::new(),
@@ -384,16 +390,26 @@ impl RobustMesh {
             return None;
         }
         let mut tol = tol;
+        self.work_budget = MAX_SWEEP_WORK;
+        let mut over_work_at = None;
         for coarsenings in 0..=MAX_COARSENINGS {
             self.clear();
             self.stats.coarsenings = coarsenings;
             self.stats.tolerance = tol;
-            let result = self
-                .flatten(verbs, points, tol)
-                .and_then(|()| body(self, tol));
+            let result = self.flatten(verbs, points, tol).and_then(|()| {
+                // A sweep over its budget whose coarsening left the chords as they were (a
+                // path of lines) would only fail again: this attempt runs unbudgeted, since
+                // its work is then the path's own crossings.
+                if over_work_at == Some(self.stats.chords) {
+                    self.work_budget = u64::MAX;
+                }
+                body(self, tol)
+            });
             match result {
                 Ok(drawn) => return Some(drawn),
                 Err(Full) => {
+                    over_work_at = self.over_work.then_some(self.stats.chords);
+                    self.over_work = false;
                     tol *= self.coarsening;
                     self.coarsening = 2.0;
                 }
@@ -793,6 +809,7 @@ impl RobustMesh {
             .ceil()
             .clamp(1.0, 16.0);
         self.coarsening = 2f64.powf(factor);
+        self.over_work = true;
         Full
     }
 
@@ -845,7 +862,7 @@ impl RobustMesh {
             loop {
                 self.stats.slabs += 1;
                 self.stats.work += 4 * self.active.len() as u64 + self.open.len() as u64;
-                if self.stats.work > MAX_SWEEP_WORK {
+                if self.stats.work > self.work_budget {
                     return Err(self.over_budget(next));
                 }
                 if splits == 0 {
@@ -869,9 +886,9 @@ impl RobustMesh {
                             j -= 1;
                             self.stats.work += 1;
                         }
-                    }
-                    if self.stats.work > MAX_SWEEP_WORK {
-                        return Err(self.over_budget(next));
+                        if self.stats.work > self.work_budget {
+                            return Err(self.over_budget(next));
+                        }
                     }
                 }
                 // The earliest crossing below `top` of two neighbours in the top order.

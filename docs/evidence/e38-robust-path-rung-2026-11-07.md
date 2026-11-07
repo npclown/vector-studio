@@ -63,7 +63,7 @@ The worst case on the corpus is node-7's stroke at `e = −8` (zoom 32 at DPR 1)
 | E38-A2 `e38_fuzz_pen_paths_match_the_reference` (12 cases, CI) and `_full` (96 cases, release) | PASS |
 | E38-A3 `e38_fuzz_never_refuses` (3 cases, CI) and `_full` (40 cases, release) | PASS |
 | E38-A4 `e38_build_allocates_nothing`, `e38_robust_rung_through_the_export` (fill: E14-U2 `x_f7` at −4 and node-7 at −3; stroke: node-7 at −3), no allocation, storage unchanged, empty boundary, `work-limit` without the rung | PASS |
-| E38-A5 the kernel suite, debug as CI runs it (`cargo test --locked --offline`) | 548 passed, 0 failed, 76 ignored |
+| E38-A5 the kernel suite, debug as CI runs it (`cargo test --locked --offline`) | 549 passed, 0 failed, 76 ignored |
 | `cargo fmt --check`, `cargo clippy --all-targets -D warnings` on Rust 1.94.1 | PASS |
 | `pnpm exec vitest run` (unit) | PASS except `p3-b0r-identity` "matches its pinned SHA-256", which fails identically on `main` d9b5f88 in this container (Node 22, not the repository's pinned Node 24.22.1) |
 | Geometry suite through the release WASM (`vitest.geometry.config.ts`, pinned Rust 1.94.1 build) | 1,222 passed, 6 skipped |
@@ -81,6 +81,8 @@ Round 1 was NOT READY with six findings, all addressed:
 4. An exact fill with a robust stroke built an overlay that ignored the stroke: a pair with a boundary-less mesh is now `overlay-unsupported` without a build (ST-U7 unit test "E38: a robust stroke mesh ...").
 5. The piece area overflowed on huge coordinates: taken relative to the first point (`e38_huge_coordinates_keep_their_pieces`).
 6. Debug printing left in the test allocator: removed.
+
+Round 2 (fb7deba) confirmed fixes 1 and 3 to 6 and found one regression: the budget made crossing-heavy line paths (a 240-line scribble, 401- and 1,001-point star polygons) refuse after about 2 s, since coarsening cannot simplify lines. Fixed: an attempt whose coarsening left the chord count unchanged runs without the budget (`e38_crossing_heavy_lines_still_draw`, a 201-point star, fill and stroke). The large coarsening on wide strokes is disclosed ([contract §6](../plans/d9-e38-robust-path-rung-contract.md#6-not-in-e38)).
 
 ## 6. Changed tests
 

@@ -1188,3 +1188,35 @@ fn e38_wide_strokes_stay_bounded() {
         assert_eq!(built, Some(true), "{name} {width} {e}");
     }
 }
+
+/// E38 review round 2: a crossing-heavy path of lines, which coarsening cannot simplify, still
+/// draws (the budgeted attempt fails once, then the same chords run unbudgeted).
+#[test]
+fn e38_crossing_heavy_lines_still_draw() {
+    let mut mesh = RobustMesh::new();
+    mesh.reserve().expect("reserve");
+    // A star polygon {201/100}: 201 lines that all cross one another, over the sweep budget at
+    // any tolerance.
+    let n = 201usize;
+    let mut star = PathSpec::new();
+    for k in 0..n {
+        let angle = std::f64::consts::TAU * ((k * (n / 2)) % n) as f64 / n as f64;
+        let (x, y) = (500.0 * angle.cos(), 500.0 * angle.sin());
+        star = if k == 0 { star.m(x, y) } else { star.l(x, y) };
+    }
+    let star = star.z();
+    let bytes = star.bytes();
+    let fill = mesh.build_fill(&star.verbs, &bytes, LineFillRule::Evenodd, 2f64.powi(-4));
+    assert_eq!(fill, Some(true));
+    let style = RobustStroke {
+        width: 3.0,
+        cap: StrokeCap::Round,
+        join: StrokeJoin::Round,
+        miter_limit: 4.0,
+    };
+    let stroke = mesh.build_stroke(&star.verbs, &bytes, style, 2f64.powi(-4));
+    assert_eq!(stroke, Some(true));
+    // The budgeted attempt failed once; the unbudgeted one at the same chords drew.
+    assert_eq!(mesh.stats.coarsenings, 1);
+    assert!(mesh.stats.work > crate::robust_mesh::MAX_SWEEP_WORK);
+}
