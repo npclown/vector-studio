@@ -281,7 +281,7 @@ export function missedFloors(counts, floors) {
 }
 
 /** One-path fill-v0 input (V2 contract section a). */
-export function packFillInput(verbs, points, rule, exponent, requestId) {
+export function packFillInput(verbs, points, rule, exponent, requestId, exact = false) {
   const requests = 48;
   const pathOffsets = requests + 16;
   const pointOffsets = pathOffsets + 8;
@@ -302,7 +302,8 @@ export function packFillInput(verbs, points, rule, exponent, requestId) {
     pointOffsets,
     verbsOffset,
     pointsOffset,
-    0,
+    // E39: header word 11 asks for the exact rungs (the identity tools compare those).
+    exact ? 1 : 0,
   ];
   header.forEach((value, index) => view.setUint32(index * 4, value, true));
   view.setUint32(requests, requestId, true);

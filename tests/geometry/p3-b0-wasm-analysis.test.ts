@@ -38,8 +38,8 @@ import {
 import { parseArguments } from '../../tooling/run-p3-b0-wasm-benchmark.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
-/** Recorded in the plan when AL-U6 merges; any configuration change shows up here. */
-const REFERENCE_CONFIG_HASH = '449520404c5cf280977b9c5f5e2399ad1c154a8e1db1958c4771d51f47e1657b';
+/** Recorded in the plan when AL-U6 merges; any configuration change shows up here; re-baselined for E39. */
+const REFERENCE_CONFIG_HASH = '72ee8db478f4b4f55321f88ec9f4a3c6747a840b78106b8d5af24f52a0342186';
 type Mutable<T> = { -readonly [K in keyof T]: Mutable<T[K]> };
 const clone = <T>(value: T): Mutable<T> => JSON.parse(JSON.stringify(value)) as Mutable<T>;
 const decision = corpusCells().filter((cell) => cell.role === 'decision');
@@ -63,10 +63,11 @@ describe('AL-S2 configuration', () => {
     expect(config.corpus.sha256).toBe(CORPUS_SHA256);
     expect(CORPUS_SHA256.startsWith('206cf6e9') && CORPUS_SHA256.endsWith('9796')).toBe(true);
     expect(config.native).toEqual(ratioModeConfig('reference'));
+    // Re-baselined for E39 (fill-v0+r7).
     expect(configHash(config.native)).toBe(
-      '82414c3a2ad6794c67cf2afd8cfb8d096bc89a4e746a2736b066990a6e184dd7',
+      '71875bc2f6e6edf433f06385050fb2eefb0ccdf32185949d5159bd90e88f2c10',
     );
-    expect(config.operation.id).toBe('geometry-wasm/fill-v0+r6');
+    expect(config.operation.id).toBe('geometry-wasm/fill-v0+r7');
     expect(config.sampling).toMatchObject({ repetitions: 5, warmup: 3, timed: 20, calls: 100 });
     expect(config.sampling.onePath).toEqual({ cells: largestCells(), path: 0, calls: 1000 });
     expect(largestCells()).toEqual(['P2/s=16', 'P4/s=16', 'P8/s=8']);
@@ -210,7 +211,7 @@ function nativeOutputs(profile: 'functional' | 'reference'): RatioOutput[] {
     return {
       kind: 'ratio',
       repetition,
-      revision: 6,
+      revision: 7,
       clockQuantumNs: 100,
       calls: config.calls,
       onePathCalls: config.onePath.calls,
@@ -255,7 +256,7 @@ function captureFor(
     options: { ...pageOptions(config, wasmSha256), repetition },
     wasmSha256,
     corpusSha256: CORPUS_SHA256,
-    adapter: { operationId: 'geometry-wasm/fill-v0+r6', portVersion: 0 },
+    adapter: { operationId: 'geometry-wasm/fill-v0+r7', portVersion: 0 },
     crossOriginIsolated: true,
     clockProbe: {
       attempts: 10,

@@ -18,7 +18,12 @@ beforeAll(async () => {
   const module = await WebAssembly.compile(
     new Uint8Array(await readFile(process.env.P2_WASM_PATH)),
   );
-  ports = { fill: await createFillMeshPort(module), stroke: await createStrokeMeshPort(module) };
+  // E39 contract section 5: A04 measures the exact rungs, which are test-only after E39.
+  const exact = { exactRungsForTesting: true };
+  ports = {
+    fill: await createFillMeshPort(module, exact),
+    stroke: await createStrokeMeshPort(module, exact),
+  };
 });
 
 describe('E3-U3 harness on the release WASM (smoke cases, not the corpus)', () => {

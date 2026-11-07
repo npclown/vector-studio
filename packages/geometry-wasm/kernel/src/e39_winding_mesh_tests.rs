@@ -83,11 +83,7 @@ fn compare_counts(
 /// through the production entry points; every build is a mesh, a winding fill or a union
 /// stroke, matching the reference at `samples` seeded points. Returns the fills that fell back
 /// to a partition mesh (K5).
-fn check_winding_paths(
-    paths: &[(String, PathSpec)],
-    exponents: &[i32],
-    samples: usize,
-) -> usize {
+fn check_winding_paths(paths: &[(String, PathSpec)], exponents: &[i32], samples: usize) -> usize {
     let (mut fill, mut stroke) = winding_production();
     let mut rng = Rng(0x0E39_0001);
     let mut fallbacks = 0;
@@ -376,7 +372,10 @@ fn e39_winding_bound_falls_back_only_when_needed() {
     // y): far below the fallback, whatever the number of glyphs.
     assert!(mesh.stats.winding_bound <= 4, "{:?}", mesh.stats);
     let small = spiral_bound(&mut mesh, 20, tol);
-    assert!((20..WINDING_FALLBACK).contains(&small), "spiral 20: {small}");
+    assert!(
+        (20..WINDING_FALLBACK).contains(&small),
+        "spiral 20: {small}"
+    );
     let style = RobustStroke {
         width: 1.0,
         cap: StrokeCap::Butt,

@@ -263,6 +263,9 @@ pub(crate) struct FillRequest {
 pub(crate) struct FillInput<'a> {
     bytes: &'a [u8],
     path_count: usize,
+    /// E39: header word 11, bit 0: build with the ladder (the exact rungs and E38's robust
+    /// rung), not a winding mesh. The adapters set it only for the oracle and analysis harnesses.
+    exact: bool,
     path_offsets_offset: usize,
     point_offsets_offset: usize,
     verbs_offset: usize,
@@ -290,10 +293,11 @@ impl<'a> FillInput<'a> {
             || read_u32(bytes, 0)? != FILL_INPUT_MAGIC
             || read_u32(bytes, 4)? != FILL_V0_VERSION
             || read_usize(bytes, 8)? != bytes.len()
-            || read_u32(bytes, 44)? != 0
+            || read_u32(bytes, 44)? > 1
         {
             return None;
         }
+        let exact = read_u32(bytes, 44)? == 1;
         let path_count = read_usize(bytes, 12)?;
         let verb_count = read_usize(bytes, 16)?;
         let point_count = read_usize(bytes, 20)?;
@@ -353,6 +357,7 @@ impl<'a> FillInput<'a> {
         Some(Self {
             bytes,
             path_count,
+            exact,
             path_offsets_offset: path_offsets.0,
             point_offsets_offset: point_offsets.0,
             verbs_offset: verbs.0,
@@ -362,6 +367,11 @@ impl<'a> FillInput<'a> {
 
     pub(crate) fn path_count(self) -> usize {
         self.path_count
+    }
+
+    /// E39: whether the batch asks for the ladder instead of winding meshes (header word 11).
+    pub(crate) fn exact(self) -> bool {
+        self.exact
     }
 
     pub(crate) fn request(self, index: usize) -> Option<FillRequest> {
@@ -928,18 +938,21 @@ pub(crate) struct PathSwitches {
     /// is opt-in, so that the ladder fixtures keep observing `fill-v0+r6`'s results.
     #[cfg(test)]
     pub(crate) winding: bool,
+    /// E39: the batch's exact flag (header word 11): the ladder runs instead of the winding
+    /// build, in production as in tests.
+    pub(crate) exact: bool,
 }
 
 impl PathSwitches {
     #[cfg(test)]
     fn winding(self) -> bool {
-        self.winding
+        self.winding && !self.exact
     }
 
     #[cfg(not(test))]
     #[inline(always)]
     fn winding(self) -> bool {
-        true
+        !self.exact
     }
 
     #[cfg(test)]
@@ -1203,25 +1216,30 @@ pub(crate) fn build_path(
             robust: true,
             ..BuiltPath::decided(outcome)
         };
-        return Ok(match scratch.robust.build_fill_winding(verbs, point_bytes, tol) {
-            WindingFill::Mesh => BuiltPath {
-                outcome: PathOutcome::Mesh,
-                coverage: COVERAGE_WINDING,
-                ..robust(FILL_PATH_OK)
-            },
-            WindingFill::Empty => BuiltPath::decided(FILL_PATH_EMPTY),
-            WindingFill::Refused => BuiltPath::decided(FILL_PATH_WORK_LIMIT),
-            WindingFill::TooWound => {
-                match scratch.robust.build_fill(verbs, point_bytes, request.rule, tol) {
-                    Some(true) => BuiltPath {
-                        outcome: PathOutcome::Mesh,
-                        ..robust(FILL_PATH_OK)
-                    },
-                    Some(false) => BuiltPath::decided(FILL_PATH_EMPTY),
-                    None => BuiltPath::decided(FILL_PATH_WORK_LIMIT),
+        return Ok(
+            match scratch.robust.build_fill_winding(verbs, point_bytes, tol) {
+                WindingFill::Mesh => BuiltPath {
+                    outcome: PathOutcome::Mesh,
+                    coverage: COVERAGE_WINDING,
+                    ..robust(FILL_PATH_OK)
+                },
+                WindingFill::Empty => BuiltPath::decided(FILL_PATH_EMPTY),
+                WindingFill::Refused => BuiltPath::decided(FILL_PATH_WORK_LIMIT),
+                WindingFill::TooWound => {
+                    match scratch
+                        .robust
+                        .build_fill(verbs, point_bytes, request.rule, tol)
+                    {
+                        Some(true) => BuiltPath {
+                            outcome: PathOutcome::Mesh,
+                            ..robust(FILL_PATH_OK)
+                        },
+                        Some(false) => BuiltPath::decided(FILL_PATH_EMPTY),
+                        None => BuiltPath::decided(FILL_PATH_WORK_LIMIT),
+                    }
                 }
-            }
-        });
+            },
+        );
     }
     // Step 0, rung 0 (Alt-A1 contract sections 1.2 and 3.1): AL-FR0, the S1 prefix, FR1-FR8
     // and AL-FR9 on the request's tolerance. A published fast mesh is the path's result: no
@@ -1754,13 +1772,15 @@ impl FillEngine {
             return BATCH_ALLOCATION_FAILED;
         };
         #[cfg(test)]
-        let (fault_path, output_cap, switches) = (
+        let (fault_path, output_cap, mut switches) = (
             self.test_hooks.fault_path,
             self.test_hooks.output_cap.unwrap_or(OUTPUT_CAP_BYTES),
             self.test_hooks.switches(),
         );
         #[cfg(not(test))]
-        let (fault_path, output_cap, switches) = (None, OUTPUT_CAP_BYTES, PathSwitches::default());
+        let (fault_path, output_cap, mut switches) =
+            (None, OUTPUT_CAP_BYTES, PathSwitches::default());
+        switches.exact = input.exact();
         let output = &mut words_as_bytes_mut(&mut self.output)[..capacity];
         match run_batch(
             input,
@@ -1859,6 +1879,7 @@ impl TestHooks {
             // The older references (`r4`, pre-B1) predate the robust rung.
             robust: self.robust && !self.small_tier_only && !self.pre_b1_caps,
             winding: self.winding && !self.small_tier_only && !self.pre_b1_caps,
+            exact: false,
         }
     }
 }

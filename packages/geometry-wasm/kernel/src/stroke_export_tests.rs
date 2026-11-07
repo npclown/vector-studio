@@ -412,8 +412,8 @@ fn decode(output: &[u8], paths: &[TestPath]) -> Vec<Decoded> {
         assert_eq!(bounds, expected);
         cursor += block_bytes;
         decoded.push(Decoded {
-                coverage,
-                coarsenings,
+            coverage,
+            coarsenings,
             id,
             status,
             exponent,
@@ -640,7 +640,8 @@ fn input_framing_rejections_are_invalid_batch() {
     corrupt("point offsets offset", 32, point_offsets as u32 + 4);
     corrupt("verbs offset", 36, read_u32(&valid, 36).unwrap() + 1);
     corrupt("points offset", 40, points_offset as u32 - 8);
-    corrupt("header reserved", 44, 1);
+    // E39: word 11 is the exact flag, 0 or 1.
+    corrupt("exact flag above 1", 44, 2);
     corrupt("cap above 2", 48 + 4, 3);
     corrupt("join above 2", 48 + 8, 3);
     corrupt("second cap above 2", 48 + 32 + 4, u32::MAX);
@@ -1347,7 +1348,11 @@ fn e39_union_meshes_through_the_export() {
     assert_eq!(engine.storage(), storage);
     let decoded = decode(engine.output_bytes(), &paths);
     assert_eq!(
-        (decoded[0].status, decoded[0].coverage, decoded[0].coarsenings),
+        (
+            decoded[0].status,
+            decoded[0].coverage,
+            decoded[0].coarsenings
+        ),
         (STROKE_PATH_OK, 2, 0)
     );
     assert!(decoded[0].indices.len() > 1_000);

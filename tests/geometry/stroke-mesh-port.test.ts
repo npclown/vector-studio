@@ -8,6 +8,8 @@ import { describeStrokeMeshPortConformance } from '../support/stroke-mesh-port-c
 
 // P3 B2 ST-A8: the shared stroke conformance suite SC01-SC22 against the release WASM adapter.
 // Results are functional evidence; precision is UNVERIFIED until B4 has A04 evidence.
+// E39-A7: the suite checks partition meshes, so it runs on the exact rungs (test hook);
+// e39-winding-port.test.ts covers the production winding and union meshes.
 
 let module: WebAssembly.Module;
 beforeAll(async () => {
@@ -18,7 +20,7 @@ beforeAll(async () => {
 describeStrokeMeshPortConformance(
   'geometry-wasm stroke-v0',
   async () => {
-    const adapter = await createStrokeMeshPort(module);
+    const adapter = await createStrokeMeshPort(module, { exactRungsForTesting: true });
     return {
       port: adapter,
       dispose: () => adapter.dispose(),
@@ -47,9 +49,9 @@ describeStrokeMeshPortConformance(
     };
   },
   {
-    operationId: 'geometry-wasm/stroke-v0+r9',
+    operationId: 'geometry-wasm/stroke-v0+r10', // re-baselined: E39
     createFillPort: async () => {
-      const adapter = await createFillMeshPort(module);
+      const adapter = await createFillMeshPort(module, { exactRungsForTesting: true });
       return { port: adapter, dispose: () => adapter.dispose() };
     },
   },

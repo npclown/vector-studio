@@ -42,7 +42,7 @@ const request = (requestId: number, name: string): FillMeshRequest => ({
 
 describe('E16-U1 source caps and refinement through the release WASM', () => {
   it('meshes E16-F1, E16-F2 and E16-F5 with valid structure (E16-A7)', async () => {
-    const adapter = await createFillMeshPort(module);
+    const adapter = await createFillMeshPort(module, { exactRungsForTesting: true });
     const names = ['E16-F1', 'E16-F2', 'E16-F5'];
     const batch = adapter.buildFillMeshes(names.map((name, index) => request(index, name)));
     expect(batch.status).toBe('ok');
@@ -60,7 +60,7 @@ describe('E16-U1 source caps and refinement through the release WASM', () => {
   // E38 (2026-11-07): the exact ladder still refuses E16-F8 (unsupported-geometry) and E16-F9
   // (work-limit); the robust last rung (`fill-v0+r6`) meshes both, with no boundary edges.
   it('meshes E16-F8 and E16-F9 through the robust rung', async () => {
-    const adapter = await createFillMeshPort(module);
+    const adapter = await createFillMeshPort(module, { exactRungsForTesting: true });
     const batch = adapter.buildFillMeshes([request(1, 'E16-F8'), request(2, 'E16-F9')]);
     expect(batch.status).toBe('ok');
     if (batch.status === 'ok') {

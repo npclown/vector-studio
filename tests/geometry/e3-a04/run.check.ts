@@ -85,7 +85,12 @@ async function loadPorts() {
   const wasm = process.env.P2_WASM_PATH;
   if (wasm === undefined) throw new Error('P2_WASM_PATH is required');
   const module = await WebAssembly.compile(new Uint8Array(readFileSync(wasm)));
-  return { fill: await createFillMeshPort(module), stroke: await createStrokeMeshPort(module) };
+  // E39 contract section 5: A04 measures the exact rungs, which are test-only after E39.
+  const exact = { exactRungsForTesting: true };
+  return {
+    fill: await createFillMeshPort(module, exact),
+    stroke: await createStrokeMeshPort(module, exact),
+  };
 }
 
 function measureLogged(kase: A04Case, ports: HarnessPorts, partner?: A04Case): HarnessRow {

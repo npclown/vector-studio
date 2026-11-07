@@ -600,7 +600,15 @@ impl RobustMesh {
         deepest.clamp(0, i64::from(u32::MAX)) as u32
     }
 
-    fn tree_update(&mut self, node: usize, left: usize, right: usize, lo: usize, hi: usize, value: i64) {
+    fn tree_update(
+        &mut self,
+        node: usize,
+        left: usize,
+        right: usize,
+        lo: usize,
+        hi: usize,
+        value: i64,
+    ) {
         if hi < left || right < lo {
             return;
         }
@@ -835,7 +843,8 @@ impl RobustMesh {
             let base = self.vertices.len() as u32;
             self.vertices.extend_from_slice(&self.piece);
             for i in 1..n as u32 - 1 {
-                self.triangles.extend_from_slice(&[base, base + i, base + i + 1]);
+                self.triangles
+                    .extend_from_slice(&[base, base + i, base + i + 1]);
             }
             return Ok(());
         }

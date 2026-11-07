@@ -227,7 +227,11 @@ function inputLayout(requests: readonly ValidatedRequest[]): InputLayout {
   };
 }
 
-function packInput(requests: readonly ValidatedRequest[], layout: InputLayout): Uint8Array {
+function packInput(
+  requests: readonly ValidatedRequest[],
+  layout: InputLayout,
+  exact: boolean,
+): Uint8Array {
   const bytes = allocate(() => new Uint8Array(layout.totalBytes));
   const view = new DataView(bytes.buffer);
   const header = [
@@ -242,7 +246,8 @@ function packInput(requests: readonly ValidatedRequest[], layout: InputLayout): 
     layout.pointOffsets,
     layout.verbsOffset,
     layout.pointsOffset,
-    0,
+    // E39: header word 11 asks the kernel for the exact rungs (oracle and analysis harnesses).
+    exact ? 1 : 0,
   ];
   header.forEach((value, index) => view.setUint32(index * 4, value, true));
   let verbCursor = 0;
@@ -287,6 +292,7 @@ class FillMeshKernelAdapter implements FillMeshAdapter {
   constructor(
     kernel: FillKernelExports,
     private readonly onFailClosed: ((reason: string) => void) | undefined,
+    private readonly exactRungs = false,
   ) {
     this.kernel = kernel;
     this.memory = kernel.memory;
@@ -333,7 +339,7 @@ class FillMeshKernelAdapter implements FillMeshAdapter {
     requests: readonly ValidatedRequest[],
     layout: InputLayout,
   ): FillMeshBatchResult {
-    const input = packInput(requests, layout);
+    const input = packInput(requests, layout, this.exactRungs);
     if (this.state === null) this.state = this.readState(kernel);
     const minimumOutput = OUTPUT_HEADER_BYTES + RESULT_BYTES * requests.length;
     if (
@@ -695,7 +701,14 @@ function isLittleEndianHost(): boolean {
  */
 export function createFillMeshPortFromExports(
   exports: FillKernelExports,
-  options: Readonly<{ onFailClosed?: (reason: string) => void }> = {},
+  options: Readonly<{
+    onFailClosed?: (reason: string) => void;
+    /**
+     * E39-K3: build with the exact rungs and partition meshes (the pre-E39 ladder) instead of
+     * the winding/union meshes. Only oracle and analysis harnesses set it; production never does.
+     */
+    exactRungsForTesting?: boolean;
+  }> = {},
 ): FillMeshAdapter {
   const candidate = exports as unknown as Record<string, unknown>;
   const dispose = (): void => {
@@ -726,7 +739,11 @@ export function createFillMeshPortFromExports(
     dispose();
     throw error;
   }
-  return new FillMeshKernelAdapter(exports, options.onFailClosed);
+  return new FillMeshKernelAdapter(
+    exports,
+    options.onFailClosed,
+    options.exactRungsForTesting === true,
+  );
 }
 
 /**
@@ -735,6 +752,7 @@ export function createFillMeshPortFromExports(
  */
 export async function createFillMeshPort(
   source: WebAssembly.Module | BufferSource,
+  options: Readonly<{ exactRungsForTesting?: boolean }> = {},
 ): Promise<FillMeshAdapter> {
   let instance: WebAssembly.Instance;
   if (source instanceof WebAssembly.Module) {
@@ -742,5 +760,7 @@ export async function createFillMeshPort(
   } else {
     instance = (await WebAssembly.instantiate(source, {})).instance;
   }
-  return createFillMeshPortFromExports(instance.exports as unknown as FillKernelExports);
+  return createFillMeshPortFromExports(instance.exports as unknown as FillKernelExports, {
+    exactRungsForTesting: options.exactRungsForTesting === true,
+  });
 }

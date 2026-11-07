@@ -254,7 +254,11 @@ function inputLayout(requests: readonly ValidatedRequest[]): InputLayout {
   };
 }
 
-function packInput(requests: readonly ValidatedRequest[], layout: InputLayout): Uint8Array {
+function packInput(
+  requests: readonly ValidatedRequest[],
+  layout: InputLayout,
+  exact: boolean,
+): Uint8Array {
   const bytes = allocate(() => new Uint8Array(layout.totalBytes));
   const view = new DataView(bytes.buffer);
   const header = [
@@ -269,7 +273,8 @@ function packInput(requests: readonly ValidatedRequest[], layout: InputLayout): 
     layout.pointOffsets,
     layout.verbsOffset,
     layout.pointsOffset,
-    0,
+    // E39: header word 11 asks the kernel for the exact rungs (oracle and analysis harnesses).
+    exact ? 1 : 0,
   ];
   header.forEach((value, index) => view.setUint32(index * 4, value, true));
   let verbCursor = 0;
@@ -317,6 +322,7 @@ class StrokeMeshKernelAdapter implements StrokeMeshAdapter {
   constructor(
     kernel: StrokeKernelExports,
     private readonly onFailClosed: ((reason: string) => void) | undefined,
+    private readonly exactRungs = false,
   ) {
     this.kernel = kernel;
     this.memory = kernel.memory;
@@ -363,7 +369,7 @@ class StrokeMeshKernelAdapter implements StrokeMeshAdapter {
     requests: readonly ValidatedRequest[],
     layout: InputLayout,
   ): StrokeMeshBatchResult {
-    const input = packInput(requests, layout);
+    const input = packInput(requests, layout, this.exactRungs);
     if (this.state === null) this.state = this.readState(kernel);
     const minimumOutput = OUTPUT_HEADER_BYTES + RESULT_BYTES * requests.length;
     if (
@@ -729,7 +735,14 @@ function isLittleEndianHost(): boolean {
  */
 export function createStrokeMeshPortFromExports(
   exports: StrokeKernelExports,
-  options: Readonly<{ onFailClosed?: (reason: string) => void }> = {},
+  options: Readonly<{
+    onFailClosed?: (reason: string) => void;
+    /**
+     * E39-K3: build with the exact rungs and partition meshes (the pre-E39 ladder) instead of
+     * the winding/union meshes. Only oracle and analysis harnesses set it; production never does.
+     */
+    exactRungsForTesting?: boolean;
+  }> = {},
 ): StrokeMeshAdapter {
   const candidate = exports as unknown as Record<string, unknown>;
   const dispose = (): void => {
@@ -761,7 +774,11 @@ export function createStrokeMeshPortFromExports(
     dispose();
     throw error;
   }
-  return new StrokeMeshKernelAdapter(exports, options.onFailClosed);
+  return new StrokeMeshKernelAdapter(
+    exports,
+    options.onFailClosed,
+    options.exactRungsForTesting === true,
+  );
 }
 
 /**
@@ -771,6 +788,7 @@ export function createStrokeMeshPortFromExports(
  */
 export async function createStrokeMeshPort(
   source: WebAssembly.Module | BufferSource,
+  options: Readonly<{ exactRungsForTesting?: boolean }> = {},
 ): Promise<StrokeMeshAdapter> {
   let instance: WebAssembly.Instance;
   if (source instanceof WebAssembly.Module) {
@@ -778,5 +796,7 @@ export async function createStrokeMeshPort(
   } else {
     instance = (await WebAssembly.instantiate(source, {})).instance;
   }
-  return createStrokeMeshPortFromExports(instance.exports as unknown as StrokeKernelExports);
+  return createStrokeMeshPortFromExports(instance.exports as unknown as StrokeKernelExports, {
+    exactRungsForTesting: options.exactRungsForTesting === true,
+  });
 }

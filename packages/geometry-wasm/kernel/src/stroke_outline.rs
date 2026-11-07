@@ -476,6 +476,9 @@ pub(crate) struct StrokeDefects {
     /// in tests it is opt-in, so that the exact-rung fixtures keep observing `stroke-v0+r9`.
     #[cfg(test)]
     pub(crate) winding: bool,
+    /// Not a defect: the batch's exact flag (E39, header word 11): the exact rungs run instead
+    /// of the union build, in production as in tests.
+    pub(crate) exact: bool,
 }
 
 #[cfg(test)]
@@ -520,7 +523,7 @@ impl StrokeDefects {
     }
 
     pub(crate) fn winding(self) -> bool {
-        self.winding
+        self.winding && !self.exact
     }
 }
 
@@ -628,7 +631,7 @@ impl StrokeDefects {
 
     #[inline(always)]
     pub(crate) fn winding(self) -> bool {
-        true
+        !self.exact
     }
 }
 
@@ -898,6 +901,10 @@ impl StrokeWorkspace {
         self.family_b
     }
 
+    /// E39: the batch's exact flag (header word 11).
+    pub(crate) fn set_exact(&mut self, exact: bool) {
+        self.defects.exact = exact;
+    }
     #[cfg(test)]
     pub(crate) fn defects_mut(&mut self) -> &mut StrokeDefects {
         &mut self.defects

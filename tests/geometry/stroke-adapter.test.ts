@@ -77,7 +77,7 @@ describe('stroke-v0 adapter factory', () => {
       const adapter = await createStrokeMeshPort(source);
       expect(adapter.portVersion).toBe(0);
       expect(adapter.operationId).toBe(STROKE_V0_OPERATION_ID);
-      expect(adapter.operationId).toBe('geometry-wasm/stroke-v0+r9');
+      expect(adapter.operationId).toBe('geometry-wasm/stroke-v0+r10'); // re-baselined: E39
       expect(adapter.linearMemoryBytes()).toBeGreaterThan(0);
       const result = adapter.buildStrokeMeshes([line()]);
       expect(result.status).toBe('ok');
@@ -443,7 +443,8 @@ async function expectFailClosed(name: string, reason: string, wrap: Wrap): Promi
         return real.stroke_v0_dispose();
       },
     },
-    { onFailClosed: (breach) => reasons.push(breach) },
+    // E39-A7: the pinned record offsets are those of the partition mesh (exact rungs).
+    { onFailClosed: (breach) => reasons.push(breach), exactRungsForTesting: true },
   );
   expect(adapter.buildStrokeMeshes([line(), grammarError()]), name).toEqual(INTERNAL);
   expect(reasons, name).toHaveLength(1);
@@ -654,7 +655,8 @@ describe('stroke-v0 adapter fails closed', () => {
     [
       'record tail reserved',
       'record reserved field is set',
-      corrupt((view) => view.setUint32(OK_RECORD + 40, 1, true)),
+      // E39-K6: offset 40 now holds the coarsenings; 44 stays reserved.
+      corrupt((view) => view.setUint32(OK_RECORD + 44, 1, true)),
     ],
     ['OK with zero vertices', COUNTS, corrupt((view) => view.setUint32(OK_RECORD + 20, 0, true))],
     ['OK with zero indices', COUNTS, corrupt((view) => view.setUint32(OK_RECORD + 24, 0, true))],

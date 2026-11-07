@@ -313,8 +313,8 @@ fn decode(output: &[u8], paths: &[TestPath]) -> Vec<Decoded> {
         assert_eq!(bounds, expected);
         cursor += block_bytes;
         decoded.push(Decoded {
-                coverage,
-                coarsenings,
+            coverage,
+            coarsenings,
             id,
             status,
             exponent,
@@ -607,7 +607,8 @@ fn input_framing_rejections_are_invalid_batch() {
     corrupt("point offsets offset", 32, point_offsets as u32 + 4);
     corrupt("verbs offset", 36, read_u32(&valid, 36).unwrap() + 1);
     corrupt("points offset", 40, points_offset as u32 - 8);
-    corrupt("header reserved", 44, 1);
+    // E39: word 11 is the exact flag, 0 or 1.
+    corrupt("exact flag above 1", 44, 2);
     corrupt("fill rule", 48 + 4, 2);
     corrupt("request reserved", 48 + 16 + 12, 1);
     corrupt("first path offset", path_offsets, 1);
@@ -2614,10 +2615,7 @@ fn e39_winding_meshes_through_the_export() {
     for i in 1..n {
         star = star.l(at(i).0, at(i).1);
     }
-    let paths = [
-        test_path(0, user_node7(), -3),
-        test_path(1, star.z(), -3),
-    ];
+    let paths = [test_path(0, user_node7(), -3), test_path(1, star.z(), -3)];
     let input = pack(&paths);
     let mut engine = FillEngine::new();
     engine.hooks().robust = true;

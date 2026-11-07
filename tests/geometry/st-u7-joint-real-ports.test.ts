@@ -149,8 +149,8 @@ function nonDyadic(mesh: FillMesh): number {
 
 describe('ST-U7 joint overlay on real-port meshes (ST-U7b review S4)', () => {
   it('builds or refuses with a reason on every curve-flattened and round case', async () => {
-    const fillPort = await createFillMeshPort(module);
-    const strokePort = await createStrokeMeshPort(module);
+    const fillPort = await createFillMeshPort(module, { exactRungsForTesting: true });
+    const strokePort = await createStrokeMeshPort(module, { exactRungsForTesting: true });
     const results: Record<string, unknown>[] = [];
     try {
       for (const testCase of CASES) {

@@ -87,6 +87,9 @@ fn decode_join(value: u32) -> Option<StrokeJoin> {
 pub(crate) struct StrokeInput<'a> {
     bytes: &'a [u8],
     path_count: usize,
+    /// E39: header word 11, bit 0: build with the exact rungs and E38's robust rung, not a
+    /// union mesh. The adapters set it only for the oracle and analysis harnesses.
+    exact: bool,
     requests_offset: usize,
     path_offsets_offset: usize,
     point_offsets_offset: usize,
@@ -100,10 +103,11 @@ impl<'a> StrokeInput<'a> {
             || read_u32(bytes, 0)? != STROKE_INPUT_MAGIC
             || read_u32(bytes, 4)? != STROKE_V0_VERSION
             || read_usize(bytes, 8)? != bytes.len()
-            || read_u32(bytes, 44)? != 0
+            || read_u32(bytes, 44)? > 1
         {
             return None;
         }
+        let exact = read_u32(bytes, 44)? == 1;
         let path_count = read_usize(bytes, 12)?;
         let verb_count = read_usize(bytes, 16)?;
         let point_count = read_usize(bytes, 20)?;
@@ -164,6 +168,7 @@ impl<'a> StrokeInput<'a> {
         Some(Self {
             bytes,
             path_count,
+            exact,
             requests_offset: requests.0,
             path_offsets_offset: path_offsets.0,
             point_offsets_offset: point_offsets.0,
@@ -174,6 +179,11 @@ impl<'a> StrokeInput<'a> {
 
     pub(crate) fn path_count(self) -> usize {
         self.path_count
+    }
+
+    /// E39: whether the batch asks for the exact rungs instead of union meshes (word 11).
+    pub(crate) fn exact(self) -> bool {
+        self.exact
     }
 
     pub(crate) fn request(self, index: usize) -> Option<StrokeRequest> {
@@ -323,6 +333,7 @@ fn run_batch(
     };
     let mut cursor = data_offset;
     let mut overflow = false;
+    workspace.set_exact(input.exact());
     for index in 0..path_count {
         let (Some(request), Some((verbs, points))) = (input.request(index), input.path(index))
         else {
@@ -392,7 +403,11 @@ fn run_batch(
                         boundary: boundary_count,
                         bytes,
                         bounds: vertex_bounds(vertices),
-                        coverage: if workspace.union_published() { 2 } else { 0 },
+                        coverage: if workspace.union_published() {
+                            crate::fill_export::COVERAGE_UNION
+                        } else {
+                            crate::fill_export::COVERAGE_PARTITION
+                        },
                         coarsenings: workspace.coarsenings(),
                     }
                 } else {
