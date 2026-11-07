@@ -2634,9 +2634,9 @@ fn e39_winding_meshes_through_the_export() {
             .iter()
             .map(|mesh| (mesh.status, mesh.coverage, mesh.coarsenings))
             .collect::<Vec<_>>(),
-        // The star's slab sweep runs over its work budget once (E38-R4), so it reports one
-        // doubling (E39-K4).
-        [(FILL_PATH_OK, 1, 0), (FILL_PATH_OK, 0, 1)]
+        // The star's slab sweep runs over its work budget once (E38-R4) and then draws its
+        // own lines unbudgeted: the requested flattening, so no doubling is reported (E39-K4).
+        [(FILL_PATH_OK, 1, 0), (FILL_PATH_OK, 0, 0)]
     );
     assert!(decoded.iter().all(|mesh| mesh.boundary.is_empty()));
 }

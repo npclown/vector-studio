@@ -49,6 +49,11 @@ pub(crate) const MAX_WINDING_VERTICES: usize = 1 << 17;
 /// E39-K4: the most triangle indices of a winding or union mesh (a fan of `k` points has `k - 2`
 /// triangles, so three per vertex is enough).
 const MAX_WINDING_INDICES: usize = 3 * MAX_WINDING_VERTICES;
+/// E39-K4: every subpath holds a point, so a build within the vertex bound has at most this
+/// many subpaths (the E38 sweep's `MAX_CHORDS` would refuse a compound path of more contours).
+const MAX_SUBPATHS: usize = MAX_WINDING_VERTICES;
+/// E39-K5: a winding box belongs to a subpath of at least three points.
+const MAX_BOXES: usize = MAX_WINDING_VERTICES / 3;
 /// E39-K5: a fill whose winding bound reaches this falls back to the slab sweep (the stencil
 /// counts modulo 128 in a joint draw; 8 is the margin for the f32 rounding of transformed
 /// vertices).
@@ -343,7 +348,7 @@ impl RobustMesh {
         if self.reserved {
             return Ok(());
         }
-        reserve(&mut self.subpaths, MAX_CHORDS)?;
+        reserve(&mut self.subpaths, MAX_SUBPATHS)?;
         reserve(&mut self.points, MAX_WINDING_VERTICES)?;
         reserve(&mut self.corners, MAX_WINDING_VERTICES)?;
         reserve(&mut self.piece, MAX_ARC_STEPS + 8)?;
@@ -358,13 +363,13 @@ impl RobustMesh {
         reserve(&mut self.triangles, MAX_WINDING_INDICES.max(SWEEP_INDICES))?;
         reserve(&mut self.tops, MAX_WINDING_VERTICES)?;
         reserve(&mut self.bottoms, MAX_WINDING_VERTICES)?;
-        reserve(&mut self.boxes, MAX_CHORDS)?;
-        reserve(&mut self.box_ys, 2 * MAX_CHORDS)?;
-        reserve(&mut self.box_events, 2 * MAX_CHORDS)?;
-        reserve(&mut self.tree_max, 8 * MAX_CHORDS)?;
-        reserve(&mut self.tree_add, 8 * MAX_CHORDS)?;
-        self.tree_max.resize(8 * MAX_CHORDS, 0);
-        self.tree_add.resize(8 * MAX_CHORDS, 0);
+        reserve(&mut self.boxes, MAX_BOXES)?;
+        reserve(&mut self.box_ys, 2 * MAX_BOXES)?;
+        reserve(&mut self.box_events, 2 * MAX_BOXES)?;
+        reserve(&mut self.tree_max, 8 * MAX_BOXES)?;
+        reserve(&mut self.tree_add, 8 * MAX_BOXES)?;
+        self.tree_max.resize(8 * MAX_BOXES, 0);
+        self.tree_add.resize(8 * MAX_BOXES, 0);
         self.reserved = true;
         Ok(())
     }
@@ -372,7 +377,7 @@ impl RobustMesh {
     /// Bytes `reserve` requests, from the capacities alone.
     pub(crate) const fn reserved_bytes() -> usize {
         use std::mem::size_of;
-        MAX_CHORDS * size_of::<Subpath>()
+        MAX_SUBPATHS * size_of::<Subpath>()
             + MAX_WINDING_VERTICES * (size_of::<Point>() + size_of::<bool>())
             + (MAX_ARC_STEPS + 8) * size_of::<Point>()
             + MAX_EDGES * size_of::<Edge>()
@@ -385,9 +390,9 @@ impl RobustMesh {
             + const_max(MAX_WINDING_VERTICES, SWEEP_VERTICES) * size_of::<Point>()
             + const_max(MAX_WINDING_INDICES, SWEEP_INDICES) * size_of::<u32>()
             + 2 * MAX_WINDING_VERTICES * size_of::<f64>()
-            + MAX_CHORDS * size_of::<WindingBox>()
-            + 2 * MAX_CHORDS * (size_of::<f64>() + size_of::<(f64, u32, bool)>())
-            + 16 * MAX_CHORDS * size_of::<i64>()
+            + MAX_BOXES * size_of::<WindingBox>()
+            + 2 * MAX_BOXES * (size_of::<f64>() + size_of::<(f64, u32, bool)>())
+            + 16 * MAX_BOXES * size_of::<i64>()
     }
 
     /// Bytes reserved by `reserve`.
@@ -528,7 +533,9 @@ impl RobustMesh {
                 };
             }
             total += u64::from(bound);
-            // `boxes` holds `MAX_CHORDS` entries, as many as there are subpaths.
+            // `boxes` holds `MAX_BOXES` entries: each box's subpath has three or more of the
+            // at most `MAX_WINDING_VERTICES` points.
+            debug_assert!(self.boxes.len() < self.boxes.capacity());
             self.boxes.push(WindingBox { min, max, bound });
         }
         if total < u64::from(WINDING_FALLBACK) {
@@ -689,11 +696,18 @@ impl RobustMesh {
         let mut tol = tol;
         self.work_budget = MAX_SWEEP_WORK;
         let mut over_work_at = None;
-        for coarsenings in 0..=MAX_COARSENINGS {
+        // E39-K4: the served tolerance as doublings of the requested one (an over-budget sweep
+        // multiplies by up to 2^16 in one retry), and the requested flattening's chord count.
+        let mut doublings = 0u32;
+        let mut requested_chords = None;
+        for attempt in 0..=MAX_COARSENINGS {
             self.clear();
-            self.stats.coarsenings = coarsenings;
+            self.stats.coarsenings = doublings;
             self.stats.tolerance = tol;
             let result = self.flatten(verbs, points, tol).and_then(|()| {
+                if attempt == 0 {
+                    requested_chords = Some(self.stats.chords);
+                }
                 // A sweep over its budget whose coarsening left the chords as they were (a
                 // path of lines) would only fail again: this attempt runs unbudgeted, since
                 // its work is then the path's own crossings.
@@ -703,11 +717,19 @@ impl RobustMesh {
                 body(self, tol)
             });
             match result {
-                Ok(drawn) => return Some(drawn),
+                Ok(drawn) => {
+                    // Wang's chord count per cubic never grows with the tolerance, so an equal
+                    // total is the requested flattening itself (a path of lines): not coarser.
+                    if requested_chords == Some(self.stats.chords) {
+                        self.stats.coarsenings = 0;
+                    }
+                    return Some(drawn);
+                }
                 Err(Full) => {
                     over_work_at = self.over_work.then_some(self.stats.chords);
                     self.over_work = false;
                     tol *= self.coarsening;
+                    doublings += self.coarsening.log2() as u32;
                     self.coarsening = 2.0;
                 }
             }

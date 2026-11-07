@@ -617,6 +617,10 @@ class StrokeMeshKernelAdapter implements StrokeMeshAdapter {
       // E39-K6: the coverage word (0 partition, 2 union) and the tolerance doublings.
       const coverageWord = u32(record + 36);
       const coarsenings = u32(record + 40);
+      // E39-K4: the served tolerance 2^(e - 1 + doublings) is finite.
+      if (status === PATH_OK && coarsenings > 0 && request.exponent + coarsenings > 1024) {
+        throw new StrokeAbiBreach('record coarsenings exceed a finite tolerance');
+      }
       const echo = { requestId: request.requestId, toleranceExponent: request.exponent };
       if (status !== PATH_OK) {
         for (let offset = 16; offset < RESULT_BYTES; offset += 4) {

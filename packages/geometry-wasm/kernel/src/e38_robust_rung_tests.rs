@@ -1216,8 +1216,9 @@ fn e38_crossing_heavy_lines_still_draw() {
     };
     let stroke = mesh.build_stroke(&star.verbs, &bytes, style, 2f64.powi(-4));
     assert_eq!(stroke, Some(true));
-    // The budgeted attempt failed once; the unbudgeted one at the same chords drew.
-    assert_eq!(mesh.stats.coarsenings, 1);
+    // The budgeted attempt failed once; the unbudgeted one at the same chords drew. E39-K4:
+    // the chords are the requested flattening's, so the build reports no coarsening.
+    assert_eq!(mesh.stats.coarsenings, 0);
     assert!(mesh.stats.work > crate::robust_mesh::MAX_SWEEP_WORK);
 }
 

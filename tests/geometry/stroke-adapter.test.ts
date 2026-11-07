@@ -658,6 +658,11 @@ describe('stroke-v0 adapter fails closed', () => {
       // E39-K6: offset 40 now holds the coarsenings; 44 stays reserved.
       corrupt((view) => view.setUint32(OK_RECORD + 44, 1, true)),
     ],
+    [
+      'coarsenings past a finite tolerance',
+      'record coarsenings exceed a finite tolerance',
+      corrupt((view) => view.setUint32(OK_RECORD + 40, 2000, true)),
+    ],
     ['OK with zero vertices', COUNTS, corrupt((view) => view.setUint32(OK_RECORD + 20, 0, true))],
     ['OK with zero indices', COUNTS, corrupt((view) => view.setUint32(OK_RECORD + 24, 0, true))],
     [

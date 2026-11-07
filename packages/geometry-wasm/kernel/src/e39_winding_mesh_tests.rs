@@ -501,3 +501,46 @@ fn e39_fan_of_a_square() {
         .all(|t| orientation(vertices, t) > 0.0));
     assert_eq!(mesh.stats.winding_bound, 1);
 }
+
+/// E39-K4: a compound path of more contours than the E38 sweep's `MAX_CHORDS` (an outlined text
+/// block) builds within the vertex bound, uncoarsened, as a fill; so does a stroke of as many
+/// segments.
+#[test]
+fn e39_many_contours_draw() {
+    let mut mesh = RobustMesh::new();
+    mesh.reserve().expect("reserve");
+    let mut path = PathSpec::new();
+    for k in 0..9_000 {
+        let (x, y) = (f64::from(k % 100) * 3.0, f64::from(k / 100) * 3.0);
+        path = path
+            .m(x, y)
+            .l(x + 2.0, y)
+            .l(x + 2.0, y + 2.0)
+            .l(x, y + 2.0)
+            .z();
+    }
+    let bytes = path.bytes();
+    assert_eq!(
+        mesh.build_fill_winding(&path.verbs, &bytes, 0.25),
+        WindingFill::Mesh
+    );
+    assert_eq!(mesh.stats.coarsenings, 0);
+    assert_eq!(mesh.stats.winding_bound, 1);
+    // A stroke's pieces take several vertices per chord, so its contours are single segments.
+    let mut hatch = PathSpec::new();
+    for k in 0..9_000 {
+        let (x, y) = (f64::from(k % 100) * 3.0, f64::from(k / 100) * 3.0);
+        hatch = hatch.m(x, y).l(x + 2.0, y + 2.0);
+    }
+    let style = RobustStroke {
+        width: 0.5,
+        cap: StrokeCap::Butt,
+        join: StrokeJoin::Miter,
+        miter_limit: 4.0,
+    };
+    assert_eq!(
+        mesh.build_stroke_union(&hatch.verbs, &hatch.bytes(), style, 0.25),
+        Some(true)
+    );
+    assert_eq!(mesh.stats.coarsenings, 0);
+}
