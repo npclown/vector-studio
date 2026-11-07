@@ -1023,9 +1023,9 @@ fn e38_measure_corpus() {
                 .expect("fits");
             let stroke = (mesh.stats, start.elapsed());
             println!(
-                "{name}\te{e}\tfill chords {} trapezoids {} coarsen {} {:.1?}\tstroke chords {} edges {} trapezoids {} coarsen {} {:.1?}",
+                "{name}\te{e}\tfill chords {} trapezoids {} coarsen {} {:.1?}\tstroke chords {} edges {} trapezoids {} coarsen {} work {} {:.1?}",
                 fill.0.chords, fill.0.trapezoids, fill.0.coarsenings, fill.1,
-                stroke.0.chords, stroke.0.edges, stroke.0.trapezoids, stroke.0.coarsenings, stroke.1
+                stroke.0.chords, stroke.0.edges, stroke.0.trapezoids, stroke.0.coarsenings, stroke.0.work, stroke.1
             );
         }
     }
@@ -1049,4 +1049,142 @@ fn e38_build_allocates_nothing() {
     let stroke = mesh.build_stroke(&path.verbs, &bytes, style, 2f64.powi(-9));
     let allocations = crate::allocation_test_support::stop();
     assert_eq!((fill, stroke, allocations), (Some(true), Some(true), 0));
+}
+
+fn mesh_area(mesh: &RobustMesh) -> f64 {
+    let (vertices, triangles, _) = mesh.mesh();
+    triangles
+        .chunks_exact(3)
+        .map(|t| {
+            let (a, b, c) = (
+                vertices[t[0] as usize],
+                vertices[t[1] as usize],
+                vertices[t[2] as usize],
+            );
+            ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)).abs() * 0.5
+        })
+        .sum()
+}
+
+/// E38 review: an exact 180° reversal keeps its round join's tip whatever the sign of the
+/// zero cross product (+x and -y reversals gave `+0.0` and swept the arc inside the turn).
+#[test]
+fn e38_reversal_round_join_keeps_its_tip() {
+    let mut mesh = RobustMesh::new();
+    mesh.reserve().expect("reserve");
+    let style = RobustStroke {
+        width: 10.0,
+        cap: StrokeCap::Butt,
+        join: StrokeJoin::Round,
+        miter_limit: 4.0,
+    };
+    // 100 px out and back: a 100 × 10 band and a half disk of radius 5 at the tip.
+    let expected = 1_000.0 + std::f64::consts::PI * 12.5;
+    for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0), (0.6, 0.8)] {
+        let tip = (100.0 * dx, 100.0 * dy);
+        for path in [
+            PathSpec::new().m(0.0, 0.0).l(tip.0, tip.1).l(0.0, 0.0),
+            PathSpec::new()
+                .m(0.0, 0.0)
+                .c([
+                    tip.0 / 3.0,
+                    tip.1 / 3.0,
+                    tip.0 * 2.0 / 3.0,
+                    tip.1 * 2.0 / 3.0,
+                    tip.0,
+                    tip.1,
+                ])
+                .l(0.0, 0.0),
+        ] {
+            let built = mesh.build_stroke(&path.verbs, &path.bytes(), style, 2f64.powi(-4));
+            assert_eq!(built, Some(true));
+            let area = mesh_area(&mesh);
+            assert!(
+                (area - expected).abs() < 1.0,
+                "direction ({dx}, {dy}): area {area}, expected {expected}"
+            );
+        }
+    }
+}
+
+/// E38 review: far-off and huge coordinates keep their stroke pieces (the piece area is taken
+/// relative to its first point).
+#[test]
+fn e38_huge_coordinates_keep_their_pieces() {
+    let mut mesh = RobustMesh::new();
+    mesh.reserve().expect("reserve");
+    let style = RobustStroke {
+        width: 2.0,
+        cap: StrokeCap::Butt,
+        join: StrokeJoin::Miter,
+        miter_limit: 4.0,
+    };
+    let big = 1e306;
+    let square = PathSpec::new()
+        .m(0.0, 0.0)
+        .l(big, 0.0)
+        .l(big, big)
+        .l(0.0, big)
+        .z();
+    let built = mesh.build_stroke(
+        &square.verbs,
+        &square.bytes(),
+        RobustStroke {
+            width: 1e304,
+            ..style
+        },
+        1e300,
+    );
+    assert_eq!(built, Some(true));
+    let far = PathSpec::new()
+        .m(1e9, 1e9)
+        .l(1e9 + 100.0, 1e9)
+        .l(1e9 + 100.0, 1e9 + 100.0);
+    let built = mesh.build_stroke(&far.verbs, &far.bytes(), style, 2f64.powi(-4));
+    assert_eq!(built, Some(true));
+    let area = mesh_area(&mesh);
+    assert!((area - 400.0).abs() < 4.0, "area {area}");
+}
+
+/// E38 review (evidence): wide round strokes, where the pieces overlap deeply, stay within the
+/// sweep budget (R4 coarsens instead of running for seconds). Prints time and tolerance.
+#[test]
+#[ignore = "E38 evidence, run by hand in release"]
+fn e38_wide_strokes_stay_bounded() {
+    let mut mesh = RobustMesh::new();
+    mesh.reserve().expect("reserve");
+    let mut loops = PathSpec::new().m(0.0, 0.0);
+    for i in 0..40 {
+        let x = f64::from(i) * 3.0;
+        loops = loops.c([x + 120.0, -80.0, x + 120.0, 80.0, x + 3.0, 0.0]);
+    }
+    let node5 = user_node5();
+    let cases = [
+        ("node-5", &node5, 1.0, -6),
+        ("node-5", &node5, 40.0, -6),
+        ("node-5", &node5, 100.0, -3),
+        ("node-5", &node5, 100.0, -6),
+        ("loops", &loops, 50.0, -8),
+        ("loops", &loops, 200.0, -8),
+    ];
+    for (name, path, width, e) in cases {
+        let style = RobustStroke {
+            width,
+            cap: StrokeCap::Round,
+            join: StrokeJoin::Round,
+            miter_limit: 4.0,
+        };
+        let asked = 2f64.powi(e - 1);
+        let start = std::time::Instant::now();
+        let built = mesh.build_stroke(&path.verbs, &path.bytes(), style, asked);
+        let elapsed = start.elapsed();
+        println!(
+            "{name}\twidth {width}\te {e}\t{built:?}\t{elapsed:.1?}\tcoarsenings {}\ttolerance x{}\twork {}\ttrapezoids {}",
+            mesh.stats.coarsenings,
+            mesh.stats.tolerance / asked,
+            mesh.stats.work,
+            mesh.stats.trapezoids
+        );
+        assert_eq!(built, Some(true), "{name} {width} {e}");
+    }
 }

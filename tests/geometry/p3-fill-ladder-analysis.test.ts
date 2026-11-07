@@ -49,9 +49,9 @@ const manifest = path.join(root, 'packages/geometry-wasm/kernel/Cargo.toml');
 type Mutable<T> = { -readonly [K in keyof T]: Mutable<T[K]> };
 const clone = <T>(value: T): Mutable<T> => JSON.parse(JSON.stringify(value)) as Mutable<T>;
 /** `configHash(ratioModeConfig('reference'))`, recorded in the plan for AL-U6. */
-const RATIO_CONFIG_HASH = '0bc8c556a6999a9f138f2ec1db158c6daf4229b14df0775e69ad1e02bea7e47f';
+const RATIO_CONFIG_HASH = '82414c3a2ad6794c67cf2afd8cfb8d096bc89a4e746a2736b066990a6e184dd7';
 /** `configHash(scenarioConfig('reference'))`, recorded in the plan when AL-U5 merges. */
-const REFERENCE_CONFIG_HASH = '779170170f79d664e7bb564b26b47e91fbb31eecc3f1a441fd96e90321230589';
+const REFERENCE_CONFIG_HASH = '9b93f0ec3e187d852cdd06e33d125ef454aa655eae881608d69a47130c05ad02';
 
 describe('P3 Alt-A1 AL-S1 configuration (section 5.3)', () => {
   it("keeps B0's and the spike's configurations unchanged and gives AL-S1 its own", () => {

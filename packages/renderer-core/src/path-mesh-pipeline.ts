@@ -1959,31 +1959,37 @@ export class PathMeshPipeline {
         candidate.strokeVariant === strokeVariant,
     );
     if (overlay === undefined) {
-      this.#overlayBuilds += 1;
-      const result = buildJointOverlay(
-        {
-          fill: {
-            mesh: fillEntry.mesh!,
-            fringeBucket: fillDraw.fringe === null ? null : fillDraw.fringeBucket,
-          },
-          stroke: {
-            mesh: strokeEntry.mesh!,
-            fringeBucket: strokeDraw.fringe === null ? null : strokeDraw.fringeBucket,
-          },
-        },
-        {
-          limits: {
-            exactTests: this.#limits.overlayExactTests,
-            steinerPoints: this.#limits.overlaySteinerPoints,
-          },
-        },
-      );
+      // E38: a robust mesh (no boundary edges) gives the overlay no boundary to classify
+      // against, so the pair is marked overlay-unsupported without a build.
+      const robust =
+        fillEntry.mesh!.boundaryEdges.length === 0 || strokeEntry.mesh!.boundaryEdges.length === 0;
+      if (!robust) this.#overlayBuilds += 1;
+      const result = robust
+        ? null
+        : buildJointOverlay(
+            {
+              fill: {
+                mesh: fillEntry.mesh!,
+                fringeBucket: fillDraw.fringe === null ? null : fillDraw.fringeBucket,
+              },
+              stroke: {
+                mesh: strokeEntry.mesh!,
+                fringeBucket: strokeDraw.fringe === null ? null : strokeDraw.fringeBucket,
+              },
+            },
+            {
+              limits: {
+                exactTests: this.#limits.overlayExactTests,
+                steinerPoints: this.#limits.overlaySteinerPoints,
+              },
+            },
+          );
       overlay = {
         fillVariant,
         strokeEntry: strokeEntry.id,
         strokeVariant,
         built:
-          result.status === 'built'
+          result?.status === 'built'
             ? Object.freeze({
                 id: Symbol(`path-joint-overlay-${nodeId}`),
                 overlay: result.overlay,

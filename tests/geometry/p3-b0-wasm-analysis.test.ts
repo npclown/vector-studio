@@ -39,7 +39,7 @@ import { parseArguments } from '../../tooling/run-p3-b0-wasm-benchmark.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 /** Recorded in the plan when AL-U6 merges; any configuration change shows up here. */
-const REFERENCE_CONFIG_HASH = '9abd6a948f6e05d7995b3738f2b905de25324eab9a707cf3bef9e4f4d7d7fcd9';
+const REFERENCE_CONFIG_HASH = '449520404c5cf280977b9c5f5e2399ad1c154a8e1db1958c4771d51f47e1657b';
 type Mutable<T> = { -readonly [K in keyof T]: Mutable<T[K]> };
 const clone = <T>(value: T): Mutable<T> => JSON.parse(JSON.stringify(value)) as Mutable<T>;
 const decision = corpusCells().filter((cell) => cell.role === 'decision');
@@ -64,7 +64,7 @@ describe('AL-S2 configuration', () => {
     expect(CORPUS_SHA256.startsWith('206cf6e9') && CORPUS_SHA256.endsWith('9796')).toBe(true);
     expect(config.native).toEqual(ratioModeConfig('reference'));
     expect(configHash(config.native)).toBe(
-      '0bc8c556a6999a9f138f2ec1db158c6daf4229b14df0775e69ad1e02bea7e47f',
+      '82414c3a2ad6794c67cf2afd8cfb8d096bc89a4e746a2736b066990a6e184dd7',
     );
     expect(config.operation.id).toBe('geometry-wasm/fill-v0+r6');
     expect(config.sampling).toMatchObject({ repetitions: 5, warmup: 3, timed: 20, calls: 100 });

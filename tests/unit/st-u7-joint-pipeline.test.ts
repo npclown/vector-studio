@@ -30,6 +30,8 @@ import { RetainedSceneMirror } from '../../packages/renderer-core/src/scene-mirr
 import {
   ScriptedStrokeMeshPort,
   pathStroke,
+  strokeOk,
+  strokeRingMesh,
   strokedNode,
 } from '../support/st-u6-stroke-harness.js';
 import {
@@ -572,6 +574,30 @@ describe('ST-U7 overlay cache, accounting and failures (addendum section 4.6)', 
         3,
       ).message,
     ).toBe('Path a is drawn without its joint coverage (renderer overlay-unsupported).');
+  });
+
+  it('E38: a robust stroke mesh (no boundary edges) is overlay-unsupported without a build and draws plain', () => {
+    const h = jointHarness({
+      nodes: [strokedNode('a', 0, { opacity: 0.5 }), pathNode('f', 20)],
+      fringeBuilder: buildPathFringe,
+    });
+    h.ports.stroke.script = {
+      request: (request, tag) =>
+        strokeOk(request, tag, { ...strokeRingMesh(tag), boundaryEdges: new Uint32Array(0) }),
+    };
+    const first = h.prepare();
+    expect(first.draws.map((draw) => draw.nodeId)).toEqual(['a', 'a', 'f']);
+    expect(first.notices).toEqual([
+      {
+        nodeId: 'a',
+        failureScope: 'renderer',
+        failureCode: 'overlay-unsupported',
+        toleranceExponent: null,
+        paint: null,
+      },
+    ]);
+    expect(h.pipeline.getOverlayBuildCount()).toBe(0);
+    expect(h.prepare().notices).toEqual([]);
   });
 
   it('ST-A15: the pipeline overlay equals the builder output for the served variant pair', () => {

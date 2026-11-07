@@ -88,7 +88,10 @@ describe('E14-U2 large tier through the release WASM', () => {
       batch.results.forEach((result, index) => {
         const name = names[index]!;
         if (name === 'X-F7/e-4') {
-          expect(result, name).toMatchObject({ status: 'failed', code: 'work-limit' });
+          // E38 (2026-11-07): the large tier still stops on X-F7, and the robust last rung
+          // (`fill-v0+r6`) meshes it, with no boundary edges.
+          expect(result.status, name).toBe('ok');
+          if (result.status === 'ok') expect(result.mesh.boundaryEdges.length, name).toBe(0);
           return;
         }
         expect(result.status, name).toBe('ok');

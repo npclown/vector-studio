@@ -42,7 +42,7 @@ import {
 } from '../geometry-benchmark/p3-al-ob5/workload.js';
 
 /** The reference configuration hash, recorded in the plan with OB5-U2. */
-const REFERENCE_CONFIG_HASH = 'e7c069d52636e3cdaf18cd57fca6ffb3cfcb9c99995169423ee2e7be97a03aa8';
+const REFERENCE_CONFIG_HASH = '8c570d6e58e73f030070dad622bc2643e7e576ede4192dd19b4fda6c03cc118e';
 
 type Profile = 'functional' | 'reference';
 type Mutable<T> = { -readonly [K in keyof T]: Mutable<T[K]> };

@@ -43,6 +43,10 @@ const MAX_SPLITS_PER_SLAB: usize = 4_096;
 const MAX_ARC_STEPS: usize = 128;
 /// The most tolerance doublings (R4) before a refusal.
 const MAX_COARSENINGS: u32 = 64;
+/// The sweep's work budget per build: edge visits over all sub-slabs (sorting, crossing search,
+/// span matching). A build over it starts again at twice the tolerance (R4), which bounds the
+/// time of one robust build however much the stroke pieces overlap.
+pub(crate) const MAX_SWEEP_WORK: u64 = 1 << 24;
 
 /// One directed edge of the sweep, stored top to bottom with its winding sign.
 #[derive(Clone, Copy, Debug, Default)]
@@ -100,6 +104,8 @@ pub(crate) struct RobustStats {
     /// The tolerance used, `2^(e-1)` times `2^coarsenings`.
     pub(crate) tolerance: f64,
     pub(crate) coarsenings: u32,
+    /// The sweep work of the published build (against `MAX_SWEEP_WORK`).
+    pub(crate) work: u64,
 }
 
 /// The stroke style of a build.
@@ -123,6 +129,12 @@ pub(crate) struct RobustMesh {
     keys: Vec<(f64, f64, u32)>,
     spans: Vec<(u32, u32)>,
     open: Vec<OpenSpan>,
+    /// Per edge, the `open` slot of the span it may bound on the left (checked on use, so a
+    /// stale entry is harmless).
+    open_by_left: Vec<u32>,
+    /// The factor of the next coarsening (R4): 2 after a full buffer, more after a sweep far
+    /// over its work budget.
+    coarsening: f64,
     vertices: Vec<Point>,
     triangles: Vec<u32>,
     boundary: Vec<[u32; 2]>,
@@ -230,6 +242,8 @@ impl RobustMesh {
             keys: Vec::new(),
             spans: Vec::new(),
             open: Vec::new(),
+            open_by_left: Vec::new(),
+            coarsening: 2.0,
             vertices: Vec::new(),
             triangles: Vec::new(),
             boundary: Vec::new(),
@@ -243,6 +257,7 @@ impl RobustMesh {
                 trapezoids: 0,
                 tolerance: 0.0,
                 coarsenings: 0,
+                work: 0,
             },
         }
     }
@@ -261,6 +276,8 @@ impl RobustMesh {
         reserve(&mut self.keys, MAX_ACTIVE)?;
         reserve(&mut self.spans, MAX_ACTIVE)?;
         reserve(&mut self.open, MAX_ACTIVE)?;
+        reserve(&mut self.open_by_left, MAX_EDGES)?;
+        self.open_by_left.resize(MAX_EDGES, 0);
         reserve(&mut self.vertices, 4 * MAX_TRAPEZOIDS)?;
         reserve(&mut self.triangles, 6 * MAX_TRAPEZOIDS)?;
         self.reserved = true;
@@ -278,6 +295,7 @@ impl RobustMesh {
                     + size_of::<(f64, f64, u32)>()
                     + size_of::<(u32, u32)>()
                     + size_of::<OpenSpan>())
+            + MAX_EDGES * size_of::<u32>()
             + 4 * MAX_TRAPEZOIDS * size_of::<Point>()
             + 6 * MAX_TRAPEZOIDS * size_of::<u32>()
     }
@@ -294,6 +312,7 @@ impl RobustMesh {
             + self.keys.capacity() * size_of::<(f64, f64, u32)>()
             + self.spans.capacity() * size_of::<(u32, u32)>()
             + self.open.capacity() * size_of::<OpenSpan>()
+            + self.open_by_left.capacity() * size_of::<u32>()
             + self.vertices.capacity() * size_of::<Point>()
             + self.triangles.capacity() * size_of::<u32>()
     }
@@ -374,7 +393,10 @@ impl RobustMesh {
                 .and_then(|()| body(self, tol));
             match result {
                 Ok(drawn) => return Some(drawn),
-                Err(Full) => tol *= 2.0,
+                Err(Full) => {
+                    tol *= self.coarsening;
+                    self.coarsening = 2.0;
+                }
             }
             if !tol.is_finite() {
                 break;
@@ -484,9 +506,12 @@ impl RobustMesh {
         if n < 3 {
             return Ok(());
         }
+        // Relative to the first point, so huge or far-off coordinates neither overflow nor
+        // cancel.
+        let origin = self.piece[0];
         let mut area = 0.0;
-        for i in 0..n {
-            area += cross(self.piece[i], self.piece[(i + 1) % n]);
+        for i in 1..n - 1 {
+            area += cross(sub(self.piece[i], origin), sub(self.piece[i + 1], origin));
         }
         if area == 0.0 || area.is_nan() {
             return Ok(());
@@ -645,9 +670,13 @@ impl RobustMesh {
                 if r * (1.0 - half_cos(cosine)) <= tol {
                     self.set_piece(&[p, a, b]);
                 } else {
+                    // From n0 around the outer side: counterclockwise when the outer side is
+                    // the right (`side` = -1). Signed from `side`, not from `turn`, so an exact
+                    // reversal (`turn` = ±0) sweeps through d0 whatever the zero's sign.
+                    let sweep = -side * turn.atan2(cosine).abs();
                     self.piece.clear();
                     self.piece.push(p);
-                    arc(&mut self.piece, p, n0, turn.atan2(cosine), r, tol);
+                    arc(&mut self.piece, p, n0, sweep, r, tol);
                 }
             }
         }
@@ -738,6 +767,7 @@ impl RobustMesh {
             let span = self.open[i];
             if span.seen == generation {
                 self.open[kept] = span;
+                self.open_by_left[span.left as usize] = kept as u32;
                 kept += 1;
             } else {
                 let (left, right) = (
@@ -749,6 +779,21 @@ impl RobustMesh {
         }
         self.open.truncate(kept);
         Ok(())
+    }
+
+    /// The sweep ran over `MAX_SWEEP_WORK` with `next` edges started: projects its whole work
+    /// from that share and records the coarsening that should bring it under the budget. The
+    /// work grows about as `tol^-1.5` (chords as `tol^-0.5`, and the overlap depth and active
+    /// edges with them), so the factor is the overrun to the power 2/3, as a power of two.
+    fn over_budget(&mut self, next: usize) -> Full {
+        let share = (next as f64 / self.edges.len().max(1) as f64).max(1.0 / 1024.0);
+        let overrun = 1.0 / share;
+        let factor = (overrun.powf(2.0 / 3.0) * 1.25)
+            .log2()
+            .ceil()
+            .clamp(1.0, 16.0);
+        self.coarsening = 2f64.powf(factor);
+        Full
     }
 
     /// R3: the slab sweep under `rule`. Returns whether a trapezoid has area.
@@ -792,18 +837,43 @@ impl RobustMesh {
             }
             let mut top = y0;
             let mut splits = 0usize;
+            let order = |a: &(f64, f64, u32), b: &(f64, f64, u32)| {
+                a.0.total_cmp(&b.0)
+                    .then(a.1.total_cmp(&b.1))
+                    .then(a.2.cmp(&b.2))
+            };
             loop {
                 self.stats.slabs += 1;
-                self.keys.clear();
-                for &index in &self.active {
-                    let edge = &self.edges[index as usize];
-                    self.keys.push((edge.x_at(top), edge.x_at(y1), index));
+                self.stats.work += 4 * self.active.len() as u64 + self.open.len() as u64;
+                if self.stats.work > MAX_SWEEP_WORK {
+                    return Err(self.over_budget(next));
                 }
-                self.keys.sort_unstable_by(|a, b| {
-                    a.0.total_cmp(&b.0)
-                        .then(a.1.total_cmp(&b.1))
-                        .then(a.2.cmp(&b.2))
-                });
+                if splits == 0 {
+                    self.keys.clear();
+                    for &index in &self.active {
+                        let edge = &self.edges[index as usize];
+                        self.keys.push((edge.x_at(top), edge.x_at(y1), index));
+                    }
+                    self.keys.sort_unstable_by(order);
+                } else {
+                    // Below a crossing the previous order is almost right: refresh the keys
+                    // and insertion-sort them (linear when few neighbours swapped).
+                    for key in self.keys.iter_mut() {
+                        let edge = &self.edges[key.2 as usize];
+                        *key = (edge.x_at(top), edge.x_at(y1), key.2);
+                    }
+                    for i in 1..self.keys.len() {
+                        let mut j = i;
+                        while j > 0 && order(&self.keys[j - 1], &self.keys[j]).is_gt() {
+                            self.keys.swap(j - 1, j);
+                            j -= 1;
+                            self.stats.work += 1;
+                        }
+                    }
+                    if self.stats.work > MAX_SWEEP_WORK {
+                        return Err(self.over_budget(next));
+                    }
+                }
                 // The earliest crossing below `top` of two neighbours in the top order.
                 let mut split = y1;
                 if splits < MAX_SPLITS_PER_SLAB {
@@ -839,21 +909,23 @@ impl RobustMesh {
                 generation = generation.wrapping_add(1);
                 for s in 0..self.spans.len() {
                     let (l, r) = self.spans[s];
-                    match self
-                        .open
-                        .iter_mut()
-                        .find(|span| span.left == l && span.right == r)
-                    {
-                        Some(span) => span.seen = generation,
-                        None => push(
-                            &mut self.open,
-                            OpenSpan {
-                                left: l,
-                                right: r,
-                                y: top,
-                                seen: generation,
-                            },
-                        )?,
+                    let slot = self.open_by_left[l as usize] as usize;
+                    match self.open.get_mut(slot) {
+                        Some(span) if span.left == l && span.right == r => {
+                            span.seen = generation;
+                        }
+                        _ => {
+                            self.open_by_left[l as usize] = self.open.len() as u32;
+                            push(
+                                &mut self.open,
+                                OpenSpan {
+                                    left: l,
+                                    right: r,
+                                    y: top,
+                                    seen: generation,
+                                },
+                            )?;
+                        }
                     }
                 }
                 self.close_unseen(generation, top)?;

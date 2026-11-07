@@ -17,7 +17,7 @@ An exact rung keeps every answer it gives today. Only when the exact build of a 
 - **E38-R1, flattening.** Each cubic becomes `n` chords by Wang's bound at `tol = 2^(e-1)`, at most 4,096 per cubic.
 - **E38-R2, stroke pieces.** Each chord gives a quad of half width `r`. Each chord corner gives a join: the request's join (miter with its limit, round or bevel) at a verb boundary, round inside a cubic. Open subpaths get the request's caps. Each piece is a convex polygon oriented counterclockwise, so their nonzero union is the stroke.
 - **E38-R3, slab sweep.** The directed edges (the fill's chords under its rule, or the stroke's pieces under nonzero) are cut at every endpoint `y` and at every crossing of two neighbouring edges. In each slab the spans whose winding passes the rule become trapezoids, and a span bounded by the same two edges in the next slab extends its trapezoid. The output is a set of non-overlapping triangles, so a stroke under opacity blends once.
-- **E38-R4, fixed budget.** All buffers are reserved once with the engine (`RobustMesh::reserve`, 6.8 MB per engine), so a build never allocates and the `process` calls never move linear memory. A build that would overflow a buffer starts again at twice the tolerance. It refuses (the exact status is kept) only when the path does not fit even at one chord per verb, which takes more than 8,192 source points.
+- **E38-R4, fixed budget.** All buffers are reserved once with the engine (`RobustMesh::reserve`, 7.1 MB per engine), so a build never allocates and the `process` calls never move linear memory. The sweep also has a work budget, `MAX_SWEEP_WORK` = 2^24 edge visits (about 130 ms natively), which bounds its time where stroke pieces overlap deeply (wide strokes). A build that would overflow a buffer starts again at twice the tolerance; one over the work budget starts again at a tolerance projected from its overrun (work grows about as `tol^-1.5`), by a power of two up to 2^16. It refuses (the exact status is kept) only when the path does not fit even at one chord per verb, which takes more than 8,192 source points.
 - **E38-R5, no fringe.** The robust mesh has no boundary edges. The renderer draws a mesh with no boundary edges without the coverage fringe, so its edges are the 4x MSAA edges.
 
 Plain binary64 arithmetic, no exact predicate: a rounding slip moves a trapezoid corner by about one ulp of the coordinates, which the 1/8 device px tolerance budget absorbs.
@@ -27,13 +27,14 @@ Plain binary64 arithmetic, no exact predicate: a rounding slip moves a trapezoid
 Two failure paths no longer hide a path (`path-mesh-pipeline.ts`):
 
 - A mesh with no boundary edges is drawn without a fringe and posts no notice.
+- A joint fill and stroke pair (opacity below 1) where either mesh has no boundary edges is `overlay-unsupported` without an overlay build: the overlay classifies triangles against the boundary, and a robust mesh has none.
 - `fringe-unsupported` draws the region without the fringe, and `overlay-unsupported` draws the plain fill and stroke without the joint overlay. Both notices stay, with the text "is drawn without its coverage fringe" or "is drawn without its joint coverage".
 
 The coarser retry (#522) stays. With the robust rung a kernel `work-limit` is now rare (a path over 8,192 source points), so it seldom runs.
 
 ## 4. Error argument
 
-Fill: Wang's bound puts every chord within `tol = 2^(e-1)` of its cubic, so the flattened region is within `2^(e-1)` of the ideal region in Hausdorff distance. The sweep is exact up to rounding. Stroke: the union of the chord quads, joins and caps is the stroke of the flattened polyline (each chord's sweep of a disk of radius `r`, with the round joins inside a cubic filling the wedges between chords, and the request's join at the verb corners). The polyline is within `2^(e-1)` of the curve, so the union is within `2^(e-1)` of the ideal stroke, plus each round arc's sagitta (arcs are inscribed, with steps whose sagitta is at most `2^(e-1)`; the 128-step cap only binds for radii above about 3,300 tolerances). The total stays inside the curve share `2^e`. A coarsened build (R4) has a larger tolerance, recorded in its stats; none occurred on the corpus.
+Fill: Wang's bound puts every chord within `tol = 2^(e-1)` of its cubic, so the flattened region is within `2^(e-1)` of the ideal region in Hausdorff distance. The sweep is exact up to rounding. Stroke: the union of the chord quads, joins and caps is the stroke of the flattened polyline (each chord's sweep of a disk of radius `r`, with the round joins inside a cubic filling the wedges between chords, and the request's join at the verb corners). The polyline is within `2^(e-1)` of the curve, so the union is within `2^(e-1)` of the ideal stroke, plus each round arc's sagitta (arcs are inscribed, with steps whose sagitta is at most `2^(e-1)`; the 128-step cap only binds for radii above about 3,300 tolerances). The total stays inside the curve share `2^e`. A coarsened build (R4) has a larger tolerance, recorded in its stats and not reported to the renderer: drawing the path coarser is the rung's purpose. None occurred on the user corpus at width 1; wide round strokes coarsen ([record §3](../evidence/e38-robust-path-rung-2026-11-07.md#3-results-native-release-one-container)), for example node-5 at width 100 to 4x at `e = −3`.
 
 ## 5. Acceptance
 
@@ -46,6 +47,7 @@ Fill: Wang's bound puts every chord within `tol = 2^(e-1)` of its cubic, so the 
 
 ## 6. Not in E38
 
+- **Coarsening is silent.** A coarsened robust build keeps its status `ok`; reporting the published tolerance to the renderer is a follow-up.
 - **Latency before the fallback.** The exact rung still runs to its cap first (up to about 400 ms natively on node-7's stroke at `e = −6`). Skipping it for paths known to be too large is a follow-up.
 - **Precision label.** The robust meshes are not certified by the exact predicates; their rows stay UNVERIFIED under E3, as all P3 meshes are.
 - **Caps.** E37's decision (2026-11-06, keep the stroke caps) stands: no exact-rung cap changes. E37 and E36 (star outlines, `unsupported-geometry`) are now drawn through the robust rung.
