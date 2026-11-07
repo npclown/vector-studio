@@ -441,7 +441,7 @@ describe('V3c builder failures (V3-A11, V3-A8)', () => {
     expect(buildPathFringe(squareMesh(), 1).status).toBe('built');
   });
 
-  it('V3-A11 and V3-A8 in the pipeline: unsupported keeps the mesh cached; a range corner is the fringe-range state', () => {
+  it('V3-A11 and V3-A8 in the pipeline: unsupported keeps the mesh cached and draws region-only (E38); a range corner is the fringe-range state', () => {
     const meshes = new Map<number, FillMesh>([
       [0, fan],
       [20, huge],
@@ -456,7 +456,10 @@ describe('V3c builder failures (V3-A11, V3-A8)', () => {
       fringeBuilder: buildPathFringe,
     });
     const first = h.prepare();
-    expect(first.draws.map((draw) => draw.nodeId)).toEqual(['square']);
+    expect(first.draws.map((draw) => [draw.nodeId, draw.fringe === null])).toEqual([
+      ['fan', true],
+      ['square', false],
+    ]);
     expect(first.notices).toEqual([
       {
         nodeId: 'fan',

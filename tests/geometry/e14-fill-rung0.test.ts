@@ -130,7 +130,9 @@ describe('E14-U1 rung 0 over E through the release WASM', () => {
     adapter.dispose();
   });
 
-  it('keeps work-limit beyond E0 and on a self-crossing path over E', async () => {
+  // E38 (2026-11-07): the exact ladder still stops here, and the robust last rung
+  // (`fill-v0+r6`) now meshes both paths, with no boundary edges.
+  it('meshes past E0 and a self-crossing path over E through the robust rung', async () => {
     const adapter = await createFillMeshPort(module);
     const circle = (r: number) => path(5, quarters(r));
     const crossing: FillMeshRequest = {
@@ -143,8 +145,12 @@ describe('E14-U1 rung 0 over E through the release WASM', () => {
     const batch = adapter.buildFillMeshes([circle(2_097_152), crossing]);
     expect(batch.status).toBe('ok');
     if (batch.status === 'ok')
-      for (const result of batch.results)
-        expect(result).toMatchObject({ status: 'failed', code: 'work-limit' });
+      for (const result of batch.results) {
+        expect(result.status).toBe('ok');
+        if (result.status !== 'ok') continue;
+        expect(result.mesh.indices.length).toBeGreaterThan(0);
+        expect(result.mesh.boundaryEdges.length).toBe(0);
+      }
     adapter.dispose();
   });
 });

@@ -379,7 +379,7 @@ describe('ST-U6 failures, isolation and memo (sections 9.4 and 9.6)', () => {
     expect([fill.callCount, stroke.callCount]).toEqual([2, 1]);
   });
 
-  it('ST-A10: an invalid stroke mesh is invalid-mesh with paint stroke; a fringe-unsupported stroke hides the path', () => {
+  it('ST-A10: an invalid stroke mesh is invalid-mesh with paint stroke; a fringe-unsupported stroke is drawn region-only (E38)', () => {
     const bad: FillMesh = { ...strokeRingMesh(), bounds: { minX: 0, minY: 0, maxX: 1, maxY: 1 } };
     const stroke = new ScriptedStrokeMeshPort({
       request: (request, tag) => strokeOk(request, tag, tag === 20 ? bad : strokeRingMesh(tag)),
@@ -392,7 +392,10 @@ describe('ST-U6 failures, isolation and memo (sections 9.4 and 9.6)', () => {
         mesh.positions.length === 16 ? { status: 'unsupported' } : buildPathFringe(mesh, f),
     });
     const frame = h.prepare();
-    expect(frame.draws).toEqual([]);
+    expect(frame.draws.map((draw) => [draw.nodeId, draw.paint, draw.fringe === null])).toEqual([
+      ['a', 'fill', false],
+      ['a', 'stroke', true],
+    ]);
     expect(frame.notices).toEqual([
       notice('b', 'renderer', 'invalid-mesh', -3, 'stroke'),
       notice('a', 'renderer', 'fringe-unsupported', -3, 'stroke'),

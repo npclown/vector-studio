@@ -39,7 +39,7 @@ pub const STROKE_V0_VERSION: u32 = 0;
 /// Revision 8 (2026-11-06): a path that ends in `work-limit` is built once more with the E35
 /// retry (D9 E35: near-cusp fans as two side hulls, the relative cone guard, near-reversal
 /// disks); every path that was `ok` keeps its mesh.
-pub const STROKE_V0_REVISION: u32 = 8;
+pub const STROKE_V0_REVISION: u32 = 9;
 /// Bytes `VGT0`.
 pub const STROKE_INPUT_MAGIC: u32 = 0x3054_4756;
 /// Bytes `VGU0`.
@@ -454,6 +454,8 @@ pub(crate) struct TestHooks {
     pub(crate) output_cap: Option<u32>,
     /// Replaces the section 7.5 heap cap at the next workspace construction.
     pub(crate) heap_cap: Option<usize>,
+    /// E38: the robust last rung runs (opt-in in tests; always on in production).
+    pub(crate) robust: bool,
 }
 
 impl Default for StrokeEngine {
@@ -481,6 +483,7 @@ impl StrokeEngine {
                 fault_path: None,
                 output_cap: None,
                 heap_cap: None,
+                robust: false,
             },
         }
     }
@@ -529,7 +532,12 @@ impl StrokeEngine {
         // `FillScratch` from `STROKE_V0_LIMITS` and maps a construction failure as V2 does
         // (`ALLOCATION_FAILED` or `INTERNAL_ERROR`). The combined heap is checked again here,
         // with checked arithmetic, against the section 7.5 cap.
-        let workspace = StrokeWorkspace::new()?;
+        #[cfg_attr(not(test), allow(unused_mut))]
+        let mut workspace = StrokeWorkspace::new()?;
+        #[cfg(test)]
+        {
+            workspace.defects_mut().robust = self.test_hooks.robust;
+        }
         let total = workspace.allocated_bytes().ok_or(BATCH_INTERNAL_ERROR)?;
         if total > cap {
             return Err(BATCH_INTERNAL_ERROR);
