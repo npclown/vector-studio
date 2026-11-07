@@ -525,7 +525,9 @@ fn e39_many_contours_draw() {
         WindingFill::Mesh
     );
     assert_eq!(mesh.stats.coarsenings, 0);
-    assert_eq!(mesh.stats.winding_bound, 1);
+    // Past `MAX_CHORDS` boxes, neighbouring squares merge in pairs: one box over two squares
+    // has bound 2, still far below the fallback.
+    assert_eq!(mesh.stats.winding_bound, 2);
     // A stroke's pieces take several vertices per chord, so its contours are single segments.
     let mut hatch = PathSpec::new();
     for k in 0..9_000 {

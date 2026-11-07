@@ -52,8 +52,9 @@ const MAX_WINDING_INDICES: usize = 3 * MAX_WINDING_VERTICES;
 /// E39-K4: every subpath holds a point, so a build within the vertex bound has at most this
 /// many subpaths (the E38 sweep's `MAX_CHORDS` would refuse a compound path of more contours).
 const MAX_SUBPATHS: usize = MAX_WINDING_VERTICES;
-/// E39-K5: a winding box belongs to a subpath of at least three points.
-const MAX_BOXES: usize = MAX_WINDING_VERTICES / 3;
+/// E39-K5: the winding boxes held at once. A path with more boxing subpaths (an outlined text
+/// block) merges neighbouring boxes in pairs, which only loosens the bound.
+const MAX_BOXES: usize = MAX_CHORDS;
 /// E39-K5: a fill whose winding bound reaches this falls back to the slab sweep (the stencil
 /// counts modulo 128 in a joint draw; 8 is the margin for the f32 rounding of transformed
 /// vertices).
@@ -533,15 +534,43 @@ impl RobustMesh {
                 };
             }
             total += u64::from(bound);
-            // `boxes` holds `MAX_BOXES` entries: each box's subpath has three or more of the
-            // at most `MAX_WINDING_VERTICES` points.
-            debug_assert!(self.boxes.len() < self.boxes.capacity());
+            if self.boxes.len() == MAX_BOXES {
+                self.merge_box_pairs();
+            }
             self.boxes.push(WindingBox { min, max, bound });
         }
         if total < u64::from(WINDING_FALLBACK) {
             return total as u32;
         }
         self.box_depth()
+    }
+
+    /// Replaces boxes `2i` and `2i + 1` by the box around both with the sum of their bounds: a
+    /// point in either is in the merged box, and its sum over the boxes containing it can only
+    /// grow, so the bound stays conservative. Subpaths come in path order, so pairs are mostly
+    /// near each other (the contours of one glyph, neighbouring glyphs).
+    fn merge_box_pairs(&mut self) {
+        let pairs = self.boxes.len() / 2;
+        for i in 0..pairs {
+            let (a, b) = (self.boxes[2 * i], self.boxes[2 * i + 1]);
+            self.boxes[i] = WindingBox {
+                min: Point {
+                    x: a.min.x.min(b.min.x),
+                    y: a.min.y.min(b.min.y),
+                },
+                max: Point {
+                    x: a.max.x.max(b.max.x),
+                    y: a.max.y.max(b.max.y),
+                },
+                bound: a.bound.saturating_add(b.bound),
+            };
+        }
+        if self.boxes.len() % 2 == 1 {
+            self.boxes[pairs] = self.boxes[2 * pairs];
+            self.boxes.truncate(pairs + 1);
+        } else {
+            self.boxes.truncate(pairs);
+        }
     }
 
     fn subpath_bound(&mut self, subpath: Subpath) -> u32 {
