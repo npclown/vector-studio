@@ -1,6 +1,6 @@
 # D9 E38: a robust last rung so pen paths always draw
 
-Status: **ADOPTED 2026-11-07** (recommended option auto-adopted under the user's standing instruction of 2026-10-24; the user's thread of 2026-11-07 on node-5). Identity: `geometry-wasm/fill-v0+r6`, `geometry-wasm/stroke-v0+r9`. Evidence: [E38 record](../evidence/e38-robust-path-rung-2026-11-07.md).
+Status: **DONE 2026-11-07** (merged #530 `a6c28fb`; headed run PASS after the spec re-baseline). Adopted 2026-11-07 (recommended option auto-adopted under the user's standing instruction of 2026-10-24; the user's thread of 2026-11-07 on node-5). Identity: `geometry-wasm/fill-v0+r6`, `geometry-wasm/stroke-v0+r9`. Evidence: [E38 record](../evidence/e38-robust-path-rung-2026-11-07.md).
 
 This is rendering-track item E38 ([D9 rendering track](d9-rendering-track.md#status-index)). The user asked on 2026-11-07 for the cause of their vanishing pen paths to be found and fixed for good, after four piecemeal fixes (#520, #522, #524, #528). The goal, as the coordinator read it: **any path drawn with the pen tool (large, with sharp turns, self-crossing, with short handles) always draws, both its fill and its stroke.** Full tier: it changes fill and stroke output, both operation ids and the renderer's failure handling. It changes no threshold of the P3 acceptance table, no tolerance bucket and no exact-rung cap.
 
