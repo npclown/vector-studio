@@ -84,6 +84,8 @@ Round 1 was NOT READY with six findings, all addressed:
 
 Round 2 (fb7deba) confirmed fixes 1 and 3 to 6 and found one regression: the budget made crossing-heavy line paths (a 240-line scribble, 401- and 1,001-point star polygons) refuse after about 2 s, since coarsening cannot simplify lines. Fixed: an attempt whose coarsening left the chord count unchanged runs without the budget (`e38_crossing_heavy_lines_still_draw`, a 201-point star, fill and stroke). The large coarsening on wide strokes is disclosed ([contract §6](../plans/d9-e38-robust-path-rung-contract.md#6-not-in-e38)).
 
+Round 3 (f7d35bc): READY WITH FOLLOW-UPS. The scribble and star probes draw (240-line scribble 120 ms, 401-point star fill 133 ms and stroke 0.78 s, 1,001-point star stroke 6.4 s); wide-stroke timings unchanged. Follow-ups: the unbudgeted line case and the coarsening signal ([contract §6](../plans/d9-e38-robust-path-rung-contract.md#6-not-in-e38)).
+
 ## 6. Changed tests
 
 - Revision pins: `fill-v0+r6` and `stroke-v0+r9` in the adapters, the export tests, the geometry analysis tests and five GPU specs.

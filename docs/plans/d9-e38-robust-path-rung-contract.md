@@ -48,6 +48,7 @@ Fill: Wang's bound puts every chord within `tol = 2^(e-1)` of its cubic, so the 
 ## 6. Not in E38
 
 - **Coarsening is silent and can be large.** A coarsened robust build keeps its status `ok`. On deeply overlapping wide strokes at high zoom the tolerance grows a lot, for example 32x on node-5 at width 100 and `e = −6`, and 8,192x on 40 overlapping loops at width 200 and `e = −8`, so such strokes look faceted. Reporting the published tolerance to the renderer, or a cheaper union for wide strokes, is a follow-up.
+- **Pathological line paths are not time-bounded.** An unbudgeted attempt (R4) costs the path's own crossings: a 240-line scribble takes about 120 ms natively, but a 1,001-point star whose edges all cross (about 250,000 crossings) takes 6.4 s. Degrading inside the sweep instead of lifting the budget is a follow-up.
 - **Latency before the fallback.** The exact rung still runs to its cap first (up to about 400 ms natively on node-7's stroke at `e = −6`). Skipping it for paths known to be too large is a follow-up.
 - **Precision label.** The robust meshes are not certified by the exact predicates; their rows stay UNVERIFIED under E3, as all P3 meshes are.
 - **Caps.** E37's decision (2026-11-06, keep the stroke caps) stands: no exact-rung cap changes. E37 and E36 (star outlines, `unsupported-geometry`) are now drawn through the robust rung.
