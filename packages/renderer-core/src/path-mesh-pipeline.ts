@@ -1071,6 +1071,19 @@ export class PathMeshPipeline {
       // unchanged stroke draw; at o = 0, o = 1 and for one paint the draws are ST-U6's.
       const opacity = path.node.opacity;
       if (path.maskSource !== true && pathDraws.length === 2 && opacity > 0 && opacity < 1) {
+        // E39-R6: a winding fill and its union stroke draw jointly through the stencil (fill
+        // count in the low 7 bits, stroke in bit 7), with no overlay. A fill that fell back to
+        // a partition mesh (K5) keeps the ST-U7 overlay below.
+        if (pathDraws[0]!.coverage === 'winding' && pathDraws[1]!.coverage === 'union') {
+          const joint: PathMeshDraw = Object.freeze({
+            ...pathDraws[0]!,
+            composite: 'joint-fill' as const,
+          });
+          const jointDraws = [joint, pathDraws[1]!];
+          draws.push(...jointDraws);
+          keep(path, items, entries as MeshEntry[], jointDraws, null);
+          continue;
+        }
         const fillEntry = entries[0]!;
         const served = this.#serveOverlay(path.id, fillEntry, entries[1]!, pathDraws, now);
         if (served === null) {

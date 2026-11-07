@@ -148,12 +148,16 @@ export const MESH_JOINT_CLIP_SHADER_KEY = `${MESH_JOINT_SHADER_KEY}${CLIP_VARIAN
  */
 export const MESH_FILL_CLIP_SHADER = `${replaceOnce(
   replaceOnce(
-    MESH_FILL_SHADER,
-    '@fragment\nfn meshFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {',
-    'fn meshShade(input: MeshVertexOutput) -> vec4f {',
+    replaceOnce(
+      MESH_FILL_SHADER,
+      '@fragment\nfn meshFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {',
+      'fn meshShade(input: MeshVertexOutput) -> vec4f {',
+    ),
+    '@fragment\nfn meshJointFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {',
+    'fn meshJointShadeUnclipped(input: MeshVertexOutput) -> vec4f {',
   ),
-  '@fragment\nfn meshJointFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {',
-  'fn meshJointShadeUnclipped(input: MeshVertexOutput) -> vec4f {',
+  '@fragment\nfn meshJointCoverFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {',
+  'fn meshJointCoverShadeUnclipped(input: MeshVertexOutput) -> vec4f {',
 )}${CLIP_BLOCK}
 @fragment
 fn meshFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {
@@ -175,6 +179,18 @@ fn meshJointFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {
   if (alpha == 0.0) {
     discard;
   }
+  return vec4f(fill.fill.rgb * alpha, alpha);
+}
+
+// E39-R6: the joint-both cover with the opacity o replaced by o·k, as the joint fill above.
+@fragment
+fn meshJointCoverFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {
+  let clip = clipCoverage(input.position.xy);
+  let fill = instances[input.instance];
+  let stroke = instances[fill.strokeLink - 1u];
+  let opacity = fill.opacity * clip;
+  let factor = opacity * (1.0 - stroke.fill.a) / (1.0 - opacity * stroke.fill.a);
+  let alpha = fill.fill.a * factor;
   return vec4f(fill.fill.rgb * alpha, alpha);
 }
 `;

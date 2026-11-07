@@ -80,12 +80,18 @@ import {
   meshPipelineKey,
   meshWriteOnceStencilState,
   meshCoverStencilState,
+  meshJointCoverStencilState,
   createMeshStencilPipelineDescriptor,
   meshStencilPipelineKey,
   meshStencilPassReference,
   MESH_PIPELINE_KINDS,
   MeshStencilSequence,
+  MESH_JOINT_COVERS,
+  MESH_STENCIL_KINDS,
+  meshJointCoverKind,
+  encodeMeshJoint,
   type MeshCoverRule,
+  type MeshJointCover,
   type MeshPipelineKind,
   type MeshStencilKind,
 } from './mesh-pipeline.js';
@@ -250,8 +256,12 @@ interface MeshPipelineState {
 
 /** E39-R1: a target's stencil pass pipelines, by mesh coverage. */
 type MeshStencilPipelines = Readonly<Record<MeshStencilKind, GPURenderPipeline>>;
-/** E39-R2: a variant's cover pipelines, by rule (a union mesh uses `nonzero`). */
-type MeshCoverPipelines = Readonly<Record<MeshCoverRule, GPURenderPipeline>>;
+/**
+ * E39-R2: a variant's cover pipelines, by rule (a union mesh uses `nonzero`), and E39-R6's joint
+ * covers. A mask tile pass has the two rule covers only (a mask source is never joint).
+ */
+type MeshCoverPipelines = Readonly<Record<MeshCoverRule | MeshJointCover, GPURenderPipeline>>;
+type MeshMaskCoverPipelines = Readonly<Record<MeshCoverRule, GPURenderPipeline>>;
 
 /**
  * E39-R8: a draw's coverage fields: none (partition), `winding` with its fill rule, or `union`
@@ -288,7 +298,7 @@ interface ClipPipelineState {
   readonly maskMesh: GPURenderPipeline | null;
   /** E39-R7: a winding mask source's stencil pass and covers at `r8unorm`; null without mesh. */
   readonly maskStencil: GPURenderPipeline | null;
-  readonly maskCover: MeshCoverPipelines | null;
+  readonly maskCover: MeshMaskCoverPipelines | null;
   /** U4: the 1 × 1 texture bound for states without a mask level, never read. */
   readonly defaultMask: GPUTexture;
 }
@@ -933,15 +943,16 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       layerModules +
       textVariants;
     this.pipelinesCreated =
-      // E39-R8: with the mesh path, two stencil pass pipelines per target and two covers per
-      // mesh variant (plain, clip, mask, paint, layer) and in the count pass.
-      (mesh === null ? 1 : 8) +
-      (count === null ? 0 : countModules + 6) +
-      (clip === null ? 0 : clip.mesh === null ? 2 : 10) +
+      // E39-R8: with the mesh path, four stencil pass pipelines per target (two plain, two
+      // joint) and seven covers per mesh variant (two rules, five joint covers; plain, clip,
+      // paint, layer) and in the count pass; the mask pass has one stencil and two covers.
+      (mesh === null ? 1 : 15) +
+      (count === null ? 0 : countModules + 13) +
+      (clip === null ? 0 : clip.mesh === null ? 2 : 15) +
       (paint === null
         ? 0
-        : (1 + (paint.mesh === null ? 0 : 4)) * (paint.analyticClip === null ? 1 : 2)) +
-      (layer === null ? 0 : 1 + analyticLayerModules + 4 * meshLayerModules) +
+        : (1 + (paint.mesh === null ? 0 : 9)) * (paint.analyticClip === null ? 1 : 2)) +
+      (layer === null ? 0 : 1 + analyticLayerModules + 9 * meshLayerModules) +
       textVariants;
     this.#device = device;
     this.#context = context;
@@ -1350,8 +1361,51 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
             pass.draw(3);
             bound = null;
           }
+          // E39-R6: a joint draw's stroke draw follows it (checked at validation); the pair
+          // draws as one through the stencil's two halves.
+          const jointStroke =
+            coverage !== undefined && draw.composite === 'joint-fill'
+              ? meshDraws[nextMeshDraw]!
+              : null;
+          if (jointStroke !== null) {
+            nextMeshDraw += 1;
+            order += 1;
+          }
           if (state !== 0 && (clipPipelines?.mesh ?? null) === null) continue;
-          const painted = draw.gradient !== undefined || draw.strokeGradient !== undefined;
+          const painted =
+            draw.gradient !== undefined ||
+            draw.strokeGradient !== undefined ||
+            jointStroke?.gradient !== undefined;
+          if (jointStroke !== null) {
+            const covers = painted
+              ? state === 0
+                ? (paintPipelines?.meshCover ?? null)
+                : (paintPipelines?.meshCoverClip ?? null)
+              : state === 0
+                ? this.#mesh!.cover
+                : clipPipelines!.meshCover;
+            if (covers === null) continue;
+            // encodeMeshJoint sets each step's pipeline; group 0 may be set before it.
+            if (bound === null || bound.startsWith('analytic')) {
+              pass.setBindGroup(0, meshArena!.bindGroup);
+              clipBoundState = 0;
+            }
+            encodeMeshJoint(
+              pass,
+              draw,
+              jointStroke,
+              meshCoverRule(draw),
+              (kind) => this.#mesh!.stencil[kind],
+              (cover) => covers[cover],
+              () => {
+                if (painted) bindPaint(paintBuffers!.meshBindGroup, state !== 0);
+                if (state !== 0) bindClip(state);
+              },
+            );
+            // The next mesh draw sets its pipeline and paint group again.
+            bound = 'joint-cover';
+            continue;
+          }
           if (coverage !== undefined) {
             // E39-R1, R2: the stencil triangles with no color, then the cover quad under the
             // rule's stencil test, which zeroes every sample it tests.
@@ -2853,9 +2907,48 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         }
         const state = draw.clipState ?? 0;
         const joint = coverage === undefined && draw.composite === 'joint-fill';
-        const painted = draw.gradient !== undefined || draw.strokeGradient !== undefined;
+        // E39-R6, R7: a joint pair draws as in the main pass, with the layer variant's covers.
+        const jointStroke =
+          coverage !== undefined && draw.composite === 'joint-fill'
+            ? meshDraws[nextMeshDraw]!
+            : null;
+        if (jointStroke !== null) {
+          nextMeshDraw += 1;
+          order += 1;
+        }
+        const painted =
+          draw.gradient !== undefined ||
+          draw.strokeGradient !== undefined ||
+          jointStroke?.gradient !== undefined;
         if (state !== 0 && clip === null) continue;
         if (painted && paint === null) continue;
+        if (jointStroke !== null) {
+          const covers = painted
+            ? state === 0
+              ? pipelines.meshCoverPaint
+              : pipelines.meshCoverPaintClip
+            : state === 0
+              ? pipelines.meshCover
+              : pipelines.meshCoverClip;
+          if (covers === null) continue;
+          // encodeMeshJoint sets each step's pipeline; group 0 may be set before it.
+          bind0('mesh');
+          encodeMeshJoint(
+            pass,
+            draw,
+            jointStroke,
+            meshCoverRule(draw),
+            (kind) => this.#mesh!.stencil[kind],
+            (cover) => covers[cover],
+            () => {
+              bind1(state);
+              bind2(painted ? 'mesh' : 'empty');
+            },
+          );
+          // encodeMeshJoint set pipelines directly; the next draw sets its own again.
+          pipeline = null;
+          continue;
+        }
         if (coverage !== undefined) {
           // E39-R7: R1 and R2 with the layer variant's cover.
           const covers = painted
@@ -3719,7 +3812,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       ...layerDraws,
     ]) {
       let previousPosition = 0;
-      for (const draw of draws) {
+      for (const [drawIndex, draw] of draws.entries()) {
         if (
           typeof draw !== 'object' ||
           draw === null ||
@@ -3737,7 +3830,9 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           draw.firstTriangle + draw.triangleCount > triangleCapacity ||
           (draw.composite !== undefined && draw.composite !== 'joint-fill') ||
           !validMeshCoverage(draw) ||
-          (draw.coverage !== undefined && draw.composite !== undefined)
+          (draw.coverage !== undefined &&
+            draw.composite !== undefined &&
+            draw.coverage !== 'winding')
         ) {
           throw new TypeError('Invalid mesh draw.');
         }
@@ -3746,6 +3841,20 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           // record, which must be a written instance below capacity, as draw.instance is.
           const stroke = (links.get(draw.instance) ?? 0) - 1;
           if (stroke < 0 || stroke >= instanceCapacity || !instances.has(stroke)) {
+            throw new TypeError('Invalid joint mesh draw.');
+          }
+          // E39-R6: a joint draw over a winding mesh is followed by its stroke's union draw at
+          // the same position and clip state, which the passes draw with it.
+          const next = draws[drawIndex + 1];
+          if (
+            draw.coverage !== undefined &&
+            (next === undefined ||
+              next.coverage !== 'union' ||
+              next.composite !== undefined ||
+              next.instance !== stroke ||
+              next.position !== draw.position ||
+              (next.clipState ?? 0) !== (draw.clipState ?? 0))
+          ) {
             throw new TypeError('Invalid joint mesh draw.');
           }
         }
@@ -4521,7 +4630,7 @@ export function createNativePrimitiveSceneCreation(
             format,
             sampleCount,
           );
-          for (const kind of ['winding', 'union']) {
+          for (const kind of MESH_STENCIL_KINDS) {
             trackMesh(`${prefix}/mesh-stencil-${kind}-pipeline`, { category: 'render-pipeline' });
           }
           const coverPipelines = await createMeshCoverPipelines((kind) =>
@@ -4537,7 +4646,7 @@ export function createNativePrimitiveSceneCreation(
               ),
             ),
           );
-          for (const rule of ['nonzero', 'evenodd']) {
+          for (const rule of MESH_COVER_NAMES) {
             trackMesh(`${prefix}/mesh-cover-${rule}-pipeline`, { category: 'render-pipeline' });
           }
           mesh = Object.freeze({
@@ -4661,7 +4770,7 @@ export function createNativePrimitiveSceneCreation(
         let meshCoverClip: MeshCoverPipelines | null = null;
         let maskMesh: GPURenderPipeline | null = null;
         let maskStencil: GPURenderPipeline | null = null;
-        let maskCover: MeshCoverPipelines | null = null;
+        let maskCover: MeshMaskCoverPipelines | null = null;
         if (mesh !== null) {
           const meshClipLayout = device.createPipelineLayout({
             label: `${prefix}/mesh-clip-pipeline-layout`,
@@ -4694,7 +4803,7 @@ export function createNativePrimitiveSceneCreation(
           meshJointClip = await meshVariant('joint');
           trackClip(`${prefix}/mesh-joint-clip-pipeline`, { category: 'render-pipeline' });
           meshCoverClip = await createMeshCoverPipelines(meshVariant);
-          for (const rule of ['nonzero', 'evenodd']) {
+          for (const rule of MESH_COVER_NAMES) {
             trackClip(`${prefix}/mesh-cover-${rule}-clip-pipeline`, {
               category: 'render-pipeline',
             });
@@ -4726,7 +4835,7 @@ export function createNativePrimitiveSceneCreation(
               'winding',
             ),
           );
-          maskCover = await createMeshCoverPipelines((kind) =>
+          maskCover = await createMeshRuleCoverPipelines((kind) =>
             device.createRenderPipelineAsync(
               maskDescriptor(
                 createMeshPipelineDescriptor(
@@ -4889,7 +4998,7 @@ export function createNativePrimitiveSceneCreation(
           const joint = await variant('joint');
           trackPaint(`${prefix}/mesh-joint-${suffix}-pipeline`, { category: 'render-pipeline' });
           const cover = await createMeshCoverPipelines(variant);
-          for (const rule of ['nonzero', 'evenodd']) {
+          for (const rule of MESH_COVER_NAMES) {
             trackPaint(`${prefix}/mesh-cover-${rule}-${suffix}-pipeline`, {
               category: 'render-pipeline',
             });
@@ -5081,7 +5190,7 @@ export function createNativePrimitiveSceneCreation(
             category: 'render-pipeline',
           });
           const cover = await createMeshCoverPipelines(variant);
-          for (const rule of ['nonzero', 'evenodd']) {
+          for (const rule of MESH_COVER_NAMES) {
             trackLayer(`${prefix}/mesh-cover-${rule}-layer-${kind}-pipeline`, {
               category: 'render-pipeline',
             });
@@ -5342,14 +5451,31 @@ function variantDescriptor(
   return { ...base, label: `${base.label ?? 'vector-studio/pipeline'}${suffix}` };
 }
 
-/** E39-R8: a variant's two cover pipelines, created through its own variant factory. */
-async function createMeshCoverPipelines(
+/** E39-R8: a variant's two rule covers, created through its own variant factory. */
+async function createMeshRuleCoverPipelines(
   variant: (kind: 'cover-nonzero' | 'cover-evenodd') => Promise<GPURenderPipeline>,
-): Promise<MeshCoverPipelines> {
+): Promise<MeshMaskCoverPipelines> {
   const nonzero = await variant('cover-nonzero');
   const evenodd = await variant('cover-evenodd');
   return Object.freeze({ nonzero, evenodd });
 }
+
+/** E39-R8: a variant's rule covers and E39-R6's five joint covers. */
+async function createMeshCoverPipelines(
+  variant: (kind: MeshPipelineKind) => Promise<GPURenderPipeline>,
+): Promise<MeshCoverPipelines> {
+  const rules = await createMeshRuleCoverPipelines(variant);
+  const joint: Partial<Record<MeshJointCover, GPURenderPipeline>> = {};
+  for (const cover of MESH_JOINT_COVERS) joint[cover] = await variant(meshJointCoverKind(cover));
+  return Object.freeze({ ...rules, ...(joint as Record<MeshJointCover, GPURenderPipeline>) });
+}
+
+/** The tracked names of a full cover set (two rule covers, five joint covers). */
+const MESH_COVER_NAMES: readonly string[] = Object.freeze([
+  'nonzero',
+  'evenodd',
+  ...MESH_JOINT_COVERS,
+]);
 
 /** E39-R1: the stencil pass pipelines at one target format, cached by their keys. */
 async function createMeshStencilPipelines(
@@ -5366,9 +5492,9 @@ async function createMeshStencilPipelines(
         createMeshStencilPipelineDescriptor(shader, layout, format, sampleCount, kind),
       ),
     );
-  const winding = await create('winding');
-  const union = await create('union');
-  return Object.freeze({ winding, union });
+  const pipelines: Partial<Record<MeshStencilKind, GPURenderPipeline>> = {};
+  for (const kind of MESH_STENCIL_KINDS) pipelines[kind] = await create(kind);
+  return Object.freeze(pipelines as Record<MeshStencilKind, GPURenderPipeline>);
 }
 
 /** P4 contract, U3: a clip variant's descriptor, labelled apart from its base pipeline. */
@@ -5414,29 +5540,22 @@ async function createCountPipelines(
   // E39-R9: the stencil pass and the covers at the count target, over the count module (its
   // vertex entry and meshStencilFragmentMain are MESH_FILL_SHADER's). The covers write 1 with
   // no discard under the cover stencil states.
-  const stencil = Object.freeze({
-    winding: await device.createRenderPipelineAsync(
+  const stencilPipelines: Partial<Record<MeshStencilKind, GPURenderPipeline>> = {};
+  for (const kind of MESH_STENCIL_KINDS) {
+    stencilPipelines[kind] = await device.createRenderPipelineAsync(
       createMeshStencilPipelineDescriptor(
         module,
         meshPipelineLayout,
         'rgba16float',
         sampleCount,
-        'winding',
+        kind,
       ),
-    ),
-    union: await device.createRenderPipelineAsync(
-      createMeshStencilPipelineDescriptor(
-        module,
-        meshPipelineLayout,
-        'rgba16float',
-        sampleCount,
-        'union',
-      ),
-    ),
-  });
-  const coverPipeline = (rule: MeshCoverRule) =>
+    );
+  }
+  const stencil = Object.freeze(stencilPipelines as Record<MeshStencilKind, GPURenderPipeline>);
+  const coverPipeline = (name: MeshCoverRule | MeshJointCover) =>
     device.createRenderPipelineAsync({
-      label: `vector-studio/e39-count-cover-${rule}-${sampleCount}x`,
+      label: `vector-studio/e39-count-cover-${name}-${sampleCount}x`,
       layout: meshPipelineLayout,
       vertex: { module, entryPoint: 'meshVertexMain', buffers: [] },
       fragment: {
@@ -5445,14 +5564,23 @@ async function createCountPipelines(
         targets: [{ format: 'rgba16float', blend: { color: additive, alpha: additive } }],
       },
       primitive: { topology: 'triangle-list', frontFace: 'ccw', cullMode: 'none' },
-      depthStencil: meshCoverStencilState(rule),
+      depthStencil:
+        name === 'nonzero' || name === 'evenodd'
+          ? meshCoverStencilState(name)
+          : meshJointCoverStencilState(name),
       multisample: { count: sampleCount, mask: 0xffffffff, alphaToCoverageEnabled: false },
     });
-  const cover = Object.freeze({
-    nonzero: await coverPipeline('nonzero'),
-    evenodd: await coverPipeline('evenodd'),
-  });
-  for (const name of ['stencil-winding', 'stencil-union', 'cover-nonzero', 'cover-evenodd']) {
+  const coverPipelines: Partial<Record<MeshCoverRule | MeshJointCover, GPURenderPipeline>> = {};
+  for (const name of MESH_COVER_NAMES as readonly (MeshCoverRule | MeshJointCover)[]) {
+    coverPipelines[name] = await coverPipeline(name);
+  }
+  const cover = Object.freeze(
+    coverPipelines as Record<MeshCoverRule | MeshJointCover, GPURenderPipeline>,
+  );
+  for (const name of [
+    ...MESH_STENCIL_KINDS.map((kind) => `stencil-${kind}`),
+    ...MESH_COVER_NAMES.map((name) => `cover-${name}`),
+  ]) {
     track(`${prefix}/e39-count-${name}-pipeline`, { category: 'render-pipeline' });
   }
   const joint = await countPipeline(MESH_JOINT_VERTEX_ENTRY_POINT, 'joint');

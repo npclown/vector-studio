@@ -533,7 +533,7 @@ describe('E10-A5 count pass', () => {
     // and count sets each gain two stencil and two cover pipelines.
     expect(h.result.supported && h.backend.getStatistics()).toMatchObject({
       shaderModulesCreated: 5,
-      pipelinesCreated: 16,
+      pipelinesCreated: 30,
     });
     const capture = await h.pending;
     expect(capture.counts!.samples).toBe(4);
