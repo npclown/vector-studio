@@ -24,6 +24,19 @@ export interface FillMesh {
   /** Vertex-index pairs (a, b), one per boundary mesh edge; see rule 5 for the orientation. */
   readonly boundaryEdges: Uint32Array;
   readonly bounds: Readonly<{ minX: number; minY: number; maxX: number; maxY: number }>;
+  /**
+   * E39-K6 (docs/plans/d9-e39-gpu-stencil-path-contract.md): absent for a partition mesh
+   * (non-overlapping triangles, boundary edges as above). `'winding'`: a fill's fan triangles,
+   * whose signed count at a sample is the path's winding number there (the renderer applies
+   * the fill rule in the stencil). `'union'`: a stroke's pieces, whose union is the region.
+   * Both have no boundary edges, and `bounds` contain every vertex.
+   */
+  readonly coverage?: 'winding' | 'union';
+  /**
+   * E39-K4: the exponent the mesh was built at when it is above the request's (the build
+   * doubled its tolerance to fit its buffers); absent otherwise.
+   */
+  readonly servedExponent?: number;
 }
 
 export type FillMeshFailureCode =

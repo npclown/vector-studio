@@ -477,8 +477,8 @@ fn fallback_fixtures() -> Vec<(Path, Reason)> {
 
 #[test]
 fn al_u3_fallback_fixtures_take_the_exact_rung_and_equal_exact_only() {
-    // E38 (2026-11-07): `fill-v0+r6`.
-    assert_eq!(FILL_V0_REVISION, 6);
+    // E39 (2026-11-07): `fill-v0+r7`.
+    assert_eq!(FILL_V0_REVISION, 7);
     let fixtures = fallback_fixtures();
     for (path, expected) in &fixtures {
         let record = built(path, false);

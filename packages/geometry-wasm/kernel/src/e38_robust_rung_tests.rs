@@ -1220,3 +1220,6 @@ fn e38_crossing_heavy_lines_still_draw() {
     assert_eq!(mesh.stats.coarsenings, 1);
     assert!(mesh.stats.work > crate::robust_mesh::MAX_SWEEP_WORK);
 }
+
+#[path = "e39_winding_mesh_tests.rs"]
+mod e39;

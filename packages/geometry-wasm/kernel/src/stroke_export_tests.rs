@@ -268,6 +268,9 @@ struct Decoded {
     indices: Vec<u32>,
     boundary: Vec<u32>,
     bounds: [f64; 4],
+    /// E39-K6: the coverage word and the tolerance doublings (record offsets 36 and 40).
+    coverage: u32,
+    coarsenings: u32,
 }
 
 impl Decoded {
@@ -325,8 +328,14 @@ fn decode(output: &[u8], paths: &[TestPath]) -> Vec<Decoded> {
         let exponent = read_u32(output, record + 8).unwrap() as i32;
         assert_eq!(id, path.id);
         assert_eq!(exponent, path.exponent);
-        for reserved in [12, 36, 40, 44] {
+        for reserved in [12, 44] {
             assert_eq!(read_u32(output, record + reserved), Some(0));
+        }
+        let coverage = read_u32(output, record + 36).unwrap();
+        let coarsenings = read_u32(output, record + 40).unwrap();
+        assert!(coverage <= 2);
+        if status != STROKE_PATH_OK {
+            assert_eq!((coverage, coarsenings), (0, 0));
         }
         let block_offset = read_u32(output, record + 16).unwrap() as usize;
         let vertex_count = read_u32(output, record + 20).unwrap() as usize;
@@ -352,6 +361,8 @@ fn decode(output: &[u8], paths: &[TestPath]) -> Vec<Decoded> {
             );
             assert!(bounds.iter().all(|value| value.to_bits() == 0));
             decoded.push(Decoded {
+                coverage,
+                coarsenings,
                 id,
                 status,
                 exponent,
@@ -401,6 +412,8 @@ fn decode(output: &[u8], paths: &[TestPath]) -> Vec<Decoded> {
         assert_eq!(bounds, expected);
         cursor += block_bytes;
         decoded.push(Decoded {
+                coverage,
+                coarsenings,
             id,
             status,
             exponent,
@@ -508,7 +521,8 @@ fn assert_area(mesh: &Decoded, expected: f64, tolerance: f64, name: &str) {
 #[test]
 fn identity_constants_match_section_7_1() {
     assert_eq!(STROKE_V0_VERSION, 0);
-    assert_eq!(STROKE_V0_REVISION, 9);
+    // E39 (2026-11-07): `stroke-v0+r10`.
+    assert_eq!(STROKE_V0_REVISION, 10);
     assert_eq!(STROKE_INPUT_MAGIC, 0x3054_4756);
     assert_eq!(STROKE_OUTPUT_MAGIC, 0x3055_4756);
     assert_eq!(STROKE_INPUT_MAGIC.to_le_bytes(), *b"VGT0");
@@ -1308,4 +1322,34 @@ fn e38_robust_rung_through_the_export() {
             assert_eq!(decoded[0].status, STROKE_PATH_WORK_LIMIT);
         }
     }
+}
+
+/// E39-A4 and K6: through the export, production's union meshes (opt-in here) allocate
+/// nothing, move no storage, and carry the coverage word 2.
+#[test]
+fn e39_union_meshes_through_the_export() {
+    let spec = crate::e38_robust_rung_tests::user_node7();
+    let mut path = TestPath::new(1);
+    path.width = 1.0;
+    path.verbs = spec.verbs.clone();
+    path.points = spec.points.clone();
+    let paths = [path];
+    let input = pack(&paths);
+    let mut engine = StrokeEngine::new();
+    engine.hooks().robust = true;
+    engine.hooks().winding = true;
+    load(&mut engine, &input, 1 << 22);
+    let storage = engine.storage();
+    crate::allocation_test_support::start();
+    let status = engine.process(input.len() as u32);
+    let allocations = crate::allocation_test_support::stop();
+    assert_eq!((status, allocations), (BATCH_OK, 0));
+    assert_eq!(engine.storage(), storage);
+    let decoded = decode(engine.output_bytes(), &paths);
+    assert_eq!(
+        (decoded[0].status, decoded[0].coverage, decoded[0].coarsenings),
+        (STROKE_PATH_OK, 2, 0)
+    );
+    assert!(decoded[0].indices.len() > 1_000);
+    assert!(decoded[0].boundary.is_empty());
 }

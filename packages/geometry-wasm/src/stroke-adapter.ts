@@ -13,10 +13,10 @@ import type {
 // owned copies and the same fail-closed list. Results are functional evidence; precision is
 // UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence.
 
-export const STROKE_V0_OPERATION_ID = 'geometry-wasm/stroke-v0+r9';
+export const STROKE_V0_OPERATION_ID = 'geometry-wasm/stroke-v0+r10';
 export const STROKE_V0_VERSION = 0;
 /** The kernel revision this adapter was built for. */
-export const STROKE_V0_REVISION = 9;
+export const STROKE_V0_REVISION = 10;
 
 const INPUT_MAGIC = 0x3054_4756;
 const OUTPUT_MAGIC = 0x3055_4756;
@@ -91,7 +91,7 @@ const STROKE_EXPORT_NAMES = [
 
 export interface StrokeMeshAdapter extends StrokeMeshPort {
   readonly portVersion: 0;
-  readonly operationId: 'geometry-wasm/stroke-v0+r9';
+  readonly operationId: 'geometry-wasm/stroke-v0+r10';
   /** Terminal and idempotent. Later calls return batch-failed: disposed. */
   dispose(): void;
   /** Current byteLength of this adapter's own linear memory. */
@@ -605,15 +605,16 @@ class StrokeMeshKernelAdapter implements StrokeMeshAdapter {
       ) {
         throw new StrokeAbiBreach('result echo differs from the request');
       }
-      for (const reserved of [12, 36, 40, 44]) {
-        if (u32(record + reserved) !== 0) {
-          throw new StrokeAbiBreach('record reserved field is set');
-        }
+      for (const reserved of [12, 44]) {
+        if (u32(record + reserved) !== 0) throw new StrokeAbiBreach('record reserved field is set');
       }
+      // E39-K6: the coverage word (0 partition, 2 union) and the tolerance doublings.
+      const coverageWord = u32(record + 36);
+      const coarsenings = u32(record + 40);
       const echo = { requestId: request.requestId, toleranceExponent: request.exponent };
       if (status !== PATH_OK) {
         for (let offset = 16; offset < RESULT_BYTES; offset += 4) {
-          if (offset >= 36 && offset < 48) continue;
+          if (offset === 44) continue;
           if (u32(record + offset) !== 0) {
             throw new StrokeAbiBreach('a non-OK record carries mesh fields');
           }
@@ -639,6 +640,8 @@ class StrokeMeshKernelAdapter implements StrokeMeshAdapter {
         indexCount === 0 ||
         indexCount % 3 !== 0 ||
         boundaryCount % 2 !== 0 ||
+        (coverageWord !== 0 && coverageWord !== 2) ||
+        (coverageWord !== 0 && boundaryCount !== 0) ||
         blockOffset !== cursor
       ) {
         throw new StrokeAbiBreach('an OK record has inconsistent counts or offsets');
@@ -695,6 +698,8 @@ class StrokeMeshKernelAdapter implements StrokeMeshAdapter {
         indices,
         boundaryEdges,
         bounds: { minX, minY, maxX, maxY },
+        ...(coverageWord === 2 ? { coverage: 'union' as const } : {}),
+        ...(coarsenings > 0 ? { servedExponent: request.exponent + coarsenings } : {}),
       };
       results.push({ ...echo, status: 'ok', mesh });
     }

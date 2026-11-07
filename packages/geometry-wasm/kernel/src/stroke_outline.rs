@@ -472,6 +472,10 @@ pub(crate) struct StrokeDefects {
     /// opt-in, so that the exact-rung fixtures keep observing `stroke-v0+r8`'s statuses.
     #[cfg(test)]
     pub(crate) robust: bool,
+    /// Not a defect: E39's union mesh instead of the exact rungs. Production always builds it;
+    /// in tests it is opt-in, so that the exact-rung fixtures keep observing `stroke-v0+r9`.
+    #[cfg(test)]
+    pub(crate) winding: bool,
 }
 
 #[cfg(test)]
@@ -513,6 +517,10 @@ impl StrokeDefects {
 impl StrokeDefects {
     pub(crate) fn no_robust(self) -> bool {
         !self.robust
+    }
+
+    pub(crate) fn winding(self) -> bool {
+        self.winding
     }
 }
 
@@ -617,6 +625,11 @@ impl StrokeDefects {
     pub(crate) fn no_robust(self) -> bool {
         false
     }
+
+    #[inline(always)]
+    pub(crate) fn winding(self) -> bool {
+        true
+    }
 }
 
 /// Tolerances of one request (section 3), built from exponent bits.
@@ -675,6 +688,8 @@ pub(crate) struct StrokeWorkspace {
     fast_published: bool,
     /// E38: the robust last rung published the last path (its mesh is `scratch.robust`).
     robust_published: bool,
+    /// E39-K2: the last path's mesh is a union mesh (also `robust_published`).
+    union_published: bool,
     /// E2-K3's outcome on the last path: `None` when it was not tried, otherwise `Ok` or the
     /// fallback reason (`TOO_MANY_POINTS` is `Prefix`). Observational (E2-A7, E2-R2).
     family_b: Option<Result<(), Reason>>,
@@ -784,6 +799,7 @@ impl StrokeWorkspace {
             rung: FastRung::reserve_with(STROKE_RUNG_CAPS)?,
             fast_published: false,
             robust_published: false,
+            union_published: false,
             family_b: None,
             rounded,
             scratch,
@@ -920,6 +936,7 @@ impl StrokeWorkspace {
         self.merge.clear();
         self.fast_published = false;
         self.robust_published = false;
+        self.union_published = false;
         self.family_b = None;
         #[cfg(test)]
         {
@@ -936,15 +953,18 @@ impl StrokeWorkspace {
         verbs: &[u8],
         point_bytes: &[u8],
     ) -> Result<StrokeOutcome, SelfCheckFailure> {
-        let outcome = self.build_exact(request, verbs, point_bytes)?;
-        let refused = outcome == StrokeOutcome::Status(STROKE_PATH_WORK_LIMIT)
-            || outcome == StrokeOutcome::Status(STROKE_PATH_UNSUPPORTED_GEOMETRY);
-        // The older baselines (`r4` to `r7`) predate the robust rung.
         let baseline = self.defects.unmerged()
             || self.defects.no_band_rule()
             || self.defects.no_family_b()
             || self.defects.no_retry()
             || self.defects.no_robust();
+        if self.defects.winding() && !baseline {
+            return Ok(self.build_union(request, verbs, point_bytes));
+        }
+        let outcome = self.build_exact(request, verbs, point_bytes)?;
+        let refused = outcome == StrokeOutcome::Status(STROKE_PATH_WORK_LIMIT)
+            || outcome == StrokeOutcome::Status(STROKE_PATH_UNSUPPORTED_GEOMETRY);
+        // The older baselines (`r4` to `r7`) predate the robust rung.
         if !refused || baseline {
             return Ok(outcome);
         }
@@ -973,6 +993,82 @@ impl StrokeWorkspace {
     /// Whether the robust rung published the last path (E38).
     pub(crate) fn robust_published(&self) -> bool {
         self.robust_published
+    }
+
+    /// Whether the last path's mesh is a union mesh (E39-K2).
+    pub(crate) fn union_published(&self) -> bool {
+        self.union_published
+    }
+
+    /// The tolerance doublings of the last robust or union build (E39-K4).
+    pub(crate) fn coarsenings(&self) -> u32 {
+        if self.robust_published {
+            self.scratch.robust.stats.coarsenings
+        } else {
+            0
+        }
+    }
+
+    /// E39-K2: the checks of `build_once` (steps 1 to 4), then the union mesh of the pieces.
+    fn build_union(
+        &mut self,
+        request: StrokeRequest,
+        verbs: &[u8],
+        point_bytes: &[u8],
+    ) -> StrokeOutcome {
+        self.reset();
+        if let Some(status) = Self::checks(request, verbs, point_bytes) {
+            return StrokeOutcome::Status(status);
+        }
+        let style = RobustStroke {
+            width: request.width,
+            cap: request.cap,
+            join: request.join,
+            miter_limit: request.miter_limit,
+        };
+        let tol = power_of_two(request.exponent - 1);
+        let drawn = self
+            .scratch
+            .robust
+            .build_stroke_union(verbs, point_bytes, style, tol);
+        self.robust_published = drawn == Some(true);
+        self.union_published = self.robust_published;
+        match drawn {
+            Some(true) => StrokeOutcome::Mesh,
+            Some(false) => StrokeOutcome::Status(STROKE_PATH_EMPTY),
+            None => StrokeOutcome::Status(STROKE_PATH_WORK_LIMIT),
+        }
+    }
+
+    /// Steps 1 to 4 of section 7.8: grammar and values, stroke values, tolerance range, empty.
+    fn checks(request: StrokeRequest, verbs: &[u8], point_bytes: &[u8]) -> Option<u32> {
+        let input = PathInput::from_parts(
+            Request {
+                request_id: request.request_id,
+                source_epoch: 0,
+                source_revision: 0,
+                tolerance: 0.0,
+            },
+            verbs,
+            point_bytes,
+        );
+        if validate_path(input).is_err() {
+            return Some(STROKE_PATH_INVALID_PATH);
+        }
+        let width_valid = request.width.is_finite() && request.width >= 0.0;
+        let limit_valid = request.miter_limit.is_finite() && request.miter_limit >= 1.0;
+        if !width_valid || !limit_valid {
+            return Some(STROKE_PATH_INVALID_STROKE);
+        }
+        if !(STROKE_MIN_TOLERANCE_EXPONENT..=STROKE_MAX_TOLERANCE_EXPONENT)
+            .contains(&request.exponent)
+        {
+            return Some(STROKE_PATH_INVALID_TOLERANCE);
+        }
+        if verbs.is_empty() || request.width == 0.0 {
+            return Some(STROKE_PATH_EMPTY);
+        }
+        None
     }
 
     /// The exact rungs (`stroke-v0+r8`): the build, and after a `work-limit` the E35 retry.

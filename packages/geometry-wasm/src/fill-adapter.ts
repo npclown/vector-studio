@@ -10,10 +10,10 @@ import type {
 // P3 D8 V2 fill-mesh transport v0 adapter
 // (docs/plans/p3-v2-fill-mesh-transport-contract.md, sections a, b, g and h).
 
-export const FILL_V0_OPERATION_ID = 'geometry-wasm/fill-v0+r6';
+export const FILL_V0_OPERATION_ID = 'geometry-wasm/fill-v0+r7';
 export const FILL_V0_VERSION = 0;
 /** The kernel revision this adapter was built for. */
-export const FILL_V0_REVISION = 6;
+export const FILL_V0_REVISION = 7;
 
 const INPUT_MAGIC = 0x3046_4756;
 const OUTPUT_MAGIC = 0x304d_4756;
@@ -83,7 +83,7 @@ const FILL_EXPORT_NAMES = [
 
 export interface FillMeshAdapter extends FillMeshPort {
   readonly portVersion: 0;
-  readonly operationId: 'geometry-wasm/fill-v0+r6';
+  readonly operationId: 'geometry-wasm/fill-v0+r7';
   /** Terminal and idempotent. Later calls return batch-failed: disposed. */
   dispose(): void;
   /** Current byteLength of this adapter's own linear memory. */
@@ -571,13 +571,16 @@ class FillMeshKernelAdapter implements FillMeshAdapter {
       ) {
         throw new FillAbiBreach('result echo differs from the request');
       }
-      for (const reserved of [12, 36, 40, 44]) {
+      for (const reserved of [12, 44]) {
         if (u32(record + reserved) !== 0) throw new FillAbiBreach('record reserved field is set');
       }
+      // E39-K6: the coverage word (0 partition, 1 winding) and the tolerance doublings.
+      const coverageWord = u32(record + 36);
+      const coarsenings = u32(record + 40);
       const echo = { requestId: request.requestId, toleranceExponent: request.exponent };
       if (status !== PATH_OK) {
         for (let offset = 16; offset < RESULT_BYTES; offset += 4) {
-          if (offset >= 36 && offset < 48) continue;
+          if (offset === 44) continue;
           if (u32(record + offset) !== 0) {
             throw new FillAbiBreach('a non-OK record carries mesh fields');
           }
@@ -603,6 +606,8 @@ class FillMeshKernelAdapter implements FillMeshAdapter {
         indexCount === 0 ||
         indexCount % 3 !== 0 ||
         boundaryCount % 2 !== 0 ||
+        (coverageWord !== 0 && coverageWord !== 1) ||
+        (coverageWord !== 0 && boundaryCount !== 0) ||
         blockOffset !== cursor
       ) {
         throw new FillAbiBreach('an OK record has inconsistent counts or offsets');
@@ -659,6 +664,8 @@ class FillMeshKernelAdapter implements FillMeshAdapter {
         indices,
         boundaryEdges,
         bounds: { minX, minY, maxX, maxY },
+        ...(coverageWord === 1 ? { coverage: 'winding' as const } : {}),
+        ...(coarsenings > 0 ? { servedExponent: request.exponent + coarsenings } : {}),
       };
       results.push({ ...echo, status: 'ok', mesh });
     }
