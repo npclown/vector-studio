@@ -107,6 +107,7 @@ const hash = (code: string) => createHash('sha256').update(code).digest('hex');
 describe('E23 U3 paint shader variants (section 4, Pipelines; E23-A08 hash part)', () => {
   it('keeps every base, clip and mask module byte-identical to main at the U1 merge base', () => {
     // SHA-256 at 1fb3830; MESH_FILL_SHADER's is the E3-recorded hash.
+    // E39-U2 re-baselined the mesh modules (cover quad, stencil fragment, no-discard flag).
     expect({
       analytic: hash(PRIMITIVE_ANALYTIC_SHADER),
       mesh: hash(MESH_FILL_SHADER),
@@ -116,11 +117,11 @@ describe('E23 U3 paint shader variants (section 4, Pipelines; E23-A08 hash part)
       meshMask: hash(MESH_FILL_MASK_SHADER),
     }).toEqual({
       analytic: '06b0839c15b93141d1caa72596484b0aa02f53e74f1e58b74959fb5b92af527d',
-      mesh: 'd306137cf0770f6bf7f9237f1c98b9ecd0a165cfdbfda916196d299e36b831a3',
+      mesh: 'a74fc8809f69bb92cd4c7e99c94ddfc08d5b479ce776c79126f56a72135d67a4',
       analyticClip: '434bc1d2768c1b9d09c385a2ac4f524f3d6976e183fb9324e0612a7a176efc0d',
-      meshClip: 'abcac5d89e07e09978e7a93ad4f14783ac17fef656332cdcffa821328e994d7a',
+      meshClip: '7d2c6a6a0bfaf98efc1dc46c1d33ae28fcbd6af2d1af13e2ceea71bec11d7b07',
       analyticMask: '64eb3d86eec661291c71665f6bbaeb18095cfb7db793edec1b64a18468bd504b',
-      meshMask: 'a479f0c5500d1d446c4b3bd6fa1242a4995e8161fcd02390b112e389d47639f4',
+      meshMask: '7c4db30a327ebd637e3f3b0cca5a56c673f11f75a50b88e97f5ecf58d6a277ef',
     });
     for (const code of [PRIMITIVE_ANALYTIC_SHADER, MESH_FILL_SHADER, MESH_FILL_CLIP_SHADER]) {
       expect(code).not.toContain('paintValue');
@@ -149,8 +150,14 @@ describe('E23 U3 paint shader variants (section 4, Pipelines; E23-A08 hash part)
       code.match(/@fragment\s+fn (\w+)/g)?.map((match) => match.split(' ').pop());
     expect(entries(PRIMITIVE_ANALYTIC_PAINT_SHADER)).toEqual(['fragmentMain']);
     expect(entries(PRIMITIVE_ANALYTIC_PAINT_CLIP_SHADER)).toEqual(['fragmentMain']);
-    expect(entries(MESH_FILL_PAINT_SHADER)).toEqual(['meshFragmentMain', 'meshJointFragmentMain']);
+    // E39-U2: the stencil pass's entry point stays the base module's.
+    expect(entries(MESH_FILL_PAINT_SHADER)).toEqual([
+      'meshStencilFragmentMain',
+      'meshFragmentMain',
+      'meshJointFragmentMain',
+    ]);
     expect(entries(MESH_FILL_PAINT_CLIP_SHADER)).toEqual([
+      'meshStencilFragmentMain',
       'meshFragmentMain',
       'meshJointFragmentMain',
     ]);
@@ -265,16 +272,21 @@ describe('E23 U3 pipeline creation', () => {
     expect(scene).toMatchObject({
       paintPipelineAvailable: true,
       clipPipelineAvailable: true,
-      pipelinesCreated: 15,
+      pipelinesCreated: 28,
       shaderModulesCreated: 11,
     });
-    expect(fixture.pipelineLabels.slice(9)).toEqual([
+    // E39-U2: each mesh paint variant also has its two cover pipelines.
+    expect(fixture.pipelineLabels.slice(18)).toEqual([
       'vector-studio/p1-analytic-primitive-stencil-4x+paint-v0',
       'vector-studio/p1-analytic-primitive-stencil-4x+paint-v0+clip-v0',
       'vector-studio/p3-mesh-fill-4x+paint-v0',
       'vector-studio/p3-mesh-joint-4x+paint-v0',
+      'vector-studio/p3-mesh-cover-nonzero-4x+paint-v0',
+      'vector-studio/p3-mesh-cover-evenodd-4x+paint-v0',
       'vector-studio/p3-mesh-fill-4x+paint-v0+clip-v0',
       'vector-studio/p3-mesh-joint-4x+paint-v0+clip-v0',
+      'vector-studio/p3-mesh-cover-nonzero-4x+paint-v0+clip-v0',
+      'vector-studio/p3-mesh-cover-evenodd-4x+paint-v0+clip-v0',
     ]);
     const groups = (label: string) =>
       (
@@ -298,7 +310,7 @@ describe('E23 U3 pipeline creation', () => {
       MESH_FILL_PAINT_SHADER,
       MESH_FILL_PAINT_CLIP_SHADER,
     ]);
-    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(15);
+    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(28);
     creation.dispose();
     expect(accounting.snapshot().live).toBe(0);
   });
@@ -306,7 +318,7 @@ describe('E23 U3 pipeline creation', () => {
   it('creates nothing extra without the option, and only what the other options allow', async () => {
     const plain = nativeFixture();
     const without = await nativeScene(plain, { meshPipeline: true, clipPipeline: true });
-    expect(without.scene).toMatchObject({ paintPipelineAvailable: false, pipelinesCreated: 9 });
+    expect(without.scene).toMatchObject({ paintPipelineAvailable: false, pipelinesCreated: 18 });
     expect(plain.modules.some((code) => code.includes('paintValue'))).toBe(false);
     without.creation.dispose();
     const analyticOnly = nativeFixture();
@@ -347,7 +359,7 @@ describe('E23 U3 pipeline creation', () => {
         paintPipelineAvailable: false,
         clipPipelineAvailable: true,
         meshPipelineAvailable: true,
-        pipelinesCreated: 9,
+        pipelinesCreated: 18,
       });
       expect(readyOf(scene).readyEntries).toBe(baseline);
       expect(accounting.snapshot().live).toBe(baselineLive);

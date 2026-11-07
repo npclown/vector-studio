@@ -32,6 +32,7 @@ const OUTCOME: Record<PathMeshFailureCode, 'O1' | 'O2' | 'O3'> = {
   'mesh-pipeline-unavailable': 'O1',
   'dash-limit': 'O1',
   'fringe-work-cap': 'O2',
+  'path-coarsened': 'O2',
   'overlay-unsupported': 'O3',
 };
 

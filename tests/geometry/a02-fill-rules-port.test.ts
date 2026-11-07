@@ -43,7 +43,7 @@ function triangleInput(mesh: FillMesh, expectedArea: number): TriangleMeshInput 
 
 describe('A02: line-fill sources through the release fill-v0 port', () => {
   it('meshes all 32 source/rule cases to the independent oracle region', async () => {
-    const port = await createFillMeshPort(module);
+    const port = await createFillMeshPort(module, { exactRungsForTesting: true });
     try {
       const cases = LINE_FILL_SOURCES.flatMap((source) =>
         LINE_FILL_RULES.map((rule) => ({ source, rule })),

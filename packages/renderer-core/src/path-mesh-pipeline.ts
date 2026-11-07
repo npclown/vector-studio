@@ -114,7 +114,8 @@ export type PathMeshRendererFailureCode =
   | 'packing-range'
   | 'mesh-pipeline-unavailable'
   | 'overlay-unsupported'
-  | 'dash-limit';
+  | 'dash-limit'
+  | 'path-coarsened';
 export type PathMeshFailureCode =
   StrokeMeshFailureCode | PathMeshBatchFailureCode | PathMeshRendererFailureCode;
 
@@ -173,6 +174,13 @@ export type PathMeshDraw = Readonly<{
   overlay?: Readonly<{ id: symbol; data: JointOverlay }>;
   /** P4 contract, U4: present only on a mask source's fill draw, which never paints. */
   maskSource?: true;
+  /**
+   * E39-R8: the mesh's coverage (FillMesh.coverage); absent for a partition mesh. A winding or
+   * union variant's triangles end with the two cover triangles (path-mesh-packet.ts).
+   */
+  coverage?: 'winding' | 'union';
+  /** E39-R2: the fill rule of a winding draw; absent otherwise. */
+  fillRule?: SceneFillRule;
 }>;
 
 export type PathMeshStatistics = Readonly<{
@@ -1779,6 +1787,10 @@ export class PathMeshPipeline {
     }
     const mesh = result?.mesh ?? null;
     const packed = mesh === null ? null : packOffsets(mesh);
+    // E39-K4: a mesh served at a coarser tolerance than requested says so, once per entry.
+    if (mesh?.servedExponent !== undefined && mesh.servedExponent > request.e) {
+      this.#enqueue(request.nodeId, 'renderer', 'path-coarsened', request.e, request.key.paint);
+    }
     this.#shape += 1;
     nodeCache.entries.set(request.e, {
       id: Symbol(`path-${request.key.paint}-mesh-${request.nodeId}`),
@@ -1891,6 +1903,11 @@ export class PathMeshPipeline {
       opacity: item.path.maskSource === true ? 1 : item.path.node.opacity,
       fill: item.color,
       ...(item.path.maskSource === true ? { maskSource: true as const } : {}),
+      ...(entry.mesh!.coverage === undefined
+        ? {}
+        : entry.mesh!.coverage === 'winding'
+          ? { coverage: 'winding' as const, fillRule: item.path.node.geometry.fillRule }
+          : { coverage: 'union' as const }),
     });
   }
 
@@ -2198,7 +2215,9 @@ export function pathMeshNoticeDiagnostic(
       ? 'is drawn without its coverage fringe'
       : notice.failureCode === 'overlay-unsupported'
         ? 'is drawn without its joint coverage'
-        : 'is not drawn';
+        : notice.failureCode === 'path-coarsened'
+          ? 'is drawn at a coarser tolerance'
+          : 'is not drawn';
   const subject =
     notice.nodeId === null ? 'Mesh paths are not drawn' : `Path ${notice.nodeId} ${outcome}`;
   return Object.freeze({
@@ -2396,7 +2415,14 @@ function classifyResult(
 function validateMesh(value: unknown): Readonly<{ mesh: FillMesh; bytes: number }> | null {
   if (typeof value !== 'object' || value === null) return null;
   const record = value as Record<string, unknown>;
-  const { positions, indices, boundaryEdges, bounds } = record;
+  const { positions, indices, boundaryEdges, bounds, coverage, servedExponent } = record;
+  // E39-K6: a winding or union mesh has no boundary edges; its served exponent is an integer.
+  if (
+    (coverage !== undefined && coverage !== 'winding' && coverage !== 'union') ||
+    (servedExponent !== undefined && !Number.isSafeInteger(servedExponent))
+  ) {
+    return null;
+  }
   if (
     !(positions instanceof Float64Array) ||
     !(indices instanceof Uint32Array) ||
@@ -2433,12 +2459,15 @@ function validateMesh(value: unknown): Readonly<{ mesh: FillMesh; bytes: number 
   if (box.minX !== minX || box.minY !== minY || box.maxX !== maxX || box.maxY !== maxY) {
     return null;
   }
+  if (coverage !== undefined && boundaryEdges.length !== 0) return null;
   return Object.freeze({
     mesh: Object.freeze({
       positions,
       indices,
       boundaryEdges,
       bounds: Object.freeze({ minX, minY, maxX, maxY }),
+      ...(coverage === undefined ? {} : { coverage: coverage }),
+      ...(servedExponent === undefined ? {} : { servedExponent: servedExponent as number }),
     }),
     bytes: positions.byteLength + indices.byteLength + boundaryEdges.byteLength,
   });
@@ -2456,13 +2485,26 @@ function packOffsets(mesh: FillMesh): Readonly<{
     x: mesh.bounds.minX / 2 + mesh.bounds.maxX / 2,
     y: mesh.bounds.minY / 2 + mesh.bounds.maxY / 2,
   });
-  const offsets = new Float32Array(mesh.positions.length);
-  for (let index = 0; index < mesh.positions.length; index += 2) {
+  // E39-R3: a winding or union mesh's offsets end with its cover quad's four corners, the
+  // bounds' corners (minX, minY), (maxX, minY), (maxX, maxY), (minX, maxY) packed the same way.
+  // fround is monotone, so the packed corners bound every packed vertex.
+  const cover = mesh.coverage !== undefined;
+  const length = mesh.positions.length;
+  const offsets = new Float32Array(length + (cover ? 8 : 0));
+  for (let index = 0; index < length; index += 2) {
     offsets[index] = mesh.positions[index]! - midpoint.x;
     offsets[index + 1] = mesh.positions[index + 1]! - midpoint.y;
-    if (!Number.isFinite(offsets[index]!) || !Number.isFinite(offsets[index + 1]!)) {
-      return Object.freeze({ midpoint, offsets: null });
+  }
+  if (cover) {
+    const { minX, minY, maxX, maxY } = mesh.bounds;
+    const corners = [minX, minY, maxX, minY, maxX, maxY, minX, maxY];
+    for (let index = 0; index < 8; index += 2) {
+      offsets[length + index] = corners[index]! - midpoint.x;
+      offsets[length + index + 1] = corners[index + 1]! - midpoint.y;
     }
+  }
+  for (let index = 0; index < offsets.length; index += 1) {
+    if (!Number.isFinite(offsets[index]!)) return Object.freeze({ midpoint, offsets: null });
   }
   return Object.freeze({ midpoint, offsets });
 }

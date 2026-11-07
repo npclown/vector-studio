@@ -68,7 +68,7 @@ describe('fill-v0 adapter factory', () => {
       const adapter = await createFillMeshPort(source);
       expect(adapter.portVersion).toBe(0);
       expect(adapter.operationId).toBe(FILL_V0_OPERATION_ID);
-      expect(adapter.operationId).toBe('geometry-wasm/fill-v0+r6');
+      expect(adapter.operationId).toBe('geometry-wasm/fill-v0+r7'); // re-baselined: E39
       expect(adapter.linearMemoryBytes()).toBeGreaterThan(0);
       const result = adapter.buildFillMeshes([square()]);
       expect(result.status).toBe('ok');
@@ -294,7 +294,8 @@ async function expectFailClosed(name: string, reason: string, wrap: Wrap): Promi
         return real.fill_v0_dispose();
       },
     },
-    { onFailClosed: (breach) => reasons.push(breach) },
+    // E39-A7: the pinned record offsets are those of the partition mesh (exact rungs).
+    { onFailClosed: (breach) => reasons.push(breach), exactRungsForTesting: true },
   );
   expect(adapter.buildFillMeshes([square(), grammarError()]), name).toEqual(INTERNAL);
   expect(reasons, name).toHaveLength(1);
@@ -501,7 +502,13 @@ describe('fill-v0 adapter fails closed', () => {
     [
       'record tail reserved',
       'record reserved field is set',
-      corrupt((view) => view.setUint32(OK_RECORD + 40, 1, true)),
+      // E39-K6: offset 40 now holds the coarsenings; 44 stays reserved.
+      corrupt((view) => view.setUint32(OK_RECORD + 44, 1, true)),
+    ],
+    [
+      'coarsenings past a finite tolerance',
+      'record coarsenings exceed a finite tolerance',
+      corrupt((view) => view.setUint32(OK_RECORD + 40, 2000, true)),
     ],
     ['OK with zero vertices', COUNTS, corrupt((view) => view.setUint32(OK_RECORD + 20, 0, true))],
     ['OK with zero indices', COUNTS, corrupt((view) => view.setUint32(OK_RECORD + 24, 0, true))],

@@ -231,7 +231,8 @@ fn meshFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {
   let triangle = triangles[input.triangle];
   let instance = instances[input.instance];
   let coverage = meshCoverage(input.position.xy + clipState.pixelShift, triangle, instance);
-  if (coverage == 0.0) {
+  // E39-R4: a winding source's cover never discards.
+  if (coverage == 0.0 && triangle.padding1 != NO_DISCARD) {
     discard;
   }
   return vec4f(coverage * clip);

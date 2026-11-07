@@ -175,6 +175,9 @@ struct Decoded {
     indices: Vec<u32>,
     boundary: Vec<u32>,
     bounds: [f64; 4],
+    /// E39-K6: the coverage word and the tolerance doublings (record offsets 36 and 40).
+    coverage: u32,
+    coarsenings: u32,
 }
 
 impl Decoded {
@@ -226,8 +229,14 @@ fn decode(output: &[u8], paths: &[TestPath]) -> Vec<Decoded> {
         let exponent = read_u32(output, record + 8).unwrap() as i32;
         assert_eq!(id, path.id);
         assert_eq!(exponent, path.exponent);
-        for reserved in [12, 36, 40, 44] {
+        for reserved in [12, 44] {
             assert_eq!(read_u32(output, record + reserved), Some(0));
+        }
+        let coverage = read_u32(output, record + 36).unwrap();
+        let coarsenings = read_u32(output, record + 40).unwrap();
+        assert!(coverage <= 2);
+        if status != FILL_PATH_OK {
+            assert_eq!((coverage, coarsenings), (0, 0));
         }
         let block_offset = read_u32(output, record + 16).unwrap() as usize;
         let vertex_count = read_u32(output, record + 20).unwrap() as usize;
@@ -253,6 +262,8 @@ fn decode(output: &[u8], paths: &[TestPath]) -> Vec<Decoded> {
             );
             assert!(bounds.iter().all(|value| value.to_bits() == 0));
             decoded.push(Decoded {
+                coverage,
+                coarsenings,
                 id,
                 status,
                 exponent,
@@ -302,6 +313,8 @@ fn decode(output: &[u8], paths: &[TestPath]) -> Vec<Decoded> {
         assert_eq!(bounds, expected);
         cursor += block_bytes;
         decoded.push(Decoded {
+            coverage,
+            coarsenings,
             id,
             status,
             exponent,
@@ -445,8 +458,8 @@ fn runtime_limits_equal_the_native_test_limits() {
         assert!(runtime >= test);
     }
     assert_eq!(FILL_V0_VERSION, 0);
-    // E38 (2026-11-07): `fill-v0+r6`.
-    assert_eq!(FILL_V0_REVISION, 6);
+    // E39 (2026-11-07): `fill-v0+r7`.
+    assert_eq!(FILL_V0_REVISION, 7);
     assert_eq!(FILL_INPUT_MAGIC.to_le_bytes(), *b"VGF0");
     assert_eq!(FILL_OUTPUT_MAGIC.to_le_bytes(), *b"VGM0");
     let (slots, split, bytes) = FillEngine::scratch_sizes().unwrap();
@@ -594,7 +607,8 @@ fn input_framing_rejections_are_invalid_batch() {
     corrupt("point offsets offset", 32, point_offsets as u32 + 4);
     corrupt("verbs offset", 36, read_u32(&valid, 36).unwrap() + 1);
     corrupt("points offset", 40, points_offset as u32 - 8);
-    corrupt("header reserved", 44, 1);
+    // E39: word 11 is the exact flag, 0 or 1.
+    corrupt("exact flag above 1", 44, 2);
     corrupt("fill rule", 48 + 4, 2);
     corrupt("request reserved", 48 + 16 + 12, 1);
     corrupt("first path offset", path_offsets, 1);
@@ -2576,4 +2590,53 @@ fn e38_robust_rung_through_the_export() {
             }
         }
     }
+}
+
+/// E39-A4 and K6: through the export, production's winding meshes (opt-in here) allocate
+/// nothing, move no storage, and carry the coverage word; the E36 star takes the partition
+/// fallback (coverage 0) and reports its coarsening.
+#[test]
+fn e39_winding_meshes_through_the_export() {
+    use crate::e38_robust_rung_tests::user_node7;
+    use crate::stroke_outline_tests::PathSpec;
+    let test_path = |id: u32, path: PathSpec, exponent: i32| TestPath {
+        id,
+        rule: NONZERO,
+        exponent,
+        verbs: path.verbs,
+        points: path.points,
+    };
+    let n = 1001;
+    let at = |i: usize| {
+        let angle = std::f64::consts::TAU * ((i * 500) % n) as f64 / n as f64;
+        (300.0 * angle.cos(), 300.0 * angle.sin())
+    };
+    let mut star = PathSpec::new().m(at(0).0, at(0).1);
+    for i in 1..n {
+        star = star.l(at(i).0, at(i).1);
+    }
+    let paths = [test_path(0, user_node7(), -3), test_path(1, star.z(), -3)];
+    let input = pack(&paths);
+    let mut engine = FillEngine::new();
+    engine.hooks().robust = true;
+    engine.hooks().winding = true;
+    load(&mut engine, &input, 1 << 23);
+    let storage = engine.storage();
+    engine.input_bytes_mut()[..input.len()].copy_from_slice(&input);
+    crate::allocation_test_support::start();
+    let status = engine.process(input.len() as u32);
+    let allocations = crate::allocation_test_support::stop();
+    assert_eq!((status, allocations), (BATCH_OK, 0));
+    assert_eq!(engine.storage(), storage);
+    let decoded = decode(engine.output_bytes(), &paths);
+    assert_eq!(
+        decoded
+            .iter()
+            .map(|mesh| (mesh.status, mesh.coverage, mesh.coarsenings))
+            .collect::<Vec<_>>(),
+        // The star's slab sweep runs over its work budget once (E38-R4) and then draws its
+        // own lines unbudgeted: the requested flattening, so no doubling is reported (E39-K4).
+        [(FILL_PATH_OK, 1, 0), (FILL_PATH_OK, 0, 0)]
+    );
+    assert!(decoded.iter().all(|mesh| mesh.boundary.is_empty()));
 }

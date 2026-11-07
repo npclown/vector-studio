@@ -1498,7 +1498,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       // A part holding notices only: no resources, writes or draws.
       return Object.freeze({
         part: Object.freeze({
-          layoutVersion: 0 as const,
+          layoutVersion: 1 as const,
           originRevision: this.#meshOriginRevision,
           resources: Object.freeze([]),
           writes: Object.freeze([]),
@@ -1518,7 +1518,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     });
     return Object.freeze({
       part: Object.freeze({
-        layoutVersion: 0 as const,
+        layoutVersion: 1 as const,
         originRevision: this.#meshOriginRevision,
         resources: output.resources,
         writes: output.writes,
@@ -1551,6 +1551,9 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
               triangleCount: placement.triangleCount,
               // ST-U7 addendum, section 4.5: only a joint fill draw carries the field.
               ...(draw.composite === undefined ? {} : { composite: draw.composite }),
+              // E39-R8: a winding or union draw carries its coverage (and a winding its rule).
+              ...(draw.coverage === undefined ? {} : { coverage: draw.coverage }),
+              ...(draw.fillRule === undefined ? {} : { fillRule: draw.fillRule }),
             }),
           });
           if (!this.#fullDerivation) this.#meshPartDraws.set(draw, made);
@@ -2693,6 +2696,8 @@ function maskLevels(
                   instance: draw.instance,
                   firstTriangle: draw.firstTriangle,
                   triangleCount: draw.triangleCount,
+                  ...(draw.coverage === undefined ? {} : { coverage: draw.coverage }),
+                  ...(draw.fillRule === undefined ? {} : { fillRule: draw.fillRule }),
                 }),
         }),
       });

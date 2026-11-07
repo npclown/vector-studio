@@ -126,6 +126,8 @@ async function runWasm(): Promise<Map<string, DigestRecord>> {
         pathData.rule,
         pathData.exponent,
         index,
+        // E39-A7: the native harness runs the exact rungs; so does this release-WASM side.
+        true,
       );
       new Uint8Array(kernel.memory.buffer, kernel.fill_v0_input_ptr() >>> 0, input.length).set(
         input,

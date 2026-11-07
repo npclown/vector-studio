@@ -102,7 +102,7 @@ function boundaryCycleTwiceArea(mesh: FillMesh): number {
 
 describe('E14-U1 rung 0 over E through the release WASM', () => {
   it('meshes E14-F1 to E14-F4 with valid structure (E14-A3, E14-A6)', async () => {
-    const adapter = await createFillMeshPort(module);
+    const adapter = await createFillMeshPort(module, { exactRungsForTesting: true });
     const fixtures: [string, FillMeshRequest, number][] = [
       ['E14-F1', path(1, quarters(512)), 256],
       ['E14-F2', path(2, quarters(2_048)), 512],
@@ -133,7 +133,7 @@ describe('E14-U1 rung 0 over E through the release WASM', () => {
   // E38 (2026-11-07): the exact ladder still stops here, and the robust last rung
   // (`fill-v0+r6`) now meshes both paths, with no boundary edges.
   it('meshes past E0 and a self-crossing path over E through the robust rung', async () => {
-    const adapter = await createFillMeshPort(module);
+    const adapter = await createFillMeshPort(module, { exactRungsForTesting: true });
     const circle = (r: number) => path(5, quarters(r));
     const crossing: FillMeshRequest = {
       requestId: 6,

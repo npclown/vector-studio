@@ -80,6 +80,12 @@ struct MeshVertexOutput {
 @group(0) @binding(5) var<uniform> frame: MeshFrame;
 
 const REGION_ROLE: u32 = 0u;
+const EXTERIOR_ROLE: u32 = 1u;
+// E39-R3: a winding or union variant's two cover triangles; word 6 is the half (0 or 1).
+const COVER_ROLE: u32 = 2u;
+// E39-R4: word 7 of a winding or union variant's triangle records; such fragments never discard.
+const NO_DISCARD: u32 = 1u;
+const COVER_MARGIN_PX: f32 = 1.0;
 const EDGE_KIND: u32 = 0u;
 const FAR_FIELD_PX: f32 = 1.0;
 const JOINT_STROKE_INDEX: u32 = 0x80000000u;
@@ -106,7 +112,10 @@ fn meshCornerIndex(triangle: MeshTriangle, corner: u32) -> u32 {
 // The shared position helper of both vertex entry points (ST-U7 addendum, S-3 a): NDC of the
 // position at absolute index positionIndex, mapped with the given record's lanes and anchor.
 fn meshPositionNdc(positionIndex: u32, instance: MeshInstance) -> vec4f {
-  let physicalPosition = toPhysical(positions[positionIndex], instance);
+  return physicalToNdc(toPhysical(positions[positionIndex], instance));
+}
+
+fn physicalToNdc(physicalPosition: vec2f) -> vec4f {
   // NDC exactly as the P1 shader, y flipped.
   return vec4f(
     physicalPosition.x * 2.0 / frame.physicalSize.x - 1.0,
@@ -128,10 +137,45 @@ fn meshVertexMain(
   let local = meshCornerIndex(triangle, corner);
 
   var output: MeshVertexOutput;
-  output.position = meshPositionNdc(instance.vertexBase + local, instance);
+  if (triangle.role == COVER_ROLE) {
+    output.position = meshCoverNdc(triangle, corner, instance);
+  } else {
+    output.position = meshPositionNdc(instance.vertexBase + local, instance);
+  }
   output.triangle = triangleIndex;
   output.instance = instanceIndex;
   return output;
+}
+
+// E39-R3: a cover triangle's corner. The four cover corners from word 0 are mapped to physical
+// pixels, and their axis-aligned box, moved out by COVER_MARGIN_PX on each side, is the cover
+// quad: half 0 is (min, min), (max, min), (max, max); half 1 is (min, min), (max, max),
+// (min, max). The margin absorbs the f32 rounding of the corners; the stencil test keeps it
+// unpainted.
+fn meshCoverNdc(triangle: MeshTriangle, corner: u32, instance: MeshInstance) -> vec4f {
+  let base = instance.vertexBase + triangle.i0;
+  let a = toPhysical(positions[base], instance);
+  let b = toPhysical(positions[base + 1u], instance);
+  let c = toPhysical(positions[base + 2u], instance);
+  let d = toPhysical(positions[base + 3u], instance);
+  let low = min(min(a, b), min(c, d)) - vec2f(COVER_MARGIN_PX);
+  let high = max(max(a, b), max(c, d)) + vec2f(COVER_MARGIN_PX);
+  var x = low.x;
+  var y = low.y;
+  if (corner == 1u) {
+    x = high.x;
+    y = select(low.y, high.y, triangle.padding0 == 1u);
+  } else if (corner == 2u) {
+    x = select(high.x, low.x, triangle.padding0 == 1u);
+    y = high.y;
+  }
+  return physicalToNdc(vec2f(x, y));
+}
+
+// E39 stencil pass: the pipeline's color write mask is 0 and nothing is discarded.
+@fragment
+fn meshStencilFragmentMain() -> @location(0) vec4f {
+  return vec4f(0.0);
 }
 
 // The joint fill draw's vertex entry point. It first selects the record: the stroke record
@@ -197,7 +241,8 @@ fn insideSector(
 // strict-< updates in list order, s positive outside, w = |v.x| + |v.y| over |v|, and the 1.0 px
 // far-field clamp to the role constant.
 fn meshCoverage(p: vec2f, triangle: MeshTriangle, instance: MeshInstance) -> f32 {
-  let roleConstant = select(0.0, 1.0, triangle.role == REGION_ROLE);
+  // Region and cover triangles (E39) are inside; exterior triangles outside.
+  let roleConstant = select(1.0, 0.0, triangle.role == EXTERIOR_ROLE);
   return meshListCoverage(
     p,
     instance.listBase + triangle.listOffset,
@@ -273,7 +318,8 @@ fn meshFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {
   let coverage = meshCoverage(input.position.xy, triangle, instance);
   // out = c * opacity * (r * a, g * a, b * a, a), premultiplied for P1's blend.
   let alpha = coverage * instance.opacity * instance.fill.a;
-  if (alpha == 0.0) {
+  // E39-R4: a winding or union draw never discards; a discard would skip its stencil zeroing.
+  if (alpha == 0.0 && triangle.padding1 != NO_DISCARD) {
     discard;
   }
   return vec4f(instance.fill.rgb * alpha, alpha);

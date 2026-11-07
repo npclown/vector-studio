@@ -29,14 +29,14 @@ use crate::geometry::{
     PATH_OK, PATH_WORK_LIMIT,
 };
 use crate::line_fill::LineFillRule;
-use crate::robust_mesh::RobustMesh;
+use crate::robust_mesh::{RobustMesh, WindingFill};
 use crate::rounded_line_fill::{RoundedFillError, RoundedFillLimits, RoundedFillOutput};
 use crate::simple_cubic_topology::{
     TopologyError, TopologyLimits, MAX_CROSSINGS, MAX_CROSSING_SCAN,
 };
 
 pub const FILL_V0_VERSION: u32 = 0;
-pub const FILL_V0_REVISION: u32 = 6;
+pub const FILL_V0_REVISION: u32 = 7;
 pub const FILL_INPUT_MAGIC: u32 = 0x3046_4756;
 pub const FILL_OUTPUT_MAGIC: u32 = 0x304D_4756;
 
@@ -263,6 +263,9 @@ pub(crate) struct FillRequest {
 pub(crate) struct FillInput<'a> {
     bytes: &'a [u8],
     path_count: usize,
+    /// E39: header word 11, bit 0: build with the ladder (the exact rungs and E38's robust
+    /// rung), not a winding mesh. The adapters set it only for the oracle and analysis harnesses.
+    exact: bool,
     path_offsets_offset: usize,
     point_offsets_offset: usize,
     verbs_offset: usize,
@@ -290,10 +293,11 @@ impl<'a> FillInput<'a> {
             || read_u32(bytes, 0)? != FILL_INPUT_MAGIC
             || read_u32(bytes, 4)? != FILL_V0_VERSION
             || read_usize(bytes, 8)? != bytes.len()
-            || read_u32(bytes, 44)? != 0
+            || read_u32(bytes, 44)? > 1
         {
             return None;
         }
+        let exact = read_u32(bytes, 44)? == 1;
         let path_count = read_usize(bytes, 12)?;
         let verb_count = read_usize(bytes, 16)?;
         let point_count = read_usize(bytes, 20)?;
@@ -353,6 +357,7 @@ impl<'a> FillInput<'a> {
         Some(Self {
             bytes,
             path_count,
+            exact,
             path_offsets_offset: path_offsets.0,
             point_offsets_offset: point_offsets.0,
             verbs_offset: verbs.0,
@@ -362,6 +367,11 @@ impl<'a> FillInput<'a> {
 
     pub(crate) fn path_count(self) -> usize {
         self.path_count
+    }
+
+    /// E39: whether the batch asks for the ladder instead of winding meshes (header word 11).
+    pub(crate) fn exact(self) -> bool {
+        self.exact
     }
 
     pub(crate) fn request(self, index: usize) -> Option<FillRequest> {
@@ -880,7 +890,15 @@ pub(crate) struct BuiltPath {
     /// E38: the mesh is the robust rung's (`FillScratch::robust`), after the exact rung's
     /// `work-limit` or `unsupported-geometry`; the other fields keep the exact rung's record.
     pub(crate) robust: bool,
+    /// E39-K6: the mesh's coverage (`COVERAGE_PARTITION` or `COVERAGE_WINDING`).
+    pub(crate) coverage: u32,
 }
+
+/// E39-K6: the record's coverage word (offset 36): a partition mesh (today's), a winding mesh
+/// (a fill fan), or a union mesh (stroke pieces).
+pub(crate) const COVERAGE_PARTITION: u32 = 0;
+pub(crate) const COVERAGE_WINDING: u32 = 1;
+pub(crate) const COVERAGE_UNION: u32 = 2;
 
 impl BuiltPath {
     const fn decided(status: u32) -> Self {
@@ -893,6 +911,7 @@ impl BuiltPath {
             error: None,
             tier: None,
             robust: false,
+            coverage: COVERAGE_PARTITION,
         }
     }
 }
@@ -915,9 +934,27 @@ pub(crate) struct PathSwitches {
     /// that the exact-rung fixtures keep observing `fill-v0+r5`'s statuses.
     #[cfg(test)]
     pub(crate) robust: bool,
+    /// E39: winding meshes instead of the ladder. Production always builds them; in tests it
+    /// is opt-in, so that the ladder fixtures keep observing `fill-v0+r6`'s results.
+    #[cfg(test)]
+    pub(crate) winding: bool,
+    /// E39: the batch's exact flag (header word 11): the ladder runs instead of the winding
+    /// build, in production as in tests.
+    pub(crate) exact: bool,
 }
 
 impl PathSwitches {
+    #[cfg(test)]
+    fn winding(self) -> bool {
+        self.winding && !self.exact
+    }
+
+    #[cfg(not(test))]
+    #[inline(always)]
+    fn winding(self) -> bool {
+        !self.exact
+    }
+
     #[cfg(test)]
     fn no_robust(self) -> bool {
         !self.robust
@@ -1171,6 +1208,39 @@ pub(crate) fn build_path(
     if verbs.is_empty() {
         return Ok(BuiltPath::decided(FILL_PATH_EMPTY));
     }
+    // E39-K1, K3 and K5: production builds a winding mesh, with no rung of the ladder; a path
+    // past the winding bound takes E38's slab sweep (a partition mesh).
+    if switches.winding() {
+        let tol = tolerances(request.exponent).1;
+        let robust = |outcome| BuiltPath {
+            robust: true,
+            ..BuiltPath::decided(outcome)
+        };
+        return Ok(
+            match scratch.robust.build_fill_winding(verbs, point_bytes, tol) {
+                WindingFill::Mesh => BuiltPath {
+                    outcome: PathOutcome::Mesh,
+                    coverage: COVERAGE_WINDING,
+                    ..robust(FILL_PATH_OK)
+                },
+                WindingFill::Empty => BuiltPath::decided(FILL_PATH_EMPTY),
+                WindingFill::Refused => BuiltPath::decided(FILL_PATH_WORK_LIMIT),
+                WindingFill::TooWound => {
+                    match scratch
+                        .robust
+                        .build_fill(verbs, point_bytes, request.rule, tol)
+                    {
+                        Some(true) => BuiltPath {
+                            outcome: PathOutcome::Mesh,
+                            ..robust(FILL_PATH_OK)
+                        },
+                        Some(false) => BuiltPath::decided(FILL_PATH_EMPTY),
+                        None => BuiltPath::decided(FILL_PATH_WORK_LIMIT),
+                    }
+                }
+            },
+        );
+    }
     // Step 0, rung 0 (Alt-A1 contract sections 1.2 and 3.1): AL-FR0, the S1 prefix, FR1-FR8
     // and AL-FR9 on the request's tolerance. A published fast mesh is the path's result: no
     // exact attempt, no cell-ladder refinement and no ledger cross-check run (section 3.8).
@@ -1188,6 +1258,7 @@ pub(crate) fn build_path(
                     error: None,
                     tier: None,
                     robust: false,
+                    coverage: COVERAGE_PARTITION,
                 })
             }
             Err(reason) => Some(reason),
@@ -1220,6 +1291,7 @@ pub(crate) fn build_path(
         error,
         tier: Some(tier),
         robust: false,
+        coverage: COVERAGE_PARTITION,
     };
     // E38: an exact `work-limit` or `unsupported-geometry` goes to the robust last rung, which
     // never refuses a valid path (an empty region is `empty`).
@@ -1303,6 +1375,9 @@ struct BlockRecord {
     boundary: u32,
     bytes: u32,
     bounds: [f64; 4],
+    /// E39-K6: the coverage word and the tolerance doublings of the published build.
+    coverage: u32,
+    coarsenings: u32,
 }
 
 fn write_record(
@@ -1323,6 +1398,8 @@ fn write_record(
     write_u32(output, offset + 24, block.indices)?;
     write_u32(output, offset + 28, block.boundary)?;
     write_u32(output, offset + 32, block.bytes)?;
+    write_u32(output, offset + 36, block.coverage)?;
+    write_u32(output, offset + 40, block.coarsenings)?;
     for (index, value) in block.bounds.into_iter().enumerate() {
         write_f64(output, offset + 48 + index * 8, value)?;
     }
@@ -1457,6 +1534,12 @@ fn run_batch(
                         boundary: boundary_count,
                         bytes,
                         bounds: vertex_bounds(vertices),
+                        coverage: built.coverage,
+                        coarsenings: if built.robust {
+                            scratch.robust.stats.coarsenings
+                        } else {
+                            0
+                        },
                     }
                 } else {
                     BlockRecord::default()
@@ -1538,6 +1621,8 @@ pub(crate) struct TestHooks {
     pub(crate) small_tier_only: bool,
     /// E38: the robust last rung runs (opt-in in tests; always on in production).
     pub(crate) robust: bool,
+    /// E39: winding meshes instead of the ladder (opt-in in tests; always on in production).
+    pub(crate) winding: bool,
 }
 
 impl Default for FillEngine {
@@ -1571,6 +1656,7 @@ impl FillEngine {
                 defect_fallback_partial: false,
                 pre_b1_caps: false,
                 robust: false,
+                winding: false,
                 small_tier_only: false,
             },
         }
@@ -1686,13 +1772,15 @@ impl FillEngine {
             return BATCH_ALLOCATION_FAILED;
         };
         #[cfg(test)]
-        let (fault_path, output_cap, switches) = (
+        let (fault_path, output_cap, mut switches) = (
             self.test_hooks.fault_path,
             self.test_hooks.output_cap.unwrap_or(OUTPUT_CAP_BYTES),
             self.test_hooks.switches(),
         );
         #[cfg(not(test))]
-        let (fault_path, output_cap, switches) = (None, OUTPUT_CAP_BYTES, PathSwitches::default());
+        let (fault_path, output_cap, mut switches) =
+            (None, OUTPUT_CAP_BYTES, PathSwitches::default());
+        switches.exact = input.exact();
         let output = &mut words_as_bytes_mut(&mut self.output)[..capacity];
         match run_batch(
             input,
@@ -1790,6 +1878,8 @@ impl TestHooks {
             fallback_partial: self.defect_fallback_partial,
             // The older references (`r4`, pre-B1) predate the robust rung.
             robust: self.robust && !self.small_tier_only && !self.pre_b1_caps,
+            winding: self.winding && !self.small_tier_only && !self.pre_b1_caps,
+            exact: false,
         }
     }
 }

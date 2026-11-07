@@ -10,10 +10,10 @@ import type {
 // P3 D8 V2 fill-mesh transport v0 adapter
 // (docs/plans/p3-v2-fill-mesh-transport-contract.md, sections a, b, g and h).
 
-export const FILL_V0_OPERATION_ID = 'geometry-wasm/fill-v0+r6';
+export const FILL_V0_OPERATION_ID = 'geometry-wasm/fill-v0+r7';
 export const FILL_V0_VERSION = 0;
 /** The kernel revision this adapter was built for. */
-export const FILL_V0_REVISION = 6;
+export const FILL_V0_REVISION = 7;
 
 const INPUT_MAGIC = 0x3046_4756;
 const OUTPUT_MAGIC = 0x304d_4756;
@@ -83,7 +83,7 @@ const FILL_EXPORT_NAMES = [
 
 export interface FillMeshAdapter extends FillMeshPort {
   readonly portVersion: 0;
-  readonly operationId: 'geometry-wasm/fill-v0+r6';
+  readonly operationId: 'geometry-wasm/fill-v0+r7';
   /** Terminal and idempotent. Later calls return batch-failed: disposed. */
   dispose(): void;
   /** Current byteLength of this adapter's own linear memory. */
@@ -227,7 +227,11 @@ function inputLayout(requests: readonly ValidatedRequest[]): InputLayout {
   };
 }
 
-function packInput(requests: readonly ValidatedRequest[], layout: InputLayout): Uint8Array {
+function packInput(
+  requests: readonly ValidatedRequest[],
+  layout: InputLayout,
+  exact: boolean,
+): Uint8Array {
   const bytes = allocate(() => new Uint8Array(layout.totalBytes));
   const view = new DataView(bytes.buffer);
   const header = [
@@ -242,7 +246,8 @@ function packInput(requests: readonly ValidatedRequest[], layout: InputLayout): 
     layout.pointOffsets,
     layout.verbsOffset,
     layout.pointsOffset,
-    0,
+    // E39: header word 11 asks the kernel for the exact rungs (oracle and analysis harnesses).
+    exact ? 1 : 0,
   ];
   header.forEach((value, index) => view.setUint32(index * 4, value, true));
   let verbCursor = 0;
@@ -287,6 +292,7 @@ class FillMeshKernelAdapter implements FillMeshAdapter {
   constructor(
     kernel: FillKernelExports,
     private readonly onFailClosed: ((reason: string) => void) | undefined,
+    private readonly exactRungs = false,
   ) {
     this.kernel = kernel;
     this.memory = kernel.memory;
@@ -333,7 +339,7 @@ class FillMeshKernelAdapter implements FillMeshAdapter {
     requests: readonly ValidatedRequest[],
     layout: InputLayout,
   ): FillMeshBatchResult {
-    const input = packInput(requests, layout);
+    const input = packInput(requests, layout, this.exactRungs);
     if (this.state === null) this.state = this.readState(kernel);
     const minimumOutput = OUTPUT_HEADER_BYTES + RESULT_BYTES * requests.length;
     if (
@@ -571,13 +577,20 @@ class FillMeshKernelAdapter implements FillMeshAdapter {
       ) {
         throw new FillAbiBreach('result echo differs from the request');
       }
-      for (const reserved of [12, 36, 40, 44]) {
+      for (const reserved of [12, 44]) {
         if (u32(record + reserved) !== 0) throw new FillAbiBreach('record reserved field is set');
+      }
+      // E39-K6: the coverage word (0 partition, 1 winding) and the tolerance doublings.
+      const coverageWord = u32(record + 36);
+      const coarsenings = u32(record + 40);
+      // E39-K4: the served tolerance 2^(e - 1 + doublings) is finite.
+      if (status === PATH_OK && coarsenings > 0 && request.exponent + coarsenings > 1024) {
+        throw new FillAbiBreach('record coarsenings exceed a finite tolerance');
       }
       const echo = { requestId: request.requestId, toleranceExponent: request.exponent };
       if (status !== PATH_OK) {
         for (let offset = 16; offset < RESULT_BYTES; offset += 4) {
-          if (offset >= 36 && offset < 48) continue;
+          if (offset === 44) continue;
           if (u32(record + offset) !== 0) {
             throw new FillAbiBreach('a non-OK record carries mesh fields');
           }
@@ -603,6 +616,8 @@ class FillMeshKernelAdapter implements FillMeshAdapter {
         indexCount === 0 ||
         indexCount % 3 !== 0 ||
         boundaryCount % 2 !== 0 ||
+        (coverageWord !== 0 && coverageWord !== 1) ||
+        (coverageWord !== 0 && boundaryCount !== 0) ||
         blockOffset !== cursor
       ) {
         throw new FillAbiBreach('an OK record has inconsistent counts or offsets');
@@ -659,6 +674,8 @@ class FillMeshKernelAdapter implements FillMeshAdapter {
         indices,
         boundaryEdges,
         bounds: { minX, minY, maxX, maxY },
+        ...(coverageWord === 1 ? { coverage: 'winding' as const } : {}),
+        ...(coarsenings > 0 ? { servedExponent: request.exponent + coarsenings } : {}),
       };
       results.push({ ...echo, status: 'ok', mesh });
     }
@@ -688,7 +705,14 @@ function isLittleEndianHost(): boolean {
  */
 export function createFillMeshPortFromExports(
   exports: FillKernelExports,
-  options: Readonly<{ onFailClosed?: (reason: string) => void }> = {},
+  options: Readonly<{
+    onFailClosed?: (reason: string) => void;
+    /**
+     * E39-K3: build with the exact rungs and partition meshes (the pre-E39 ladder) instead of
+     * the winding/union meshes. Only oracle and analysis harnesses set it; production never does.
+     */
+    exactRungsForTesting?: boolean;
+  }> = {},
 ): FillMeshAdapter {
   const candidate = exports as unknown as Record<string, unknown>;
   const dispose = (): void => {
@@ -719,7 +743,11 @@ export function createFillMeshPortFromExports(
     dispose();
     throw error;
   }
-  return new FillMeshKernelAdapter(exports, options.onFailClosed);
+  return new FillMeshKernelAdapter(
+    exports,
+    options.onFailClosed,
+    options.exactRungsForTesting === true,
+  );
 }
 
 /**
@@ -728,6 +756,7 @@ export function createFillMeshPortFromExports(
  */
 export async function createFillMeshPort(
   source: WebAssembly.Module | BufferSource,
+  options: Readonly<{ exactRungsForTesting?: boolean }> = {},
 ): Promise<FillMeshAdapter> {
   let instance: WebAssembly.Instance;
   if (source instanceof WebAssembly.Module) {
@@ -735,5 +764,7 @@ export async function createFillMeshPort(
   } else {
     instance = (await WebAssembly.instantiate(source, {})).instance;
   }
-  return createFillMeshPortFromExports(instance.exports as unknown as FillKernelExports);
+  return createFillMeshPortFromExports(instance.exports as unknown as FillKernelExports, {
+    exactRungsForTesting: options.exactRungsForTesting === true,
+  });
 }

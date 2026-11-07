@@ -23,8 +23,12 @@ import { ScriptedStrokeMeshPort, strokedNode } from '../support/st-u6-stroke-har
 // E10_UPDATE_GOLDEN=1 only for such a reason.
 
 const GOLDEN = join(dirname(fileURLToPath(import.meta.url)), 'e10-golden', 'default-gpu-log.json');
-/** E3-U4's recorded SHA-256 of MESH_FILL_SHADER (E3 contract, section 16.5). */
-const MESH_FILL_SHADER_SHA256 = 'd306137cf0770f6bf7f9237f1c98b9ecd0a165cfdbfda916196d299e36b831a3';
+/**
+ * E3-U4's recorded SHA-256 of MESH_FILL_SHADER (E3 contract, section 16.5), re-baselined by E39
+ * (U2: the cover quad, the stencil pass fragment and the no-discard flag; partition draws shade
+ * as before). The golden log changed with it for the E39 stencil and cover pipelines.
+ */
+const MESH_FILL_SHADER_SHA256 = 'a74fc8809f69bb92cd4c7e99c94ddfc08d5b479ce776c79126f56a72135d67a4';
 
 class ManualClock implements AnimationFrameClock {
   #callbacks = new Map<number, (timestampMs: number) => void>();

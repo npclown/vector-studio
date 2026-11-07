@@ -44,6 +44,11 @@ export const MESH_STRIDES: Readonly<Record<MeshResourceId, number>> = Object.fre
   meshFrame: 32,
 });
 
+/** E39-R3: the cover triangles' role (0 region and 1 exterior are the fringe's). */
+export const MESH_COVER_ROLE = 2;
+/** E39-R4: word 7 of a winding or union variant's triangle records: the shaders never discard. */
+export const MESH_TRIANGLE_NO_DISCARD = 1;
+
 /** R3's selected O-PX target in physical pixels (section f, mesh origin). */
 export const MESH_ORIGIN_TARGET_PX = 128;
 
@@ -256,6 +261,11 @@ type ResidentVariant = {
   readonly fringe: PathFringe | null;
   /** An overlay variant of a joint fill draw (ST-U7 addendum, section 4.5); null otherwise. */
   readonly overlay: JointOverlay | null;
+  /**
+   * E39-R3: for a winding or union mesh, the variant-relative index of its first cover corner
+   * (the port vertex count); its two cover triangles follow its stencil triangles. Null otherwise.
+   */
+  readonly cover: number | null;
   readonly sizes: Readonly<Record<GeometryRegion, number>>;
   readonly bases: Record<GeometryRegion, number>;
 };
@@ -564,11 +574,14 @@ export class PathMeshPacker {
 
   #placeVariant(draw: PathMeshDraw): ResidentVariant {
     const fringe = draw.fringe?.data ?? null;
+    // E39-R3: a winding or union mesh (never fringed) has its cover corners at the end of its
+    // offsets and two cover triangles after its own.
+    const cover = fringe === null && draw.coverage !== undefined;
     const sizes = Object.freeze(
       fringe === null
         ? {
             meshPositions: draw.offsets.length / 2,
-            meshTriangles: draw.mesh.indices.length / 3,
+            meshTriangles: draw.mesh.indices.length / 3 + (cover ? 2 : 0),
             meshFeatureLists: 0,
             meshFeatures: 0,
           }
@@ -585,6 +598,7 @@ export class PathMeshPacker {
       indices: draw.mesh.indices,
       fringe,
       overlay: null,
+      cover: cover ? draw.offsets.length / 2 - 4 : null,
       sizes,
       bases: { meshPositions: 0, meshTriangles: 0, meshFeatureLists: 0, meshFeatures: 0 },
     };
@@ -606,6 +620,7 @@ export class PathMeshPacker {
       indices: new Uint32Array(0),
       fringe: null,
       overlay,
+      cover: null,
       sizes: Object.freeze({
         meshPositions: overlay.positions.length / 2,
         meshTriangles: (4 * overlay.triangles.length) / MESH_STRIDES.meshTriangles,
@@ -756,6 +771,29 @@ export class PathMeshPacker {
         // The fringe's records: i0, i1, i2, listOffset, listCount, role, two zero words.
         for (let word = 0; word < 8; word += 1) {
           triangles.setUint32(byte + 4 * word, variant.fringe.triangles[8 * index + word]!, true);
+        }
+      } else if (variant.cover !== null) {
+        // E39: stencil triangles i0, i1, i2 (the port's order; the stencil pass counts their
+        // orientation), listOffset 0, listCount 0, role 0, word 6 zero, word 7 the no-discard
+        // flag. Then the two cover triangles: i0 the first corner, i1 and i2 zero, role 2
+        // (cover), word 6 the half (0 or 1), word 7 the flag (mesh-fill-shader.ts).
+        const stencilTriangles = variant.sizes.meshTriangles - 2;
+        const half = index - stencilTriangles;
+        const words =
+          half < 0
+            ? [
+                variant.indices[3 * index]!,
+                variant.indices[3 * index + 1]!,
+                variant.indices[3 * index + 2]!,
+                0,
+                0,
+                0,
+                0,
+                MESH_TRIANGLE_NO_DISCARD,
+              ]
+            : [variant.cover, 0, 0, 0, 0, MESH_COVER_ROLE, half, MESH_TRIANGLE_NO_DISCARD];
+        for (let word = 0; word < 8; word += 1) {
+          triangles.setUint32(byte + 4 * word, words[word]!, true);
         }
       } else {
         // Region-only: u32 i0, i1, i2 (variant-relative, counter-clockwise as the port gives

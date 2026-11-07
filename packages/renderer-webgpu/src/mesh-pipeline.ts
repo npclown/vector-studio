@@ -14,8 +14,9 @@ import { MESH_STENCIL_FORMAT, type PrimitiveTargetFormat } from './primitive-pip
 // addendum, section 4.5: a joint pipeline over the same module, layout and bind group layout,
 // with its own shaderKey and entry points, created beside the fill pipeline.
 
-export const MESH_PACKET_LAYOUT_VERSION = 0;
-export const MESH_PACKET_LAYOUT_KEY = 'p3-mesh-packet-v0';
+/** E39-R8: layout version 1, the draws' coverage. */
+export const MESH_PACKET_LAYOUT_VERSION = 1;
+export const MESH_PACKET_LAYOUT_KEY = 'p3-mesh-packet-v1';
 export const MESH_VERTEX_LAYOUT_KEY = 'vertex-pulling-v0';
 export const MESH_FRAME_SIZE = 32;
 
@@ -153,8 +154,82 @@ export function createMeshStencilResetPipelineDescriptor(
   };
 }
 
-/** The mesh pipelines: V3's fill pipeline and ST-U7's joint fill pipeline. */
-export type MeshPipelineKind = 'fill' | 'joint';
+/**
+ * E39-R2: the cover pass's stencil test. Pass and fail both zero the sample (write mask 0xff),
+ * so every sample the stencil pass touched is 0 again after the cover, and each sample is
+ * painted at most once. Nonzero: not-equal to reference 0 under read mask 0xff. Even-odd: the
+ * same under read mask 0x01. A union (stroke) mesh's samples hold 0 or 1, so it uses the nonzero
+ * cover (equal to 1 under 0xff, as section 3's table states it, passes the same samples).
+ */
+export type MeshCoverRule = 'nonzero' | 'evenodd';
+
+export function meshCoverStencilState(rule: MeshCoverRule): GPUDepthStencilState {
+  const face = {
+    compare: 'not-equal',
+    failOp: 'zero',
+    depthFailOp: 'zero',
+    passOp: 'zero',
+  } as const;
+  return {
+    format: MESH_STENCIL_FORMAT,
+    depthWriteEnabled: false,
+    depthCompare: 'always',
+    stencilFront: face,
+    stencilBack: face,
+    stencilReadMask: rule === 'nonzero' ? 0xff : 0x01,
+    stencilWriteMask: 0xff,
+  };
+}
+
+/** E39-R1: the stencil pass of a winding mesh (fill) or a union mesh (stroke). */
+export type MeshStencilKind = 'winding' | 'union';
+
+/**
+ * E39-R1: compare always, no color writes. A winding mesh counts front faces up and back faces
+ * down (wrapping); a union mesh replaces with the draw's reference, 1.
+ */
+export function meshStencilPassState(kind: MeshStencilKind): GPUDepthStencilState {
+  const face = (passOp: GPUStencilOperation) =>
+    ({ compare: 'always', failOp: 'keep', depthFailOp: 'keep', passOp }) as const;
+  return {
+    format: MESH_STENCIL_FORMAT,
+    depthWriteEnabled: false,
+    depthCompare: 'always',
+    stencilFront: face(kind === 'winding' ? 'increment-wrap' : 'replace'),
+    stencilBack: face(kind === 'winding' ? 'decrement-wrap' : 'replace'),
+    stencilReadMask: 0xff,
+    stencilWriteMask: 0xff,
+  };
+}
+
+/** E39-R8: the stencil pass's reference: 1 for a union mesh (replace), 0 for a winding mesh. */
+export function meshStencilPassReference(kind: MeshStencilKind): number {
+  return kind === 'union' ? 1 : 0;
+}
+
+/**
+ * The mesh pipelines: V3's fill pipeline and ST-U7's joint fill pipeline (E17 write-once), and
+ * E39's cover pipelines over the fill module's entry points with the cover stencil states.
+ */
+export type MeshPipelineKind = 'fill' | 'joint' | 'cover-nonzero' | 'cover-evenodd';
+
+/** E39-R8: the cover kinds, by rule. */
+export const MESH_COVER_KINDS = Object.freeze({
+  nonzero: 'cover-nonzero',
+  evenodd: 'cover-evenodd',
+} as const satisfies Record<MeshCoverRule, MeshPipelineKind>);
+
+/** Every mesh pipeline kind, for cache eviction. */
+export const MESH_PIPELINE_KINDS: readonly MeshPipelineKind[] = Object.freeze([
+  'fill',
+  'joint',
+  'cover-nonzero',
+  'cover-evenodd',
+]);
+
+function meshRenderStateKey(state: string): string {
+  return `premultiplied-source-over/stencil8-${state}/no-cull/triangle-list-v1`;
+}
 
 export function meshPipelineKey(
   targetFormat: PrimitiveTargetFormat,
@@ -162,14 +237,64 @@ export function meshPipelineKey(
   kind: MeshPipelineKind = 'fill',
 ): PipelineCacheKey {
   return Object.freeze({
-    shaderKey: kind === 'fill' ? MESH_FILL_SHADER_KEY : MESH_JOINT_SHADER_KEY,
+    shaderKey: kind === 'joint' ? MESH_JOINT_SHADER_KEY : MESH_FILL_SHADER_KEY,
     layoutKey: MESH_PACKET_LAYOUT_KEY,
     vertexLayoutKey: MESH_VERTEX_LAYOUT_KEY,
     targetFormat,
-    renderStateKey: MESH_RENDER_STATE_KEY,
+    renderStateKey:
+      kind === 'fill' || kind === 'joint' ? MESH_RENDER_STATE_KEY : meshRenderStateKey(kind),
     sampleCount,
   });
 }
+
+/** E39-R8: a stencil pass pipeline's key; its target is any color format of a mesh pass. */
+export function meshStencilPipelineKey(
+  targetFormat: GPUTextureFormat,
+  sampleCount: 1 | 4,
+  kind: MeshStencilKind,
+): PipelineCacheKey {
+  return Object.freeze({
+    shaderKey: MESH_FILL_SHADER_KEY,
+    layoutKey: MESH_PACKET_LAYOUT_KEY,
+    vertexLayoutKey: MESH_VERTEX_LAYOUT_KEY,
+    targetFormat: targetFormat as PrimitiveTargetFormat,
+    renderStateKey: meshRenderStateKey(`stencil-${kind}`).replace(
+      'premultiplied-source-over',
+      'no-color',
+    ),
+    sampleCount,
+  });
+}
+
+/**
+ * E39-R1: the stencil pass pipeline over the fill module: meshVertexMain, no color writes, the
+ * stencil pass state. Only group 0 is in its layout, so it draws in the main pass, a layer tile
+ * pass, a mask tile pass and the count pass alike (their other groups stay bound).
+ */
+export function createMeshStencilPipelineDescriptor(
+  shaderModule: GPUShaderModule,
+  pipelineLayout: GPUPipelineLayout,
+  targetFormat: GPUTextureFormat,
+  sampleCount: 1 | 4,
+  kind: MeshStencilKind,
+): GPURenderPipelineDescriptor {
+  return {
+    label: `vector-studio/e39-mesh-stencil-${kind}-${targetFormat}-${sampleCount}x`,
+    layout: pipelineLayout,
+    vertex: { module: shaderModule, entryPoint: 'meshVertexMain', buffers: [] },
+    fragment: {
+      module: shaderModule,
+      entryPoint: MESH_STENCIL_FRAGMENT_ENTRY_POINT,
+      targets: [{ format: targetFormat, writeMask: 0 }],
+    },
+    primitive: { topology: 'triangle-list', frontFace: 'ccw', cullMode: 'none' },
+    depthStencil: meshStencilPassState(kind),
+    multisample: { count: sampleCount, mask: 0xffffffff, alphaToCoverageEnabled: false },
+  };
+}
+
+/** E39: the stencil pass's fragment entry point in MESH_FILL_SHADER. */
+export const MESH_STENCIL_FRAGMENT_ENTRY_POINT = 'meshStencilFragmentMain';
 
 export function createMeshPipelineDescriptor(
   shaderModule: GPUShaderModule,
@@ -178,9 +303,9 @@ export function createMeshPipelineDescriptor(
   sampleCount: 1 | 4,
   kind: MeshPipelineKind = 'fill',
 ): GPURenderPipelineDescriptor {
-  const fill = kind === 'fill';
+  const fill = kind !== 'joint';
   return {
-    label: `vector-studio/p3-mesh-${fill ? 'fill' : 'joint'}-${sampleCount}x`,
+    label: `vector-studio/p3-mesh-${kind}-${sampleCount}x`,
     layout: pipelineLayout,
     vertex: {
       module: shaderModule,
@@ -204,10 +329,42 @@ export function createMeshPipelineDescriptor(
     },
     // Cull mode none: winding never discards a triangle.
     primitive: { topology: 'triangle-list', frontFace: 'ccw', cullMode: 'none' },
-    // E17-K2: write-once per draw; the draw's reference is set before it is encoded.
-    depthStencil: meshWriteOnceStencilState(),
+    // E17-K2: write-once per draw; the draw's reference is set before it is encoded. E39-R2:
+    // a cover pipeline tests the stencil pass's count and zeroes it.
+    depthStencil:
+      kind === 'cover-nonzero'
+        ? meshCoverStencilState('nonzero')
+        : kind === 'cover-evenodd'
+          ? meshCoverStencilState('evenodd')
+          : meshWriteOnceStencilState(),
     multisample: { count: sampleCount, mask: 0xffffffff, alphaToCoverageEnabled: false },
   };
+}
+
+/**
+ * E39-R5: the stencil sequence of one pass's mesh draws in encoded order. A partition draw
+ * takes the next E17 ordinal (meshStencilStep); a winding or union draw takes none, and is
+ * preceded by a reset draw when a partition draw has written since the last reset. The main
+ * pass, each layer tile pass, each mask tile pass and E10's count pass all follow it.
+ */
+export class MeshStencilSequence {
+  #ordinal = 0;
+  #written = false;
+
+  /** A partition draw's reference and whether a reset draw precedes it. */
+  public partition(): Readonly<{ reset: boolean; reference: number }> {
+    const step = meshStencilStep(this.#ordinal);
+    this.#ordinal += 1;
+    this.#written = true;
+    return step;
+  }
+
+  /** Whether a reset draw precedes this winding or union draw. */
+  public winding(): boolean {
+    const reset = this.#written;
+    this.#written = false;
+    return reset;
+  }
 }
 
 /**

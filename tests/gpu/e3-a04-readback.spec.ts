@@ -75,9 +75,11 @@ function* allCases(): Generator<A04Case> {
 test('E3-U4 GPU model check and E3-PC12', async ({ browser, page }, info) => {
   test.setTimeout(4 * 60 * 60_000);
   const module = await WebAssembly.compile(new Uint8Array(readFileSync(wasmPath)));
+  // E39 contract section 5: A04 measures the exact rungs, which are test-only after E39.
+  const exact = { exactRungsForTesting: true };
   const ports = {
-    fill: await createFillMeshPort(module),
-    stroke: await createStrokeMeshPort(module),
+    fill: await createFillMeshPort(module, exact),
+    stroke: await createStrokeMeshPort(module, exact),
   };
   const partners = jointPartners();
 

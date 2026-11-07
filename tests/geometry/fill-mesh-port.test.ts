@@ -5,6 +5,8 @@ import { describeFillMeshPortConformance } from '../support/fill-mesh-port-confo
 
 // P3 V2 P-C1: the shared conformance suite against the release WASM adapter.
 // Results are functional evidence; precision is UNVERIFIED until B4 has A04 evidence.
+// E39-A7: the suite checks partition meshes, so it runs on the exact rungs (test hook);
+// e39-winding-port.test.ts covers the production winding and union meshes.
 
 let module: WebAssembly.Module;
 beforeAll(async () => {
@@ -13,7 +15,7 @@ beforeAll(async () => {
 });
 
 describeFillMeshPortConformance('geometry-wasm fill-v0', async () => {
-  const adapter = await createFillMeshPort(module);
+  const adapter = await createFillMeshPort(module, { exactRungsForTesting: true });
   return {
     port: adapter,
     dispose: () => adapter.dispose(),

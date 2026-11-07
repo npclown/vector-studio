@@ -43,6 +43,25 @@ const MAX_SPLITS_PER_SLAB: usize = 4_096;
 const MAX_ARC_STEPS: usize = 128;
 /// The most tolerance doublings (R4) before a refusal.
 const MAX_COARSENINGS: u32 = 64;
+/// E39-K4: the most vertices of a winding (fill) or union (stroke) mesh, and the most flattened
+/// points of their builds.
+pub(crate) const MAX_WINDING_VERTICES: usize = 1 << 17;
+/// E39-K4: the most triangle indices of a winding or union mesh (a fan of `k` points has `k - 2`
+/// triangles, so three per vertex is enough).
+const MAX_WINDING_INDICES: usize = 3 * MAX_WINDING_VERTICES;
+/// E39-K4: every subpath holds a point, so a build within the vertex bound has at most this
+/// many subpaths (the E38 sweep's `MAX_CHORDS` would refuse a compound path of more contours).
+const MAX_SUBPATHS: usize = MAX_WINDING_VERTICES;
+/// E39-K5: the winding boxes held at once. A path with more boxing subpaths (an outlined text
+/// block) merges neighbouring boxes in pairs, which only loosens the bound.
+const MAX_BOXES: usize = MAX_CHORDS;
+/// E39-K5: a fill whose winding bound reaches this falls back to the slab sweep (the stencil
+/// counts modulo 128 in a joint draw; 8 is the margin for the f32 rounding of transformed
+/// vertices).
+pub(crate) const WINDING_FALLBACK: u32 = 120;
+/// The sweep's vertex and index limits (E38), kept apart from the larger winding buffers.
+const SWEEP_VERTICES: usize = 4 * MAX_TRAPEZOIDS;
+const SWEEP_INDICES: usize = 6 * MAX_TRAPEZOIDS;
 /// The sweep's work budget per build: edge visits over all sub-slabs (sorting, crossing search,
 /// span matching). A build over it starts again at twice the tolerance (R4), which bounds the
 /// time of one robust build however much the stroke pieces overlap.
@@ -88,6 +107,27 @@ struct OpenSpan {
     seen: u32,
 }
 
+/// E39: the outcome of a winding fill build.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WindingFill {
+    /// A winding mesh (fan triangles over the flattened points).
+    Mesh,
+    /// No triangle covers a sample.
+    Empty,
+    /// E39-K5: the winding bound reached `WINDING_FALLBACK`; build the slab sweep instead.
+    TooWound,
+    /// The path does not fit the reserved buffers at any tolerance.
+    Refused,
+}
+
+/// One subpath's box and winding bound for the E39-K5 sweep.
+#[derive(Clone, Copy, Debug, Default)]
+struct WindingBox {
+    min: Point,
+    max: Point,
+    bound: u32,
+}
+
 /// A build stopped at a full buffer (R4 retries coarser).
 #[derive(Clone, Copy, Debug)]
 struct Full;
@@ -106,6 +146,8 @@ pub(crate) struct RobustStats {
     pub(crate) coarsenings: u32,
     /// The sweep work of the published build (against `MAX_SWEEP_WORK`).
     pub(crate) work: u64,
+    /// E39-K5: the winding bound of the last winding fill build.
+    pub(crate) winding_bound: u32,
 }
 
 /// The stroke style of a build.
@@ -142,6 +184,21 @@ pub(crate) struct RobustMesh {
     vertices: Vec<Point>,
     triangles: Vec<u32>,
     boundary: Vec<[u32; 2]>,
+    /// The most flattened points of this build: `MAX_CHORDS` for the sweep (E38), and
+    /// `MAX_WINDING_VERTICES` for a winding or union build (E39-K4).
+    point_limit: usize,
+    /// E39-K2: stroke pieces are written as fan triangles (a union mesh), not sweep edges.
+    union_output: bool,
+    /// E39-K1: the published vertices are the flattened points (a fill fan).
+    publish_points: bool,
+    /// E39-K5: edge span ends, and the subpath boxes with their y and x events.
+    tops: Vec<f64>,
+    bottoms: Vec<f64>,
+    boxes: Vec<WindingBox>,
+    box_ys: Vec<f64>,
+    box_events: Vec<(f64, u32, bool)>,
+    tree_max: Vec<i64>,
+    tree_add: Vec<i64>,
     reserved: bool,
     pub(crate) stats: RobustStats,
 }
@@ -221,6 +278,14 @@ fn half_cos(cosine: f64) -> f64 {
     ((1.0 + cosine) * 0.5).max(0.0).sqrt()
 }
 
+const fn const_max(a: usize, b: usize) -> usize {
+    if a > b {
+        a
+    } else {
+        b
+    }
+}
+
 fn reserve<T>(buffer: &mut Vec<T>, capacity: usize) -> Result<(), ()> {
     buffer.try_reserve_exact(capacity).map_err(|_| ())
 }
@@ -253,6 +318,16 @@ impl RobustMesh {
             vertices: Vec::new(),
             triangles: Vec::new(),
             boundary: Vec::new(),
+            point_limit: MAX_CHORDS,
+            union_output: false,
+            publish_points: false,
+            tops: Vec::new(),
+            bottoms: Vec::new(),
+            boxes: Vec::new(),
+            box_ys: Vec::new(),
+            box_events: Vec::new(),
+            tree_max: Vec::new(),
+            tree_add: Vec::new(),
             reserved: false,
             stats: RobustStats {
                 chords: 0,
@@ -264,6 +339,7 @@ impl RobustMesh {
                 tolerance: 0.0,
                 coarsenings: 0,
                 work: 0,
+                winding_bound: 0,
             },
         }
     }
@@ -273,9 +349,9 @@ impl RobustMesh {
         if self.reserved {
             return Ok(());
         }
-        reserve(&mut self.subpaths, MAX_CHORDS)?;
-        reserve(&mut self.points, MAX_CHORDS)?;
-        reserve(&mut self.corners, MAX_CHORDS)?;
+        reserve(&mut self.subpaths, MAX_SUBPATHS)?;
+        reserve(&mut self.points, MAX_WINDING_VERTICES)?;
+        reserve(&mut self.corners, MAX_WINDING_VERTICES)?;
         reserve(&mut self.piece, MAX_ARC_STEPS + 8)?;
         reserve(&mut self.edges, MAX_EDGES)?;
         reserve(&mut self.active, MAX_ACTIVE)?;
@@ -284,8 +360,17 @@ impl RobustMesh {
         reserve(&mut self.open, MAX_ACTIVE)?;
         reserve(&mut self.open_by_left, MAX_EDGES)?;
         self.open_by_left.resize(MAX_EDGES, 0);
-        reserve(&mut self.vertices, 4 * MAX_TRAPEZOIDS)?;
-        reserve(&mut self.triangles, 6 * MAX_TRAPEZOIDS)?;
+        reserve(&mut self.vertices, MAX_WINDING_VERTICES.max(SWEEP_VERTICES))?;
+        reserve(&mut self.triangles, MAX_WINDING_INDICES.max(SWEEP_INDICES))?;
+        reserve(&mut self.tops, MAX_WINDING_VERTICES)?;
+        reserve(&mut self.bottoms, MAX_WINDING_VERTICES)?;
+        reserve(&mut self.boxes, MAX_BOXES)?;
+        reserve(&mut self.box_ys, 2 * MAX_BOXES)?;
+        reserve(&mut self.box_events, 2 * MAX_BOXES)?;
+        reserve(&mut self.tree_max, 8 * MAX_BOXES)?;
+        reserve(&mut self.tree_add, 8 * MAX_BOXES)?;
+        self.tree_max.resize(8 * MAX_BOXES, 0);
+        self.tree_add.resize(8 * MAX_BOXES, 0);
         self.reserved = true;
         Ok(())
     }
@@ -293,7 +378,8 @@ impl RobustMesh {
     /// Bytes `reserve` requests, from the capacities alone.
     pub(crate) const fn reserved_bytes() -> usize {
         use std::mem::size_of;
-        MAX_CHORDS * (size_of::<Subpath>() + size_of::<Point>() + size_of::<bool>())
+        MAX_SUBPATHS * size_of::<Subpath>()
+            + MAX_WINDING_VERTICES * (size_of::<Point>() + size_of::<bool>())
             + (MAX_ARC_STEPS + 8) * size_of::<Point>()
             + MAX_EDGES * size_of::<Edge>()
             + MAX_ACTIVE
@@ -302,8 +388,12 @@ impl RobustMesh {
                     + size_of::<(u32, u32)>()
                     + size_of::<OpenSpan>())
             + MAX_EDGES * size_of::<u32>()
-            + 4 * MAX_TRAPEZOIDS * size_of::<Point>()
-            + 6 * MAX_TRAPEZOIDS * size_of::<u32>()
+            + const_max(MAX_WINDING_VERTICES, SWEEP_VERTICES) * size_of::<Point>()
+            + const_max(MAX_WINDING_INDICES, SWEEP_INDICES) * size_of::<u32>()
+            + 2 * MAX_WINDING_VERTICES * size_of::<f64>()
+            + MAX_BOXES * size_of::<WindingBox>()
+            + 2 * MAX_BOXES * (size_of::<f64>() + size_of::<(f64, u32, bool)>())
+            + 16 * MAX_BOXES * size_of::<i64>()
     }
 
     /// Bytes reserved by `reserve`.
@@ -321,11 +411,253 @@ impl RobustMesh {
             + self.open_by_left.capacity() * size_of::<u32>()
             + self.vertices.capacity() * size_of::<Point>()
             + self.triangles.capacity() * size_of::<u32>()
+            + (self.tops.capacity() + self.bottoms.capacity()) * size_of::<f64>()
+            + self.boxes.capacity() * size_of::<WindingBox>()
+            + self.box_ys.capacity() * size_of::<f64>()
+            + self.box_events.capacity() * size_of::<(f64, u32, bool)>()
+            + (self.tree_max.capacity() + self.tree_add.capacity()) * size_of::<i64>()
     }
 
     /// The published vertices, triangles (three indices each) and boundary pairs (none).
     pub(crate) fn mesh(&self) -> (&[Point], &[u32], &[[u32; 2]]) {
+        if self.publish_points {
+            return (&self.points, &self.triangles, &self.boundary);
+        }
         (&self.vertices, &self.triangles, &self.boundary)
+    }
+
+    /// E39-K1 and K5: the fill of a validated path as a winding mesh, a fan from each
+    /// subpath's first flattened point, at `tol` or coarser (K4).
+    pub(crate) fn build_fill_winding(
+        &mut self,
+        verbs: &[u8],
+        points: &[u8],
+        tol: f64,
+    ) -> WindingFill {
+        self.point_limit = MAX_WINDING_VERTICES;
+        let built = self.build(verbs, points, tol, |mesh, _| mesh.fans());
+        self.point_limit = MAX_CHORDS;
+        match built {
+            None => WindingFill::Refused,
+            Some(false) => WindingFill::Empty,
+            Some(true) => {
+                let bound = self.winding_bound();
+                self.stats.winding_bound = bound;
+                if bound >= WINDING_FALLBACK {
+                    WindingFill::TooWound
+                } else {
+                    self.publish_points = true;
+                    WindingFill::Mesh
+                }
+            }
+        }
+    }
+
+    /// E39-K2: the stroke of a validated path as a union mesh (every piece fanned), as
+    /// `build_stroke` answers.
+    pub(crate) fn build_stroke_union(
+        &mut self,
+        verbs: &[u8],
+        points: &[u8],
+        style: RobustStroke,
+        tol: f64,
+    ) -> Option<bool> {
+        if style.width.is_nan() || style.width <= 0.0 {
+            self.clear();
+            return Some(false);
+        }
+        self.point_limit = MAX_WINDING_VERTICES;
+        self.union_output = true;
+        let built = self.build(verbs, points, tol, |mesh, tol| {
+            mesh.stroke_pieces(style, tol)?;
+            Ok(!mesh.triangles.is_empty())
+        });
+        self.union_output = false;
+        self.point_limit = MAX_CHORDS;
+        built
+    }
+
+    /// E39-K1: the fan triangles `(p_0, p_i, p_{i+1})` of every subpath, collinear ones left
+    /// out.
+    fn fans(&mut self) -> Result<bool, Full> {
+        for index in 0..self.subpaths.len() {
+            let subpath = self.subpaths[index];
+            if subpath.count < 3 {
+                continue;
+            }
+            let first = subpath.start;
+            let origin = self.points[first];
+            for i in first + 1..first + subpath.count - 1 {
+                let a = sub(self.points[i], origin);
+                let b = sub(self.points[i + 1], origin);
+                let area = cross(a, b);
+                if area == 0.0 || area.is_nan() {
+                    continue;
+                }
+                if self.triangles.len() + 3 > MAX_WINDING_INDICES {
+                    return Err(Full);
+                }
+                self.triangles
+                    .extend_from_slice(&[first as u32, i as u32, i as u32 + 1]);
+            }
+        }
+        Ok(!self.triangles.is_empty())
+    }
+
+    /// E39-K5: a bound on the absolute winding number of the flattened fill. Per subpath, half
+    /// the largest number of its edges whose closed `y`-span contains one `y` (a horizontal
+    /// line through any point meets each such edge once, left or right of the point, and the
+    /// winding number is the same either way); over the path, the largest sum of these over
+    /// subpath boxes that contain one point.
+    fn winding_bound(&mut self) -> u32 {
+        self.boxes.clear();
+        let mut total = 0u64;
+        for index in 0..self.subpaths.len() {
+            let subpath = self.subpaths[index];
+            if subpath.count < 3 {
+                continue;
+            }
+            let bound = self.subpath_bound(subpath);
+            if bound == 0 {
+                continue;
+            }
+            let mut min = self.points[subpath.start];
+            let mut max = min;
+            for p in &self.points[subpath.start..subpath.start + subpath.count] {
+                min = Point {
+                    x: min.x.min(p.x),
+                    y: min.y.min(p.y),
+                };
+                max = Point {
+                    x: max.x.max(p.x),
+                    y: max.y.max(p.y),
+                };
+            }
+            total += u64::from(bound);
+            if self.boxes.len() == MAX_BOXES {
+                self.merge_box_pairs();
+            }
+            self.boxes.push(WindingBox { min, max, bound });
+        }
+        if total < u64::from(WINDING_FALLBACK) {
+            return total as u32;
+        }
+        self.box_depth()
+    }
+
+    /// Replaces boxes `2i` and `2i + 1` by the box around both with the sum of their bounds: a
+    /// point in either is in the merged box, and its sum over the boxes containing it can only
+    /// grow, so the bound stays conservative. Subpaths come in path order, so pairs are mostly
+    /// near each other (the contours of one glyph, neighbouring glyphs).
+    fn merge_box_pairs(&mut self) {
+        let pairs = self.boxes.len() / 2;
+        for i in 0..pairs {
+            let (a, b) = (self.boxes[2 * i], self.boxes[2 * i + 1]);
+            self.boxes[i] = WindingBox {
+                min: Point {
+                    x: a.min.x.min(b.min.x),
+                    y: a.min.y.min(b.min.y),
+                },
+                max: Point {
+                    x: a.max.x.max(b.max.x),
+                    y: a.max.y.max(b.max.y),
+                },
+                bound: a.bound.saturating_add(b.bound),
+            };
+        }
+        if self.boxes.len() % 2 == 1 {
+            self.boxes[pairs] = self.boxes[2 * pairs];
+            self.boxes.truncate(pairs + 1);
+        } else {
+            self.boxes.truncate(pairs);
+        }
+    }
+
+    fn subpath_bound(&mut self, subpath: Subpath) -> u32 {
+        self.tops.clear();
+        self.bottoms.clear();
+        let (start, n) = (subpath.start, subpath.count);
+        for i in 0..n {
+            let a = self.points[start + i];
+            let b = self.points[start + (i + 1) % n];
+            // `tops` and `bottoms` hold `MAX_WINDING_VERTICES`, as many as there are points.
+            self.tops.push(a.y.min(b.y));
+            self.bottoms.push(a.y.max(b.y));
+        }
+        self.tops.sort_unstable_by(f64::total_cmp);
+        self.bottoms.sort_unstable_by(f64::total_cmp);
+        let mut ended = 0usize;
+        let mut deepest = 0usize;
+        for (started, &y) in self.tops.iter().enumerate() {
+            while ended < n && self.bottoms[ended] < y {
+                ended += 1;
+            }
+            deepest = deepest.max(started + 1 - ended);
+        }
+        (deepest / 2) as u32
+    }
+
+    /// The largest sum of box bounds over the boxes containing one point (closed boxes): a
+    /// sweep in `x` with a max segment tree over the boxes' `y` ends.
+    fn box_depth(&mut self) -> u32 {
+        self.box_ys.clear();
+        self.box_events.clear();
+        for (index, b) in self.boxes.iter().enumerate() {
+            self.box_ys.push(b.min.y);
+            self.box_ys.push(b.max.y);
+            self.box_events.push((b.min.x, index as u32, true));
+            self.box_events.push((b.max.x, index as u32, false));
+        }
+        self.box_ys.sort_unstable_by(f64::total_cmp);
+        self.box_ys.dedup();
+        // At one x, every box that starts there counts before any box that ends there.
+        self.box_events
+            .sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(b.2.cmp(&a.2)));
+        let leaves = self.box_ys.len();
+        let nodes = (4 * leaves).min(self.tree_max.len());
+        self.tree_max[..nodes].fill(0);
+        self.tree_add[..nodes].fill(0);
+        let mut deepest = 0i64;
+        for k in 0..self.box_events.len() {
+            let (_, index, opens) = self.box_events[k];
+            let b = self.boxes[index as usize];
+            let lo = self.box_ys.partition_point(|&y| y < b.min.y);
+            let hi = self.box_ys.partition_point(|&y| y <= b.max.y) - 1;
+            let value = if opens {
+                i64::from(b.bound)
+            } else {
+                -i64::from(b.bound)
+            };
+            self.tree_update(1, 0, leaves - 1, lo, hi, value);
+            if opens {
+                deepest = deepest.max(self.tree_max[1]);
+            }
+        }
+        deepest.clamp(0, i64::from(u32::MAX)) as u32
+    }
+
+    fn tree_update(
+        &mut self,
+        node: usize,
+        left: usize,
+        right: usize,
+        lo: usize,
+        hi: usize,
+        value: i64,
+    ) {
+        if hi < left || right < lo {
+            return;
+        }
+        if lo <= left && right <= hi {
+            self.tree_max[node] += value;
+            self.tree_add[node] += value;
+            return;
+        }
+        let middle = (left + right) / 2;
+        self.tree_update(2 * node, left, middle, lo, hi, value);
+        self.tree_update(2 * node + 1, middle + 1, right, lo, hi, value);
+        self.tree_max[node] =
+            self.tree_add[node] + self.tree_max[2 * node].max(self.tree_max[2 * node + 1]);
     }
 
     /// The fill of a validated path under `rule`: `Some(true)` for a mesh, `Some(false)` for an
@@ -375,6 +707,7 @@ impl RobustMesh {
         self.edges.clear();
         self.vertices.clear();
         self.triangles.clear();
+        self.publish_points = false;
         self.stats = RobustStats::default();
     }
 
@@ -392,11 +725,18 @@ impl RobustMesh {
         let mut tol = tol;
         self.work_budget = MAX_SWEEP_WORK;
         let mut over_work_at = None;
-        for coarsenings in 0..=MAX_COARSENINGS {
+        // E39-K4: the served tolerance as doublings of the requested one (an over-budget sweep
+        // multiplies by up to 2^16 in one retry), and the requested flattening's chord count.
+        let mut doublings = 0u32;
+        let mut requested_chords = None;
+        for attempt in 0..=MAX_COARSENINGS {
             self.clear();
-            self.stats.coarsenings = coarsenings;
+            self.stats.coarsenings = doublings;
             self.stats.tolerance = tol;
             let result = self.flatten(verbs, points, tol).and_then(|()| {
+                if attempt == 0 {
+                    requested_chords = Some(self.stats.chords);
+                }
                 // A sweep over its budget whose coarsening left the chords as they were (a
                 // path of lines) would only fail again: this attempt runs unbudgeted, since
                 // its work is then the path's own crossings.
@@ -406,11 +746,19 @@ impl RobustMesh {
                 body(self, tol)
             });
             match result {
-                Ok(drawn) => return Some(drawn),
+                Ok(drawn) => {
+                    // Wang's chord count per cubic never grows with the tolerance, so an equal
+                    // total is the requested flattening itself (a path of lines): not coarser.
+                    if requested_chords == Some(self.stats.chords) {
+                        self.stats.coarsenings = 0;
+                    }
+                    return Some(drawn);
+                }
                 Err(Full) => {
                     over_work_at = self.over_work.then_some(self.stats.chords);
                     self.over_work = false;
                     tol *= self.coarsening;
+                    doublings += self.coarsening.log2() as u32;
                     self.coarsening = 2.0;
                 }
             }
@@ -431,6 +779,9 @@ impl RobustMesh {
                 }
             }
             return Ok(());
+        }
+        if self.points.len() >= self.point_limit {
+            return Err(Full);
         }
         push(&mut self.points, p)?;
         push(&mut self.corners, corner)?;
@@ -530,6 +881,22 @@ impl RobustMesh {
             area += cross(sub(self.piece[i], origin), sub(self.piece[i + 1], origin));
         }
         if area == 0.0 || area.is_nan() {
+            return Ok(());
+        }
+        if self.union_output {
+            // E39-K2: the piece as a fan from its first point (orientation does not matter:
+            // the renderer marks the union).
+            if self.vertices.len() + n > MAX_WINDING_VERTICES
+                || self.triangles.len() + 3 * (n - 2) > MAX_WINDING_INDICES
+            {
+                return Err(Full);
+            }
+            let base = self.vertices.len() as u32;
+            self.vertices.extend_from_slice(&self.piece);
+            for i in 1..n as u32 - 1 {
+                self.triangles
+                    .extend_from_slice(&[base, base + i, base + i + 1]);
+            }
             return Ok(());
         }
         for i in 0..n {
@@ -757,9 +1124,7 @@ impl RobustMesh {
         if !wide_top && !wide_bottom {
             return Ok(());
         }
-        if self.vertices.len() + 4 > self.vertices.capacity()
-            || self.triangles.len() + 6 > self.triangles.capacity()
-        {
+        if self.vertices.len() + 4 > SWEEP_VERTICES || self.triangles.len() + 6 > SWEEP_INDICES {
             return Err(Full);
         }
         let base = self.vertices.len() as u32;

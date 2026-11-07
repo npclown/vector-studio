@@ -66,8 +66,9 @@ export const LADDER_SCENARIO_VERSION = 1;
 export const LADDER_RUNNER_VERSION = 'p3-fill-ladder-runner/1';
 export const LADDER_SCHEMA_VERSION = 1;
 /** The production operation AL-S1 times (contract sections 2.1 and 5.3). */
-export const OPERATION_ID = 'geometry-wasm/fill-v0+r6';
-export const OPERATION_REVISION = 6;
+// Re-baselined for E39 (the harness runs the exact rungs through the r7 kernel).
+export const OPERATION_ID = 'geometry-wasm/fill-v0+r7';
+export const OPERATION_REVISION = 7;
 /** The spike's reference configuration hash, recorded when SL-U3 merged; unchanged here. */
 export const SPIKE_REFERENCE_CONFIG_HASH =
   '0daa96c068504c33dcf17ca787c1995db4972a76a006cd6db79473243fe72267';

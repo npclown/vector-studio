@@ -68,7 +68,7 @@ describe('E14-U2 large tier through the release WASM', () => {
     };
     // Stack-first: static data starts above the 1 MiB stack.
     expect(Number(exports.__data_end.value)).toBeGreaterThan(STACK_TOP);
-    const adapter = createFillMeshPortFromExports(exports);
+    const adapter = createFillMeshPortFromExports(exports, { exactRungsForTesting: true });
     const names = [...MESHED, 'X-F7/e-4'];
     expect(names.every((name) => fixtures.has(name))).toBe(true);
     // Warm the reservation, then paint the idle stack and run the measured batch.

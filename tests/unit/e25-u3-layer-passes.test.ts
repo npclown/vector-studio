@@ -158,6 +158,7 @@ const layerEmpty = 'primitive/1/layer-empty-bind-group';
 describe('E25 U3 layer variant sources (section 4; E25-A08 hash part)', () => {
   it('keeps the base, clip and paint modules byte-identical to main', () => {
     // E23 U3 pins the base, clip and mask hashes; these are the paint modules' at 095abeb.
+    // E39-U2 re-baselined the mesh modules (cover quad, stencil fragment, no-discard flag).
     expect({
       analytic: hash(PRIMITIVE_ANALYTIC_SHADER),
       mesh: hash(MESH_FILL_SHADER),
@@ -169,13 +170,13 @@ describe('E25 U3 layer variant sources (section 4; E25-A08 hash part)', () => {
       meshPaintClip: hash(MESH_FILL_PAINT_CLIP_SHADER),
     }).toEqual({
       analytic: '06b0839c15b93141d1caa72596484b0aa02f53e74f1e58b74959fb5b92af527d',
-      mesh: 'd306137cf0770f6bf7f9237f1c98b9ecd0a165cfdbfda916196d299e36b831a3',
+      mesh: 'a74fc8809f69bb92cd4c7e99c94ddfc08d5b479ce776c79126f56a72135d67a4',
       analyticClip: '434bc1d2768c1b9d09c385a2ac4f524f3d6976e183fb9324e0612a7a176efc0d',
-      meshClip: 'abcac5d89e07e09978e7a93ad4f14783ac17fef656332cdcffa821328e994d7a',
+      meshClip: '7d2c6a6a0bfaf98efc1dc46c1d33ae28fcbd6af2d1af13e2ceea71bec11d7b07',
       analyticPaint: '4806c2ff765f81874b1c4e343642f84113cc2be4ddcba355a4479a644f2767f3',
       analyticPaintClip: 'd5ca9dad0bb75815b3048d9276d2a57e63def756b9fb44149ee4042dc2720510',
-      meshPaint: '6e92d37155395acaad383dcb2093e6e449c88f3e41843825249b9ede8785ad40',
-      meshPaintClip: '6c77d54690333e3a93138bc43be954d14a66d692aaeb767488480c46435b7fd2',
+      meshPaint: 'a3e5cca88f27dfd705ce049617d1559c9c6caf6ca95fbcf89e2e549600021e30',
+      meshPaintClip: 'a80140642ce8185de9d18a80ca8949596ea067e1f049d0f24048fa529b9bf780',
     });
   });
 
@@ -238,23 +239,31 @@ describe('E25 U3 pipeline creation', () => {
     expect(scene).toMatchObject({
       layerPipelineAvailable: true,
       paintPipelineAvailable: true,
-      pipelinesCreated: 27,
+      pipelinesCreated: 48,
       shaderModulesCreated: 19,
       layerPasses: 0,
     });
-    expect(fixture.pipelineLabels.slice(15)).toEqual([
+    expect(fixture.pipelineLabels.slice(28)).toEqual([
       composite,
       `${stencilP1}+clip-v0+layer-v0`,
       `${stencilP1}+paint-v0+layer-v0`,
       `${stencilP1}+paint-v0+clip-v0+layer-v0`,
       'vector-studio/p3-mesh-fill-4x+layer-v0',
       'vector-studio/p3-mesh-joint-4x+layer-v0',
+      'vector-studio/p3-mesh-cover-nonzero-4x+layer-v0',
+      'vector-studio/p3-mesh-cover-evenodd-4x+layer-v0',
       'vector-studio/p3-mesh-fill-4x+clip-v0+layer-v0',
       'vector-studio/p3-mesh-joint-4x+clip-v0+layer-v0',
+      'vector-studio/p3-mesh-cover-nonzero-4x+clip-v0+layer-v0',
+      'vector-studio/p3-mesh-cover-evenodd-4x+clip-v0+layer-v0',
       'vector-studio/p3-mesh-fill-4x+paint-v0+layer-v0',
       'vector-studio/p3-mesh-joint-4x+paint-v0+layer-v0',
+      'vector-studio/p3-mesh-cover-nonzero-4x+paint-v0+layer-v0',
+      'vector-studio/p3-mesh-cover-evenodd-4x+paint-v0+layer-v0',
       'vector-studio/p3-mesh-fill-4x+paint-v0+clip-v0+layer-v0',
       'vector-studio/p3-mesh-joint-4x+paint-v0+clip-v0+layer-v0',
+      'vector-studio/p3-mesh-cover-nonzero-4x+paint-v0+clip-v0+layer-v0',
+      'vector-studio/p3-mesh-cover-evenodd-4x+paint-v0+clip-v0+layer-v0',
     ]);
     const groups = (label: string) =>
       (
@@ -280,14 +289,14 @@ describe('E25 U3 pipeline creation', () => {
       'vector-studio/e23-paint-layout',
       'vector-studio/e25-layer-layout',
     ]);
-    // The base pipelines are created as before: the first 15 labels are the paint run's.
+    // The base pipelines are created as before: the first 28 labels are the paint run's.
     const paintOnly = nativeFixture();
     const plain = await nativeScene(paintOnly, withoutLayer);
-    expect(fixture.pipelineLabels.slice(0, 15)).toEqual(paintOnly.pipelineLabels);
-    expect(plain.scene).toMatchObject({ layerPipelineAvailable: false, pipelinesCreated: 15 });
+    expect(fixture.pipelineLabels.slice(0, 28)).toEqual(paintOnly.pipelineLabels);
+    expect(plain.scene).toMatchObject({ layerPipelineAvailable: false, pipelinesCreated: 28 });
     expect(paintOnly.modules.some((code) => code.includes('layerPass'))).toBe(false);
     plain.creation.dispose();
-    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(27);
+    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(48);
     creation.dispose();
     expect(accounting.snapshot().live).toBe(0);
   });
@@ -330,7 +339,7 @@ describe('E25 U3 pipeline creation', () => {
         paintPipelineAvailable: true,
         clipPipelineAvailable: true,
         meshPipelineAvailable: true,
-        pipelinesCreated: 15,
+        pipelinesCreated: 28,
         shaderModulesCreated: 11,
       });
       expect(readyOf(scene).readyEntries).toBe(baseline);
@@ -344,7 +353,7 @@ describe('E25 U3 pipeline creation', () => {
     const fixture = nativeFixture();
     (fixture.device.limits as { maxBindGroups: number }).maxBindGroups = 3;
     const { scene, creation } = await nativeScene(fixture, allOptions);
-    expect(scene).toMatchObject({ layerPipelineAvailable: false, pipelinesCreated: 15 });
+    expect(scene).toMatchObject({ layerPipelineAvailable: false, pipelinesCreated: 28 });
     expect(fixture.modules.some((code) => code.includes('layerPass'))).toBe(false);
     creation.dispose();
   });

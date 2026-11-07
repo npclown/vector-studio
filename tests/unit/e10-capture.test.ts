@@ -529,10 +529,11 @@ describe('E10-A5 count pass', () => {
       .map(([, descriptor]) => (descriptor as { code: string }).code);
     expect(modules).toContain(`sha256:${sha}`);
     // P1, mesh, E17 reset, count and readout modules; P1, mesh and E17 reset pipelines plus
-    // three count pipelines and the E17 count reset pipeline.
+    // three count pipelines and the E17 count reset pipeline. Re-baselined for E39: the main
+    // and count sets each gain two stencil and two cover pipelines.
     expect(h.result.supported && h.backend.getStatistics()).toMatchObject({
       shaderModulesCreated: 5,
-      pipelinesCreated: 8,
+      pipelinesCreated: 16,
     });
     const capture = await h.pending;
     expect(capture.counts!.samples).toBe(4);

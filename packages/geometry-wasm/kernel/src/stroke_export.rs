@@ -39,7 +39,7 @@ pub const STROKE_V0_VERSION: u32 = 0;
 /// Revision 8 (2026-11-06): a path that ends in `work-limit` is built once more with the E35
 /// retry (D9 E35: near-cusp fans as two side hulls, the relative cone guard, near-reversal
 /// disks); every path that was `ok` keeps its mesh.
-pub const STROKE_V0_REVISION: u32 = 9;
+pub const STROKE_V0_REVISION: u32 = 10;
 /// Bytes `VGT0`.
 pub const STROKE_INPUT_MAGIC: u32 = 0x3054_4756;
 /// Bytes `VGU0`.
@@ -87,6 +87,9 @@ fn decode_join(value: u32) -> Option<StrokeJoin> {
 pub(crate) struct StrokeInput<'a> {
     bytes: &'a [u8],
     path_count: usize,
+    /// E39: header word 11, bit 0: build with the exact rungs and E38's robust rung, not a
+    /// union mesh. The adapters set it only for the oracle and analysis harnesses.
+    exact: bool,
     requests_offset: usize,
     path_offsets_offset: usize,
     point_offsets_offset: usize,
@@ -100,10 +103,11 @@ impl<'a> StrokeInput<'a> {
             || read_u32(bytes, 0)? != STROKE_INPUT_MAGIC
             || read_u32(bytes, 4)? != STROKE_V0_VERSION
             || read_usize(bytes, 8)? != bytes.len()
-            || read_u32(bytes, 44)? != 0
+            || read_u32(bytes, 44)? > 1
         {
             return None;
         }
+        let exact = read_u32(bytes, 44)? == 1;
         let path_count = read_usize(bytes, 12)?;
         let verb_count = read_usize(bytes, 16)?;
         let point_count = read_usize(bytes, 20)?;
@@ -164,6 +168,7 @@ impl<'a> StrokeInput<'a> {
         Some(Self {
             bytes,
             path_count,
+            exact,
             requests_offset: requests.0,
             path_offsets_offset: path_offsets.0,
             point_offsets_offset: point_offsets.0,
@@ -174,6 +179,11 @@ impl<'a> StrokeInput<'a> {
 
     pub(crate) fn path_count(self) -> usize {
         self.path_count
+    }
+
+    /// E39: whether the batch asks for the exact rungs instead of union meshes (word 11).
+    pub(crate) fn exact(self) -> bool {
+        self.exact
     }
 
     pub(crate) fn request(self, index: usize) -> Option<StrokeRequest> {
@@ -244,6 +254,9 @@ struct BlockRecord {
     boundary: u32,
     bytes: u32,
     bounds: [f64; 4],
+    /// E39-K6: the coverage word (0 partition, 2 union) and the tolerance doublings.
+    coverage: u32,
+    coarsenings: u32,
 }
 
 /// V2's 80-byte result record (section 7.4): echoes, status, block fields and bounds; every
@@ -266,6 +279,8 @@ fn write_record(
     write_u32(output, offset + 24, block.indices)?;
     write_u32(output, offset + 28, block.boundary)?;
     write_u32(output, offset + 32, block.bytes)?;
+    write_u32(output, offset + 36, block.coverage)?;
+    write_u32(output, offset + 40, block.coarsenings)?;
     for (index, value) in block.bounds.into_iter().enumerate() {
         write_f64(output, offset + 48 + index * 8, value)?;
     }
@@ -318,6 +333,7 @@ fn run_batch(
     };
     let mut cursor = data_offset;
     let mut overflow = false;
+    workspace.set_exact(input.exact());
     for index in 0..path_count {
         let (Some(request), Some((verbs, points))) = (input.request(index), input.path(index))
         else {
@@ -387,6 +403,12 @@ fn run_batch(
                         boundary: boundary_count,
                         bytes,
                         bounds: vertex_bounds(vertices),
+                        coverage: if workspace.union_published() {
+                            crate::fill_export::COVERAGE_UNION
+                        } else {
+                            crate::fill_export::COVERAGE_PARTITION
+                        },
+                        coarsenings: workspace.coarsenings(),
                     }
                 } else {
                     BlockRecord::default()
@@ -456,6 +478,8 @@ pub(crate) struct TestHooks {
     pub(crate) heap_cap: Option<usize>,
     /// E38: the robust last rung runs (opt-in in tests; always on in production).
     pub(crate) robust: bool,
+    /// E39: union meshes instead of the exact rungs (opt-in in tests; always on in production).
+    pub(crate) winding: bool,
 }
 
 impl Default for StrokeEngine {
@@ -484,6 +508,7 @@ impl StrokeEngine {
                 output_cap: None,
                 heap_cap: None,
                 robust: false,
+                winding: false,
             },
         }
     }
@@ -537,6 +562,7 @@ impl StrokeEngine {
         #[cfg(test)]
         {
             workspace.defects_mut().robust = self.test_hooks.robust;
+            workspace.defects_mut().winding = self.test_hooks.winding;
         }
         let total = workspace.allocated_bytes().ok_or(BATCH_INTERNAL_ERROR)?;
         if total > cap {

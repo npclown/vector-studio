@@ -47,6 +47,8 @@ export function packFillInput(
   rule: number,
   exponent: number,
   requestId: number,
+  /** E39: header word 11, the exact-rung flag (default false). */
+  exact?: boolean,
 ): Uint8Array;
 export function main(args?: readonly string[]): Promise<boolean>;
 export const RANDOM_CORPUS_SHA256: string;
