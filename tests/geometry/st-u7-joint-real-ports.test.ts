@@ -265,9 +265,13 @@ describe('ST-U7 joint overlay on real-port meshes (ST-U7b review S4)', () => {
  *
  * Note, 2026-10-24 (D9 E2-U1, stroke-v0+r5): the seam merge makes the stroke of `blob-miter` ok,
  * so both ports return meshes and the overlay refuses it with a reason (`unsupported`).
+ *
+ * Note, 2026-11-07 (D9 E38, stroke-v0+r9): the robust last rung meshes the stroke of
+ * `blob-round-join` (both exponents) with no boundary edges, so this harness's fringe builder
+ * refuses it (`stroke-fringe-unsupported`); the pipeline draws such a mesh without a fringe.
  */
 const EXPECTED_OUTCOMES: Readonly<Record<string, string>> = {
-  'blob-round-join': 'port-failure',
+  'blob-round-join': 'stroke-fringe-unsupported',
   'blob-miter': 'unsupported',
   's-curve-round-caps': 'built',
   's-curve-square-caps': 'built',
@@ -277,7 +281,7 @@ const EXPECTED_OUTCOMES: Readonly<Record<string, string>> = {
   'd-shape-miter-e-1': 'built',
   'arch-round-caps-e-2': 'built',
   'arch-butt-e-1': 'built',
-  'blob-round-join-e-1': 'port-failure',
+  'blob-round-join-e-1': 'stroke-fringe-unsupported',
   'pentagon-round-join': 'built',
   'pentagon-bevel': 'built',
 };

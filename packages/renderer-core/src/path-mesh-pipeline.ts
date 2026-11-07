@@ -75,8 +75,8 @@ import { expandDash, type DashedPath, type DashExpansion } from './stroke-dash.j
 // both paints drawable at 0 < opacity < 1 is drawn by a joint-coverage fill draw over a
 // renderer-derived overlay (path-joint-overlay.ts), then the unchanged stroke draw, so opacity
 // applies once. The overlay is built on first need and cached on the fill entry, at most two per
-// node; a failed build is the state `overlay-unsupported` (paint null), which hides
-// the path and keeps both cached meshes. Functional evidence only: precision is UNVERIFIED.
+// node; a failed build is the state `overlay-unsupported` (paint null), which since E38 draws
+// the two paints plainly (opacity twice in the overlap) and keeps both cached meshes. Functional evidence only: precision is UNVERIFIED.
 
 export type { PathFringe, PathFringeBuilder, PathFringeBuildResult };
 
@@ -1066,7 +1066,10 @@ export class PathMeshPipeline {
         const fillEntry = entries[0]!;
         const served = this.#serveOverlay(path.id, fillEntry, entries[1]!, pathDraws, now);
         if (served === null) {
-          volatile = true;
+          // E38: an overlay that cannot be built no longer hides the path; its two paints are
+          // drawn as at opacity 1 (the overlap takes the opacity twice), with the notice.
+          draws.push(...pathDraws);
+          keep(path, items, entries as MeshEntry[], pathDraws, null);
           continue;
         }
         const joint: PathMeshDraw = Object.freeze({
@@ -1848,7 +1851,10 @@ export class PathMeshPipeline {
     if (lanes === null) return fail('packing-range');
     let fringeBucket: number | null = null;
     let fringe: PathMeshDraw['fringe'] = null;
-    if (
+    if (this.#fringeBuilder !== undefined && entry.boundaryVertices === 0) {
+      // E38: a mesh with no boundary edges (the kernel's robust last rung) has no fringe to
+      // build; its region triangles are drawn without one (4x MSAA edges), with no notice.
+    } else if (
       this.#fringeBuilder !== undefined &&
       entry.boundaryVertices > this.#limits.fringeBoundaryVertexCap
     ) {
@@ -1861,9 +1867,12 @@ export class PathMeshPipeline {
     } else if (this.#fringeBuilder !== undefined) {
       const served = this.#serveFringe(item, entry, this.#fringeBuilder);
       if (served === 'range') return fail('fringe-range');
-      if (served === 'unsupported') return null;
-      fringeBucket = served.f;
-      fringe = Object.freeze({ id: served.id, data: served.fringe });
+      // E38: a fringe the builder refuses no longer hides the path; the region triangles are
+      // drawn without it (4x MSAA edges), with the notice, as under the work cap.
+      if (served !== 'unsupported') {
+        fringeBucket = served.f;
+        fringe = Object.freeze({ id: served.id, data: served.fringe });
+      }
     }
     const slot = item.paint === 'fill' ? this.#slots.get(nodeId)! : this.#strokeSlots.get(nodeId)!;
     return Object.freeze({
@@ -1950,31 +1959,37 @@ export class PathMeshPipeline {
         candidate.strokeVariant === strokeVariant,
     );
     if (overlay === undefined) {
-      this.#overlayBuilds += 1;
-      const result = buildJointOverlay(
-        {
-          fill: {
-            mesh: fillEntry.mesh!,
-            fringeBucket: fillDraw.fringe === null ? null : fillDraw.fringeBucket,
-          },
-          stroke: {
-            mesh: strokeEntry.mesh!,
-            fringeBucket: strokeDraw.fringe === null ? null : strokeDraw.fringeBucket,
-          },
-        },
-        {
-          limits: {
-            exactTests: this.#limits.overlayExactTests,
-            steinerPoints: this.#limits.overlaySteinerPoints,
-          },
-        },
-      );
+      // E38: a robust mesh (no boundary edges) gives the overlay no boundary to classify
+      // against, so the pair is marked overlay-unsupported without a build.
+      const robust =
+        fillEntry.mesh!.boundaryEdges.length === 0 || strokeEntry.mesh!.boundaryEdges.length === 0;
+      if (!robust) this.#overlayBuilds += 1;
+      const result = robust
+        ? null
+        : buildJointOverlay(
+            {
+              fill: {
+                mesh: fillEntry.mesh!,
+                fringeBucket: fillDraw.fringe === null ? null : fillDraw.fringeBucket,
+              },
+              stroke: {
+                mesh: strokeEntry.mesh!,
+                fringeBucket: strokeDraw.fringe === null ? null : strokeDraw.fringeBucket,
+              },
+            },
+            {
+              limits: {
+                exactTests: this.#limits.overlayExactTests,
+                steinerPoints: this.#limits.overlaySteinerPoints,
+              },
+            },
+          );
       overlay = {
         fillVariant,
         strokeEntry: strokeEntry.id,
         strokeVariant,
         built:
-          result.status === 'built'
+          result?.status === 'built'
             ? Object.freeze({
                 id: Symbol(`path-joint-overlay-${nodeId}`),
                 overlay: result.overlay,
@@ -2176,10 +2191,14 @@ export function pathMeshNoticeDiagnostic(
   generation: number,
 ): DiagnosticInput {
   // fringe-work-cap (the V4 builder work cap) still draws the region triangles, without a fringe.
+  // fringe-unsupported (E38) also draws the region triangles; overlay-unsupported (E38) draws
+  // both paints without the joint coverage.
   const outcome =
-    notice.failureCode === 'fringe-work-cap'
+    notice.failureCode === 'fringe-work-cap' || notice.failureCode === 'fringe-unsupported'
       ? 'is drawn without its coverage fringe'
-      : 'is not drawn';
+      : notice.failureCode === 'overlay-unsupported'
+        ? 'is drawn without its joint coverage'
+        : 'is not drawn';
   const subject =
     notice.nodeId === null ? 'Mesh paths are not drawn' : `Path ${notice.nodeId} ${outcome}`;
   return Object.freeze({

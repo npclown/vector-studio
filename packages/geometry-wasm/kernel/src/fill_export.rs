@@ -29,13 +29,14 @@ use crate::geometry::{
     PATH_OK, PATH_WORK_LIMIT,
 };
 use crate::line_fill::LineFillRule;
+use crate::robust_mesh::RobustMesh;
 use crate::rounded_line_fill::{RoundedFillError, RoundedFillLimits, RoundedFillOutput};
 use crate::simple_cubic_topology::{
     TopologyError, TopologyLimits, MAX_CROSSINGS, MAX_CROSSING_SCAN,
 };
 
 pub const FILL_V0_VERSION: u32 = 0;
-pub const FILL_V0_REVISION: u32 = 5;
+pub const FILL_V0_REVISION: u32 = 6;
 pub const FILL_INPUT_MAGIC: u32 = 0x3046_4756;
 pub const FILL_OUTPUT_MAGIC: u32 = 0x304D_4756;
 
@@ -435,6 +436,8 @@ pub(crate) struct FillScratch {
     /// `(index slots, split pairs)` of the small and large tiers.
     small_limits: (usize, usize),
     large_limits: (usize, usize),
+    /// E38: the robust last rung's storage and mesh (`fill-v0+r6`, `stroke-v0+r9`).
+    pub(crate) robust: RobustMesh,
 }
 
 /// Marker for a refinement or boundary self-check failure.
@@ -452,6 +455,7 @@ impl FillScratch {
             split_limit: 0,
             small_limits: (0, 0),
             large_limits: (0, 0),
+            robust: RobustMesh::new(),
         }
     }
 
@@ -487,6 +491,8 @@ impl FillScratch {
             slots.checked_mul(size_of::<DirectedEdge>())?,
             slots.checked_mul(size_of::<[u32; 2]>())?,
             split.checked_mul(size_of::<SplitEdge>())?,
+            // E38: the robust rung's buffers.
+            RobustMesh::reserved_bytes(),
         ]
         .into_iter()
         .try_fold(0usize, usize::checked_add)?;
@@ -532,8 +538,12 @@ impl FillScratch {
             || scratch.edges.try_reserve_exact(slots).is_err()
             || scratch.boundary.try_reserve_exact(slots).is_err()
             || scratch.split.try_reserve_exact(split).is_err()
+            || scratch.robust.reserve().is_err()
         {
             return Err(BATCH_ALLOCATION_FAILED);
+        }
+        if scratch.robust.allocated_bytes() != RobustMesh::reserved_bytes() {
+            return Err(BATCH_INTERNAL_ERROR);
         }
         Ok((scratch, bytes))
     }
@@ -867,6 +877,9 @@ pub(crate) struct BuiltPath {
     pub(crate) error: Option<CubicFillError>,
     /// E14-U2 X-K1 item 5: the exact rung's tier, `None` when the exact rung did not run.
     pub(crate) tier: Option<FillTier>,
+    /// E38: the mesh is the robust rung's (`FillScratch::robust`), after the exact rung's
+    /// `work-limit` or `unsupported-geometry`; the other fields keep the exact rung's record.
+    pub(crate) robust: bool,
 }
 
 impl BuiltPath {
@@ -879,6 +892,7 @@ impl BuiltPath {
             depth: 0,
             error: None,
             tier: None,
+            robust: false,
         }
     }
 }
@@ -897,9 +911,24 @@ pub(crate) struct PathSwitches {
     /// rung 0 left), because the exact mesh's refinement is skipped.
     #[cfg(test)]
     pub(crate) fallback_partial: bool,
+    /// E38: the robust last rung runs. Production always runs it; in tests it is opt-in, so
+    /// that the exact-rung fixtures keep observing `fill-v0+r5`'s statuses.
+    #[cfg(test)]
+    pub(crate) robust: bool,
 }
 
 impl PathSwitches {
+    #[cfg(test)]
+    fn no_robust(self) -> bool {
+        !self.robust
+    }
+
+    #[cfg(not(test))]
+    #[inline(always)]
+    fn no_robust(self) -> bool {
+        false
+    }
+
     #[cfg(test)]
     fn exact_only(self) -> bool {
         self.exact_only
@@ -1158,6 +1187,7 @@ pub(crate) fn build_path(
                     depth: 0,
                     error: None,
                     tier: None,
+                    robust: false,
                 })
             }
             Err(reason) => Some(reason),
@@ -1189,19 +1219,42 @@ pub(crate) fn build_path(
         depth,
         error,
         tier: Some(tier),
+        robust: false,
+    };
+    // E38: an exact `work-limit` or `unsupported-geometry` goes to the robust last rung, which
+    // never refuses a valid path (an empty region is `empty`).
+    let robust = |scratch: &mut FillScratch, status: u32| -> BuiltPath {
+        let refused = status == FILL_PATH_WORK_LIMIT || status == FILL_PATH_UNSUPPORTED_GEOMETRY;
+        if !refused || switches.no_robust() {
+            return exact(PathOutcome::Status(status));
+        }
+        let tol = tolerances(request.exponent).1;
+        let outcome = match scratch
+            .robust
+            .build_fill(verbs, point_bytes, request.rule, tol)
+        {
+            Some(true) => PathOutcome::Mesh,
+            Some(false) => PathOutcome::Status(FILL_PATH_EMPTY),
+            // Beyond the rung's reserved buffers at any tolerance: the exact rung's status.
+            None => return exact(PathOutcome::Status(status)),
+        };
+        BuiltPath {
+            robust: true,
+            ..exact(outcome)
+        }
     };
     let diagnostics = match result {
         Ok(diagnostics) => diagnostics,
         Err(error) => {
             return match map_attempt_error(error) {
-                Mapped::Path(status) => Ok(exact(PathOutcome::Status(status))),
+                Mapped::Path(status) => Ok(robust(scratch, status)),
                 Mapped::Internal => Err(SelfCheckFailure),
             }
         }
     };
     match map_flat_status(diagnostics.flat_status) {
         Mapped::Path(FILL_PATH_OK) => {}
-        Mapped::Path(status) => return Ok(exact(PathOutcome::Status(status))),
+        Mapped::Path(status) => return Ok(robust(scratch, status)),
         Mapped::Internal => return Err(SelfCheckFailure),
     }
     let output = workspace.output().ok_or(SelfCheckFailure)?;
@@ -1341,19 +1394,23 @@ fn run_batch(
         let (status, block) = match built.outcome {
             PathOutcome::Status(status) => (status, BlockRecord::default()),
             PathOutcome::Mesh => {
-                let vertices = if built.rung == Some(Rung::Fast) {
+                let (vertices, triangles, boundary) = if built.robust {
+                    scratch.robust.mesh()
+                } else if built.rung == Some(Rung::Fast) {
                     let Some((vertices, _)) = ladder.mesh() else {
                         return BatchOutcome::Internal;
                     };
-                    vertices
+                    (vertices, scratch.triangles(), scratch.boundary())
                 } else {
                     let Some(mesh) = workspace.output() else {
                         return BatchOutcome::Internal;
                     };
-                    mesh.rounded.vertices
+                    (
+                        mesh.rounded.vertices,
+                        scratch.triangles(),
+                        scratch.boundary(),
+                    )
                 };
-                let triangles = scratch.triangles();
-                let boundary = scratch.boundary();
                 let payload = 16 * vertices.len() as u64
                     + 4 * (triangles.len() as u64 + 2 * boundary.len() as u64);
                 let block_bytes = payload.div_ceil(8) * 8;
@@ -1479,6 +1536,8 @@ pub(crate) struct TestHooks {
     /// E14-U2: the next reserve builds the `fill-v0+r4` workspace and scratch, without the
     /// exact rung's large tier, as the identity reference.
     pub(crate) small_tier_only: bool,
+    /// E38: the robust last rung runs (opt-in in tests; always on in production).
+    pub(crate) robust: bool,
 }
 
 impl Default for FillEngine {
@@ -1511,6 +1570,7 @@ impl FillEngine {
                 defect_cascade_inverted: false,
                 defect_fallback_partial: false,
                 pre_b1_caps: false,
+                robust: false,
                 small_tier_only: false,
             },
         }
@@ -1728,6 +1788,8 @@ impl TestHooks {
             exact_only: self.exact_only,
             cascade_inverted: self.defect_cascade_inverted,
             fallback_partial: self.defect_fallback_partial,
+            // The older references (`r4`, pre-B1) predate the robust rung.
+            robust: self.robust && !self.small_tier_only && !self.pre_b1_caps,
         }
     }
 }
@@ -1760,6 +1822,11 @@ impl FillEngine {
             point_bytes,
             switches,
         ))
+    }
+
+    /// The robust rung's mesh of the last path (E38), meaningful when it was `robust`.
+    pub(crate) fn scratch_robust_mesh(&self) -> (&[Point], &[u32], &[[u32; 2]]) {
+        self.scratch.robust.mesh()
     }
 
     /// Rung 0's work charges in the last path (E14-K3).
