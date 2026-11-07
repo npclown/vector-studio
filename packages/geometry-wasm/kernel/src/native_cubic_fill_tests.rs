@@ -700,6 +700,7 @@ fn topology_error_name(error: TopologyError) -> &'static str {
         TopologyError::KnotMismatch => "KnotMismatch",
         TopologyError::Unresolved => "Unresolved",
         TopologyError::WorkLimit => "WorkLimit",
+        TopologyError::ScanLimit => "ScanLimit",
     }
 }
 
@@ -1878,8 +1879,8 @@ fn emit_composition_rows(
     let mut workspace = BridgeWorkspace::new(LIMITS).expect("construct mixed cubic workspace");
     let allocated_bytes = workspace.allocated_bytes();
     let inline_bytes = size_of::<BridgeWorkspace>();
-    assert_eq!(allocated_bytes, 4_514_304);
-    assert_eq!(inline_bytes, 16_928);
+    assert_eq!(allocated_bytes, 4_662_016);
+    assert_eq!(inline_bytes, 2_824);
     println!("{begin_marker}");
     for (row, expectation) in rows.iter().zip(expected) {
         assert_eq!(row.id, expectation.id);
@@ -3317,15 +3318,17 @@ mod tests {
         let rounded_topology =
             RoundedKnotCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
         let transverse = TransverseArrangementWorkspace::new(TopologyLimits::default()).unwrap();
-        assert_eq!(rounded_topology.allocated_bytes(), 897_024);
-        assert_eq!(transverse.allocated_bytes(), 897_024);
+        // E14-U2 X-K1 item 7 (2026-11-07): the per-leaf scratch, partners and crossing records
+        // are counted with the topology workspaces.
+        assert_eq!(rounded_topology.allocated_bytes(), 942_592);
+        assert_eq!(transverse.allocated_bytes(), 945_408);
         let expected = rounded
             .allocated_bytes()
             .checked_add(exact.allocated_bytes())
             .and_then(|bytes| bytes.checked_add(rounded_topology.allocated_bytes()))
             .and_then(|bytes| bytes.checked_add(transverse.allocated_bytes()))
             .unwrap();
-        assert_eq!(expected, 2_908_672);
+        assert_eq!(expected, 3_048_192);
         // E14-K1 item 4: the prefix buffers, sized for E0, are heap buffers counted here too.
         let prefix = MAX_FAST_FLAT_COMMANDS * size_of::<FlatCommand>()
             + MAX_FAST_CONTOUR_POINTS * size_of::<Point>()
@@ -3336,7 +3339,11 @@ mod tests {
         // counted here too.
         let sources = crate::cubic_fill::source_buffer_bytes();
         assert_eq!(sources, 966_656);
-        let expected = expected + prefix + sources;
+        // E14-U2 X-K1 item 7: `certify_topology`'s leaves are a heap buffer of E records.
+        let leaves = crate::cubic_fill::MAX_EDGE_OWNERS
+            * size_of::<crate::simple_cubic_topology::TopologyLeaf>();
+        assert_eq!(leaves, 8_192);
+        let expected = expected + prefix + sources + leaves;
         assert_eq!(workspace.allocated_bytes(), expected);
         assert!(workspace.allocated_bytes() <= MAX_BRIDGE_HEAP_BYTES);
         assert!(size_of::<BridgeWorkspace>() < 64 * 1024);

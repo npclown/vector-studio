@@ -13,8 +13,8 @@ use core::mem::size_of;
 
 use crate::codec::{align_up, read_u32, write_f64, write_u32, PathInput, Request};
 use crate::cubic_fill::{
-    CubicFillDiagnostics, CubicFillError, CubicFillWorkspace, MAX_EDGE_OWNERS,
-    MAX_EXACT_FLAT_COMMANDS, MAX_LINE_CONTOURS,
+    CubicFillDiagnostics, CubicFillError, CubicFillWorkspace, FillTier, LargeTierLimits,
+    MAX_EDGE_OWNERS, MAX_EXACT_FLAT_COMMANDS, MAX_LARGE_EDGE_OWNERS, MAX_LINE_CONTOURS,
 };
 use crate::engine::{
     BATCH_ALLOCATION_FAILED, BATCH_DISPOSED, BATCH_INTERNAL_ERROR, BATCH_INVALID_BATCH, BATCH_OK,
@@ -30,10 +30,12 @@ use crate::geometry::{
 };
 use crate::line_fill::LineFillRule;
 use crate::rounded_line_fill::{RoundedFillError, RoundedFillLimits, RoundedFillOutput};
-use crate::simple_cubic_topology::TopologyError;
+use crate::simple_cubic_topology::{
+    TopologyError, TopologyLimits, MAX_CROSSINGS, MAX_CROSSING_SCAN,
+};
 
 pub const FILL_V0_VERSION: u32 = 0;
-pub const FILL_V0_REVISION: u32 = 4;
+pub const FILL_V0_REVISION: u32 = 5;
 pub const FILL_INPUT_MAGIC: u32 = 0x3046_4756;
 pub const FILL_OUTPUT_MAGIC: u32 = 0x304D_4756;
 
@@ -79,6 +81,41 @@ pub(crate) const FILL_V0_LIMITS: RoundedFillLimits = RoundedFillLimits {
     max_triangles: 4 * MAX_EDGE_OWNERS,
     max_work: 32_000_000,
     max_bytes: 16 * 1024 * 1024,
+};
+
+/// E14-U2 X-K1 item 4 (`docs/plans/d9-e14-u2-fill-exact-edge-cap-contract.md` section 4): the
+/// exact rung's large tier, every field derived from EX = `MAX_LARGE_EDGE_OWNERS` as
+/// `FILL_V0_LIMITS` derives it from E, except `max_sections`, fixed at the small tier's value
+/// (X-K2, X-Q2 (a)), and `max_work`, measured (X-K3). The rounded workspace is reserved for
+/// these limits and runs the small tier's unless an attempt enters the large tier.
+pub(crate) const FILL_V0_LARGE_LIMITS: RoundedFillLimits = RoundedFillLimits {
+    max_contours: MAX_LINE_CONTOURS,
+    max_input_vertices: MAX_LARGE_EDGE_OWNERS,
+    max_edges: MAX_LARGE_EDGE_OWNERS,
+    max_pairs: MAX_LARGE_EDGE_OWNERS * (MAX_LARGE_EDGE_OWNERS - 1) / 2,
+    max_events: 2 * MAX_LARGE_EDGE_OWNERS,
+    max_sections: FILL_V0_LIMITS.max_sections,
+    max_nodes: 4 * MAX_LARGE_EDGE_OWNERS,
+    max_cells: 4 * MAX_LARGE_EDGE_OWNERS,
+    max_boundaries: 8 * MAX_LARGE_EDGE_OWNERS,
+    max_contributors: 8 * MAX_LARGE_EDGE_OWNERS,
+    max_vertices: 4 * MAX_LARGE_EDGE_OWNERS,
+    max_triangles: 4 * MAX_LARGE_EDGE_OWNERS,
+    max_work: LARGE_TIER_MAX_WORK,
+    max_bytes: 32 * 1024 * 1024,
+};
+
+/// E14-U2 X-K3: the large tier's work cap. The largest charged work measured at X-U1 was
+/// 9,796,597 units (`a04-corpus/v1` C3 g0099, the A01 sweep rows that reach the large tier,
+/// `pnpm e16:fill-diag`); × 4 rounded up to a power of two is 2^26.
+pub(crate) const LARGE_TIER_MAX_WORK: u64 = 1 << 26;
+
+/// E14-U2 X-K1: the large tier of the production fill workspace.
+pub(crate) const FILL_V0_LARGE_TIER: LargeTierLimits = LargeTierLimits {
+    rounded: FILL_V0_LARGE_LIMITS,
+    topology: TopologyLimits::LARGE,
+    crossings: MAX_CROSSINGS,
+    crossing_scan: MAX_CROSSING_SCAN,
 };
 
 /// B1's test-only pre-B1 cap mode: `FILL_V0_LIMITS` before B1 (E = 64), equal to the native
@@ -144,7 +181,8 @@ pub(crate) fn map_attempt_error(error: CubicFillError) -> Mapped {
             TopologyError::KnotMismatch | TopologyError::Unresolved => {
                 Mapped::Path(FILL_PATH_UNSUPPORTED_GEOMETRY)
             }
-            TopologyError::WorkLimit | TopologyError::ByteLimit => {
+            // E14-U2 X-K3: the crossing scan's cap is a cap stop like `WorkLimit`.
+            TopologyError::WorkLimit | TopologyError::ByteLimit | TopologyError::ScanLimit => {
                 Mapped::Path(FILL_PATH_WORK_LIMIT)
             }
             TopologyError::InvalidInput
@@ -390,8 +428,13 @@ pub(crate) struct FillScratch {
     edges: Vec<DirectedEdge>,
     boundary: Vec<[u32; 2]>,
     split: Vec<SplitEdge>,
-    /// The index slots of `FillScratch::sizes` for the reserve's limits.
+    /// The index slots of `FillScratch::sizes` for the active tier's limits.
     exact_slots: usize,
+    /// The split pairs of the active tier's limits (E14-U2 X-K1 item 3).
+    split_limit: usize,
+    /// `(index slots, split pairs)` of the small and large tiers.
+    small_limits: (usize, usize),
+    large_limits: (usize, usize),
 }
 
 /// Marker for a refinement or boundary self-check failure.
@@ -406,7 +449,24 @@ impl FillScratch {
             boundary: Vec::new(),
             split: Vec::new(),
             exact_slots: 0,
+            split_limit: 0,
+            small_limits: (0, 0),
+            large_limits: (0, 0),
         }
+    }
+
+    /// The split pairs `max_boundaries + max_nodes` (V2 section a).
+    fn split_pairs(limits: RoundedFillLimits) -> Option<usize> {
+        limits.max_boundaries.checked_add(limits.max_nodes)
+    }
+
+    /// E14-U2 X-K1 item 3: the exact rung's self-checks (`exact_slots`, the `collect_boundary`
+    /// limit and `push_split`'s capacity) take the tier of the mesh being refined.
+    pub(crate) fn set_exact_tier(&mut self, tier: FillTier) {
+        (self.exact_slots, self.split_limit) = match tier {
+            FillTier::Small => self.small_limits,
+            FillTier::Large => self.large_limits,
+        };
     }
 
     /// The exact rung's index slots `3 · (max_triangles + 2 · max_vertices)` (V2 section a).
@@ -421,7 +481,7 @@ impl FillScratch {
     /// `records` index slots (E14-K1 item 5: rung 0's AL-FR9 records).
     fn sizes_for(limits: RoundedFillLimits, records: usize) -> Option<(usize, usize, usize)> {
         let slots = Self::exact_slots(limits)?.max(records);
-        let split = limits.max_boundaries.checked_add(limits.max_nodes)?;
+        let split = Self::split_pairs(limits)?;
         let bytes = [
             slots.checked_mul(size_of::<u32>())?,
             slots.checked_mul(size_of::<DirectedEdge>())?,
@@ -442,9 +502,32 @@ impl FillScratch {
     /// Reserves every scratch buffer for at least `records` index slots; `Err(status)` on
     /// refusal.
     pub(crate) fn reserve(limits: RoundedFillLimits, records: usize) -> Result<(Self, usize), u32> {
-        let (slots, split, bytes) = Self::sizes_for(limits, records).ok_or(BATCH_INTERNAL_ERROR)?;
+        Self::reserve_tiers(limits, limits, records)
+    }
+
+    /// E14-U2 X-K1: reserves the scratch for the larger of two tiers' limits (and at least
+    /// `records` index slots) and activates the small tier's checks.
+    pub(crate) fn reserve_tiers(
+        small: RoundedFillLimits,
+        large: RoundedFillLimits,
+        records: usize,
+    ) -> Result<(Self, usize), u32> {
+        let (slots, split, bytes) = Self::sizes_for(large, records).ok_or(BATCH_INTERNAL_ERROR)?;
         let mut scratch = Self::empty();
-        scratch.exact_slots = Self::exact_slots(limits).ok_or(BATCH_INTERNAL_ERROR)?;
+        scratch.small_limits = (
+            Self::exact_slots(small).ok_or(BATCH_INTERNAL_ERROR)?,
+            Self::split_pairs(small).ok_or(BATCH_INTERNAL_ERROR)?,
+        );
+        scratch.large_limits = (
+            Self::exact_slots(large).ok_or(BATCH_INTERNAL_ERROR)?,
+            Self::split_pairs(large).ok_or(BATCH_INTERNAL_ERROR)?,
+        );
+        if scratch.small_limits.0 > scratch.large_limits.0
+            || scratch.small_limits.1 > scratch.large_limits.1
+        {
+            return Err(BATCH_INTERNAL_ERROR);
+        }
+        scratch.set_exact_tier(FillTier::Small);
         if scratch.triangles.try_reserve_exact(slots).is_err()
             || scratch.edges.try_reserve_exact(slots).is_err()
             || scratch.boundary.try_reserve_exact(slots).is_err()
@@ -665,7 +748,7 @@ impl FillScratch {
     }
 
     fn push_split(&mut self, from: usize, to: usize) -> Result<(), SelfCheckFailure> {
-        if self.split.len() >= self.split.capacity() {
+        if self.split.len() >= self.split_limit.min(self.split.capacity()) {
             return Err(SelfCheckFailure);
         }
         self.split.push(SplitEdge {
@@ -782,6 +865,8 @@ pub(crate) struct BuiltPath {
     pub(crate) depth: u32,
     /// The exact rung's unmapped error, when it ended in one (E16-A2).
     pub(crate) error: Option<CubicFillError>,
+    /// E14-U2 X-K1 item 5: the exact rung's tier, `None` when the exact rung did not run.
+    pub(crate) tier: Option<FillTier>,
 }
 
 impl BuiltPath {
@@ -793,6 +878,7 @@ impl BuiltPath {
             step: None,
             depth: 0,
             error: None,
+            tier: None,
         }
     }
 }
@@ -956,6 +1042,9 @@ pub(crate) fn exact_rung(
     point_bytes: &[u8],
     inverted: bool,
 ) -> ExactOutcome {
+    // E14-U2 X-K1 items 3 and 6: only the cascade at the request exponent may enter the large
+    // tier, and its tier is the request's.
+    workspace.set_large_tier_allowed(true);
     let (step, result) = cascade_at(
         workspace,
         request,
@@ -964,17 +1053,24 @@ pub(crate) fn exact_rung(
         point_bytes,
         inverted,
     );
+    workspace.set_large_tier_allowed(false);
+    let tier = workspace.tier();
     let mut first = ExactOutcome {
         step,
         result,
         depth: 0,
         stop: None,
+        tier,
     };
     #[cfg(test)]
     let retry_after_success = e16_defect(E16Defect::RetryAfterSuccess);
     #[cfg(not(test))]
     let retry_after_success = false;
-    if !(topology_failure(&first.result) || retry_after_success) || !workspace.refines() {
+    // E14-U2 X-K1 item 6: a large request gets no E16-K2 retry.
+    if !(topology_failure(&first.result) || retry_after_success)
+        || !workspace.refines()
+        || tier == FillTier::Large
+    {
         return first;
     }
     for (depth, exponent) in (1..).zip(refinement_exponents(request.exponent)) {
@@ -984,6 +1080,7 @@ pub(crate) fn exact_rung(
             result,
             depth,
             stop: None,
+            tier,
         };
         match result {
             Ok(diagnostics) if diagnostics.flat_status == PATH_OK => return retry,
@@ -1060,6 +1157,7 @@ pub(crate) fn build_path(
                     step: None,
                     depth: 0,
                     error: None,
+                    tier: None,
                 })
             }
             Err(reason) => Some(reason),
@@ -1073,6 +1171,7 @@ pub(crate) fn build_path(
         step,
         result,
         depth,
+        tier,
         ..
     } = exact_rung(
         workspace,
@@ -1089,6 +1188,7 @@ pub(crate) fn build_path(
         step: Some(step),
         depth,
         error,
+        tier: Some(tier),
     };
     let diagnostics = match result {
         Ok(diagnostics) => diagnostics,
@@ -1107,7 +1207,10 @@ pub(crate) fn build_path(
     let output = workspace.output().ok_or(SelfCheckFailure)?;
     // The seeded defect (15), a test-only switch, skips the refinement on a fallback path.
     if !(switches.fallback_partial() && reason.is_some()) {
-        scratch.refine(&output.rounded)?;
+        scratch.set_exact_tier(tier);
+        let refined = scratch.refine(&output.rounded);
+        scratch.set_exact_tier(FillTier::Small);
+        refined?;
     }
     if scratch.triangles.is_empty() {
         return if output.rounded.vertices.is_empty() && scratch.boundary.is_empty() {
@@ -1373,6 +1476,9 @@ pub(crate) struct TestHooks {
     /// B1's pre-B1 cap mode for the frozen oracles: the next reserve builds the workspace,
     /// scratch and ladder from `PRE_B1_FILL_V0_LIMITS` and `CubicFillWorkspace::new_pre_b1`.
     pub(crate) pre_b1_caps: bool,
+    /// E14-U2: the next reserve builds the `fill-v0+r4` workspace and scratch, without the
+    /// exact rung's large tier, as the identity reference.
+    pub(crate) small_tier_only: bool,
 }
 
 impl Default for FillEngine {
@@ -1405,6 +1511,7 @@ impl FillEngine {
                 defect_cascade_inverted: false,
                 defect_fallback_partial: false,
                 pre_b1_caps: false,
+                small_tier_only: false,
             },
         }
     }
@@ -1454,18 +1561,32 @@ impl FillEngine {
             limits
         };
         #[cfg(test)]
-        let workspace = match self.test_hooks.pre_b1_caps {
-            true => CubicFillWorkspace::new_pre_b1(limits),
-            false => CubicFillWorkspace::new(limits),
+        let workspace = match (self.test_hooks.pre_b1_caps, self.test_hooks.small_tier_only) {
+            (true, _) => CubicFillWorkspace::new_pre_b1(limits),
+            (false, true) => CubicFillWorkspace::new(limits),
+            (false, false) => CubicFillWorkspace::new_two_tier(limits, FILL_V0_LARGE_TIER),
         };
         #[cfg(not(test))]
-        let workspace = CubicFillWorkspace::new(limits);
+        let workspace = CubicFillWorkspace::new_two_tier(limits, FILL_V0_LARGE_TIER);
         let workspace = workspace.map_err(construction_status)?;
         // E14-K1 item 5: the scratch also holds the AL-FR9 records of the workspace's fast caps.
         let fast_points = workspace.fast_contour_points();
         let fast_contours = workspace.fast_contours();
-        let (scratch, scratch_bytes) =
-            FillScratch::reserve(limits, boundary_records(fast_points, fast_contours))?;
+        // E14-U2 X-K1: the scratch is reserved for the large tier unless the workspace has none
+        // (the test-only pre-B1 mode).
+        #[cfg(test)]
+        let large = if self.test_hooks.pre_b1_caps || self.test_hooks.small_tier_only {
+            limits
+        } else {
+            FILL_V0_LARGE_LIMITS
+        };
+        #[cfg(not(test))]
+        let large = FILL_V0_LARGE_LIMITS;
+        let (scratch, scratch_bytes) = FillScratch::reserve_tiers(
+            limits,
+            large,
+            boundary_records(fast_points, fast_contours),
+        )?;
         // Alt-A1 contract section 3.4: rung 0's storage, reserved once and fallibly beside the
         // workspace and the scratch, after the check that the scratch holds AL-FR9's records.
         let ladder = FillLadder::reserve(scratch.records(), fast_points, fast_contours)?;
@@ -1670,6 +1791,12 @@ impl FillEngine {
         self.workspace.as_ref()
     }
 
+    /// E14-U2 X-A5: the workspace, for the `cfg(test)` limits override.
+    #[cfg(test)]
+    pub(crate) fn workspace_mut(&mut self) -> Option<&mut CubicFillWorkspace> {
+        self.workspace.as_mut()
+    }
+
     pub(crate) fn heap_bytes(&self) -> usize {
         self.heap_bytes
     }
@@ -1717,12 +1844,15 @@ impl FillEngine {
     }
 
     /// The bytes of the production fill scratch, which since E14-K1 item 5 also holds rung 0's
-    /// AL-FR9 records at E0.
+    /// AL-FR9 records at E0, and since E14-U2 is sized for the exact rung's large tier.
     #[cfg(test)]
     pub(crate) fn scratch_bytes() -> usize {
-        FillScratch::sizes_for(FILL_V0_LIMITS, crate::fill_ladder::MAX_BOUNDARY_RECORDS)
-            .expect("scratch sizes")
-            .2
+        FillScratch::sizes_for(
+            FILL_V0_LARGE_LIMITS,
+            crate::fill_ladder::MAX_BOUNDARY_RECORDS,
+        )
+        .expect("scratch sizes")
+        .2
     }
 }
 

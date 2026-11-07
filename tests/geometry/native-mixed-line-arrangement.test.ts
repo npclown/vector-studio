@@ -117,7 +117,7 @@ function assertCarrier(
   if (fixture.expectation === 'Certified') assertOutput(fixture, row.output);
   else if (row.output !== null) throw new Error('mixed arrangement failure published output');
   if (row.allocations !== 0) throw new Error('mixed arrangement certify allocated');
-  if (row.allocated_bytes !== 897024 || row.inline_bytes !== 7120)
+  if (row.allocated_bytes !== 945408 || row.inline_bytes !== 440)
     throw new Error('mixed arrangement retained storage changed');
 }
 
@@ -289,8 +289,8 @@ describe('P3.2v native mixed LINE arrangement preservation', () => {
 
   it('keeps retained storage exact and mixed certification allocation-free', () => {
     expect(nativeRows.every(({ allocations }) => allocations === 0)).toBe(true);
-    expect(nativeRows.every(({ allocated_bytes }) => allocated_bytes === 897024)).toBe(true);
-    expect(nativeRows.every(({ inline_bytes }) => inline_bytes === 7120)).toBe(true);
+    expect(nativeRows.every(({ allocated_bytes }) => allocated_bytes === 945408)).toBe(true);
+    expect(nativeRows.every(({ inline_bytes }) => inline_bytes === 440)).toBe(true);
   });
 
   it('preserves signed-zero source and owned polygon bits', () => {

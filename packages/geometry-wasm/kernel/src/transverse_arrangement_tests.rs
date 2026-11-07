@@ -492,11 +492,12 @@ fn constructor_storage_and_byte_boundaries_are_owned_once() {
             ..TopologyLimits::default()
         },
         TopologyLimits {
-            max_pairs: 32_641,
+            max_pairs: 523_777,
             ..TopologyLimits::default()
         },
         TopologyLimits {
-            max_bytes: 1024 * 1024 + 1,
+            // E14-U2: the absolute caps are the large tier's.
+            max_bytes: 8 * 1024 * 1024 + 1,
             ..TopologyLimits::default()
         },
     ] {
@@ -509,7 +510,14 @@ fn constructor_storage_and_byte_boundaries_are_owned_once() {
     let workspace = TransverseArrangementWorkspace::new(TopologyLimits::default()).unwrap();
     let rounded = RoundedKnotCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
     let bytes = workspace.allocated_bytes();
-    assert_eq!(bytes, rounded.allocated_bytes());
+    // E14-U2 X-K1 item 7: the partners and crossing records are heap storage now, counted
+    // with the rounded workspace's.
+    assert_eq!(
+        bytes,
+        rounded.allocated_bytes()
+            + 256 * size_of::<usize>()
+            + 32 * size_of::<ArrangementCrossing>()
+    );
     assert!(size_of::<TransverseArrangementWorkspace>() <= 16 * 1024);
     drop(workspace);
     drop(rounded);

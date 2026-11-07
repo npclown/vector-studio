@@ -162,7 +162,7 @@ const F4_RADIUS: f64 = 1_048_576.0;
 
 /// E14-F7: two concentric half circles of radii 2,048.2 and 2,048, joined at both ends by
 /// segments 0.2 px long (section 8, a simple near-touching path).
-fn f7() -> Fixture {
+pub(crate) fn f7() -> Fixture {
     let (outer, inner) = (2_048.2, 2_048.0);
     let [o1, o2, ..] = quarters(outer);
     let [i1, i2, ..] = quarters(inner);
@@ -430,7 +430,14 @@ fn e14_f7_near_touching_simple_path_falls_back() {
     println!("E14-F7: {edges} flat edges, reason {:?}", record.reason);
     assert_eq!(record.rung, Some(Rung::Exact));
     assert_eq!(record.reason, Some(Reason::Clearance));
-    assert_eq!(record.outcome, PathOutcome::Status(FILL_PATH_WORK_LIMIT));
+    // E14-U2 (2026-11-07, X-F5): the exact rung's large tier meshes it; the small tier alone
+    // (a workspace without a large tier) still stops at `CommandLimit`.
+    assert_eq!(record.outcome, PathOutcome::Mesh);
+    assert_eq!(
+        record.tier,
+        Some(crate::cubic_fill::FillTier::Large),
+        "E14-F7 tier"
+    );
     assert_eq!(exact(&path), Err(CubicFillError::CommandLimit));
 }
 

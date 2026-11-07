@@ -603,8 +603,10 @@ fn mixed_line_lifecycle_old_entry_and_resource_accounting_are_frozen() {
 
     let mut workspace = TransverseArrangementWorkspace::new(TopologyLimits::default()).unwrap();
     let mut independent = TransverseArrangementWorkspace::new(TopologyLimits::default()).unwrap();
-    assert_eq!(workspace.allocated_bytes(), 897_024);
-    assert_eq!(size_of::<TransverseArrangementWorkspace>(), 7_120);
+    // E14-U2 X-K1 item 7 (2026-11-07): the point slots, the pair-candidate scratch, the partners
+    // and the crossing records are heap storage counted here, and the wrapper holds only vectors.
+    assert_eq!(workspace.allocated_bytes(), 945_408);
+    assert_eq!(size_of::<TransverseArrangementWorkspace>(), 440);
     assert_mixed_attempt(
         &mut independent,
         &success,

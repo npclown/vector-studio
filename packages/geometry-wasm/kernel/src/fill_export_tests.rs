@@ -445,7 +445,8 @@ fn runtime_limits_equal_the_native_test_limits() {
         assert!(runtime >= test);
     }
     assert_eq!(FILL_V0_VERSION, 0);
-    assert_eq!(FILL_V0_REVISION, 4);
+    // E14-U2 (2026-11-07): `fill-v0+r5`.
+    assert_eq!(FILL_V0_REVISION, 5);
     assert_eq!(FILL_INPUT_MAGIC.to_le_bytes(), *b"VGF0");
     assert_eq!(FILL_OUTPUT_MAGIC.to_le_bytes(), *b"VGM0");
     let (slots, split, bytes) = FillEngine::scratch_sizes().unwrap();
@@ -1359,6 +1360,51 @@ fn e14_f1_output_is_the_r2_output() {
     assert_eq!(hash, 0x4ed8_07b3_d10d_eec3);
 }
 
+/// D9 E14-U2 X-G3: `process` allocates nothing and moves no storage on the large tier's X-F2,
+/// X-F3 and X-F7 (`e14u2_fill_large_tier_tests`), and X-F2 and X-F3 mesh.
+#[test]
+fn e14u2_x_g3_process_does_not_allocate_on_large_tier_fixtures() {
+    use crate::e14u2_fill_large_tier_tests::{node3, node8, x_f7};
+    use crate::stroke_outline_tests::PathSpec;
+    let test_path = |id: u32, path: PathSpec, exponent: i32| TestPath {
+        id,
+        rule: NONZERO,
+        exponent,
+        verbs: path.verbs,
+        points: path.points,
+    };
+    let paths = [
+        test_path(0, node3(), -2),
+        test_path(1, node3(), -4),
+        test_path(2, node8(), -4),
+        test_path(3, x_f7(), -4),
+    ];
+    let input = pack(&paths);
+    let mut engine = FillEngine::new();
+    load(&mut engine, &input, 1 << 22);
+    let storage = engine.storage();
+    engine.input_bytes_mut()[..input.len()].copy_from_slice(&input);
+    crate::allocation_test_support::start();
+    let status = engine.process(input.len() as u32);
+    let allocations = crate::allocation_test_support::stop();
+    assert_eq!(status, BATCH_OK);
+    assert_eq!(allocations, 0, "process must not allocate");
+    assert_eq!(engine.storage(), storage);
+    let statuses: Vec<u32> = decode(engine.output_bytes(), &paths)
+        .iter()
+        .map(|mesh| mesh.status)
+        .collect();
+    assert_eq!(
+        statuses,
+        [
+            FILL_PATH_OK,
+            FILL_PATH_OK,
+            FILL_PATH_OK,
+            FILL_PATH_WORK_LIMIT
+        ]
+    );
+}
+
 /// D9 E14-G3: `process` allocates nothing and moves no storage on rung 0's E14-F2, E14-F3 and
 /// E14-F5, on a circle over E0 (`PREFIX`), and on E14-F2 and E14-F3 under a lowered work cap
 /// (rung 0 `WORK`), which stands in for E14-F8: no path within E0 and 64 sources reaches W0
@@ -1403,7 +1449,8 @@ fn e14_g3_process_does_not_allocate_on_rung0_fixtures() {
                 .collect::<Vec<_>>()
         });
         // Under the lowered cap E14-F2 and E14-F3 stop at `WORK` and fall back to the exact
-        // rung, whose `CommandLimit` is `work-limit`.
+        // rung. Since E14-U2 (2026-11-07) E14-F2's 512 flat edges mesh in the exact rung's
+        // large tier, and E14-F3's 2,048 stay over EX (`CommandLimit`, `work-limit`).
         let rung0 = if cap.is_none() {
             FILL_PATH_OK
         } else {
@@ -1411,7 +1458,12 @@ fn e14_g3_process_does_not_allocate_on_rung0_fixtures() {
         };
         assert_eq!(
             statuses,
-            [rung0, rung0, FILL_PATH_WORK_LIMIT, FILL_PATH_WORK_LIMIT],
+            [
+                FILL_PATH_OK,
+                rung0,
+                FILL_PATH_WORK_LIMIT,
+                FILL_PATH_WORK_LIMIT
+            ],
             "{cap:?}"
         );
     }
@@ -2358,17 +2410,18 @@ fn e8_fixtures_reach_their_e8_u1_status_through_the_export() {
     // E8-K2 and E8-C1/E8-C2 (E8 addendum E8.6). Column "After E8-U1 + E8-U2" since E8-U2
     // (2026-10-24): only E8-F5 changes, from `unsupported-geometry` to `ok`.
     let ok = FILL_PATH_OK;
-    let limit = FILL_PATH_WORK_LIMIT;
     let unsupported = FILL_PATH_UNSUPPORTED_GEOMETRY;
     let rows: [E8Row<'_>; 8] = [
         (
             "E8-F1",
             E8_F1,
             0.0,
+            // E14-U2 (2026-11-07): e = -8 to -6 were `work-limit` (`CommandLimit` over E) and
+            // mesh in the exact rung's large tier.
             &[
-                (-8, limit),
-                (-7, limit),
-                (-6, limit),
+                (-8, ok),
+                (-7, ok),
+                (-6, ok),
                 (-5, ok),
                 (-4, ok),
                 (-3, ok),

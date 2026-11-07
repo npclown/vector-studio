@@ -253,6 +253,7 @@ pub(crate) fn status_name(result: Result<(), TopologyError>) -> &'static str {
         Err(TopologyError::KnotMismatch) => "KnotMismatch",
         Err(TopologyError::Unresolved) => "Unresolved",
         Err(TopologyError::WorkLimit) => "WorkLimit",
+        Err(TopologyError::ScanLimit) => "ScanLimit",
     }
 }
 

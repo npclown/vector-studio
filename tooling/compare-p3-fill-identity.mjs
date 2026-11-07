@@ -62,6 +62,12 @@
 // `work-limit` (`path_status=5`) to `ok`. The rung record and the oracle validation of
 // `--revision-change` alone do not run in this mode.
 //
+// `--large-tier` (E14-U2, docs/plans/d9-e14-u2-fill-exact-edge-cap-contract.md section 8, X-G1),
+// with the combined mode only: a cascade or WASM record may also change from `work-limit` to
+// `unsupported-geometry` (X-Q4 (a): a large path that reaches the topology certificate and fails
+// there), listed per case. The entry layer stays bit-identical: the harness's entries run a
+// workspace without the large tier. Every other rule of the combined mode is unchanged.
+//
 // Re-comparison of a finished run, with an optional tampered digest:
 //   node tooling/compare-p3-fill-identity.mjs --compare-only <run-dir> [--tamper <case>]
 //     [--revision-change | --failure-to-success]
@@ -384,9 +390,15 @@ export function parseArguments(args) {
   // keeps the shape that the reviewed AL-U2 test of `parseArguments` pins (O5: that file stays).
   for (let index = 0; index < args.length;) {
     const flag = args[index];
-    if (flag === '--revision-change' || flag === '--failure-to-success' || flag === '--self-test') {
+    if (
+      flag === '--revision-change' ||
+      flag === '--failure-to-success' ||
+      flag === '--large-tier' ||
+      flag === '--self-test'
+    ) {
       if (flag === '--revision-change') options.revisionChange = true;
       else if (flag === '--failure-to-success') options.failureToSuccess = true;
+      else if (flag === '--large-tier') options.largeTier = true;
       else options.selfTest = true;
       index += 1;
       continue;
@@ -406,6 +418,8 @@ export function parseArguments(args) {
     throw new Error('--tamper is accepted only with --compare-only.');
   if (options.selfTest && args.length !== 1)
     throw new Error('--self-test takes no other argument.');
+  if (options.largeTier && !(options.revisionChange && options.failureToSuccess))
+    throw new Error('--large-tier needs --failure-to-success --revision-change.');
   if (new Set(options.allowTestChanges).size !== options.allowTestChanges.length)
     throw new Error('--allow-test-change lists a path twice.');
   return options;
@@ -637,7 +651,7 @@ export function revisionTamperChecks(input) {
  * a path status, and the ones it maps to an internal error. The two lists follow that function.
  */
 const PATH_FAILURE_ERROR =
-  /^(SourceLimit|CommandLimit|ContourLimit|PointLimit|OwnerLimit|UnsupportedSource|ZeroLengthLeaf|Topology\((KnotMismatch|Unresolved|WorkLimit|ByteLimit)\)|Rounded\((InputLimit|EdgeLimit|PairLimit|EventLimit|SectionLimit|NodeLimit|CellLimit|BoundaryLimit|ContributorLimit|WorkLimit|OutputLimit|TopologyAmbiguous|InvalidTolerance)\))$/u;
+  /^(SourceLimit|CommandLimit|ContourLimit|PointLimit|OwnerLimit|UnsupportedSource|ZeroLengthLeaf|Topology\((KnotMismatch|Unresolved|WorkLimit|ScanLimit|ByteLimit)\)|Rounded\((InputLimit|EdgeLimit|PairLimit|EventLimit|SectionLimit|NodeLimit|CellLimit|BoundaryLimit|ContributorLimit|WorkLimit|OutputLimit|TopologyAmbiguous|InvalidTolerance)\))$/u;
 const INTERNAL_ERROR =
   /^(EmissionStatus\(\d+\)|PlanMismatch|BoundsMismatch|InvalidCommand|InvalidProvenance|TopologyOwnership|RoundedOwnership|CombinedByteLimit|Topology\((InvalidInput|InvalidProvenance|InvalidLimits|AllocationFailed)\)|Rounded\((InvalidInput|InternalInvariant|InvalidLimits|AllocationFailed|ByteLimit)\))$/u;
 
@@ -689,7 +703,13 @@ export function differingFields(base, branch) {
  * record may change only from `work-limit` (E14-G1) or `unsupported-geometry` (E16-G1, the
  * refinement retries) to `ok`; any other change is a FAIL.
  */
-export function classifyFailureToSuccessLayer(layer, base, branch, recordedChanges = []) {
+export function classifyFailureToSuccessLayer(
+  layer,
+  base,
+  branch,
+  recordedChanges = [],
+  largeTier = false,
+) {
   const result = {
     counts: { identical: 0, allowedChange: 0, fail: 0, internalRegression: 0 },
     allowed: [],
@@ -722,8 +742,10 @@ export function classifyFailureToSuccessLayer(layer, base, branch, recordedChang
           `AL-I1: entry case differs in ${differing.join(', ')} (${old.code} -> ${current.code})`,
         );
       else if (
-        (old.code === WORK_LIMIT_CODE || old.code === UNSUPPORTED_CODE) &&
-        current.code === PATH_OK_CODE
+        ((old.code === WORK_LIMIT_CODE || old.code === UNSUPPORTED_CODE) &&
+          current.code === PATH_OK_CODE) ||
+        // E14-U2 X-Q4 (a): a large path's true topology failure.
+        (largeTier && old.code === WORK_LIMIT_CODE && current.code === UNSUPPORTED_CODE)
       ) {
         result.counts.allowedChange += 1;
         result.allowed.push({ layer, case: name, baseCode: old.code, branchCode: current.code });
@@ -766,15 +788,22 @@ export function classifyFailureToSuccessLayer(layer, base, branch, recordedChang
  * Both layers: `input` is { native: { base, branch }, wasm: { base, branch } }. `recordedChanges`
  * names the records the combined mode records as changes (`SIZE_RECORDS`), none otherwise.
  */
-export function classifyFailureToSuccess(input, recordedChanges = []) {
+export function classifyFailureToSuccess(input, recordedChanges = [], largeTier = false) {
   const layers = [
     classifyFailureToSuccessLayer(
       'native',
       input.native.base,
       input.native.branch,
       recordedChanges,
+      largeTier,
     ),
-    classifyFailureToSuccessLayer('wasm', input.wasm.base, input.wasm.branch, recordedChanges),
+    classifyFailureToSuccessLayer(
+      'wasm',
+      input.wasm.base,
+      input.wasm.branch,
+      recordedChanges,
+      largeTier,
+    ),
   ];
   const counts = { identical: 0, allowedChange: 0, fail: 0, internalRegression: 0 };
   for (const layer of layers)
@@ -797,7 +826,7 @@ export function classifyFailureToSuccess(input, recordedChanges = []) {
  * and one WASM case whose base record is `ok`, each tampered on its own, must be reported as a
  * FAIL naming that case.
  */
-export function failureToSuccessTamperChecks(input, recordedChanges = []) {
+export function failureToSuccessTamperChecks(input, recordedChanges = [], largeTier = false) {
   const pick = (layer) =>
     [...input[layer].base].find(
       ([name, entry]) => classifyOutcome(entry.code) === 'ok' && input[layer].branch.has(name),
@@ -809,7 +838,7 @@ export function failureToSuccessTamperChecks(input, recordedChanges = []) {
       ...input,
       [layer]: { ...input[layer], branch: tamper(input[layer].branch, name) },
     };
-    const { fails } = classifyFailureToSuccess(tampered, recordedChanges);
+    const { fails } = classifyFailureToSuccess(tampered, recordedChanges, largeTier);
     return {
       case: name,
       detected: fails.some((item) => item.layer === layer && item.case === name),
@@ -1428,7 +1457,13 @@ function failureToSuccessRecord(result) {
   };
 }
 
-function compareOnly(directory, tamperCase, revisionChange, failureToSuccess = false) {
+function compareOnly(
+  directory,
+  tamperCase,
+  revisionChange,
+  failureToSuccess = false,
+  largeTier = false,
+) {
   const load = (name) => parseNativeDigests(readFileSync(path.join(directory, name), 'utf8'));
   const native = { base: load('native-base.tsv'), branch: load('native-branch.tsv') };
   const wasm = { base: load('wasm-base.tsv'), branch: load('wasm-branch.tsv') };
@@ -1460,7 +1495,11 @@ function compareOnly(directory, tamperCase, revisionChange, failureToSuccess = f
     return cross.equal && revisionFailures.length === 0 && result.failures.length === 0;
   }
   if (failureToSuccess) {
-    const result = classifyFailureToSuccess({ native, wasm }, revisionChange ? SIZE_RECORDS : []);
+    const result = classifyFailureToSuccess(
+      { native, wasm },
+      revisionChange ? SIZE_RECORDS : [],
+      largeTier && revisionChange,
+    );
     reportFailureToSuccess(result);
     if (tamperCase === null && existsSync(directory))
       writeFileSync(
@@ -1934,9 +1973,32 @@ function selfTestCombined() {
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
-  const pass = sizedOk && aloneFails && otherFails && okFails && g1Rules && tampers && plumbing;
+  // E14-U2 X-G1 (`--large-tier`): a large path's cascade record moving from work-limit to ok or
+  // to unsupported-geometry passes; a small path's entry record that changes and an ok record
+  // that changes still FAIL; unsupported-geometry becoming work-limit still FAILs.
+  const largeTier = (native) =>
+    classifyFailureToSuccess(
+      {
+        native: { base: nativeBase(), branch: native },
+        wasm: { base: wasmBase(), branch: wasmResized() },
+      },
+      SIZE_RECORDS,
+      true,
+    );
+  const largeToUnsupported = largeTier(workToUnsupported);
+  const largeRules =
+    largeTier(resized()).pass &&
+    largeToUnsupported.pass &&
+    largeToUnsupported.allowed.some(
+      (item) => item.case === F && item.branchCode === 'path_status=6',
+    ) &&
+    !largeTier(entryChanged).pass &&
+    !largeTier(okChanged).pass &&
+    !largeTier(unsupportedToWork).pass;
+  const pass =
+    sizedOk && aloneFails && otherFails && okFails && g1Rules && largeRules && tampers && plumbing;
   console.log(
-    `P3 B0R identity self-test (failure-to-success+revision-change): size records recorded ${sizedOk ? 'ok' : 'WRONG'}; failure-to-success alone ${aloneFails ? 'fails them' : 'NOT DETECTED'}; other META ${otherFails ? 'detected' : 'NOT DETECTED'}; ok record ${okFails ? 'detected' : 'NOT DETECTED'}; E14-G1/E16-G1 rules ${g1Rules ? 'detected' : 'NOT DETECTED'}; tamper checks ${tampers ? 'detected' : 'NOT DETECTED'}; compare-only ${plumbing ? 'ok' : 'WRONG'}; ${pass ? 'PASS' : 'FAIL'}`,
+    `P3 B0R identity self-test (failure-to-success+revision-change): size records recorded ${sizedOk ? 'ok' : 'WRONG'}; failure-to-success alone ${aloneFails ? 'fails them' : 'NOT DETECTED'}; other META ${otherFails ? 'detected' : 'NOT DETECTED'}; ok record ${okFails ? 'detected' : 'NOT DETECTED'}; E14-G1/E16-G1 rules ${g1Rules ? 'detected' : 'NOT DETECTED'}; E14-U2 large-tier rules ${largeRules ? 'detected' : 'NOT DETECTED'}; tamper checks ${tampers ? 'detected' : 'NOT DETECTED'}; compare-only ${plumbing ? 'ok' : 'WRONG'}; ${pass ? 'PASS' : 'FAIL'}`,
   );
   return pass;
 }
@@ -1965,7 +2027,7 @@ async function fullRun(options) {
   const output = path.join(root, 'artifacts/p3-b0r-identity', runId);
   mkdirSync(output, { recursive: true });
   console.log(
-    `P3 B0R identity: base ${baseCommit}, head ${headCommit}, mode ${options.revisionChange && options.failureToSuccess ? 'failure-to-success+revision-change' : options.revisionChange ? 'revision-change' : options.failureToSuccess ? 'failure-to-success' : 'plain'}, output ${path.relative(root, output)}`,
+    `P3 B0R identity: base ${baseCommit}, head ${headCommit}, mode ${options.revisionChange && options.failureToSuccess ? `failure-to-success+revision-change${options.largeTier ? '+large-tier' : ''}` : options.revisionChange ? 'revision-change' : options.failureToSuccess ? 'failure-to-success' : 'plain'}, output ${path.relative(root, output)}`,
   );
 
   const b0 = await import(pathToFileURL(path.join(root, 'tests/geometry/p3-b0/corpus.ts')).href);
@@ -2136,7 +2198,11 @@ async function fullRun(options) {
         native: { base: native.base, branch: native.branch },
         wasm: { base: wasm.base, branch: wasm.branch },
       };
-      const result = classifyFailureToSuccess(f2sInput, combined ? SIZE_RECORDS : []);
+      const result = classifyFailureToSuccess(
+        f2sInput,
+        combined ? SIZE_RECORDS : [],
+        combined && options.largeTier === true,
+      );
       reportFailureToSuccess(result);
       writeFileSync(
         path.join(output, 'failure-to-success.json'),
@@ -2284,6 +2350,7 @@ export async function main(args = process.argv.slice(2)) {
         options.tamper,
         options.revisionChange,
         options.failureToSuccess,
+        options.largeTier === true,
       )
     : fullRun(options);
 }
