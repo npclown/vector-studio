@@ -521,8 +521,8 @@ fn assert_area(mesh: &Decoded, expected: f64, tolerance: f64, name: &str) {
 #[test]
 fn identity_constants_match_section_7_1() {
     assert_eq!(STROKE_V0_VERSION, 0);
-    // E39 (2026-11-07): `stroke-v0+r10`.
-    assert_eq!(STROKE_V0_REVISION, 10);
+    // E39 (2026-11-07): `stroke-v0+r10`; E39-U5 watertight union pieces: `stroke-v0+r11`.
+    assert_eq!(STROKE_V0_REVISION, 11);
     assert_eq!(STROKE_INPUT_MAGIC, 0x3054_4756);
     assert_eq!(STROKE_OUTPUT_MAGIC, 0x3055_4756);
     assert_eq!(STROKE_INPUT_MAGIC.to_le_bytes(), *b"VGT0");

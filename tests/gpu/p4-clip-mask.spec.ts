@@ -317,6 +317,8 @@ async function runImageCase(
     interiorStride?: number;
     /** E22-A5: the edge check over every pixel at this tolerance. */
     everyPixelTolerance?: number;
+    /** Samples per pixel; at 1 a path mask is aliased since E39 (stencil-then-cover). */
+    samples?: number;
   }> = {},
 ) {
   const view = options.view ?? viewOf(item.zoom, dpr, item.centre);
@@ -358,7 +360,16 @@ async function runImageCase(
       everyPixel: options.everyPixelTolerance !== undefined,
     });
     report.edges = { ...edges, tolerance: tolerance + allowance };
-    if ((content?.levels.length ?? 0) > 0 && edges.probes === 0 && !item.id.includes('line'))
+    // E39: path masks are stencil-then-cover meshes, so at 1 sample their references hold no
+    // partial coverage and only a rectangle level can give an edge ramp.
+    const aliased =
+      options.samples === 1 && !(content?.levels ?? []).some((level) => level.kind === 'rect');
+    if (
+      (content?.levels.length ?? 0) > 0 &&
+      edges.probes === 0 &&
+      !item.id.includes('line') &&
+      !aliased
+    )
       failures.push(`${item.id}: no edge probe`);
     if (edges.failures > 0)
       failures.push(`${item.id}: ${edges.failures} edge probes over ${tolerance + allowance}/255`);
@@ -426,7 +437,9 @@ for (const config of CONFIGS) {
       OPACITY_CASE,
       ...FAILURE_CASES,
     ]) {
-      const { report, frame } = await runImageCase(page, references, item, config.dpr, failures);
+      const { report, frame } = await runImageCase(page, references, item, config.dpr, failures, {
+        samples: config.samples,
+      });
       cases.push(report);
       if (item.id === 'a04-depth-32-with-sibling') cases32.frame = frame;
       if (item.named !== undefined) {

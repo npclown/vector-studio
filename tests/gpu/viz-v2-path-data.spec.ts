@@ -35,7 +35,7 @@ const runRoot = path.resolve(
 /** The operation ids the expected literals were fixed with (V2-A1). */
 const OPERATION_IDS = {
   fill: 'geometry-wasm/fill-v0+r7',
-  stroke: 'geometry-wasm/stroke-v0+r10',
+  stroke: 'geometry-wasm/stroke-v0+r11',
 } as const;
 
 /**
@@ -45,18 +45,20 @@ const OPERATION_IDS = {
  * operation-id bump or ST-U9's fast rung may re-baseline them, in the PR that changes the outcome
  * and with a dated note (contract section 4.1). Fixed 2026-10-22 from the first headed runs (Chrome
  * 155 and Edge 155, DPR 1 and 2, all four identical): p3q, p3s, a13 and t include the fringe-work-cap
- * of the two curved paths (drawn without fringe), t also the W1 work-limit.
+ * of the two curved paths (drawn without fringe), t also the W1 work-limit. E39 (2026-11-07,
+ * #533; fill-v0+r7): every fill is a winding mesh with no fringe, so p3q, p3s, p3qc, a13 and t
+ * lose their fringe-work-cap notices (headed run at main 0190c93, Chrome, DPR 1 and 2).
  */
 const OBSERVED_NOTICES: Readonly<Record<string, readonly string[]>> = {
   n0: [],
   flow: [],
   p1: [],
   p2: [],
-  p3q: ['v2-path fill fringe-work-cap'],
-  p3s: ['v2-path fill fringe-work-cap'],
+  p3q: [],
+  p3s: [],
   // Re-baselined 2026-10-23 by E8-U1 (E8-Q4 (a)): p3qc draws, without fringe like p3q; observed
   // identical in Chrome and Edge at DPR 1 and 2.
-  p3qc: ['v2-path fill fringe-work-cap'],
+  p3qc: [],
   // E38 (2026-11-07, #530; fill-v0+r6): p3sc and W1 draw through the robust rung, whose mesh has
   // no fringe, so neither gives a notice; t loses W1's work-limit. Observed identical in Chrome
   // and Edge at DPR 1 and 2.
@@ -67,9 +69,9 @@ const OBSERVED_NOTICES: Readonly<Record<string, readonly string[]>> = {
   'w.b-w2': [],
   a7: [],
   a12: [],
-  a13: ['v2-path fill fringe-work-cap'],
+  a13: [],
   a14: [],
-  t: ['v2-path fill fringe-work-cap', 'v2-path fill fringe-work-cap'],
+  t: [],
 };
 // Observed identical at DPR 1 and DPR 2; the literals are kept per DPR.
 const EXPECTED: Readonly<Record<string, readonly string[]>> = Object.fromEntries(

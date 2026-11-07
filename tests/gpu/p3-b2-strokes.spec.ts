@@ -78,15 +78,14 @@ type Expectation = Readonly<{
  * without a fringe now take the robust rung, whose mesh has no boundary edges and so no fringe
  * and no `fringe-work-cap` notice (`wide-cubic` at DPR 1 zoom 2 and at DPR 2 and 3 overview,
  * `cusp-f16p` at DPR 1 zoom 64, `cusp-f16-large` at DPR 3 overview). Mesh draws and probes are
- * unchanged. Keyed `dpr/view`.
+ * unchanged. Re-baselined E39 (2026-11-07, #533/#534; stroke revision 10, then 11) from the
+ * headed run at main 0190c93: every stroke is a union mesh drawn through the stencil, with no
+ * fringe, so no view has a `fringe-work-cap` notice. Mesh draws and probes are unchanged.
+ * Keyed `dpr/view`.
  */
 const EXPECTED: Readonly<Record<string, Expectation>> = {
   '1/overview-zoom-1': {
-    notices: [
-      'cap-round stroke fringe-work-cap',
-      'cusp-f16-large stroke fringe-work-cap',
-      'wide-cubic stroke fringe-work-cap',
-    ],
+    notices: [],
     meshDraws: 23,
   },
   '1/zoom-0.01': {
@@ -94,20 +93,18 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
     meshDraws: 23,
   },
   '1/zoom-0.25': {
-    notices: ['cusp-f16-large stroke fringe-work-cap', 'wide-cubic stroke fringe-work-cap'],
+    notices: [],
     meshDraws: 23,
   },
   '1/zoom-2-cusp': {
-    // E38 (2026-11-07, #530): `wide-cubic` takes the robust rung, so no fringe-work-cap.
-    notices: ['cusp-f16p stroke fringe-work-cap', 'fill-stroke-circle stroke fringe-work-cap'],
+    notices: [],
     meshDraws: 11,
   },
   '1/zoom-4-joins': {
-    notices: ['cap-round stroke fringe-work-cap'],
+    notices: [],
     meshDraws: 5,
   },
   '1/zoom-64-cusp': {
-    // E38 (2026-11-07, #530): `cusp-f16p` takes the robust rung, so no fringe-work-cap.
     notices: [],
     meshDraws: 1,
   },
@@ -120,17 +117,11 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
     meshDraws: 2,
   },
   '2/overview-zoom-1': {
-    // E38 (2026-11-07, #530): `wide-cubic` takes the robust rung, so no fringe-work-cap.
-    notices: [
-      'cap-round stroke fringe-work-cap',
-      'cusp-f16-large stroke fringe-work-cap',
-      'cusp-f16p stroke fringe-work-cap',
-      'fill-stroke-circle stroke fringe-work-cap',
-    ],
+    notices: [],
     meshDraws: 23,
   },
   '2/zoom-0.01': {
-    notices: ['wide-cubic stroke fringe-work-cap'],
+    notices: [],
     meshDraws: 23,
   },
   '2/zoom-64-extreme-miter-tip': {
@@ -138,18 +129,11 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
     meshDraws: 1,
   },
   '3/overview-zoom-1': {
-    // E38 (2026-11-07, #530): `cusp-f16-large` and `wide-cubic` take the robust rung, so no
-    // fringe-work-cap.
-    notices: [
-      'cap-round stroke fringe-work-cap',
-      'cusp-f16p stroke fringe-work-cap',
-      'fill-stroke-circle stroke fringe-work-cap',
-      'thin-one-px stroke fringe-work-cap',
-    ],
+    notices: [],
     meshDraws: 23,
   },
   '3/zoom-0.01': {
-    notices: ['wide-cubic stroke fringe-work-cap'],
+    notices: [],
     meshDraws: 23,
   },
   '3/zoom-64-extreme-miter-tip': {
@@ -250,7 +234,7 @@ for (const dpr of [1, 2, 3]) {
         }
         if (state.ports?.fill.operationId !== 'geometry-wasm/fill-v0+r7')
           failures.push(`${key}: unexpected fill port ${JSON.stringify(state.ports)}`);
-        if (state.ports?.stroke.operationId !== 'geometry-wasm/stroke-v0+r10')
+        if (state.ports?.stroke.operationId !== 'geometry-wasm/stroke-v0+r11')
           failures.push(`${key}: unexpected stroke port ${JSON.stringify(state.ports)}`);
 
         // Probes, far from every edge, in the zoom 1 overview only (decoded in the page).

@@ -42,7 +42,7 @@ const runRoot = path.resolve(
 /** The operation ids the expected literals were fixed with (V1-A1, V1-A9). */
 const OPERATION_IDS = {
   fill: 'geometry-wasm/fill-v0+r7',
-  stroke: 'geometry-wasm/stroke-v0+r10',
+  stroke: 'geometry-wasm/stroke-v0+r11',
 } as const;
 
 /**
@@ -58,7 +58,8 @@ const OBSERVED_NOTICES: Readonly<Record<string, readonly string[]>> = {
   s1: [],
   s2: [],
   s3: [],
-  s4: ['v1-zigzag stroke fringe-work-cap'],
+  // E39 (2026-11-07, #533): the zigzag stroke is a union mesh with no fringe, so no notice.
+  s4: [],
   s5: [],
   // N1: v1-circle fill only, stroke on, stroke off (the log keeps its entry), stroke on again
   // (the stroke is rebuilt and a second notice arrives). Since 2026-10-25 N1 strokes at a wide

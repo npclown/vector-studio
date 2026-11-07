@@ -58,6 +58,7 @@ export default defineConfig({
         vizV3Integration: `${import.meta.dirname}/viz-v3-integration.html`,
         e3A04Readback: `${import.meta.dirname}/e3-a04-readback.html`,
         e10TestHooks: `${import.meta.dirname}/e10-test-hooks.html`,
+        e39PaintedOnce: `${import.meta.dirname}/e39-painted-once.html`,
         vizV4A08Corpus: `${import.meta.dirname}/viz-v4-a08-corpus.html`,
         p4ClipMask: `${import.meta.dirname}/p4-clip-mask.html`,
         e23GradientPaint: `${import.meta.dirname}/e23-gradient-paint.html`,
