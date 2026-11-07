@@ -412,6 +412,11 @@ export class PathMeshPacker {
         this.#releaseVariant(record);
         record.variant = this.#placeVariant(draw);
       }
+      // E39-R6: a joint draw over coverage meshes has no overlay. One left on the slot by an
+      // earlier ST-U7 pair (resident until evicted) would stand in for the variant's bases.
+      if (draw.overlay === undefined && draw.coverage !== undefined) {
+        this.#releaseOverlay(record);
+      }
       if (draw.overlay !== undefined && record.overlay?.id !== draw.overlay.id) {
         this.#releaseOverlay(record);
         record.overlay = this.#placeOverlay(draw.overlay.id, draw.overlay.data);
@@ -459,7 +464,11 @@ export class PathMeshPacker {
     const strokePlacements = new Map<string, { firstTriangle: number; triangleCount: number }>();
     for (const draw of input.draws) {
       const record = this.#records.get(draw.slot)!;
-      const variant = draw.composite === 'joint-fill' ? record.overlay! : record.variant!;
+      // E39-R6: a joint draw over coverage meshes draws its own variant (no overlay).
+      const variant =
+        draw.composite === 'joint-fill' && draw.coverage === undefined
+          ? record.overlay!
+          : record.variant!;
       (draw.paint === 'stroke' ? strokePlacements : placements).set(
         draw.nodeId,
         Object.freeze({
@@ -932,7 +941,8 @@ function instanceWords(
     source.bases.meshPositions,
     source.bases.meshFeatureLists,
     variant.bases.meshFeatures,
-    overlay === null ? 0 : link,
+    // E39-R6: a joint draw over coverage meshes also names its stroke record, with no overlay.
+    overlay === null && draw.coverage === undefined ? 0 : link,
   ];
   for (let word = 0; word < 12; word += 1) words[word] = Math.fround(words[word]!);
   return words;

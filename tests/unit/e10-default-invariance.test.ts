@@ -26,9 +26,9 @@ const GOLDEN = join(dirname(fileURLToPath(import.meta.url)), 'e10-golden', 'defa
 /**
  * E3-U4's recorded SHA-256 of MESH_FILL_SHADER (E3 contract, section 16.5), re-baselined by E39
  * (U2: the cover quad, the stencil pass fragment and the no-discard flag; partition draws shade
- * as before). The golden log changed with it for the E39 stencil and cover pipelines.
+ * as before). The golden log changed with it for the E39 stencil and cover pipelines (U2, then U3's joint ones).
  */
-const MESH_FILL_SHADER_SHA256 = 'a74fc8809f69bb92cd4c7e99c94ddfc08d5b479ce776c79126f56a72135d67a4';
+const MESH_FILL_SHADER_SHA256 = '1986fd23ccd14b745c039d11afc938fdeec009768c7d2f266f38ce5010df59ee';
 
 class ManualClock implements AnimationFrameClock {
   #callbacks = new Map<number, (timestampMs: number) => void>();

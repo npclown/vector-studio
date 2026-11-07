@@ -234,7 +234,7 @@
   [
     "device#2.createShaderModule",
     {
-      "code": "sha256:a74fc8809f69bb92cd4c7e99c94ddfc08d5b479ce776c79126f56a72135d67a4",
+      "code": "sha256:1986fd23ccd14b745c039d11afc938fdeec009768c7d2f266f38ce5010df59ee",
       "label": "primitive/1/mesh-shader"
     }
   ],
@@ -532,6 +532,108 @@
         "depthWriteEnabled": false,
         "format": "stencil8",
         "stencilBack": {
+          "compare": "always",
+          "depthFailOp": "keep",
+          "failOp": "keep",
+          "passOp": "replace"
+        },
+        "stencilFront": {
+          "compare": "always",
+          "depthFailOp": "keep",
+          "failOp": "keep",
+          "passOp": "replace"
+        },
+        "stencilReadMask": 255,
+        "stencilWriteMask": 128
+      },
+      "fragment": {
+        "entryPoint": "meshStencilFragmentMain",
+        "module": "ShaderModule#17",
+        "targets": [
+          {
+            "format": "bgra8unorm",
+            "writeMask": 0
+          }
+        ]
+      },
+      "label": "vector-studio/e39-mesh-stencil-joint-stroke-bgra8unorm-4x",
+      "layout": "PipelineLayout#16",
+      "multisample": {
+        "alphaToCoverageEnabled": false,
+        "count": 4,
+        "mask": 4294967295
+      },
+      "primitive": {
+        "cullMode": "none",
+        "frontFace": "ccw",
+        "topology": "triangle-list"
+      },
+      "vertex": {
+        "buffers": [],
+        "entryPoint": "meshVertexMain",
+        "module": "ShaderModule#17"
+      }
+    }
+  ],
+  [
+    "device#2.createRenderPipelineAsync",
+    {
+      "depthStencil": {
+        "depthCompare": "always",
+        "depthWriteEnabled": false,
+        "format": "stencil8",
+        "stencilBack": {
+          "compare": "always",
+          "depthFailOp": "keep",
+          "failOp": "keep",
+          "passOp": "decrement-wrap"
+        },
+        "stencilFront": {
+          "compare": "always",
+          "depthFailOp": "keep",
+          "failOp": "keep",
+          "passOp": "increment-wrap"
+        },
+        "stencilReadMask": 255,
+        "stencilWriteMask": 127
+      },
+      "fragment": {
+        "entryPoint": "meshStencilFragmentMain",
+        "module": "ShaderModule#17",
+        "targets": [
+          {
+            "format": "bgra8unorm",
+            "writeMask": 0
+          }
+        ]
+      },
+      "label": "vector-studio/e39-mesh-stencil-joint-fill-bgra8unorm-4x",
+      "layout": "PipelineLayout#16",
+      "multisample": {
+        "alphaToCoverageEnabled": false,
+        "count": 4,
+        "mask": 4294967295
+      },
+      "primitive": {
+        "cullMode": "none",
+        "frontFace": "ccw",
+        "topology": "triangle-list"
+      },
+      "vertex": {
+        "buffers": [],
+        "entryPoint": "meshVertexMain",
+        "module": "ShaderModule#17"
+      }
+    }
+  ],
+  [
+    "device#2.createRenderPipelineAsync",
+    {
+      "depthStencil": {
+        "depthCompare": "always",
+        "depthWriteEnabled": false,
+        "format": "stencil8",
+        "stencilBack": {
           "compare": "not-equal",
           "depthFailOp": "zero",
           "failOp": "zero",
@@ -651,6 +753,321 @@
     }
   ],
   [
+    "device#2.createRenderPipelineAsync",
+    {
+      "depthStencil": {
+        "depthCompare": "always",
+        "depthWriteEnabled": false,
+        "format": "stencil8",
+        "stencilBack": {
+          "compare": "less",
+          "depthFailOp": "keep",
+          "failOp": "keep",
+          "passOp": "zero"
+        },
+        "stencilFront": {
+          "compare": "less",
+          "depthFailOp": "keep",
+          "failOp": "keep",
+          "passOp": "zero"
+        },
+        "stencilReadMask": 255,
+        "stencilWriteMask": 127
+      },
+      "fragment": {
+        "entryPoint": "meshJointCoverFragmentMain",
+        "module": "ShaderModule#17",
+        "targets": [
+          {
+            "blend": {
+              "alpha": {
+                "dstFactor": "one-minus-src-alpha",
+                "operation": "add",
+                "srcFactor": "one"
+              },
+              "color": {
+                "dstFactor": "one-minus-src-alpha",
+                "operation": "add",
+                "srcFactor": "one"
+              }
+            },
+            "format": "bgra8unorm",
+            "writeMask": 15
+          }
+        ]
+      },
+      "label": "vector-studio/p3-mesh-cover-joint-both-nonzero-4x",
+      "layout": "PipelineLayout#16",
+      "multisample": {
+        "alphaToCoverageEnabled": false,
+        "count": 4,
+        "mask": 4294967295
+      },
+      "primitive": {
+        "cullMode": "none",
+        "frontFace": "ccw",
+        "topology": "triangle-list"
+      },
+      "vertex": {
+        "buffers": [],
+        "entryPoint": "meshVertexMain",
+        "module": "ShaderModule#17"
+      }
+    }
+  ],
+  [
+    "device#2.createRenderPipelineAsync",
+    {
+      "depthStencil": {
+        "depthCompare": "always",
+        "depthWriteEnabled": false,
+        "format": "stencil8",
+        "stencilBack": {
+          "compare": "equal",
+          "depthFailOp": "keep",
+          "failOp": "keep",
+          "passOp": "zero"
+        },
+        "stencilFront": {
+          "compare": "equal",
+          "depthFailOp": "keep",
+          "failOp": "keep",
+          "passOp": "zero"
+        },
+        "stencilReadMask": 129,
+        "stencilWriteMask": 127
+      },
+      "fragment": {
+        "entryPoint": "meshJointCoverFragmentMain",
+        "module": "ShaderModule#17",
+        "targets": [
+          {
+            "blend": {
+              "alpha": {
+                "dstFactor": "one-minus-src-alpha",
+                "operation": "add",
+                "srcFactor": "one"
+              },
+              "color": {
+                "dstFactor": "one-minus-src-alpha",
+                "operation": "add",
+                "srcFactor": "one"
+              }
+            },
+            "format": "bgra8unorm",
+            "writeMask": 15
+          }
+        ]
+      },
+      "label": "vector-studio/p3-mesh-cover-joint-both-evenodd-4x",
+      "layout": "PipelineLayout#16",
+      "multisample": {
+        "alphaToCoverageEnabled": false,
+        "count": 4,
+        "mask": 4294967295
+      },
+      "primitive": {
+        "cullMode": "none",
+        "frontFace": "ccw",
+        "topology": "triangle-list"
+      },
+      "vertex": {
+        "buffers": [],
+        "entryPoint": "meshVertexMain",
+        "module": "ShaderModule#17"
+      }
+    }
+  ],
+  [
+    "device#2.createRenderPipelineAsync",
+    {
+      "depthStencil": {
+        "depthCompare": "always",
+        "depthWriteEnabled": false,
+        "format": "stencil8",
+        "stencilBack": {
+          "compare": "not-equal",
+          "depthFailOp": "zero",
+          "failOp": "zero",
+          "passOp": "zero"
+        },
+        "stencilFront": {
+          "compare": "not-equal",
+          "depthFailOp": "zero",
+          "failOp": "zero",
+          "passOp": "zero"
+        },
+        "stencilReadMask": 127,
+        "stencilWriteMask": 127
+      },
+      "fragment": {
+        "entryPoint": "meshFragmentMain",
+        "module": "ShaderModule#17",
+        "targets": [
+          {
+            "blend": {
+              "alpha": {
+                "dstFactor": "one-minus-src-alpha",
+                "operation": "add",
+                "srcFactor": "one"
+              },
+              "color": {
+                "dstFactor": "one-minus-src-alpha",
+                "operation": "add",
+                "srcFactor": "one"
+              }
+            },
+            "format": "bgra8unorm",
+            "writeMask": 15
+          }
+        ]
+      },
+      "label": "vector-studio/p3-mesh-cover-joint-fill-nonzero-4x",
+      "layout": "PipelineLayout#16",
+      "multisample": {
+        "alphaToCoverageEnabled": false,
+        "count": 4,
+        "mask": 4294967295
+      },
+      "primitive": {
+        "cullMode": "none",
+        "frontFace": "ccw",
+        "topology": "triangle-list"
+      },
+      "vertex": {
+        "buffers": [],
+        "entryPoint": "meshVertexMain",
+        "module": "ShaderModule#17"
+      }
+    }
+  ],
+  [
+    "device#2.createRenderPipelineAsync",
+    {
+      "depthStencil": {
+        "depthCompare": "always",
+        "depthWriteEnabled": false,
+        "format": "stencil8",
+        "stencilBack": {
+          "compare": "equal",
+          "depthFailOp": "zero",
+          "failOp": "zero",
+          "passOp": "zero"
+        },
+        "stencilFront": {
+          "compare": "equal",
+          "depthFailOp": "zero",
+          "failOp": "zero",
+          "passOp": "zero"
+        },
+        "stencilReadMask": 1,
+        "stencilWriteMask": 127
+      },
+      "fragment": {
+        "entryPoint": "meshFragmentMain",
+        "module": "ShaderModule#17",
+        "targets": [
+          {
+            "blend": {
+              "alpha": {
+                "dstFactor": "one-minus-src-alpha",
+                "operation": "add",
+                "srcFactor": "one"
+              },
+              "color": {
+                "dstFactor": "one-minus-src-alpha",
+                "operation": "add",
+                "srcFactor": "one"
+              }
+            },
+            "format": "bgra8unorm",
+            "writeMask": 15
+          }
+        ]
+      },
+      "label": "vector-studio/p3-mesh-cover-joint-fill-evenodd-4x",
+      "layout": "PipelineLayout#16",
+      "multisample": {
+        "alphaToCoverageEnabled": false,
+        "count": 4,
+        "mask": 4294967295
+      },
+      "primitive": {
+        "cullMode": "none",
+        "frontFace": "ccw",
+        "topology": "triangle-list"
+      },
+      "vertex": {
+        "buffers": [],
+        "entryPoint": "meshVertexMain",
+        "module": "ShaderModule#17"
+      }
+    }
+  ],
+  [
+    "device#2.createRenderPipelineAsync",
+    {
+      "depthStencil": {
+        "depthCompare": "always",
+        "depthWriteEnabled": false,
+        "format": "stencil8",
+        "stencilBack": {
+          "compare": "equal",
+          "depthFailOp": "zero",
+          "failOp": "zero",
+          "passOp": "zero"
+        },
+        "stencilFront": {
+          "compare": "equal",
+          "depthFailOp": "zero",
+          "failOp": "zero",
+          "passOp": "zero"
+        },
+        "stencilReadMask": 128,
+        "stencilWriteMask": 255
+      },
+      "fragment": {
+        "entryPoint": "meshFragmentMain",
+        "module": "ShaderModule#17",
+        "targets": [
+          {
+            "blend": {
+              "alpha": {
+                "dstFactor": "one-minus-src-alpha",
+                "operation": "add",
+                "srcFactor": "one"
+              },
+              "color": {
+                "dstFactor": "one-minus-src-alpha",
+                "operation": "add",
+                "srcFactor": "one"
+              }
+            },
+            "format": "bgra8unorm",
+            "writeMask": 15
+          }
+        ]
+      },
+      "label": "vector-studio/p3-mesh-cover-joint-stroke-4x",
+      "layout": "PipelineLayout#16",
+      "multisample": {
+        "alphaToCoverageEnabled": false,
+        "count": 4,
+        "mask": 4294967295
+      },
+      "primitive": {
+        "cullMode": "none",
+        "frontFace": "ccw",
+        "topology": "triangle-list"
+      },
+      "vertex": {
+        "buffers": [],
+        "entryPoint": "meshVertexMain",
+        "module": "ShaderModule#17"
+      }
+    }
+  ],
+  [
     "device#2.createTexture",
     {
       "format": "stencil8",
@@ -691,7 +1108,7 @@
         {
           "binding": 0,
           "resource": {
-            "buffer": "Buffer#28",
+            "buffer": "Buffer#35",
             "offset": 0,
             "size": 512
           }
@@ -699,7 +1116,7 @@
         {
           "binding": 1,
           "resource": {
-            "buffer": "Buffer#28",
+            "buffer": "Buffer#35",
             "offset": 512,
             "size": 768
           }
@@ -707,7 +1124,7 @@
         {
           "binding": 2,
           "resource": {
-            "buffer": "Buffer#28",
+            "buffer": "Buffer#35",
             "offset": 1280,
             "size": 768
           }
@@ -715,7 +1132,7 @@
         {
           "binding": 3,
           "resource": {
-            "buffer": "Buffer#28",
+            "buffer": "Buffer#35",
             "offset": 2048,
             "size": 64
           }
@@ -723,7 +1140,7 @@
         {
           "binding": 4,
           "resource": {
-            "buffer": "Buffer#28",
+            "buffer": "Buffer#35",
             "offset": 2304,
             "size": 32
           }
@@ -748,7 +1165,7 @@
         {
           "binding": 0,
           "resource": {
-            "buffer": "Buffer#30",
+            "buffer": "Buffer#37",
             "offset": 0,
             "size": 512
           }
@@ -756,7 +1173,7 @@
         {
           "binding": 1,
           "resource": {
-            "buffer": "Buffer#30",
+            "buffer": "Buffer#37",
             "offset": 512,
             "size": 4096
           }
@@ -764,7 +1181,7 @@
         {
           "binding": 2,
           "resource": {
-            "buffer": "Buffer#30",
+            "buffer": "Buffer#37",
             "offset": 4608,
             "size": 4096
           }
@@ -772,7 +1189,7 @@
         {
           "binding": 3,
           "resource": {
-            "buffer": "Buffer#30",
+            "buffer": "Buffer#37",
             "offset": 8704,
             "size": 4096
           }
@@ -780,7 +1197,7 @@
         {
           "binding": 4,
           "resource": {
-            "buffer": "Buffer#30",
+            "buffer": "Buffer#37",
             "offset": 12800,
             "size": 1024
           }
@@ -788,7 +1205,7 @@
         {
           "binding": 5,
           "resource": {
-            "buffer": "Buffer#30",
+            "buffer": "Buffer#37",
             "offset": 13824,
             "size": 32
           }
@@ -800,7 +1217,7 @@
   ],
   [
     "queue#1.writeBuffer",
-    "Buffer#28",
+    "Buffer#35",
     0,
     "bytes:32:fbc0ab4c9c4edb7dcb82e15b0f88e84f99dfcc56b2939f78236dcf004158a87a",
     0,
@@ -808,7 +1225,7 @@
   ],
   [
     "queue#1.writeBuffer",
-    "Buffer#28",
+    "Buffer#35",
     512,
     "bytes:48:336d1a79b2b218c19a0ebb7afe8cb15b00a4abd97378adb33b4ed85bddec10bf",
     0,
@@ -816,7 +1233,7 @@
   ],
   [
     "queue#1.writeBuffer",
-    "Buffer#28",
+    "Buffer#35",
     1280,
     "bytes:48:ee35911cddf900e97f93602ea5846f3f017ac0bcf3bdb00303f4cad423c7cd7f",
     0,
@@ -824,7 +1241,7 @@
   ],
   [
     "queue#1.writeBuffer",
-    "Buffer#28",
+    "Buffer#35",
     2048,
     "bytes:4:df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
     0,
@@ -832,7 +1249,7 @@
   ],
   [
     "queue#1.writeBuffer",
-    "Buffer#28",
+    "Buffer#35",
     2304,
     "bytes:32:3a70f2cf80c37e15ed741949424bcbaab7fea9eaa872b6593da524cfc515e1c9",
     0,
@@ -840,7 +1257,7 @@
   ],
   [
     "queue#1.writeBuffer",
-    "Buffer#30",
+    "Buffer#37",
     0,
     "bytes:448:985f669e7bbf1b84531fd735c6d083ea34360c9662159cb28f452ecc558a64ef",
     0,
@@ -848,7 +1265,7 @@
   ],
   [
     "queue#1.writeBuffer",
-    "Buffer#30",
+    "Buffer#37",
     512,
     "bytes:2432:03830e5e7005ef05e8701766c5f65a083204cae52b51546401598e3bb3de6f58",
     0,
@@ -856,7 +1273,7 @@
   ],
   [
     "queue#1.writeBuffer",
-    "Buffer#30",
+    "Buffer#37",
     4608,
     "bytes:2128:6480f09818598f2cd9bc9b694d46802d48ecca79ce81140a33bdb3dc390d223f",
     0,
@@ -864,7 +1281,7 @@
   ],
   [
     "queue#1.writeBuffer",
-    "Buffer#30",
+    "Buffer#37",
     8704,
     "bytes:3584:e3c0e3b3c4e242c289931c7bdf950d6ad9229bf6a2c593b3454476fe3a1c351c",
     0,
@@ -872,7 +1289,7 @@
   ],
   [
     "queue#1.writeBuffer",
-    "Buffer#30",
+    "Buffer#37",
     12800,
     "bytes:320:c0f6dcfa028cfb8b902e2c319202915df7aa3b8ee921e16658b2aca2f9243f33",
     0,
@@ -880,24 +1297,24 @@
   ],
   [
     "queue#1.writeBuffer",
-    "Buffer#30",
+    "Buffer#37",
     13824,
     "bytes:32:486aad6ce24eaaae83bd5e806cf5e65d41bac06e72715f0f3baa6e4c808a7784",
     0,
     32
   ],
   ["context#4.getCurrentTexture"],
-  ["getCurrentTexture#43.createView"],
-  ["Texture#27.createView"],
+  ["getCurrentTexture#50.createView"],
+  ["Texture#34.createView"],
   [
     "device#2.createCommandEncoder",
     {
       "label": "vector-studio/primitive-frame"
     }
   ],
-  ["Texture#26.createView"],
+  ["Texture#33.createView"],
   [
-    "CommandEncoder#46.beginRenderPass",
+    "CommandEncoder#53.beginRenderPass",
     {
       "colorAttachments": [
         {
@@ -908,46 +1325,46 @@
             "r": 0
           },
           "loadOp": "clear",
-          "resolveTarget": "View#44",
+          "resolveTarget": "View#51",
           "storeOp": "discard",
-          "view": "View#45"
+          "view": "View#52"
         }
       ],
       "depthStencilAttachment": {
         "stencilClearValue": 0,
         "stencilLoadOp": "clear",
         "stencilStoreOp": "discard",
-        "view": "View#47"
+        "view": "View#54"
       },
       "label": "vector-studio/primitive-pass"
     }
   ],
-  ["beginRenderPass#48.setPipeline", "RenderPipeline#14"],
-  ["beginRenderPass#48.setBindGroup", 0, "BindGroup#29"],
-  ["beginRenderPass#48.setVertexBuffer", 0, "Buffer#10", 0, 32],
-  ["beginRenderPass#48.setIndexBuffer", "Buffer#12", "uint16", 0, 12],
-  ["beginRenderPass#48.setPipeline", "RenderPipeline#18"],
-  ["beginRenderPass#48.setBindGroup", 0, "BindGroup#31"],
-  ["beginRenderPass#48.setStencilReference", 1],
-  ["beginRenderPass#48.draw", 30, 1, 0, 0],
-  ["beginRenderPass#48.setStencilReference", 2],
-  ["beginRenderPass#48.draw", 30, 1, 30, 1],
-  ["beginRenderPass#48.setStencilReference", 3],
-  ["beginRenderPass#48.draw", 54, 1, 60, 2],
-  ["beginRenderPass#48.setPipeline", "RenderPipeline#19"],
-  ["beginRenderPass#48.setStencilReference", 4],
-  ["beginRenderPass#48.draw", 30, 1, 144, 3],
-  ["beginRenderPass#48.setPipeline", "RenderPipeline#18"],
-  ["beginRenderPass#48.setStencilReference", 5],
-  ["beginRenderPass#48.draw", 54, 1, 174, 4],
-  ["beginRenderPass#48.setPipeline", "RenderPipeline#14"],
-  ["beginRenderPass#48.setBindGroup", 0, "BindGroup#29"],
-  ["beginRenderPass#48.setVertexBuffer", 0, "Buffer#10", 0, 32],
-  ["beginRenderPass#48.setIndexBuffer", "Buffer#12", "uint16", 0, 12],
-  ["beginRenderPass#48.drawIndexed", 6, 1, 0, 0, 0],
-  ["beginRenderPass#48.end"],
-  ["CommandEncoder#46.finish"],
-  ["queue#1.submit", ["finish#73"]],
+  ["beginRenderPass#55.setPipeline", "RenderPipeline#14"],
+  ["beginRenderPass#55.setBindGroup", 0, "BindGroup#36"],
+  ["beginRenderPass#55.setVertexBuffer", 0, "Buffer#10", 0, 32],
+  ["beginRenderPass#55.setIndexBuffer", "Buffer#12", "uint16", 0, 12],
+  ["beginRenderPass#55.setPipeline", "RenderPipeline#18"],
+  ["beginRenderPass#55.setBindGroup", 0, "BindGroup#38"],
+  ["beginRenderPass#55.setStencilReference", 1],
+  ["beginRenderPass#55.draw", 30, 1, 0, 0],
+  ["beginRenderPass#55.setStencilReference", 2],
+  ["beginRenderPass#55.draw", 30, 1, 30, 1],
+  ["beginRenderPass#55.setStencilReference", 3],
+  ["beginRenderPass#55.draw", 54, 1, 60, 2],
+  ["beginRenderPass#55.setPipeline", "RenderPipeline#19"],
+  ["beginRenderPass#55.setStencilReference", 4],
+  ["beginRenderPass#55.draw", 30, 1, 144, 3],
+  ["beginRenderPass#55.setPipeline", "RenderPipeline#18"],
+  ["beginRenderPass#55.setStencilReference", 5],
+  ["beginRenderPass#55.draw", 54, 1, 174, 4],
+  ["beginRenderPass#55.setPipeline", "RenderPipeline#14"],
+  ["beginRenderPass#55.setBindGroup", 0, "BindGroup#36"],
+  ["beginRenderPass#55.setVertexBuffer", 0, "Buffer#10", 0, 32],
+  ["beginRenderPass#55.setIndexBuffer", "Buffer#12", "uint16", 0, 12],
+  ["beginRenderPass#55.drawIndexed", 6, 1, 0, 0, 0],
+  ["beginRenderPass#55.end"],
+  ["CommandEncoder#53.finish"],
+  ["queue#1.submit", ["finish#80"]],
   ["queue#1.onSubmittedWorkDone"],
   [
     "device#2.createBuffer",
@@ -964,7 +1381,7 @@
         {
           "binding": 0,
           "resource": {
-            "buffer": "Buffer#76",
+            "buffer": "Buffer#83",
             "offset": 0,
             "size": 512
           }
@@ -972,7 +1389,7 @@
         {
           "binding": 1,
           "resource": {
-            "buffer": "Buffer#76",
+            "buffer": "Buffer#83",
             "offset": 512,
             "size": 4096
           }
@@ -980,7 +1397,7 @@
         {
           "binding": 2,
           "resource": {
-            "buffer": "Buffer#76",
+            "buffer": "Buffer#83",
             "offset": 4608,
             "size": 4096
           }
@@ -988,7 +1405,7 @@
         {
           "binding": 3,
           "resource": {
-            "buffer": "Buffer#76",
+            "buffer": "Buffer#83",
             "offset": 8704,
             "size": 4096
           }
@@ -996,7 +1413,7 @@
         {
           "binding": 4,
           "resource": {
-            "buffer": "Buffer#76",
+            "buffer": "Buffer#83",
             "offset": 12800,
             "size": 1024
           }
@@ -1004,7 +1421,7 @@
         {
           "binding": 5,
           "resource": {
-            "buffer": "Buffer#76",
+            "buffer": "Buffer#83",
             "offset": 13824,
             "size": 32
           }
@@ -1016,7 +1433,7 @@
   ],
   [
     "queue#1.writeBuffer",
-    "Buffer#28",
+    "Buffer#35",
     2304,
     "bytes:32:40966af5e3cdd81583286ef27f00601a9ecb6e4adc8590f81279e1dd3a0249a7",
     0,
@@ -1024,7 +1441,7 @@
   ],
   [
     "queue#1.writeBuffer",
-    "Buffer#76",
+    "Buffer#83",
     0,
     "bytes:448:b8f3fedf4d98f54a6b011c9ae0d85d69dfb93d328528d1d0597202ea1b5e64cc",
     0,
@@ -1032,7 +1449,7 @@
   ],
   [
     "queue#1.writeBuffer",
-    "Buffer#76",
+    "Buffer#83",
     512,
     "bytes:2432:1dbda8b88b2d6d5360b82085029cc0a0ecf7b2691a78980cd5ca9dbcb81a69ec",
     0,
@@ -1040,7 +1457,7 @@
   ],
   [
     "queue#1.writeBuffer",
-    "Buffer#76",
+    "Buffer#83",
     4608,
     "bytes:1808:4b1321f528f3c04e854e025d496104beb2fdde4a94ef109d02ec4e55618b2bd6",
     0,
@@ -1048,7 +1465,7 @@
   ],
   [
     "queue#1.writeBuffer",
-    "Buffer#76",
+    "Buffer#83",
     8704,
     "bytes:3584:e3c0e3b3c4e242c289931c7bdf950d6ad9229bf6a2c593b3454476fe3a1c351c",
     0,
@@ -1056,7 +1473,7 @@
   ],
   [
     "queue#1.writeBuffer",
-    "Buffer#76",
+    "Buffer#83",
     12800,
     "bytes:320:60a8b82aadf9a1379778a736e88ffcfc3df780f9c1849a8153f6760000e08f27",
     0,
@@ -1064,24 +1481,24 @@
   ],
   [
     "queue#1.writeBuffer",
-    "Buffer#76",
+    "Buffer#83",
     13824,
     "bytes:32:c1c66d0dabfa3f7e9c46c2988121f915a7408af39f613a44aa9fba2ebf3b6f6c",
     0,
     32
   ],
   ["context#4.getCurrentTexture"],
-  ["getCurrentTexture#85.createView"],
-  ["Texture#27.createView"],
+  ["getCurrentTexture#92.createView"],
+  ["Texture#34.createView"],
   [
     "device#2.createCommandEncoder",
     {
       "label": "vector-studio/primitive-frame"
     }
   ],
-  ["Texture#26.createView"],
+  ["Texture#33.createView"],
   [
-    "CommandEncoder#88.beginRenderPass",
+    "CommandEncoder#95.beginRenderPass",
     {
       "colorAttachments": [
         {
@@ -1092,51 +1509,51 @@
             "r": 0
           },
           "loadOp": "clear",
-          "resolveTarget": "View#86",
+          "resolveTarget": "View#93",
           "storeOp": "discard",
-          "view": "View#87"
+          "view": "View#94"
         }
       ],
       "depthStencilAttachment": {
         "stencilClearValue": 0,
         "stencilLoadOp": "clear",
         "stencilStoreOp": "discard",
-        "view": "View#89"
+        "view": "View#96"
       },
       "label": "vector-studio/primitive-pass"
     }
   ],
-  ["beginRenderPass#90.setPipeline", "RenderPipeline#14"],
-  ["beginRenderPass#90.setBindGroup", 0, "BindGroup#29"],
-  ["beginRenderPass#90.setVertexBuffer", 0, "Buffer#10", 0, 32],
-  ["beginRenderPass#90.setIndexBuffer", "Buffer#12", "uint16", 0, 12],
-  ["beginRenderPass#90.setPipeline", "RenderPipeline#18"],
-  ["beginRenderPass#90.setBindGroup", 0, "BindGroup#77"],
-  ["beginRenderPass#90.setStencilReference", 1],
-  ["beginRenderPass#90.draw", 30, 1, 0, 0],
-  ["beginRenderPass#90.setStencilReference", 2],
-  ["beginRenderPass#90.draw", 30, 1, 30, 1],
-  ["beginRenderPass#90.setStencilReference", 3],
-  ["beginRenderPass#90.draw", 54, 1, 60, 2],
-  ["beginRenderPass#90.setPipeline", "RenderPipeline#19"],
-  ["beginRenderPass#90.setStencilReference", 4],
-  ["beginRenderPass#90.draw", 30, 1, 144, 3],
-  ["beginRenderPass#90.setPipeline", "RenderPipeline#18"],
-  ["beginRenderPass#90.setStencilReference", 5],
-  ["beginRenderPass#90.draw", 54, 1, 174, 4],
-  ["beginRenderPass#90.setPipeline", "RenderPipeline#14"],
-  ["beginRenderPass#90.setBindGroup", 0, "BindGroup#29"],
-  ["beginRenderPass#90.setVertexBuffer", 0, "Buffer#10", 0, 32],
-  ["beginRenderPass#90.setIndexBuffer", "Buffer#12", "uint16", 0, 12],
-  ["beginRenderPass#90.drawIndexed", 6, 1, 0, 0, 0],
-  ["beginRenderPass#90.end"],
-  ["CommandEncoder#88.finish"],
-  ["queue#1.submit", ["finish#115"]],
-  ["Texture#27.destroy"],
-  ["Texture#26.destroy"],
-  ["Buffer#28.destroy"],
-  ["Buffer#76.destroy"],
-  ["Buffer#30.destroy"],
+  ["beginRenderPass#97.setPipeline", "RenderPipeline#14"],
+  ["beginRenderPass#97.setBindGroup", 0, "BindGroup#36"],
+  ["beginRenderPass#97.setVertexBuffer", 0, "Buffer#10", 0, 32],
+  ["beginRenderPass#97.setIndexBuffer", "Buffer#12", "uint16", 0, 12],
+  ["beginRenderPass#97.setPipeline", "RenderPipeline#18"],
+  ["beginRenderPass#97.setBindGroup", 0, "BindGroup#84"],
+  ["beginRenderPass#97.setStencilReference", 1],
+  ["beginRenderPass#97.draw", 30, 1, 0, 0],
+  ["beginRenderPass#97.setStencilReference", 2],
+  ["beginRenderPass#97.draw", 30, 1, 30, 1],
+  ["beginRenderPass#97.setStencilReference", 3],
+  ["beginRenderPass#97.draw", 54, 1, 60, 2],
+  ["beginRenderPass#97.setPipeline", "RenderPipeline#19"],
+  ["beginRenderPass#97.setStencilReference", 4],
+  ["beginRenderPass#97.draw", 30, 1, 144, 3],
+  ["beginRenderPass#97.setPipeline", "RenderPipeline#18"],
+  ["beginRenderPass#97.setStencilReference", 5],
+  ["beginRenderPass#97.draw", 54, 1, 174, 4],
+  ["beginRenderPass#97.setPipeline", "RenderPipeline#14"],
+  ["beginRenderPass#97.setBindGroup", 0, "BindGroup#36"],
+  ["beginRenderPass#97.setVertexBuffer", 0, "Buffer#10", 0, 32],
+  ["beginRenderPass#97.setIndexBuffer", "Buffer#12", "uint16", 0, 12],
+  ["beginRenderPass#97.drawIndexed", 6, 1, 0, 0, 0],
+  ["beginRenderPass#97.end"],
+  ["CommandEncoder#95.finish"],
+  ["queue#1.submit", ["finish#122"]],
+  ["Texture#34.destroy"],
+  ["Texture#33.destroy"],
+  ["Buffer#35.destroy"],
+  ["Buffer#83.destroy"],
+  ["Buffer#37.destroy"],
   ["Buffer#10.destroy"],
   ["Buffer#12.destroy"],
   ["context#4.unconfigure"],

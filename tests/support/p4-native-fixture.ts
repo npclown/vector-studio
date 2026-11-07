@@ -59,6 +59,8 @@ export function nativeFixture(
       label: descriptor.label,
       size: descriptor.size,
       destroy: vi.fn(),
+      // E39-U3: a count capture's readback, which never settles here.
+      mapAsync: vi.fn(() => new Promise<void>(() => {})),
     })),
     createBindGroupLayout: vi.fn((descriptor: GPUBindGroupLayoutDescriptor) => ({
       label: descriptor.label,
@@ -147,6 +149,7 @@ export function nativeFixture(
             size.height,
           ]),
       ),
+      copyTextureToBuffer: vi.fn(),
       finish: vi.fn(() => ({})),
     })),
     queue: {

@@ -187,7 +187,7 @@ describe('V3b mesh pipeline creation (V3-A13)', () => {
     expect(scene).toMatchObject({
       meshPipelineAvailable: true,
       // E17 section 3: the stencil reset pipeline and its module.
-      pipelinesCreated: 8,
+      pipelinesCreated: 15,
       shaderModulesCreated: 3,
     });
     expect(fixture.pipelineLabels).toEqual([
@@ -197,8 +197,15 @@ describe('V3b mesh pipeline creation (V3-A13)', () => {
       'vector-studio/p3-mesh-stencil-reset-4x',
       'vector-studio/e39-mesh-stencil-winding-bgra8unorm-4x',
       'vector-studio/e39-mesh-stencil-union-bgra8unorm-4x',
+      'vector-studio/e39-mesh-stencil-joint-stroke-bgra8unorm-4x',
+      'vector-studio/e39-mesh-stencil-joint-fill-bgra8unorm-4x',
       'vector-studio/p3-mesh-cover-nonzero-4x',
       'vector-studio/p3-mesh-cover-evenodd-4x',
+      'vector-studio/p3-mesh-cover-joint-both-nonzero-4x',
+      'vector-studio/p3-mesh-cover-joint-both-evenodd-4x',
+      'vector-studio/p3-mesh-cover-joint-fill-nonzero-4x',
+      'vector-studio/p3-mesh-cover-joint-fill-evenodd-4x',
+      'vector-studio/p3-mesh-cover-joint-stroke-4x',
     ]);
     const h = createPathHarness({ port: createCountingPort(), nodes: interleaved() });
     for (let frame = 0; frame < 5; frame += 1) {
@@ -206,10 +213,10 @@ describe('V3b mesh pipeline creation (V3-A13)', () => {
       const receipt = submitted(scene.submitPrimitivePacket(h.source.prepare(target)!));
       h.source.acknowledge(receipt);
     }
-    // Five frames later, still exactly the eight pipelines (ST-U7 addendum's joint pipeline over
-    // the same module, E17's stencil reset, E39's two stencil passes and two covers) and three
+    // Five frames later, still exactly the fifteen pipelines (ST-U7 addendum's joint pipeline over
+    // the same module, E17's stencil reset, E39's four stencil passes and seven covers) and three
     // shader modules of creation.
-    expect(fixture.pipelineLabels).toHaveLength(8);
+    expect(fixture.pipelineLabels).toHaveLength(15);
     expect(fixture.shaderLabels).toHaveLength(3);
     creation.dispose();
     expect(accounting.snapshot().live).toBe(0);

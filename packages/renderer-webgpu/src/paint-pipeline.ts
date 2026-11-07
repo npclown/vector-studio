@@ -164,12 +164,16 @@ export const MESH_JOINT_PAINT_CLIP_SHADER_KEY = `${MESH_JOINT_PAINT_SHADER_KEY}+
 function meshPaintShader(clipped: boolean): string {
   const base = replaceOnce(
     replaceOnce(
-      MESH_FILL_SHADER,
-      '@fragment\nfn meshFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {',
-      'fn meshShadeSolid(input: MeshVertexOutput) -> vec4f {',
+      replaceOnce(
+        MESH_FILL_SHADER,
+        '@fragment\nfn meshFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {',
+        'fn meshShadeSolid(input: MeshVertexOutput) -> vec4f {',
+      ),
+      '@fragment\nfn meshJointFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {',
+      'fn meshJointShadeSolid(input: MeshVertexOutput) -> vec4f {',
     ),
-    '@fragment\nfn meshJointFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {',
-    'fn meshJointShadeSolid(input: MeshVertexOutput) -> vec4f {',
+    '@fragment\nfn meshJointCoverFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {',
+    'fn meshJointCoverShadeSolid(input: MeshVertexOutput) -> vec4f {',
   );
   const clip = clipped ? 'clipCoverage(input.position.xy)' : '1.0';
   return `${base}${paintBlock('meshPaints')}${clipped ? CLIP_BLOCK : ''}
@@ -205,6 +209,19 @@ fn meshJointFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {
     discard;
   }
   return color;
+}
+
+// E39-R6: the joint-both cover at c_F = c_S = 1 with the paints; no discard (R4).
+@fragment
+fn meshJointCoverFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {
+  let clip = ${clip};
+  let fill = instances[input.instance];
+  let stroke = instances[fill.strokeLink - 1u];
+  let fillPaint = paintValue(meshPaints[input.instance * 2u], fill.fill, input.position.xy);
+  let strokePaint = paintValue(meshPaints[input.instance * 2u + 1u], stroke.fill, input.position.xy);
+  let opacity = fill.opacity * clip;
+  let factor = opacity * (1.0 - strokePaint.a) / (1.0 - opacity * strokePaint.a);
+  return fillPaint * factor;
 }
 `;
 }

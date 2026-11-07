@@ -118,6 +118,8 @@ describe('P4 U3 clip shader variants (section 4, Pipelines; P4-K1)', () => {
       'meshStencilFragmentMain',
       'meshFragmentMain',
       'meshJointFragmentMain',
+      // E39-U3: the joint-both cover (R6).
+      'meshJointCoverFragmentMain',
     ]);
     expect(PRIMITIVE_ANALYTIC_CLIP_SHADER).toContain('return shadePrimitive(input) * clip;');
     expect(MESH_FILL_CLIP_SHADER).toContain('return meshShade(input) * clip;');
@@ -218,7 +220,7 @@ describe('P4 U3 pipeline creation', () => {
     expect(scene).toMatchObject({
       clipPipelineAvailable: true,
       meshPipelineAvailable: true,
-      pipelinesCreated: 18,
+      pipelinesCreated: 30,
       shaderModulesCreated: 7,
     });
     expect(fixture.pipelineLabels).toEqual([
@@ -228,14 +230,26 @@ describe('P4 U3 pipeline creation', () => {
       'vector-studio/p3-mesh-stencil-reset-4x',
       'vector-studio/e39-mesh-stencil-winding-bgra8unorm-4x',
       'vector-studio/e39-mesh-stencil-union-bgra8unorm-4x',
+      'vector-studio/e39-mesh-stencil-joint-stroke-bgra8unorm-4x',
+      'vector-studio/e39-mesh-stencil-joint-fill-bgra8unorm-4x',
       'vector-studio/p3-mesh-cover-nonzero-4x',
       'vector-studio/p3-mesh-cover-evenodd-4x',
+      'vector-studio/p3-mesh-cover-joint-both-nonzero-4x',
+      'vector-studio/p3-mesh-cover-joint-both-evenodd-4x',
+      'vector-studio/p3-mesh-cover-joint-fill-nonzero-4x',
+      'vector-studio/p3-mesh-cover-joint-fill-evenodd-4x',
+      'vector-studio/p3-mesh-cover-joint-stroke-4x',
       'vector-studio/p1-analytic-primitive-stencil-4x+clip-v0',
       'vector-studio/p1-analytic-primitive-4x+mask-v0',
       'vector-studio/p3-mesh-fill-4x+clip-v0',
       'vector-studio/p3-mesh-joint-4x+clip-v0',
       'vector-studio/p3-mesh-cover-nonzero-4x+clip-v0',
       'vector-studio/p3-mesh-cover-evenodd-4x+clip-v0',
+      'vector-studio/p3-mesh-cover-joint-both-nonzero-4x+clip-v0',
+      'vector-studio/p3-mesh-cover-joint-both-evenodd-4x+clip-v0',
+      'vector-studio/p3-mesh-cover-joint-fill-nonzero-4x+clip-v0',
+      'vector-studio/p3-mesh-cover-joint-fill-evenodd-4x+clip-v0',
+      'vector-studio/p3-mesh-cover-joint-stroke-4x+clip-v0',
       'vector-studio/p3-mesh-fill-4x+mask-v0',
       'vector-studio/e39-mesh-stencil-winding-r8unorm-4x',
       'vector-studio/p3-mesh-cover-nonzero-4x+mask-v0',
@@ -272,7 +286,7 @@ describe('P4 U3 pipeline creation', () => {
       MESH_FILL_CLIP_SHADER,
       MESH_FILL_MASK_SHADER,
     ]);
-    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(18);
+    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(30);
     creation.dispose();
     expect(accounting.snapshot().live).toBe(0);
   });
@@ -282,7 +296,7 @@ describe('P4 U3 pipeline creation', () => {
     const { scene, creation } = await nativeScene(fixture, { meshPipeline: true });
     expect(scene).toMatchObject({
       clipPipelineAvailable: false,
-      pipelinesCreated: 8,
+      pipelinesCreated: 15,
       shaderModulesCreated: 3,
     });
     expect(fixture.modules.some((code) => code.includes('clipCoverage'))).toBe(false);
@@ -311,9 +325,9 @@ describe('P4 U3 pipeline creation', () => {
     expect(scene).toMatchObject({
       clipPipelineAvailable: false,
       meshPipelineAvailable: true,
-      pipelinesCreated: 8,
+      pipelinesCreated: 15,
     });
-    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(8);
+    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(15);
     creation.dispose();
     expect(accounting.snapshot().live).toBe(0);
   });

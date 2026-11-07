@@ -117,11 +117,11 @@ describe('E23 U3 paint shader variants (section 4, Pipelines; E23-A08 hash part)
       meshMask: hash(MESH_FILL_MASK_SHADER),
     }).toEqual({
       analytic: '06b0839c15b93141d1caa72596484b0aa02f53e74f1e58b74959fb5b92af527d',
-      mesh: 'a74fc8809f69bb92cd4c7e99c94ddfc08d5b479ce776c79126f56a72135d67a4',
+      mesh: '1986fd23ccd14b745c039d11afc938fdeec009768c7d2f266f38ce5010df59ee',
       analyticClip: '434bc1d2768c1b9d09c385a2ac4f524f3d6976e183fb9324e0612a7a176efc0d',
-      meshClip: '7d2c6a6a0bfaf98efc1dc46c1d33ae28fcbd6af2d1af13e2ceea71bec11d7b07',
+      meshClip: '0f07200d57b117259f9c9a09be743dc59280918c0adf42b44eeb0e4eb5dd535e',
       analyticMask: '64eb3d86eec661291c71665f6bbaeb18095cfb7db793edec1b64a18468bd504b',
-      meshMask: '7c4db30a327ebd637e3f3b0cca5a56c673f11f75a50b88e97f5ecf58d6a277ef',
+      meshMask: 'b4ebb4008133286b17b03a857ac8322d31eacdee3bf523091350cd54a605acac',
     });
     for (const code of [PRIMITIVE_ANALYTIC_SHADER, MESH_FILL_SHADER, MESH_FILL_CLIP_SHADER]) {
       expect(code).not.toContain('paintValue');
@@ -155,11 +155,15 @@ describe('E23 U3 paint shader variants (section 4, Pipelines; E23-A08 hash part)
       'meshStencilFragmentMain',
       'meshFragmentMain',
       'meshJointFragmentMain',
+      // E39-U3: the joint-both cover (R6).
+      'meshJointCoverFragmentMain',
     ]);
     expect(entries(MESH_FILL_PAINT_CLIP_SHADER)).toEqual([
       'meshStencilFragmentMain',
       'meshFragmentMain',
       'meshJointFragmentMain',
+      // E39-U3: the joint-both cover (R6).
+      'meshJointCoverFragmentMain',
     ]);
     // P1: both analyticCoverage calls precede both paint calls.
     const main = PRIMITIVE_ANALYTIC_PAINT_SHADER.slice(
@@ -180,7 +184,7 @@ describe('E23 U3 paint shader variants (section 4, Pipelines; E23-A08 hash part)
       analyticEntry.indexOf('shadePrimitive('),
     );
     const joint = MESH_FILL_PAINT_CLIP_SHADER.slice(
-      MESH_FILL_PAINT_CLIP_SHADER.lastIndexOf('@fragment'),
+      MESH_FILL_PAINT_CLIP_SHADER.indexOf('@fragment\nfn meshJointFragmentMain'),
     );
     expect(joint.indexOf('clipCoverage(')).toBeLessThan(joint.indexOf('paintValue('));
     expect(joint).toContain('let opacity = fill.opacity * clip;');
@@ -272,21 +276,31 @@ describe('E23 U3 pipeline creation', () => {
     expect(scene).toMatchObject({
       paintPipelineAvailable: true,
       clipPipelineAvailable: true,
-      pipelinesCreated: 28,
+      pipelinesCreated: 50,
       shaderModulesCreated: 11,
     });
     // E39-U2: each mesh paint variant also has its two cover pipelines.
-    expect(fixture.pipelineLabels.slice(18)).toEqual([
+    expect(fixture.pipelineLabels.slice(30)).toEqual([
       'vector-studio/p1-analytic-primitive-stencil-4x+paint-v0',
       'vector-studio/p1-analytic-primitive-stencil-4x+paint-v0+clip-v0',
       'vector-studio/p3-mesh-fill-4x+paint-v0',
       'vector-studio/p3-mesh-joint-4x+paint-v0',
       'vector-studio/p3-mesh-cover-nonzero-4x+paint-v0',
       'vector-studio/p3-mesh-cover-evenodd-4x+paint-v0',
+      'vector-studio/p3-mesh-cover-joint-both-nonzero-4x+paint-v0',
+      'vector-studio/p3-mesh-cover-joint-both-evenodd-4x+paint-v0',
+      'vector-studio/p3-mesh-cover-joint-fill-nonzero-4x+paint-v0',
+      'vector-studio/p3-mesh-cover-joint-fill-evenodd-4x+paint-v0',
+      'vector-studio/p3-mesh-cover-joint-stroke-4x+paint-v0',
       'vector-studio/p3-mesh-fill-4x+paint-v0+clip-v0',
       'vector-studio/p3-mesh-joint-4x+paint-v0+clip-v0',
       'vector-studio/p3-mesh-cover-nonzero-4x+paint-v0+clip-v0',
       'vector-studio/p3-mesh-cover-evenodd-4x+paint-v0+clip-v0',
+      'vector-studio/p3-mesh-cover-joint-both-nonzero-4x+paint-v0+clip-v0',
+      'vector-studio/p3-mesh-cover-joint-both-evenodd-4x+paint-v0+clip-v0',
+      'vector-studio/p3-mesh-cover-joint-fill-nonzero-4x+paint-v0+clip-v0',
+      'vector-studio/p3-mesh-cover-joint-fill-evenodd-4x+paint-v0+clip-v0',
+      'vector-studio/p3-mesh-cover-joint-stroke-4x+paint-v0+clip-v0',
     ]);
     const groups = (label: string) =>
       (
@@ -310,7 +324,7 @@ describe('E23 U3 pipeline creation', () => {
       MESH_FILL_PAINT_SHADER,
       MESH_FILL_PAINT_CLIP_SHADER,
     ]);
-    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(28);
+    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(50);
     creation.dispose();
     expect(accounting.snapshot().live).toBe(0);
   });
@@ -318,7 +332,7 @@ describe('E23 U3 pipeline creation', () => {
   it('creates nothing extra without the option, and only what the other options allow', async () => {
     const plain = nativeFixture();
     const without = await nativeScene(plain, { meshPipeline: true, clipPipeline: true });
-    expect(without.scene).toMatchObject({ paintPipelineAvailable: false, pipelinesCreated: 18 });
+    expect(without.scene).toMatchObject({ paintPipelineAvailable: false, pipelinesCreated: 30 });
     expect(plain.modules.some((code) => code.includes('paintValue'))).toBe(false);
     without.creation.dispose();
     const analyticOnly = nativeFixture();
@@ -359,7 +373,7 @@ describe('E23 U3 pipeline creation', () => {
         paintPipelineAvailable: false,
         clipPipelineAvailable: true,
         meshPipelineAvailable: true,
-        pipelinesCreated: 18,
+        pipelinesCreated: 30,
       });
       expect(readyOf(scene).readyEntries).toBe(baseline);
       expect(accounting.snapshot().live).toBe(baselineLive);

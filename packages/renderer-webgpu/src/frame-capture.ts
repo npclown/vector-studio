@@ -1,7 +1,13 @@
 import type { MeshFillDraw, PrimitivePacket } from '@vector-studio/renderer-core';
 
 import { halfToNumber } from './mesh-count-shader.js';
-import { MeshStencilSequence } from './mesh-pipeline.js';
+import {
+  encodeMeshJoint,
+  MeshStencilSequence,
+  type MeshCoverRule,
+  type MeshJointCover,
+  type MeshStencilKind,
+} from './mesh-pipeline.js';
 import type {
   WebGpuResourceTracker,
   WebGpuSceneCaptureForTesting,
@@ -28,8 +34,8 @@ export interface CountPipelineState {
   /** E17 contract, section 3: the stencil reset draw's pipeline for the count target. */
   readonly reset: GPURenderPipeline;
   /** E39-R9: the stencil pass pipelines and the covers at the count target. */
-  readonly stencil: Readonly<Record<'winding' | 'union', GPURenderPipeline>>;
-  readonly cover: Readonly<Record<'nonzero' | 'evenodd', GPURenderPipeline>>;
+  readonly stencil: Readonly<Record<MeshStencilKind, GPURenderPipeline>>;
+  readonly cover: Readonly<Record<MeshCoverRule | MeshJointCover, GPURenderPipeline>>;
   /** 4x only: the readout pipeline and its bind group layout. */
   readonly readout: Readonly<{ pipeline: GPURenderPipeline; layout: GPUBindGroupLayout }> | null;
 }
@@ -106,13 +112,31 @@ export class PendingCapture {
         // E39-R9: the main pass's stencil sequence; a winding or union draw replays its stencil
         // pass and its cover, which writes 1 per painted sample.
         const sequence = new MeshStencilSequence();
-        frame.mesh.draws.forEach((draw) => {
+        const draws = frame.mesh.draws;
+        // E39-R6: a joint draw replays with its stroke draw, which then is skipped.
+        let skip = -1;
+        draws.forEach((draw, index) => {
+          if (index === skip) return;
           const coverage = draw.coverage;
           const step = coverage === undefined ? sequence.partition() : null;
           if (step === null ? sequence.winding() : step.reset) {
             pass.setPipeline(frame.count!.reset);
             pass.draw(3);
             bound = null;
+          }
+          if (step === null && draw.composite === 'joint-fill') {
+            skip = index + 1;
+            const rule = draw.fillRule === 'evenodd' ? 'evenodd' : 'nonzero';
+            encodeMeshJoint(
+              pass,
+              draw,
+              draws[index + 1]!,
+              rule,
+              (kind) => frame.count!.stencil[kind],
+              (cover) => frame.count!.cover[cover],
+            );
+            bound = null;
+            return;
           }
           if (step === null) {
             const stencilTriangles = draw.triangleCount - 2;

@@ -4,6 +4,8 @@ export const MESH_JOINT_SHADER_KEY = 'p3-mesh-joint-v0';
 /** The joint pipeline's entry points in MESH_FILL_SHADER. */
 export const MESH_JOINT_VERTEX_ENTRY_POINT = 'meshJointVertexMain';
 export const MESH_JOINT_FRAGMENT_ENTRY_POINT = 'meshJointFragmentMain';
+/** E39-R6: the joint-both cover's fragment entry point (with meshVertexMain). */
+export const MESH_JOINT_COVER_FRAGMENT_ENTRY_POINT = 'meshJointCoverFragmentMain';
 
 /**
  * P3 V3 contract, sections e and f: one non-indexed vertex-pulling draw per path mesh, with the
@@ -370,6 +372,19 @@ fn meshJointFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {
   if (alpha == 0.0) {
     discard;
   }
+  return vec4f(fill.fill.rgb * alpha, alpha);
+}
+
+// E39-R6: the joint-both cover, on the fill record's cover quad where the stencil holds both
+// the fill and the stroke. It is the joint fill colour at c_F = c_S = 1, so the stroke cover
+// that follows composites the stroke over it with the opacity applied once. No discard (R4).
+@fragment
+fn meshJointCoverFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {
+  let fill = instances[input.instance];
+  let stroke = instances[fill.strokeLink - 1u];
+  let opacity = fill.opacity;
+  let factor = opacity * (1.0 - stroke.fill.a) / (1.0 - opacity * stroke.fill.a);
+  let alpha = fill.fill.a * factor;
   return vec4f(fill.fill.rgb * alpha, alpha);
 }
 `;
