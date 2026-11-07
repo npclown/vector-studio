@@ -1077,6 +1077,13 @@ describe('V3a device loss, ownership and host injection', () => {
     expect(e23Source).toMatch(/from '@vector-studio\/geometry-wasm'/);
     expect(e23Source).toMatch(/fillMesh: fill,/);
     expect(e23Source).toMatch(/strokeMesh: strokes,/);
+    // E39-U5: the painted-once check page injects both real ports, on E23's pattern.
+    const e39Host = files.filter((file) => /[\\/]src[\\/]e39-painted-once\.ts$/.test(file));
+    expect(e39Host).toHaveLength(1);
+    const e39Source = readFileSync(e39Host[0]!, 'utf8');
+    expect(e39Source).toMatch(/from '@vector-studio\/geometry-wasm'/);
+    expect(e39Source).toMatch(/fillMesh: await createFillMeshPort\(bytes\),/);
+    expect(e39Source).toMatch(/strokeMesh: await createStrokeMeshPort\(bytes\),/);
     const host = [
       ...v4Host,
       ...b2Host,
@@ -1086,6 +1093,7 @@ describe('V3a device loss, ownership and host injection', () => {
       ...viz4Host,
       ...p4Host,
       ...e23Host,
+      ...e39Host,
     ];
     // The manifest and project-reference edges of that import (boundary rule P-B1).
     const edges = files.filter((file) =>
