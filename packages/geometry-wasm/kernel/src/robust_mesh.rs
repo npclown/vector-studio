@@ -943,12 +943,24 @@ impl RobustMesh {
                     x: -d.y * r,
                     y: d.x * r,
                 };
-                self.set_piece(&[
-                    add(a, normal),
-                    add(b, normal),
-                    sub(b, normal),
-                    sub(a, normal),
-                ]);
+                // E39-K2: in a union mesh, an end with a join also takes its centre point as a
+                // vertex, fanned from the start's centre, so the join's edges from the centre
+                // meet the chord at shared vertices. Without it the centre is a T-junction on
+                // the chord's end edge, and the f32 transform can open a crack between them
+                // that a sample falls through.
+                let joined_start = self.union_output && (subpath.closed || i > 0);
+                let joined_end = self.union_output && (subpath.closed || i + 2 < n);
+                self.piece.clear();
+                if joined_start {
+                    self.piece.push(a);
+                }
+                self.piece.push(add(a, normal));
+                self.piece.push(add(b, normal));
+                if joined_end {
+                    self.piece.push(b);
+                }
+                self.piece.push(sub(b, normal));
+                self.piece.push(sub(a, normal));
                 self.push_piece()?;
             }
             let joins = if subpath.closed { 0..n } else { 1..n - 1 };
@@ -1060,6 +1072,13 @@ impl RobustMesh {
                     self.piece.clear();
                     self.piece.push(p);
                     arc(&mut self.piece, p, n0, sweep, r, tol);
+                    if self.union_output {
+                        // E39-K2: the arc's ends are the chords' corners bit for bit, so the
+                        // pieces share those vertices (no crack in a union mesh).
+                        let last = self.piece.len() - 1;
+                        self.piece[1] = a;
+                        self.piece[last] = b;
+                    }
                 }
             }
         }
@@ -1094,6 +1113,12 @@ impl RobustMesh {
                     r,
                     tol,
                 );
+                if self.union_output {
+                    // E39-K2: the half disk's ends are the end chord's corners bit for bit.
+                    let last = self.piece.len() - 1;
+                    self.piece[0] = add(p, normal);
+                    self.piece[last] = sub(p, normal);
+                }
             }
         }
         self.push_piece()

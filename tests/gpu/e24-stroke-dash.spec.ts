@@ -447,7 +447,7 @@ function notFringeCaps(diagnostics: readonly { code: string; context?: unknown }
     .map((diagnostic) => `diagnostic ${diagnostic.code} ${JSON.stringify(diagnostic.context)}`);
 }
 
-/** Diagnostics other than the pinned fringe caps, D6's known O3 at DPR 2, and D8's dash-limit. */
+/** Diagnostics other than the pinned fringe caps (none since E39) and D8's dash-limit. */
 function unexpected(diagnostics: readonly { code: string; context?: unknown }[], dpr: number) {
   const failures: string[] = [];
   let dashLimits = 0;
@@ -463,10 +463,6 @@ function unexpected(diagnostics: readonly { code: string; context?: unknown }[],
       FRINGE_CAPS[dpr]!.has(`${node}:${String(context.paint)}`)
     )
       continue;
-    // The known failure of U3: D6's joint overlay refuses at DPR 2 (`sloped-outer-edge`, see
-    // the A05 loop). Its solid reference must not take O3. Since E38 (2026-11-07, #530) O3 draws
-    // the plain fill and stroke, and the notice stays.
-    if (context?.failureCode === 'overlay-unsupported' && dpr === 2 && node === 'd6') continue;
     if (
       context?.failureCode === 'dash-limit' &&
       context.paint === 'stroke' &&
@@ -530,11 +526,10 @@ for (const dpr of [1, 2]) {
     }
     const diagnostics = await page.evaluate(() => window.__vectorStudioE23.diagnostics());
     failures.push(...unexpected(diagnostics, dpr));
-    if (dpr === 1 && Object.keys(outcomes).length > 0)
-      failures.push(`O3 at DPR 1: ${JSON.stringify(outcomes)}`);
-    // E38 (2026-11-07, #530): at DPR 2 D6, and only D6, still takes O3 with its notice.
-    if (dpr === 2 && JSON.stringify(Object.keys(outcomes)) !== '["D6"]')
-      failures.push(`O3 at DPR 2: ${JSON.stringify(outcomes)}, expected D6 only`);
+    // E39 (2026-11-07, #534): D6 at DPR 2 draws through R6's joint stencil (no overlay), so no
+    // fixture takes O3 at either DPR.
+    if (Object.keys(outcomes).length > 0)
+      failures.push(`O3 at DPR ${dpr}: ${JSON.stringify(outcomes)}`);
     report(
       'report.json',
       JSON.stringify({ ready, dpr, rows, outcomes, diagnostics, pageErrors, failures }, null, 2),

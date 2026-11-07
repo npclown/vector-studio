@@ -49,7 +49,7 @@ describeStrokeMeshPortConformance(
     };
   },
   {
-    operationId: 'geometry-wasm/stroke-v0+r10', // re-baselined: E39
+    operationId: 'geometry-wasm/stroke-v0+r11', // re-baselined: E39
     createFillPort: async () => {
       const adapter = await createFillMeshPort(module, { exactRungsForTesting: true });
       return { port: adapter, dispose: () => adapter.dispose() };

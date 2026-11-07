@@ -546,3 +546,82 @@ fn e39_many_contours_draw() {
     );
     assert_eq!(mesh.stats.coarsenings, 0);
 }
+
+/// Points of the mesh's inside that the GPU may leave unpainted. The vertices go to device
+/// space as the vertex stage does (scaled by `zoom`, moved far from the origin, rounded to f32);
+/// around every vertex whose neighbourhood the f64 mesh covers (inside the stroke), points at
+/// radii from 1e-4 to 1e-2 device px must be covered by the f32 triangles. Where two pieces
+/// meet at a T-junction or at two nearly equal vertices, the rounding opens a sliver there.
+fn holes(vertices: &[Point], triangles: &[u32], zoom: f64) -> Vec<Point> {
+    let device: Vec<Point> = vertices
+        .iter()
+        .map(|v| Point {
+            x: f64::from((v.x * zoom + 4321.123) as f32),
+            y: f64::from((v.y * zoom + 2345.678) as f32),
+        })
+        .collect();
+    let ring = |mesh: &[Point], c: Point, radius: f64| {
+        (0..16).all(|k| {
+            let angle = f64::from(k) * std::f64::consts::PI / 8.0 + 0.1;
+            let q = Point {
+                x: c.x + radius * angle.cos(),
+                y: c.y + radius * angle.sin(),
+            };
+            covered(mesh, triangles, q)
+        })
+    };
+    let used: std::collections::BTreeSet<u32> = triangles.iter().copied().collect();
+    let mut found = Vec::new();
+    for index in used {
+        let (v, d) = (vertices[index as usize], device[index as usize]);
+        if !ring(vertices, v, 0.05 / zoom) {
+            continue;
+        }
+        for radius in [1e-4, 3e-4, 1e-3, 3e-3, 1e-2] {
+            if !ring(&device, d, radius) {
+                found.push(v);
+                break;
+            }
+        }
+    }
+    found
+}
+
+/// E39-K2 (U5 headed finding): a union stroke mesh has no pinholes in device space. Its pieces
+/// meet at shared vertices: a chord with a join at an end takes the centre point as a vertex, and round
+/// joins and caps end exactly on the chord corners. Before, the join's centre sat inside the
+/// chord's end edge and the arcs ended an ulp off the corners, and 4x samples fell through
+/// along the centre line of thick strokes at high zoom (E24 D7 at zoom 8).
+#[test]
+fn e39_union_strokes_are_watertight() {
+    let mut mesh = RobustMesh::new();
+    mesh.reserve().expect("reserve");
+    let mut rng = Rng(0x000E_3957);
+    let mut paths = vec![("node-5".to_string(), user_node5())];
+    for case in 0..2 {
+        let closed = case % 2 == 1;
+        paths.push((format!("pen {case}"), pen_path(&mut rng, 60.0, closed)));
+    }
+    for (name, path) in &paths {
+        for cap in [StrokeCap::Butt, StrokeCap::Round, StrokeCap::Square] {
+            for join in [StrokeJoin::Miter, StrokeJoin::Round, StrokeJoin::Bevel] {
+                let style = RobustStroke {
+                    width: 6.0,
+                    cap,
+                    join,
+                    miter_limit: 4.0,
+                };
+                let drawn = mesh.build_stroke_union(&path.verbs, &path.bytes(), style, 0.125);
+                assert_eq!(drawn, Some(true), "{name} {cap:?} {join:?}");
+                let (vertices, triangles, _) = mesh.mesh();
+                let found = holes(vertices, triangles, 8.0);
+                assert!(
+                    found.is_empty(),
+                    "{name} {cap:?} {join:?}: {} holes, first near {:?}",
+                    found.len(),
+                    found.first()
+                );
+            }
+        }
+    }
+}

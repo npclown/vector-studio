@@ -39,7 +39,7 @@ pub const STROKE_V0_VERSION: u32 = 0;
 /// Revision 8 (2026-11-06): a path that ends in `work-limit` is built once more with the E35
 /// retry (D9 E35: near-cusp fans as two side hulls, the relative cone guard, near-reversal
 /// disks); every path that was `ok` keeps its mesh.
-pub const STROKE_V0_REVISION: u32 = 10;
+pub const STROKE_V0_REVISION: u32 = 11;
 /// Bytes `VGT0`.
 pub const STROKE_INPUT_MAGIC: u32 = 0x3054_4756;
 /// Bytes `VGU0`.

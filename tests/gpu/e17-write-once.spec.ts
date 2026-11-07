@@ -28,11 +28,12 @@ declare global {
 //   pnpm exec playwright test -c playwright.gpu.config.ts tests/gpu/e17-write-once.spec.ts
 //
 // 1. The section 1 fixtures on the V-4 page at fringe-1x and fringe-4x: every sample count is at
-//    most 1, every pixel with nonzero red has all its counts equal to 1, and wherever both
-//    variants cover a pixel once per sample their red values agree within 2/255 (the fringe
-//    shades each covered sample with the pixel-centre value, so 4x equals 1x without double
-//    coverage; before E17, C4/n06/T2 dpr1.5 pixel (491,268) differed by 22). A fixture with no
-//    visible pixel in either variant has nothing to compare.
+//    most 1, every pixel with nonzero red has a sample counted once, and wherever both variants
+//    cover a pixel once per sample their red values agree within 2/255 (before E17,
+//    C4/n06/T2 dpr1.5 pixel (491,268) differed by 22). Since E39 paths are stencil-then-cover
+//    meshes: a 4x edge pixel has some samples uncovered and its red is the covered fraction,
+//    and a sliver (T7) may cover no sample at all. A fixture with no pixel covered once per
+//    sample and visible in either variant has nothing to compare.
 // 2. The reset path on the E10 page, at 1x and 4x: 511 mesh draws (two stencil resets) with one
 //    rectangle drawn at ordinals 0, 255 and 510, which share reference 1, counts exactly 3 inside,
 //    so a reset separates draws that share a reference, and the frame has no page or console
@@ -75,12 +76,14 @@ const FIXTURES = [
 ] as const;
 
 /**
- * Product-side pixels named by E17-A5: (key, x, y, variant checked, rule value). T2's rule value
- * is contract section 1's 143. Section 1 gives none for T0, whose 1x pixel counted 3 before E17;
- * it is checked against its own 4x value, where every sample counts once.
+ * Product-side pixels named by E17-A5: (key, x, y, variant checked, rule value). T2's rule was
+ * contract section 1's 143 (the fringe's pixel-centre value); since E39 the 4x pixel is MSAA
+ * coverage, so its rule is 255 times the fraction of samples counted once ('coverage'; the
+ * fixture fill is full red). Section 1 gives none for T0, whose 1x pixel counted 3 before E17;
+ * it is checked against its own 4x value.
  */
 const NAMED_PIXELS = [
-  ['C4/n06/T2/z1-d1/center/k0@dpr1.5', 491, 268, 'fringe-4x', 143],
+  ['C4/n06/T2/z1-d1/center/k0@dpr1.5', 491, 268, 'fringe-4x', 'coverage'],
   ['C4/n06/T0/z1-d1/center/k0@dpr1.5', 492, 257, 'fringe-1x', null],
 ] as const;
 
@@ -156,7 +159,7 @@ test('E17-A5 fixtures: count at most 1, covered pixels counted once, 4x equals 1
           const y = Math.floor(pixel / capture.width);
           if (counts.some((count) => count > 1))
             fail(`${variant} ${key}`, `(${x},${y}) counts ${counts.join(',')}`);
-          else if (capture.red[pixel]! > 0 && counts.some((count) => count !== 1))
+          else if (capture.red[pixel]! > 0 && counts.every((count) => count !== 1))
             fail(
               `${variant} ${key}`,
               `(${x},${y}) red ${capture.red[pixel]} counts ${counts.join(',')}`,
@@ -184,20 +187,25 @@ test('E17-A5 fixtures: count at most 1, covered pixels counted once, 4x equals 1
         );
     }
     compared[key] = pixels;
-    // A fixture whose count pass shows coverage but no visible pixel in either variant (C3/c02/T7
-    // dpr2, c = 0, contract section 1) has nothing to compare; any other fixture with nothing
-    // compared is a failure.
-    const visible = (c: Capture) => c.red.some((red) => red > 0);
-    const covered = (c: Capture) => c.counts.some((count) => count >= 1);
-    if (pixels === 0 && (visible(one) || visible(four) || !covered(one) || !covered(four)))
-      fail(`1x-4x ${key}`, 'nothing compared');
+    // A fixture with no visible 4x pixel covered at every sample has nothing to compare:
+    // C3/c02/T7 dpr2 (c = 0, contract section 1), and since E39 every T7 sliver whose mesh covers
+    // no sample or only part of a 4x pixel (its 1x centre sample may still be covered). A
+    // fixture with such a 4x pixel and nothing compared is a failure.
+    const solid = (c: Capture) =>
+      c.red.some((red, pixel) => red > 0 && countsAt(c, pixel).every((count) => count === 1));
+    if (pixels === 0 && solid(four)) fail(`1x-4x ${key}`, 'nothing compared');
   }
   for (const [key, x, y, variant, rule] of NAMED_PIXELS) {
     const one = captures.get(`fringe-1x ${key}`)!;
     const four = captures.get(`fringe-4x ${key}`)!;
     const pixel = y * one.width + x;
     const observed = (variant === 'fringe-4x' ? four : one).red[pixel]!;
-    const expected = rule ?? four.red[pixel]!;
+    const covered = (c: Capture) =>
+      countsAt(c, pixel).filter((count) => count === 1).length / c.samples;
+    const expected =
+      rule === 'coverage'
+        ? Math.round(255 * covered(variant === 'fringe-4x' ? four : one))
+        : four.red[pixel]!;
     if (Math.abs(observed - expected) > 2)
       fail(`named ${key}`, `(${x},${y}) ${variant} ${observed} against ${expected}`);
     named[`${key} (${x},${y})`] = {
