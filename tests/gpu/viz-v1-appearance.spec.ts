@@ -72,9 +72,10 @@ const OBSERVED_NOTICES: Readonly<Record<string, readonly string[]>> = {
   'n1.b-stroke-on': [],
   'n1.c-stroke-off': [],
   'n1.d-stroke-on-again': [],
-  // N2: v1-zigzag cap butt, then round.
+  // N2: v1-zigzag cap butt, then round. E39: the round-capped zigzag is a union mesh with no
+  // fringe, so its fringe-work-cap notice no longer arrives; N2 checks that it still draws.
   'n2.a-butt': [],
-  'n2.b-round': ['v1-zigzag stroke fringe-work-cap'],
+  'n2.b-round': [],
   a10: [],
   a6: [],
   blur: [],
@@ -626,15 +627,6 @@ for (const dpr of [1, 2]) {
         await check('n2', 'round', [
           { name: 'centerline (still drawn)', at: ZIGZAG_CENTERLINE, expected: stroke },
         ]);
-        if (
-          !state.notices.some(
-            (n) =>
-              n.nodeId === 'v1-zigzag' &&
-              n.paint === 'stroke' &&
-              n.failureCode === 'fringe-work-cap',
-          )
-        )
-          fail('n2', 'no v1-zigzag stroke fringe-work-cap notice');
       });
 
       // -------------------------------------------------------------------------------------
