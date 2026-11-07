@@ -73,7 +73,12 @@ type Expectation = Readonly<{
  * strokes that stopped at `work-limit` now mesh without a fringe (`fringe-work-cap`):
  * `cusp-f16-large` at every overview, `wide-cubic` at DPR 1 zoom 2 and at DPR 2 and 3 overview,
  * `cusp-f16p` at DPR 1 zoom 64, so those views have more mesh draws. No `work-limit` notice is
- * left; every probe is unchanged. Keyed `dpr/view`.
+ * left; every probe is unchanged. Re-baselined E38 (2026-11-07, #530; stroke revision 9) from
+ * the headed run at main a6c28fb, identical in Chrome and Edge: strokes that the exact rung meshed
+ * without a fringe now take the robust rung, whose mesh has no boundary edges and so no fringe
+ * and no `fringe-work-cap` notice (`wide-cubic` at DPR 1 zoom 2 and at DPR 2 and 3 overview,
+ * `cusp-f16p` at DPR 1 zoom 64, `cusp-f16-large` at DPR 3 overview). Mesh draws and probes are
+ * unchanged. Keyed `dpr/view`.
  */
 const EXPECTED: Readonly<Record<string, Expectation>> = {
   '1/overview-zoom-1': {
@@ -93,11 +98,8 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
     meshDraws: 23,
   },
   '1/zoom-2-cusp': {
-    notices: [
-      'cusp-f16p stroke fringe-work-cap',
-      'fill-stroke-circle stroke fringe-work-cap',
-      'wide-cubic stroke fringe-work-cap',
-    ],
+    // E38 (2026-11-07, #530): `wide-cubic` takes the robust rung, so no fringe-work-cap.
+    notices: ['cusp-f16p stroke fringe-work-cap', 'fill-stroke-circle stroke fringe-work-cap'],
     meshDraws: 11,
   },
   '1/zoom-4-joins': {
@@ -105,7 +107,8 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
     meshDraws: 5,
   },
   '1/zoom-64-cusp': {
-    notices: ['cusp-f16p stroke fringe-work-cap'],
+    // E38 (2026-11-07, #530): `cusp-f16p` takes the robust rung, so no fringe-work-cap.
+    notices: [],
     meshDraws: 1,
   },
   '1/zoom-64-extreme-miter-tip': {
@@ -117,12 +120,12 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
     meshDraws: 2,
   },
   '2/overview-zoom-1': {
+    // E38 (2026-11-07, #530): `wide-cubic` takes the robust rung, so no fringe-work-cap.
     notices: [
       'cap-round stroke fringe-work-cap',
       'cusp-f16-large stroke fringe-work-cap',
       'cusp-f16p stroke fringe-work-cap',
       'fill-stroke-circle stroke fringe-work-cap',
-      'wide-cubic stroke fringe-work-cap',
     ],
     meshDraws: 23,
   },
@@ -135,13 +138,13 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
     meshDraws: 1,
   },
   '3/overview-zoom-1': {
+    // E38 (2026-11-07, #530): `cusp-f16-large` and `wide-cubic` take the robust rung, so no
+    // fringe-work-cap.
     notices: [
       'cap-round stroke fringe-work-cap',
-      'cusp-f16-large stroke fringe-work-cap',
       'cusp-f16p stroke fringe-work-cap',
       'fill-stroke-circle stroke fringe-work-cap',
       'thin-one-px stroke fringe-work-cap',
-      'wide-cubic stroke fringe-work-cap',
     ],
     meshDraws: 23,
   },

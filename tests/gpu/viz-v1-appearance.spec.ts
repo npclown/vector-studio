@@ -64,11 +64,13 @@ const OBSERVED_NOTICES: Readonly<Record<string, readonly string[]>> = {
   // (the stroke is rebuilt and a second notice arrives). Since 2026-10-25 N1 strokes at a wide
   // width (48, then 64 from 2026-11-06): at the initial width 8 the circle stroke meshes at
   // stroke revision 6 and reports `fringe-work-cap`, so N1 would no longer exercise a path that
-  // is not drawn.
+  // is not drawn. E38 (2026-11-07, #530): the robust rung draws the width-64 stroke too (no
+  // fringe, so no notice); a geometry path below 8,192 source points can no longer be refused,
+  // so N1 now checks that the stroke draws and no notice arrives.
   'n1.a-fill-only': [],
-  'n1.b-stroke-on': ['v1-circle stroke work-limit'],
-  'n1.c-stroke-off': ['v1-circle stroke work-limit'],
-  'n1.d-stroke-on-again': ['v1-circle stroke work-limit', 'v1-circle stroke work-limit'],
+  'n1.b-stroke-on': [],
+  'n1.c-stroke-off': [],
+  'n1.d-stroke-on-again': [],
   // N2: v1-zigzag cap butt, then round.
   'n2.a-butt': [],
   'n2.b-round': ['v1-zigzag stroke fringe-work-cap'],
@@ -172,7 +174,8 @@ const CIRCLE_CENTER = at(CIRCLE, 0, 0);
 // retries a work-limit at up to three coarser exponents (#522), and width 48 meshes at exponents
 // 0 to +2 (stroke revision 8), so DPR 1 (exponent -3, retried up to 0) drew it. Width 64 ends at
 // work-limit at every exponent from -3 to +2 (revision 8, native sweep), so N1 still exercises
-// a path that is not drawn at DPR 1 and 2.
+// a path that is not drawn at DPR 1 and 2. E38 (2026-11-07, #530): the robust rung (stroke
+// revision 9) draws width 64 as well; the width is kept, and N1 now expects the stroke drawn.
 const N1_STROKE_WIDTH = '64';
 
 function sortedNotices(
@@ -552,50 +555,52 @@ for (const dpr of [1, 2]) {
           { name: 'circle interior', at: CIRCLE_CENTER, expected: fill },
         ]);
         noticeSet('n1', 'a-fill-only', await snapshot());
-        // Stroke on at width 64 (butt, round): the whole path is not drawn. Width 8 meshes at stroke
-        // revision 6 (2026-10-25) and width 48 after the coarser retry (2026-11-06), so N1 sets a
-        // width that still ends at work-limit.
+        // Stroke on at width 64 (butt, round). Width 8 meshes at stroke revision 6 (2026-10-25)
+        // and width 48 after the coarser retry (2026-11-06); width 64 ended at work-limit until
+        // E38 (2026-11-07, #530), whose robust rung draws it: the half width 32 exceeds the radius
+        // 30, so the stroke covers the circle's center, and no notice arrives.
+        const stroke = solid(CIRCLE.initial.stroke.color);
         await commit(c.widthNumber, N1_STROKE_WIDTH);
         await settle();
         await c.strokeOn.check();
         let state = await settle();
         await check('n1', 'stroke-on', [
-          { name: 'circle interior (not drawn)', at: CIRCLE_CENTER, expected: backdrop },
+          { name: 'circle interior (stroke)', at: CIRCLE_CENTER, expected: stroke },
         ]);
         noticeSet('n1', 'b-stroke-on', state);
-        if (circleNotices(state).length !== 1)
+        if (circleNotices(state).length !== 0)
           fail('n1', `b: ${circleNotices(state).length} v1-circle work-limit notices`);
         const entries = page.locator(
           '#viz-v1-notices li[data-node="v1-circle"][data-code="work-limit"]',
         );
-        await expect(entries).toHaveCount(1);
-        await expect(entries.first()).toBeVisible();
-        if (!(await statusText()).includes('stroke: not drawn'))
-          fail('n1', `b: status ${await statusText()}`);
-        // Stroke off again: the fill draws; the log entry remains; the status drops the failure.
+        await expect(entries).toHaveCount(0);
+        const on = await statusText();
+        if (on.includes('stroke: not drawn') || !on.includes('stroke: drawn'))
+          fail('n1', `b: status ${on}`);
+        // Stroke off again: the fill draws and the status shows the stroke off.
         await c.strokeOn.uncheck();
         state = await settle();
         await check('n1', 'stroke-off', [
           { name: 'circle interior (fill)', at: CIRCLE_CENTER, expected: fill },
         ]);
         noticeSet('n1', 'c-stroke-off', state);
-        await expect(entries).toHaveCount(1);
-        await expect(entries.first()).toBeVisible();
+        await expect(entries).toHaveCount(0);
         const off = await statusText();
         if (off.includes('stroke: not drawn') || !off.includes('stroke: off'))
           fail('n1', `c: status still shows the stroke failure: ${off}`);
-        // Stroke on once more: rebuilt, a second notice arrives, and the status shows not drawn.
+        // Stroke on once more: rebuilt and drawn again, still without a notice (E38).
         await c.strokeOn.check();
         state = await settle();
         await check('n1', 'stroke-on-again', [
-          { name: 'circle interior (not drawn)', at: CIRCLE_CENTER, expected: backdrop },
+          { name: 'circle interior (stroke)', at: CIRCLE_CENTER, expected: stroke },
         ]);
         noticeSet('n1', 'd-stroke-on-again', state);
-        if (circleNotices(state).length !== 2)
-          fail('n1', `d: ${circleNotices(state).length} v1-circle work-limit notices, expected 2`);
-        await expect(entries).toHaveCount(2);
-        if (!(await statusText()).includes('stroke: not drawn'))
-          fail('n1', `d: status ${await statusText()}`);
+        if (circleNotices(state).length !== 0)
+          fail('n1', `d: ${circleNotices(state).length} v1-circle work-limit notices, expected 0`);
+        await expect(entries).toHaveCount(0);
+        const again = await statusText();
+        if (again.includes('stroke: not drawn') || !again.includes('stroke: drawn'))
+          fail('n1', `d: status ${again}`);
         const shown = await page.evaluate(
           () =>
             Array.from(document.querySelectorAll('#viz-v1-status dt')).find(
