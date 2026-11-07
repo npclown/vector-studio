@@ -57,16 +57,19 @@ const OBSERVED_NOTICES: Readonly<Record<string, readonly string[]>> = {
   // Re-baselined 2026-10-23 by E8-U1 (E8-Q4 (a)): p3qc draws, without fringe like p3q; observed
   // identical in Chrome and Edge at DPR 1 and 2.
   p3qc: ['v2-path fill fringe-work-cap'],
-  p3sc: ['v2-path fill unsupported-geometry'],
+  // E38 (2026-11-07, #530; fill-v0+r6): p3sc and W1 draw through the robust rung, whose mesh has
+  // no fringe, so neither gives a notice; t loses W1's work-limit. Observed identical in Chrome
+  // and Edge at DPR 1 and 2.
+  p3sc: [],
   p4: [],
   r: [],
-  'w.a-w1': ['v2-path fill work-limit'],
-  'w.b-w2': ['v2-path fill work-limit'],
+  'w.a-w1': [],
+  'w.b-w2': [],
   a7: [],
   a12: [],
   a13: ['v2-path fill fringe-work-cap'],
   a14: [],
-  t: ['v2-path fill fringe-work-cap', 'v2-path fill fringe-work-cap', 'v2-path fill work-limit'],
+  t: ['v2-path fill fringe-work-cap', 'v2-path fill fringe-work-cap'],
 };
 // Observed identical at DPR 1 and DPR 2; the literals are kept per DPR.
 const EXPECTED: Readonly<Record<string, readonly string[]>> = Object.fromEntries(
@@ -549,13 +552,14 @@ for (const dpr of [1, 2]) {
       // The paths as the contract wrote them: gated as the observed outcome, not hidden. See
       // DEVIATION D1 above. Note, 2026-10-23 (E8-U1, E8-Q4 (a), D9-Q8): the exact-rung direction
       // hint of docs/plans/p3-rounded-knot-topology-contract.md E8.3 admits P3Q_CONTRACT, so p3qc
-      // draws. The Q peaks at (100, -150); p3sc (M1', E8.5) stays not drawn.
+      // draws. The Q peaks at (100, -150); p3sc (M1', E8.5) stays not drawn. E38 (2026-11-07,
+      // #530): the robust rung draws p3sc as well, so its interior is fill and no notice arrives.
       await knownPath('p3qc', P3Q_CONTRACT, async () => {}, [
         { name: 'contract P3Q interior (drawn)', world: [100, -140], expected: FILL },
         { name: 'contract P3Q outside the peak', world: [100, -160], expected: 'backdrop' },
       ]);
       await knownPath('p3sc', P3S_CONTRACT, async () => {}, [
-        { name: 'contract P3S interior (not drawn)', world: [62, -70], expected: 'backdrop' },
+        { name: 'contract P3S interior (drawn)', world: [62, -70], expected: FILL },
       ]);
 
       // P4: an open path with the fill off and the stroke on, width 16, butt.
@@ -629,21 +633,24 @@ for (const dpr of [1, 2]) {
       });
 
       // -------------------------------------------------------------------------------------
-      // V2-A11: a kernel limit is shown, not hidden.
+      // V2-A11: a kernel limit is shown, not hidden. E38 (2026-11-07, #530): W1 no longer reaches
+      // a limit; the robust rung draws it without a notice. A geometry path below 8,192 source
+      // points can no longer be refused, so W1 now checks that the fill draws and nothing is logged.
       await scenario('w', async () => {
         const { controls: c } = await open('w');
         let state = await applyText(c, squares(W1_SQUARES));
         const w1 = fitFor(state);
         sameCamera('w', 'W1 fit', state.camera, w1);
         await check('w', 'w1', state, [
-          { name: 'W1 square interior (not drawn)', world: [20, 20], expected: 'backdrop' },
+          { name: 'W1 square interior (drawn)', world: [20, 20], expected: FILL },
         ]);
         noticeSet('w', 'a-w1', state);
         const status = await page.locator('#viz-v2-path-status').innerText();
-        if (!status.includes('fill: not drawn')) fail('w', `W1: status ${status}`);
+        if (status.includes('not drawn') || !status.includes('fill: drawn'))
+          fail('w', `W1: status ${status}`);
         const logged = await page.locator('#viz-v2-notices li').count();
-        if (logged < 1) fail('w', 'W1: the notice is not in the page log');
-        // W2: four of the squares: drawn, the W1 log entry remains, the status drops the failure.
+        if (logged !== 0) fail('w', `W1: ${logged} notices in the page log, expected 0`);
+        // W2: four of the squares: drawn, the log is unchanged, the status shows no failure.
         state = await applyText(c, squares(4));
         sameCamera('w', 'W2 fit', state.camera, fitFor(state));
         await check('w', 'w2', state, [
@@ -654,7 +661,7 @@ for (const dpr of [1, 2]) {
         if (status2.includes('not drawn'))
           fail('w', `W2: status still shows a failure: ${status2}`);
         if ((await page.locator('#viz-v2-notices li').count()) !== logged)
-          fail('w', 'W2: the W1 log entry did not remain');
+          fail('w', 'W2: the page log changed');
       });
 
       // -------------------------------------------------------------------------------------

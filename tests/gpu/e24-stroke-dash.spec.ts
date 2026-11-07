@@ -355,7 +355,12 @@ async function render(page: Page, items: readonly Item[], camera: RenderCamera) 
 
 type Rendered = Awaited<ReturnType<typeof render>>;
 
-function compare(rendered: Rendered, fixture: Fixture, dpr: number) {
+/**
+ * `plain`: the fixture took O3 and is drawn as plain fill then stroke without the joint overlay
+ * (E38 (2026-11-07, #530)). The oracle models the joint coverage, so content probes then only
+ * assert that the frame is covered there; background probes stay exact.
+ */
+function compare(rendered: Rendered, fixture: Fixture, dpr: number, plain = false) {
   const { width, height } = rendered.result.frame;
   const elements = fixture.items.flatMap((item) => (item.element === null ? [] : [item.element]));
   const scaleFactor = fixture.camera.zoom * dpr;
@@ -389,11 +394,26 @@ function compare(rendered: Rendered, fixture: Fixture, dpr: number) {
       const wy = fixture.camera.position.y + (y + 0.5) / scaleFactor;
       const expected = expectedDashAt(elements, wx, wy, 1 / scaleFactor);
       if (expected === null) continue;
-      if (expected.some((lane) => lane > 0)) content += 1;
+      if (expected.some((lane) => lane > 0)) {
+        content += 1;
+        if (plain) {
+          const at = (y * width + x) * 4;
+          probes += 1;
+          const covered = Math.max(
+            rendered.rgba[at]!,
+            rendered.rgba[at + 1]!,
+            rendered.rgba[at + 2]!,
+          );
+          if (covered <= INTERIOR_TOLERANCE && failures.length < 12)
+            failures.push(`${fixture.name} plain (${x}, ${y}): not covered (max lane ${covered})`);
+          continue;
+        }
+      }
       check(x, y, expected, INTERIOR_TOLERANCE, 'interior');
     }
   }
-  for (const edge of fixture.edges ?? []) check(edge.x, edge.y, edge.rgb, EDGE_TOLERANCE, 'edge');
+  if (!plain)
+    for (const edge of fixture.edges ?? []) check(edge.x, edge.y, edge.rgb, EDGE_TOLERANCE, 'edge');
   return { probes, content, worst, failures };
 }
 
@@ -444,7 +464,8 @@ function unexpected(diagnostics: readonly { code: string; context?: unknown }[],
     )
       continue;
     // The known failure of U3: D6's joint overlay refuses at DPR 2 (`sloped-outer-edge`, see
-    // the A05 loop). Its solid reference must not take O3.
+    // the A05 loop). Its solid reference must not take O3. Since E38 (2026-11-07, #530) O3 draws
+    // the plain fill and stroke, and the notice stays.
     if (context?.failureCode === 'overlay-unsupported' && dpr === 2 && node === 'd6') continue;
     if (
       context?.failureCode === 'dash-limit' &&
@@ -476,34 +497,26 @@ for (const dpr of [1, 2]) {
       const fresh = (await page.evaluate(() => window.__vectorStudioE23.diagnostics())).slice(seen);
       // D6 needs the ST-U7 joint overlay. At DPR 2 its fill draws region-only (fringe cap), and
       // the overlay builder then refuses the butt dash ends that cross the fill's sloped outer
-      // edges (ST7-Q8, `sloped-outer-edge`): D6 takes E11-U4 O3 and is not drawn. This is U3's
-      // known failure, recorded in the evidence; the frame must show exactly that, and only
-      // there (the diagnostics check rejects O3 anywhere else, including D6's solid reference).
-      const hidden = new Set(
+      // edges (ST7-Q8, `sloped-outer-edge`): D6 takes E11-U4 O3. This is U3's known failure,
+      // recorded in the evidence; the frame must show exactly that, and only there (the
+      // diagnostics check rejects O3 anywhere else, including D6's solid reference). E38
+      // (2026-11-07, #530): O3 now draws the plain fill and stroke without the joint overlay
+      // instead of hiding the path, and its notice stays. The oracle models the joint coverage,
+      // so an O3 fixture's content probes assert coverage only; its background probes stay exact.
+      const plain = new Set(
         fresh.flatMap((diagnostic) => {
           const context = diagnostic.context as Record<string, unknown> | undefined;
           return context?.failureCode === 'overlay-unsupported' ? [String(context.nodeId)] : [];
         }),
       );
-      const expected: Fixture =
-        hidden.size === 0
-          ? fixture
-          : {
-              ...fixture,
-              items: fixture.items.map((item) =>
-                [...hidden].some((id) => id.endsWith(item.node.id))
-                  ? { ...item, element: null }
-                  : item,
-              ),
-            };
-      if (hidden.size > 0) outcomes[fixture.name] = `O3: ${[...hidden].join(', ')}`;
-      const outcome = compare(rendered, expected, dpr);
+      if (plain.size > 0) outcomes[fixture.name] = `O3: ${[...plain].join(', ')}`;
+      const outcome = compare(rendered, fixture, dpr, plain.size > 0);
       if (rendered.result.status !== 'applied')
         failures.push(`${fixture.name}: ${rendered.result.status}`);
       // Every drawn fixture must be tested where it paints, not only on the background. Probes
       // within 2 physical px of an edge are left out, so thin strokes keep few interior probes;
       // D7 at zoom 0.25 keeps none (its ends are measured by the D7 test instead).
-      const floor = hidden.size > 0 || fixture.name === 'D7 zoom 0.25' ? 0 : 1;
+      const floor = fixture.name === 'D7 zoom 0.25' ? 0 : 1;
       if (outcome.content < floor)
         failures.push(`${fixture.name}: only ${outcome.content} content probes`);
       failures.push(...outcome.failures);
@@ -519,6 +532,9 @@ for (const dpr of [1, 2]) {
     failures.push(...unexpected(diagnostics, dpr));
     if (dpr === 1 && Object.keys(outcomes).length > 0)
       failures.push(`O3 at DPR 1: ${JSON.stringify(outcomes)}`);
+    // E38 (2026-11-07, #530): at DPR 2 D6, and only D6, still takes O3 with its notice.
+    if (dpr === 2 && JSON.stringify(Object.keys(outcomes)) !== '["D6"]')
+      failures.push(`O3 at DPR 2: ${JSON.stringify(outcomes)}, expected D6 only`);
     report(
       'report.json',
       JSON.stringify({ ready, dpr, rows, outcomes, diagnostics, pageErrors, failures }, null, 2),
