@@ -3287,6 +3287,8 @@ pub(crate) struct ExactOutcome {
     pub(crate) result: Result<CubicFillDiagnostics, CubicFillError>,
     pub(crate) depth: u32,
     pub(crate) stop: Option<(u32, CubicFillError)>,
+    /// E14-U2 X-K1: the tier of the request, fixed by the cascade at the request exponent.
+    pub(crate) tier: crate::cubic_fill::FillTier,
 }
 
 /// One ladder outcome: the rung taken, the fallback reason, and on fallback the exact rung's

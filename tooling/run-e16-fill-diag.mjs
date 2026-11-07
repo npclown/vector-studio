@@ -6,7 +6,12 @@
 // Writes every failed fill request of the sweep record as input, runs the ignored native test
 // `e14_fill_limit_diag` (release profile) on it, and prints each request's unmapped kernel
 // outcome, summarized by stratum, named or generated row, sweep class and cause (summary.tsv),
-// and counts each stratum's requests by closed-list class (classes.tsv). Output goes to
+// and counts each stratum's requests by closed-list class (classes.tsv). Since E14-U2
+// (fill-v0+r5) the native rows also carry the two-tier engine's result, and transitions.tsv
+// counts each stratum's requests by their r4 class and their r5 class with the r5 tier and
+// kernel error (X-A7); the output ends with the large tier's largest charged work (X-K3). Run
+// the sweep on the r4 release WASM, so that the rows that newly mesh at r5 are in the input.
+// Output goes to
 // .tools/e16-fill-diag/<stamp>/. It is a diagnostic: its timings are not performance evidence.
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -125,7 +130,50 @@ const closedClass = (row, side) => {
   if (atE === 'ZeroLengthLeaf') return 'zero-length leaf';
   return `outside: ${cause(row)}`;
 };
+/** Strips the `Some(...)` of an `Option` field printed in `Debug` form; `None` becomes `-`. */
+const some = (value) => (value === 'None' ? '-' : value.replace(/^Some\((.*)\)$/, '$1'));
+/**
+ * E14-U2 X-Q4's set (contract section 10, X-Q4 (a)): exact-rung errors that keep a large path in
+ * the cap-stop class although they are not cap stops: every `Topology(_)` other than
+ * `WorkLimit` and `ScanLimit`, `Rounded(TopologyAmbiguous)`, `UnsupportedSource` and
+ * `ZeroLengthLeaf`.
+ */
+const X_Q4 =
+  /^(Topology\((?!WorkLimit\)|ScanLimit\)).*\)|Rounded\(TopologyAmbiguous\)|UnsupportedSource|ZeroLengthLeaf)$/;
+/**
+ * The class at fill-v0+r5 (E14-U2 X-A7), from the two-tier engine's result (`engine`, `tier`,
+ * `engineError`): `mesh` when the request now meshes; the r4 class on a small-tier request;
+ * for a large-tier exact rung (no retries), the cap-stop class on a cap stop (`CommandLimit`,
+ * `OwnerLimit`, `Rounded(_)`, `Topology(WorkLimit)`, `Topology(ScanLimit)`) or on X-Q4's set.
+ */
+const r5Class = (row, side) => {
+  if (row.engine === undefined) throw new Error(`${row.id}: no engine field (fill-v0+r5 diag)`);
+  if (row.engine === 'Mesh') return 'mesh';
+  // A small-tier request runs as at r4, E16-K2 retries included, so its class is the r4 class.
+  if (some(row.tier) !== 'Large') return closedClass(row, side);
+  const error = some(row.engineError);
+  const capStop =
+    R5_CAP_STOP.test(error) ||
+    (error === 'SourceLimit' && side.cubics === 0 && side.segments > EXACT_LINE_SEGMENT_CAP);
+  // E14-Q1 needs a `work-limit` port result, so an E14-Q1 row that ends in X-Q4's set
+  // (`unsupported-geometry`) moves to the amended cap-stop class.
+  return capStop
+    ? side.e14
+      ? 'E14-Q1'
+      : 'exact-rung cap stop'
+    : X_Q4.test(error)
+      ? 'exact-rung cap stop (X-Q4)'
+      : `outside: ${error}`;
+};
+/**
+ * The large tier's cap stops: the prefix caps, the rounded arrangement's limit errors that
+ * `map_attempt_error` maps to `work-limit` (not `TopologyAmbiguous`, which is in X-Q4's set, nor
+ * the invalid-tolerance or internal ones) and the topology certificate's two work caps.
+ */
+const R5_CAP_STOP =
+  /^(CommandLimit|OwnerLimit|PointLimit|Rounded\((InputLimit|EdgeLimit|PairLimit|EventLimit|SectionLimit|NodeLimit|CellLimit|BoundaryLimit|ContributorLimit|WorkLimit|OutputLimit)\)|Topology\((WorkLimit|ScanLimit)\))$/;
 const classes = new Map();
+const transitions = new Map();
 const table = new Map();
 for (const row of rows) {
   const side = sidecar[row.id];
@@ -135,6 +183,14 @@ for (const row of rows) {
   const key = [`${stratum}/${kind}`, sweep, cause(row), `rung0 ${row.fast}`, r4(row)].join('\t');
   const classKey = `${stratum}/${kind}\t${closedClass(row, side)}`;
   classes.set(classKey, (classes.get(classKey) ?? 0) + 1);
+  const transition = [
+    `${stratum}/${kind}`,
+    closedClass(row, side),
+    r5Class(row, side),
+    some(row.tier),
+    some(row.engineError),
+  ].join('\t');
+  transitions.set(transition, (transitions.get(transition) ?? 0) + 1);
   const cell = table.get(key) ?? {
     requests: 0,
     rows: new Set(),
@@ -172,4 +228,14 @@ const classLines = [
   ...[...classes.keys()].sort().map((key) => `${key}\t${classes.get(key)}`),
 ];
 writeFileSync(path.join(dir, 'classes.tsv'), `${classLines.join('\n')}\n`);
-process.stdout.write(`${lines.join('\n')}\n\n${classLines.join('\n')}\n\n${dir}\n`);
+const transitionLines = [
+  'stratum\tclosed-list class (r4)\tclass (r5)\tr5 tier\tr5 kernel error\trequests',
+  ...[...transitions.keys()].sort().map((key) => `${key}\t${transitions.get(key)}`),
+];
+writeFileSync(path.join(dir, 'transitions.tsv'), `${transitionLines.join('\n')}\n`);
+const large = rows.filter((row) => some(row.tier) === 'Large');
+const work = large.reduce((max, row) => Math.max(max, row.work), 0);
+process.stdout.write(
+  `${lines.join('\n')}\n\n${classLines.join('\n')}\n\n${transitionLines.join('\n')}\n\n` +
+    `large-tier requests ${large.length}, largest charged work ${work}\n${dir}\n`,
+);

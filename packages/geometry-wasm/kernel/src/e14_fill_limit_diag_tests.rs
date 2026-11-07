@@ -13,7 +13,11 @@
 //! step (a diagnostic, not performance evidence). Since E16-U1 (fill-v0+r4) it also prints the
 //! exact rung as `build_path` runs it, with E16-K2's retries (`exact_cascade`): the result,
 //! the refinement depth, and when the retries ran and none succeeded, the last retry's depth
-//! and error (`retryStop`), which the cascade at e's result does not show.
+//! and error (`retryStop`), which the cascade at e's result does not show. Since E14-U2
+//! (fill-v0+r5) it also runs the request through a reserved two-tier engine (`build_one`, all
+//! of `build_path`) and prints that result's outcome, exact tier, unmapped error and the
+//! rounded arrangement's charged work, `null` when the last attempt did not run it (`engine`, `tier`, `engineError`, `work`, `engineUs`), the
+//! input to X-K3's work cap and X-A7's per-stratum report.
 use std::thread;
 use std::time::Instant;
 
@@ -48,6 +52,7 @@ fn run() {
     let (mut scratch, _) =
         FillScratch::reserve(FILL_V0_LIMITS, crate::fill_ladder::MAX_BOUNDARY_RECORDS).unwrap();
     let mut ladder = FillLadder::for_tests();
+    let mut engine = crate::e14u2_fill_large_tier_tests::engine();
     println!("E14_FILL_DIAG_BEGIN");
     for row in text.lines().filter(|row| !row.is_empty()) {
         let fields: Vec<&str> = row.split('\t').collect();
@@ -109,8 +114,22 @@ fn run() {
         };
         let refined = exact_cascade(&mut workspace, request, &verbs, &point_bytes);
         let retry_stop = retry_stop_field(refined.stop);
+        let clock = Instant::now();
+        let record = engine
+            .build_one(request, &verbs, &point_bytes)
+            .expect("reserved engine")
+            .expect("no self-check failure");
+        let engine_us = clock.elapsed().as_micros();
+        // The rounded statistics persist across requests, so the work is printed only when this
+        // request's last attempt ran the rounded arrangement; otherwise `null`.
+        let built = engine.workspace().expect("workspace");
+        let work = if built.diagnostics().rounded_invoked {
+            built.rounded_stats().work_units.to_string()
+        } else {
+            "null".to_owned()
+        };
         println!(
-            "{{\"id\":\"{}\",\"exponent\":{exponent},\"flatStatus\":{},\"flatVerbs\":{},\"flatPoints\":{},\"fast\":\"{}\",\"legacy\":\"{}\",\"triangleFree\":\"{}\",\"exact\":\"{}\",\"depth\":{},\"retryStop\":\"{}\",\"fastUs\":{fast_us},\"legacyUs\":{legacy_us},\"topologyStats\":\"{:?}\"}}",
+            "{{\"id\":\"{}\",\"exponent\":{exponent},\"flatStatus\":{},\"flatVerbs\":{},\"flatPoints\":{},\"fast\":\"{}\",\"legacy\":\"{}\",\"triangleFree\":\"{}\",\"exact\":\"{}\",\"depth\":{},\"retryStop\":\"{}\",\"fastUs\":{fast_us},\"legacyUs\":{legacy_us},\"topologyStats\":\"{:?}\",\"engine\":\"{:?}\",\"tier\":\"{:?}\",\"engineError\":\"{:?}\",\"work\":{work},\"engineUs\":{engine_us}}}",
             fields[0],
             sizing.status,
             sizing.verb_count,
@@ -125,6 +144,9 @@ fn run() {
             refined.depth,
             retry_stop,
             stats,
+            record.outcome,
+            record.tier,
+            record.error,
         );
     }
     println!("E14_FILL_DIAG_END");

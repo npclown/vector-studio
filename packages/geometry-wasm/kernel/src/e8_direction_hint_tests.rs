@@ -373,6 +373,7 @@ fn status_name(result: Result<(), TopologyError>) -> &'static str {
         Err(TopologyError::KnotMismatch) => "KNOT_MISMATCH",
         Err(TopologyError::Unresolved) => "UNRESOLVED",
         Err(TopologyError::WorkLimit) => "WORK_LIMIT",
+        Err(TopologyError::ScanLimit) => "SCAN_LIMIT",
     }
 }
 

@@ -48,6 +48,16 @@ pub(crate) const MAX_LINE_CONTOURS: usize = 64;
 const MAX_LINE_SOURCE_SEGMENTS: usize = MAX_EDGE_OWNERS;
 pub(crate) const MAX_EXACT_FLAT_COMMANDS: usize = MAX_EDGE_OWNERS + 2 * MAX_LINE_CONTOURS;
 const MAX_COMBINED_HEAP_BYTES: usize = 16 * 1024 * 1024;
+// E14-U2 X-K1 (`docs/plans/d9-e14-u2-fill-exact-edge-cap-contract.md` section 4): the exact
+// rung's large tier, EX = 1,024 flat edges (X-Q1 (a)) on a path with a CUBIC verb. The source
+// caps (contours, segments, cubics) are B1's; the command and point caps follow from EX as B1's
+// do from E. `MAX_EDGE_OWNERS` stays E, the small tier, which line-only paths always use.
+pub(crate) const MAX_LARGE_EDGE_OWNERS: usize = 1_024;
+pub(crate) const MAX_LARGE_FLAT_COMMANDS: usize = MAX_LARGE_EDGE_OWNERS + 2 * MAX_CONTOURS;
+const MAX_LARGE_CONTOUR_POINTS: usize = MAX_LARGE_EDGE_OWNERS + MAX_CONTOURS;
+/// E14-U2 X-G3: the retained heap cap of a two-tier workspace, the small cap plus X-G3's
+/// 16 MiB growth bound.
+const MAX_TWO_TIER_HEAP_BYTES: usize = MAX_COMBINED_HEAP_BYTES + 16 * 1024 * 1024;
 
 /// The prefix caps one prefix run enforces. The prefix buffers are always sized for the fast
 /// caps (E14-K1). A workspace's exact rung enforces `B1_CAPS` and its rung-0 prefix
@@ -72,6 +82,37 @@ const B1_CAPS: PrefixCaps = PrefixCaps {
     contour_points: MAX_CONTOUR_POINTS,
     edge_owners: MAX_EDGE_OWNERS,
 };
+
+/// E14-U2 X-K1 item 4: the exact rung's prefix caps in the large tier.
+const LARGE_CAPS: PrefixCaps = PrefixCaps {
+    contours: MAX_CONTOURS,
+    source_verbs: MAX_SOURCE_VERBS,
+    source_scalars: MAX_SOURCE_SCALARS,
+    source_segments: MAX_SOURCE_SEGMENTS,
+    flat_commands: MAX_LARGE_FLAT_COMMANDS,
+    contour_points: MAX_LARGE_CONTOUR_POINTS,
+    edge_owners: MAX_LARGE_EDGE_OWNERS,
+};
+
+/// E14-U2 X-K1: the limit tier of one exact attempt.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum FillTier {
+    /// At most E flat edges, or a workspace without a large tier: today's limits exactly.
+    #[default]
+    Small,
+    /// The attempt's prefix stopped at E's command, point or owner cap, and the prefix ran
+    /// again with the large tier's caps.
+    Large,
+}
+
+/// E14-U2 X-K1 item 4: the large tier's limits of a two-tier workspace.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct LargeTierLimits {
+    pub(crate) rounded: RoundedFillLimits,
+    pub(crate) topology: TopologyLimits,
+    pub(crate) crossings: usize,
+    pub(crate) crossing_scan: u64,
+}
 
 /// E16-K1 item 2: the exact rung's caps on a line-only path. The rounded line fill takes at
 /// most `limits.max_contours` contours and `limits.max_edges` edges, so the line-only contour
@@ -373,6 +414,20 @@ pub(crate) struct CubicFillWorkspace {
     fast_caps: PrefixCaps,
     /// The caps of the current prefix run: `caps` or `fast_caps`.
     prefix_caps: PrefixCaps,
+    /// E14-U2 X-K1: the small tier's rounded and topology limits, and the large tier of a
+    /// two-tier workspace (`None` otherwise).
+    small_rounded: RoundedFillLimits,
+    small_topology: TopologyLimits,
+    large: Option<LargeTierLimits>,
+    /// Whether the next attempts may enter the large tier (E14-U2 X-K1 item 6: the exact rung's
+    /// attempt at the request exponent only).
+    large_allowed: bool,
+    /// The tier of the last exact attempt, and whether the workspaces hold the large limits.
+    tier: FillTier,
+    large_active: bool,
+    /// E14-U2 X-K1 item 7: the topology leaves of `certify_topology`, reserved once for the
+    /// largest tier.
+    leaves: Vec<TopologyLeaf>,
 }
 
 impl CubicFillWorkspace {
@@ -383,6 +438,24 @@ impl CubicFillWorkspace {
             line_caps(limits),
             FAST_CAPS,
             TopologyLimits::default(),
+            None,
+        )
+    }
+
+    /// E14-U2 X-K1: the exact rung's workspace with both tiers. The storage is reserved for
+    /// `large`, and `small` (with `TopologyLimits::default()` and 32 crossings) is active
+    /// unless an attempt enters the large tier.
+    pub(crate) fn new_two_tier(
+        small: RoundedFillLimits,
+        large: LargeTierLimits,
+    ) -> Result<Self, CubicFillError> {
+        Self::with_caps(
+            small,
+            B1_CAPS,
+            line_caps(small),
+            FAST_CAPS,
+            TopologyLimits::default(),
+            Some(large),
         )
     }
 
@@ -396,6 +469,7 @@ impl CubicFillWorkspace {
             PRE_B1_CAPS,
             PRE_B1_CAPS,
             PRE_B1_TOPOLOGY_LIMITS,
+            None,
         )
     }
 
@@ -405,15 +479,54 @@ impl CubicFillWorkspace {
         line_caps: PrefixCaps,
         fast_caps: PrefixCaps,
         topology_limits: TopologyLimits,
+        large: Option<LargeTierLimits>,
     ) -> Result<Self, CubicFillError> {
+        // E14-U2 X-K1 item 1: a two-tier workspace reserves every exact-rung buffer for the
+        // large tier and then activates the small one.
+        let (rounded_reserve, topology_reserve, crossings, leaf_capacity) = match large {
+            Some(large) => (
+                large.rounded,
+                large.topology,
+                large.crossings,
+                LARGE_CAPS.edge_owners,
+            ),
+            None => (
+                limits,
+                topology_limits,
+                crate::simple_cubic_topology::SMALL_MAX_CROSSINGS,
+                MAX_EDGE_OWNERS,
+            ),
+        };
+        let mut rounded =
+            RoundedFillWorkspace::new(rounded_reserve).map_err(CubicFillError::Rounded)?;
+        rounded
+            .set_limits(limits)
+            .map_err(CubicFillError::Rounded)?;
+        let mut topology = SimpleCubicTopologyWorkspace::new(topology_reserve)
+            .map_err(CubicFillError::Topology)?;
+        topology
+            .set_limits(topology_limits)
+            .map_err(CubicFillError::Topology)?;
+        let mut rounded_topology = RoundedKnotCubicTopologyWorkspace::new(topology_reserve)
+            .map_err(CubicFillError::Topology)?;
+        rounded_topology
+            .set_limits(topology_limits)
+            .map_err(CubicFillError::Topology)?;
+        let mut transverse_topology =
+            TransverseArrangementWorkspace::with_crossings(topology_reserve, crossings)
+                .map_err(CubicFillError::Topology)?;
+        transverse_topology
+            .set_limits(
+                topology_limits,
+                crate::simple_cubic_topology::SMALL_MAX_CROSSINGS,
+                None,
+            )
+            .map_err(CubicFillError::Topology)?;
         let workspace = Self {
-            rounded: RoundedFillWorkspace::new(limits).map_err(CubicFillError::Rounded)?,
-            topology: SimpleCubicTopologyWorkspace::new(topology_limits)
-                .map_err(CubicFillError::Topology)?,
-            rounded_topology: RoundedKnotCubicTopologyWorkspace::new(topology_limits)
-                .map_err(CubicFillError::Topology)?,
-            transverse_topology: TransverseArrangementWorkspace::new(topology_limits)
-                .map_err(CubicFillError::Topology)?,
+            rounded,
+            topology,
+            rounded_topology,
+            transverse_topology,
             source_verbs: filled(SourceVerb::Unused, MAX_FAST_SOURCE_VERBS)?,
             source_verb_len: 0,
             sources: filled(DecodedSource::default(), MAX_FAST_SOURCE_SEGMENTS)?,
@@ -439,14 +552,93 @@ impl CubicFillWorkspace {
             refines: caps == B1_CAPS,
             fast_caps,
             prefix_caps: caps,
+            small_rounded: limits,
+            small_topology: topology_limits,
+            large,
+            large_allowed: false,
+            tier: FillTier::Small,
+            large_active: false,
+            leaves: filled(TopologyLeaf::default(), leaf_capacity)?,
         };
-        if workspace
-            .combined_bytes()
-            .is_none_or(|bytes| bytes > MAX_COMBINED_HEAP_BYTES)
-        {
+        let cap = if large.is_some() {
+            MAX_TWO_TIER_HEAP_BYTES
+        } else {
+            MAX_COMBINED_HEAP_BYTES
+        };
+        if workspace.combined_bytes().is_none_or(|bytes| bytes > cap) {
             return Err(CubicFillError::CombinedByteLimit);
         }
         Ok(workspace)
+    }
+
+    /// E14-U2 X-K1 item 6: whether the next exact attempts may enter the large tier. The exact
+    /// rung allows it for its attempt at the request exponent only; a workspace without a large
+    /// tier ignores it.
+    pub(crate) fn set_large_tier_allowed(&mut self, allowed: bool) {
+        self.large_allowed = allowed;
+    }
+
+    /// E14-U2 X-K1: the tier of the last exact attempt.
+    pub(crate) fn tier(&self) -> FillTier {
+        self.tier
+    }
+
+    /// E14-U2 X-K3: the crossing scan's charged cost in the last arrangement attempt.
+    pub(crate) fn crossing_scan(&self) -> u64 {
+        self.transverse_topology.crossing_scan()
+    }
+
+    /// E14-U2 X-U1 evidence: the crossing records of the last arrangement attempt.
+    #[cfg(test)]
+    pub(crate) fn crossing_count(&self) -> usize {
+        self.transverse_topology.crossing_len()
+    }
+
+    /// E14-U2 X-K1 item 3: activates one tier's limits in the rounded and topology workspaces.
+    fn activate_tier(&mut self, tier: FillTier) -> Result<(), CubicFillError> {
+        let large = matches!((tier, self.large), (FillTier::Large, Some(_)));
+        self.tier = tier;
+        if large == self.large_active {
+            return Ok(());
+        }
+        let (rounded, topology, crossings, scan_cap) = match (large, self.large) {
+            (true, Some(limits)) => (
+                limits.rounded,
+                limits.topology,
+                limits.crossings,
+                Some(limits.crossing_scan),
+            ),
+            _ => (
+                self.small_rounded,
+                self.small_topology,
+                crate::simple_cubic_topology::SMALL_MAX_CROSSINGS,
+                None,
+            ),
+        };
+        self.rounded
+            .set_limits(rounded)
+            .map_err(CubicFillError::Rounded)?;
+        self.topology
+            .set_limits(topology)
+            .map_err(CubicFillError::Topology)?;
+        self.rounded_topology
+            .set_limits(topology)
+            .map_err(CubicFillError::Topology)?;
+        self.transverse_topology
+            .set_limits(topology, crossings, scan_cap)
+            .map_err(CubicFillError::Topology)?;
+        self.large_active = large;
+        Ok(())
+    }
+
+    /// The `cfg(test)` limits override of E14-U2 X-A5: replaces the large tier's limits of a
+    /// two-tier workspace, for the seeded defects X-D1 to X-D5.
+    #[cfg(test)]
+    pub(crate) fn e14u2_override_large(&mut self, large: LargeTierLimits) {
+        self.large = Some(large);
+        self.large_active = false;
+        self.activate_tier(FillTier::Small)
+            .expect("the small tier fits the reservation");
     }
 
     /// The retained heap bytes: the four topology and rounded workspaces and, since E14-K1
@@ -492,6 +684,13 @@ impl CubicFillWorkspace {
             .and_then(|bytes| bytes.checked_add(self.rounded_topology.allocated_bytes()))
             .and_then(|bytes| bytes.checked_add(self.transverse_topology.allocated_bytes()))
             .and_then(|bytes| bytes.checked_add(prefix))
+            .and_then(|bytes| {
+                bytes.checked_add(
+                    self.leaves
+                        .capacity()
+                        .checked_mul(size_of::<TopologyLeaf>())?,
+                )
+            })
     }
 
     pub(crate) fn allocated_bytes(&self) -> usize {
@@ -640,7 +839,39 @@ impl CubicFillWorkspace {
         };
         #[cfg(not(test))]
         let caps = self.exact_caps(input);
-        let all_line_eligible = match self.run_prefix(input, command_capacity, true, caps) {
+        self.activate_tier(FillTier::Small)?;
+        #[cfg(test)]
+        let mut prefix = if E14U2_SMALL_IN_LARGE.with(core::cell::Cell::get)
+            && self.large.is_some()
+            && self.large_allowed
+            && caps == self.caps
+        {
+            Err(PrefixFailure::Error(CubicFillError::OwnerLimit))
+        } else {
+            self.run_prefix(input, command_capacity, true, caps)
+        };
+        #[cfg(not(test))]
+        let mut prefix = self.run_prefix(input, command_capacity, true, caps);
+        // E14-U2 X-K1 items 3 and 4: a path with a CUBIC verb whose prefix stops at E's command,
+        // point or owner cap runs the prefix again with the large tier's caps, when the
+        // workspace has a large tier and the caller allows it. Every other attempt is the
+        // small tier's, unchanged.
+        if self.large.is_some()
+            && self.large_allowed
+            && caps == self.caps
+            && matches!(
+                prefix,
+                Err(PrefixFailure::Error(
+                    CubicFillError::CommandLimit
+                        | CubicFillError::PointLimit
+                        | CubicFillError::OwnerLimit
+                ))
+            )
+        {
+            self.activate_tier(FillTier::Large)?;
+            prefix = self.run_prefix(input, LARGE_CAPS.flat_commands, true, LARGE_CAPS);
+        }
+        let all_line_eligible = match prefix {
             Ok(all_line_eligible) => all_line_eligible,
             Err(PrefixFailure::Sizing(_)) => return Ok(self.diagnostics),
             Err(PrefixFailure::Error(error)) => return Err(error),
@@ -1022,7 +1253,26 @@ impl CubicFillWorkspace {
         }
         let mut contours = [TopologyRange::default(); MAX_CONTOURS];
         let mut cubics = [TopologyCubic::default(); MAX_SOURCE_SEGMENTS];
-        let mut leaves = [TopologyLeaf::default(); MAX_EDGE_OWNERS];
+        // E14-U2 X-K1 item 7: the leaves live in reserved storage, moved out for this call.
+        let mut leaves = core::mem::take(&mut self.leaves);
+        let leaf_cap = match self.tier {
+            FillTier::Large => LARGE_CAPS.edge_owners,
+            FillTier::Small => self.caps.edge_owners,
+        };
+        let result =
+            self.certify_topology_with(mode, &mut contours, &mut cubics, &mut leaves, leaf_cap);
+        self.leaves = leaves;
+        result
+    }
+
+    fn certify_topology_with(
+        &mut self,
+        mode: TopologyMode,
+        contours: &mut [TopologyRange; MAX_CONTOURS],
+        cubics: &mut [TopologyCubic; MAX_SOURCE_SEGMENTS],
+        leaves: &mut [TopologyLeaf],
+        leaf_cap: usize,
+    ) -> Result<(), CubicFillError> {
         let mut source_kinds = [false; MAX_SOURCE_SEGMENTS];
         let mut cubic_len = 0usize;
         let mut leaf_len = 0usize;
@@ -1046,7 +1296,7 @@ impl CubicFillWorkspace {
                     if command.verb != VERB_LINE || command.provenance.source_verb != source_verb {
                         continue;
                     }
-                    if leaf_len >= self.caps.edge_owners {
+                    if leaf_len >= leaf_cap {
                         return Err(CubicFillError::OwnerLimit);
                     }
                     leaves[leaf_len] = TopologyLeaf {
@@ -1638,6 +1888,17 @@ thread_local! {
     static E14_EXACT_FAST_CAPS: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
     static E16_NO_REFINEMENT: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
     static E16_CUBIC_LINE_CAPS: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+    static E14U2_SMALL_IN_LARGE: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
+
+/// E14-U2 X-D4: runs `action` with every allowed exact attempt of a two-tier workspace in the
+/// large tier, small paths included, then switches it off.
+#[cfg(test)]
+pub(crate) fn with_small_paths_in_large_tier<T>(action: impl FnOnce() -> T) -> T {
+    E14U2_SMALL_IN_LARGE.with(|switch| switch.set(true));
+    let result = action();
+    E14U2_SMALL_IN_LARGE.with(|switch| switch.set(false));
+    result
 }
 
 /// Runs `action` with E16-K2's refinement retries off, so a test can read the workspace state

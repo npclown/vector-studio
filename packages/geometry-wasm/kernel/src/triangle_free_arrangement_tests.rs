@@ -854,8 +854,10 @@ fn triangle_free_lifecycle_is_atomic_allocation_free_and_isolated() {
 
     let mut workspace = TransverseArrangementWorkspace::new(TopologyLimits::default()).unwrap();
     let mut independent = TransverseArrangementWorkspace::new(TopologyLimits::default()).unwrap();
-    assert_eq!(workspace.allocated_bytes(), 897_024);
-    assert_eq!(size_of::<TransverseArrangementWorkspace>(), 7_120);
+    // E14-U2 X-K1 item 7 (2026-11-07): the point slots, the pair-candidate scratch, the partners
+    // and the crossing records are heap storage counted here, and the wrapper holds only vectors.
+    assert_eq!(workspace.allocated_bytes(), 945_408);
+    assert_eq!(size_of::<TransverseArrangementWorkspace>(), 440);
     let independent_expected = assert_cap_success(&mut independent, &cap, &cap_kinds);
 
     assert_cap_failure_recovery(&mut workspace, &cap, &cap_kinds, |workspace| {
@@ -1161,8 +1163,10 @@ fn emit_triangle_free_arrangement() {
     let mut workspace = TransverseArrangementWorkspace::new(TopologyLimits::default()).unwrap();
     let allocated_bytes = workspace.allocated_bytes();
     let inline_bytes = size_of::<TransverseArrangementWorkspace>();
-    assert_eq!(allocated_bytes, 897_024);
-    assert_eq!(inline_bytes, 7_120);
+    // E14-U2 X-K1 item 7 (2026-11-07): the point slots, the pair-candidate scratch, the partners
+    // and the crossing records are heap storage counted here, and the wrapper holds only vectors.
+    assert_eq!(allocated_bytes, 945_408);
+    assert_eq!(inline_bytes, 440);
     println!("P3_NATIVE_TRIANGLE_FREE_ARRANGEMENT_BEGIN");
     for row in rows {
         let input = TopologyInput {

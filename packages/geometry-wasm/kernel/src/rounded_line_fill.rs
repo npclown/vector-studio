@@ -465,7 +465,10 @@ struct PendingCell {
 /// of the workspace state (B0R contract section 10, unit U6).
 #[cfg_attr(test, derive(Clone))]
 pub(crate) struct RoundedFillWorkspace {
+    /// The active limits (E14-U2 X-K1 item 3), at most `reserved` where they size storage.
     limits: RoundedFillLimits,
+    /// The limits the storage was reserved for.
+    reserved: RoundedFillLimits,
     edges: Vec<EdgeState>,
     events: Vec<FillEvent>,
     exact_columns: Vec<FillEvent>,
@@ -520,6 +523,7 @@ impl RoundedFillWorkspace {
 
         let mut workspace = Self {
             limits,
+            reserved: limits,
             edges: reserve_vec(limits.max_edges)?,
             events: reserve_vec(limits.max_events)?,
             exact_columns: reserve_vec(limits.max_events)?,
@@ -549,6 +553,33 @@ impl RoundedFillWorkspace {
             return Err(RoundedFillError::ByteLimit);
         }
         Ok(workspace)
+    }
+
+    /// E14-U2 X-K1 item 3: sets the limits the next attempts enforce. Every limit that sizes
+    /// storage must be at most the reserved one.
+    pub(crate) fn set_limits(&mut self, limits: RoundedFillLimits) -> Result<(), RoundedFillError> {
+        let index_capacity = validate_limits(limits)?;
+        let reserved = self.reserved;
+        if limits.max_edges > reserved.max_edges
+            || limits.max_events > reserved.max_events
+            || limits.max_sections > reserved.max_sections
+            || limits.max_nodes > reserved.max_nodes
+            || limits.max_cells > reserved.max_cells
+            || limits.max_boundaries > reserved.max_boundaries
+            || limits.max_contributors > reserved.max_contributors
+            || limits.max_vertices > reserved.max_vertices
+            || limits.max_triangles > reserved.max_triangles
+            || index_capacity > self.indices.capacity()
+        {
+            return Err(RoundedFillError::InvalidLimits);
+        }
+        self.limits = limits;
+        Ok(())
+    }
+
+    /// The active limits.
+    pub(crate) fn limits(&self) -> RoundedFillLimits {
+        self.limits
     }
 
     pub(crate) fn tessellate(

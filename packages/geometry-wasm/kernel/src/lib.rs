@@ -524,6 +524,8 @@ mod e14_fill_limit_diag_tests;
 #[cfg(test)]
 mod e14_fill_rung0_tests;
 #[cfg(test)]
+mod e14u2_fill_large_tier_tests;
+#[cfg(test)]
 mod e16_fill_remedy_tests;
 
 // D9 E2 unit E2-U1 (docs/plans/d9-e2-stroke-fast-rung-contract.md): the lossless seam merge of

@@ -117,7 +117,7 @@ function assertCarrier(
     const old = certifyMixedTransverseCubicArrangement(fixture.contours, fixture.sourceKinds);
     expect(old, fixture.id).toEqual(oracle);
   }
-  if (row.allocations !== 0 || row.allocated_bytes !== 897024 || row.inline_bytes !== 7120)
+  if (row.allocations !== 0 || row.allocated_bytes !== 945408 || row.inline_bytes !== 440)
     throw new Error('triangle-free retained resource mismatch');
 }
 

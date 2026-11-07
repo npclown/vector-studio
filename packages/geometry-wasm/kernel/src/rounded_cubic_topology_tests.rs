@@ -260,7 +260,8 @@ fn rounded_constructor_limits_and_retained_capacity_are_stable() {
     ));
     assert!(matches!(
         RoundedKnotCubicTopologyWorkspace::new(TopologyLimits {
-            max_bytes: 1024 * 1024 + 1,
+            // E14-U2: the absolute byte cap is the large tier's 8 MiB.
+            max_bytes: 8 * 1024 * 1024 + 1,
             ..TopologyLimits::default()
         }),
         Err(TopologyError::InvalidLimits)
