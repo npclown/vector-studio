@@ -71,6 +71,14 @@ The worst case on the corpus is node-7's stroke at `e = −8` (zoom 32 at DPR 1)
 
 The reference is a 256-chord-per-cubic flattening with Wang's error bound added to the margin; samples within the margin of the ideal boundary are not judged. For miter and bevel joins and butt caps the stroke oracle also skips samples near a corner, where the reference disk union is not the requested join.
 
+## 4a. Headed run (E38-A6, 2026-11-07)
+
+Main PC DESKTOP-DKVUSAV at main `a6c28fb` (#530's squash), after `pnpm install --frozen-lockfile`, `pnpm build` and `pnpm build:kernel` (Rust 1.94.1, release). Release WASM SHA-256 `b25576da81463b98722d3ce252f456a0c5f19c5aa36676afeeb02bb89f17aa27`, the same in `dist/kernel.wasm` and in the copy next-host serves. One worker, `playwright.gpu.config.ts`, one `--project` per run.
+
+- **Editor (:4194, DPR 1.25).** node-5 and node-7 (`user_node5()`, `user_node7()`) as a white 1 px stroke (butt, miter 4) and as a solid nonzero fill draw at zoom 1 and 4. Nothing vanishes; no `work-limit`, no path-mesh notice, no console error. The path appears in the next frame (about 17 to 190 ms). **E38-A6 editor part: PASS.**
+- **Specs at `a6c28fb` before the re-baseline.** The five specs that pin the operation ids: 3/10 in Chrome and in Edge; `pnpm test:gpu` in Chrome 85/93. All 8 failures were expected outcomes of E38, not digest moves: paths that were refused (`work-limit`, `unsupported-geometry`) or drawn with a coarser retry and `fringe-work-cap` now draw through the robust rung (p3-b2-strokes DPR 1, 2, 3; viz-v1 N1 DPR 1, 2; viz-v2 DPR 1, 2), and e24 D6 at DPR 2 (its known O3) now draws plain instead of being hidden.
+- **Re-baseline** (`E38: re-baseline headed specs for the robust rung`): the vanished notices are removed; viz-v1 N1 and viz-v2 P3S/W1 now expect the drawn colour and no notice (a geometry path below 8,192 source points can no longer be refused); e24's O3 fixture checks coverage on content probes and exact background, and D6 must be the only O3 at DPR 2. After it: the four changed specs 13/13 in Chrome (4.9 min) and in Edge (4.3 min), `pnpm test:gpu` in Chrome 93/93 (28.7 min). **E38-A6: PASS.**
+
 ## 5. Independent review (2026-11-07)
 
 Round 1 was NOT READY with six findings, all addressed:
