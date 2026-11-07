@@ -412,6 +412,11 @@ export class PathMeshPacker {
         this.#releaseVariant(record);
         record.variant = this.#placeVariant(draw);
       }
+      // E39-R6: a joint draw over coverage meshes has no overlay. One left on the slot by an
+      // earlier ST-U7 pair (resident until evicted) would stand in for the variant's bases.
+      if (draw.overlay === undefined && draw.coverage !== undefined) {
+        this.#releaseOverlay(record);
+      }
       if (draw.overlay !== undefined && record.overlay?.id !== draw.overlay.id) {
         this.#releaseOverlay(record);
         record.overlay = this.#placeOverlay(draw.overlay.id, draw.overlay.data);
