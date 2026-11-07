@@ -113,7 +113,12 @@ describe('P4 U3 clip shader variants (section 4, Pipelines; P4-K1)', () => {
     const entries = (code: string) =>
       code.match(/@fragment\s+fn (\w+)/g)?.map((m) => m.split(' ').pop());
     expect(entries(PRIMITIVE_ANALYTIC_CLIP_SHADER)).toEqual(['fragmentMain']);
-    expect(entries(MESH_FILL_CLIP_SHADER)).toEqual(['meshFragmentMain', 'meshJointFragmentMain']);
+    // E39-U2: the stencil pass's entry point stays the base module's.
+    expect(entries(MESH_FILL_CLIP_SHADER)).toEqual([
+      'meshStencilFragmentMain',
+      'meshFragmentMain',
+      'meshJointFragmentMain',
+    ]);
     expect(PRIMITIVE_ANALYTIC_CLIP_SHADER).toContain('return shadePrimitive(input) * clip;');
     expect(MESH_FILL_CLIP_SHADER).toContain('return meshShade(input) * clip;');
     // The joint fill runs its formula with o·k, so the following stroke draw (also × k)
@@ -213,7 +218,7 @@ describe('P4 U3 pipeline creation', () => {
     expect(scene).toMatchObject({
       clipPipelineAvailable: true,
       meshPipelineAvailable: true,
-      pipelinesCreated: 9,
+      pipelinesCreated: 18,
       shaderModulesCreated: 7,
     });
     expect(fixture.pipelineLabels).toEqual([
@@ -221,11 +226,20 @@ describe('P4 U3 pipeline creation', () => {
       'vector-studio/p3-mesh-fill-4x',
       'vector-studio/p3-mesh-joint-4x',
       'vector-studio/p3-mesh-stencil-reset-4x',
+      'vector-studio/e39-mesh-stencil-winding-bgra8unorm-4x',
+      'vector-studio/e39-mesh-stencil-union-bgra8unorm-4x',
+      'vector-studio/p3-mesh-cover-nonzero-4x',
+      'vector-studio/p3-mesh-cover-evenodd-4x',
       'vector-studio/p1-analytic-primitive-stencil-4x+clip-v0',
       'vector-studio/p1-analytic-primitive-4x+mask-v0',
       'vector-studio/p3-mesh-fill-4x+clip-v0',
       'vector-studio/p3-mesh-joint-4x+clip-v0',
+      'vector-studio/p3-mesh-cover-nonzero-4x+clip-v0',
+      'vector-studio/p3-mesh-cover-evenodd-4x+clip-v0',
       'vector-studio/p3-mesh-fill-4x+mask-v0',
+      'vector-studio/e39-mesh-stencil-winding-r8unorm-4x',
+      'vector-studio/p3-mesh-cover-nonzero-4x+mask-v0',
+      'vector-studio/p3-mesh-cover-evenodd-4x+mask-v0',
     ]);
     const byLabel = (label: string) =>
       fixture.descriptors.find((descriptor) => descriptor.label === label)!;
@@ -258,7 +272,7 @@ describe('P4 U3 pipeline creation', () => {
       MESH_FILL_CLIP_SHADER,
       MESH_FILL_MASK_SHADER,
     ]);
-    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(9);
+    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(18);
     creation.dispose();
     expect(accounting.snapshot().live).toBe(0);
   });
@@ -268,7 +282,7 @@ describe('P4 U3 pipeline creation', () => {
     const { scene, creation } = await nativeScene(fixture, { meshPipeline: true });
     expect(scene).toMatchObject({
       clipPipelineAvailable: false,
-      pipelinesCreated: 4,
+      pipelinesCreated: 8,
       shaderModulesCreated: 3,
     });
     expect(fixture.modules.some((code) => code.includes('clipCoverage'))).toBe(false);
@@ -297,9 +311,9 @@ describe('P4 U3 pipeline creation', () => {
     expect(scene).toMatchObject({
       clipPipelineAvailable: false,
       meshPipelineAvailable: true,
-      pipelinesCreated: 4,
+      pipelinesCreated: 8,
     });
-    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(4);
+    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(8);
     creation.dispose();
     expect(accounting.snapshot().live).toBe(0);
   });

@@ -181,7 +181,8 @@ fn meshFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {
   let coverage = meshCoverage(input.position.xy, triangle, instance);
   let paint = paintValue(meshPaints[input.instance * 2u], instance.fill, input.position.xy);
   let color = paint * (coverage * instance.opacity);
-  if (color.a == 0.0) {
+  // E39-R4: a winding or union draw never discards.
+  if (color.a == 0.0 && triangle.padding1 != NO_DISCARD) {
     discard;
   }
   return color * clip;

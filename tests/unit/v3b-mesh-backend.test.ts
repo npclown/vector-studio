@@ -187,7 +187,7 @@ describe('V3b mesh pipeline creation (V3-A13)', () => {
     expect(scene).toMatchObject({
       meshPipelineAvailable: true,
       // E17 section 3: the stencil reset pipeline and its module.
-      pipelinesCreated: 4,
+      pipelinesCreated: 8,
       shaderModulesCreated: 3,
     });
     expect(fixture.pipelineLabels).toEqual([
@@ -195,6 +195,10 @@ describe('V3b mesh pipeline creation (V3-A13)', () => {
       'vector-studio/p3-mesh-fill-4x',
       'vector-studio/p3-mesh-joint-4x',
       'vector-studio/p3-mesh-stencil-reset-4x',
+      'vector-studio/e39-mesh-stencil-winding-bgra8unorm-4x',
+      'vector-studio/e39-mesh-stencil-union-bgra8unorm-4x',
+      'vector-studio/p3-mesh-cover-nonzero-4x',
+      'vector-studio/p3-mesh-cover-evenodd-4x',
     ]);
     const h = createPathHarness({ port: createCountingPort(), nodes: interleaved() });
     for (let frame = 0; frame < 5; frame += 1) {
@@ -202,9 +206,10 @@ describe('V3b mesh pipeline creation (V3-A13)', () => {
       const receipt = submitted(scene.submitPrimitivePacket(h.source.prepare(target)!));
       h.source.acknowledge(receipt);
     }
-    // Five frames later, still exactly the four pipelines (ST-U7 addendum's joint pipeline over
-    // the same module, E17's stencil reset) and three shader modules of creation.
-    expect(fixture.pipelineLabels).toHaveLength(4);
+    // Five frames later, still exactly the eight pipelines (ST-U7 addendum's joint pipeline over
+    // the same module, E17's stencil reset, E39's two stencil passes and two covers) and three
+    // shader modules of creation.
+    expect(fixture.pipelineLabels).toHaveLength(8);
     expect(fixture.shaderLabels).toHaveLength(3);
     creation.dispose();
     expect(accounting.snapshot().live).toBe(0);
@@ -348,7 +353,7 @@ describe('V3b mesh submission (V3-A13)', () => {
         },
       },
       { ...packet, mesh: { ...part, resources: [], draws: [] } },
-      { ...packet, mesh: { ...part, layoutVersion: 1 } } as unknown as PrimitivePacket,
+      { ...packet, mesh: { ...part, layoutVersion: 0 } } as unknown as PrimitivePacket,
     ];
     for (const candidate of invalid) {
       expect(scene.submitPrimitivePacket(candidate)).toEqual({

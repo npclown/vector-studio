@@ -1,7 +1,7 @@
 import type { MeshFillDraw, PrimitivePacket } from '@vector-studio/renderer-core';
 
 import { halfToNumber } from './mesh-count-shader.js';
-import { meshStencilStep } from './mesh-pipeline.js';
+import { MeshStencilSequence } from './mesh-pipeline.js';
 import type {
   WebGpuResourceTracker,
   WebGpuSceneCaptureForTesting,
@@ -27,6 +27,9 @@ export interface CountPipelineState {
   readonly joint: GPURenderPipeline;
   /** E17 contract, section 3: the stencil reset draw's pipeline for the count target. */
   readonly reset: GPURenderPipeline;
+  /** E39-R9: the stencil pass pipelines and the covers at the count target. */
+  readonly stencil: Readonly<Record<'winding' | 'union', GPURenderPipeline>>;
+  readonly cover: Readonly<Record<'nonzero' | 'evenodd', GPURenderPipeline>>;
   /** 4x only: the readout pipeline and its bind group layout. */
   readonly readout: Readonly<{ pipeline: GPURenderPipeline; layout: GPUBindGroupLayout }> | null;
 }
@@ -100,12 +103,29 @@ export class PendingCapture {
         // The reset pipeline has no bind group; group 0 stays set across it.
         pass.setBindGroup(0, frame.mesh.bindGroup);
         let bound: GPURenderPipeline | null = null;
-        frame.mesh.draws.forEach((draw, ordinal) => {
-          const step = meshStencilStep(ordinal);
-          if (step.reset) {
+        // E39-R9: the main pass's stencil sequence; a winding or union draw replays its stencil
+        // pass and its cover, which writes 1 per painted sample.
+        const sequence = new MeshStencilSequence();
+        frame.mesh.draws.forEach((draw) => {
+          const coverage = draw.coverage;
+          const step = coverage === undefined ? sequence.partition() : null;
+          if (step === null ? sequence.winding() : step.reset) {
             pass.setPipeline(frame.count!.reset);
             pass.draw(3);
             bound = null;
+          }
+          if (step === null) {
+            const stencilTriangles = draw.triangleCount - 2;
+            pass.setPipeline(frame.count!.stencil[coverage!]);
+            pass.setStencilReference(coverage === 'union' ? 1 : 0);
+            pass.draw(3 * stencilTriangles, 1, 3 * draw.firstTriangle, draw.instance);
+            const rule =
+              draw.coverage === 'winding' && draw.fillRule === 'evenodd' ? 'evenodd' : 'nonzero';
+            pass.setPipeline(frame.count!.cover[rule]);
+            pass.setStencilReference(0);
+            pass.draw(6, 1, 3 * (draw.firstTriangle + stencilTriangles), draw.instance);
+            bound = null;
+            return;
           }
           const pipeline = draw.composite === 'joint-fill' ? frame.count!.joint : frame.count!.fill;
           if (pipeline !== bound) {

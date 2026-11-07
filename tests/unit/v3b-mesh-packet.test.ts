@@ -91,7 +91,8 @@ describe('V3b mesh part bytes (V3-A10)', () => {
     h.setZoom(1.5, { x: -200.25, y: -300.5 });
     const packet = h.source.prepare({ ...target, devicePixelRatio: 2 })!;
     const part = packet.mesh!;
-    expect(part.layoutVersion).toBe(0);
+    // E39-R8: layout version 1 (the draws' coverage).
+    expect(part.layoutVersion).toBe(1);
     expect(part.resources.map((resource) => [resource.id, resource.capacityBytes])).toEqual([
       ['meshPositions', 16 * 8],
       ['meshTriangles', 16 * 32],

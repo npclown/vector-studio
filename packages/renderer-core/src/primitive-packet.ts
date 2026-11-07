@@ -70,7 +70,9 @@ export type ClipMaskPacketLevel = Omit<MaskLevelRecord, 'source'> &
       | Readonly<{
           kind: 'mesh';
           nodeId: string;
-          draw: Readonly<{ instance: number; firstTriangle: number; triangleCount: number }> | null;
+          draw: Readonly<
+            { instance: number; firstTriangle: number; triangleCount: number } & MeshCoverage
+          > | null;
         }>;
   }>;
 /**
@@ -103,35 +105,50 @@ export type MeshResourceId =
   | 'meshFeatures'
   | 'meshInstances'
   | 'meshFrame';
-export type MeshFillDraw = Readonly<{
-  /** Number of analytic draws that precede this draw in paint order; equal values keep array order. */
-  position: number;
-  /** Path slot; selects the meshInstances record. */
-  instance: number;
-  /** Absolute record index in meshTriangles. */
-  firstTriangle: number;
-  /** Region and exterior triangles of the served variant, > 0. */
-  triangleCount: number;
-  /**
-   * ST-U7 addendum, section 4.5: present only on a joint fill draw, which uses the joint
-   * pipeline over the overlay variant's triangles and reads the stroke record named by word 15
-   * of its instance record (stroke slot + 1). Absent on every other draw; layoutVersion stays 0.
-   */
-  composite?: 'joint-fill';
-  /** P4 contract, U2: the 1-based clip state of a clipped draw; absent when unclipped. */
-  clipState?: number;
-  /**
-   * E23 contract, U2: the 1-based paint-part record of this draw's paint (the fill for a fill
-   * or joint fill draw, the stroke for a stroke draw); absent for a solid paint.
-   */
-  gradient?: number;
-  /**
-   * E23 contract, U2: on a joint fill draw only, the record of the stroke paint it reads for
-   * a_S (E23-K4); absent when the stroke is solid. A joint fill draw with either field uses the
-   * paint variant.
-   */
-  strokeGradient?: number;
+/**
+ * E39 contract, R8: how a mesh draw is resolved. Absent: a partition mesh (E17 write-once).
+ * `winding`: a fill's winding mesh, counted in the stencil and covered under `fillRule`.
+ * `union`: a stroke's union mesh, marked in the stencil and covered. A winding or union draw's
+ * last two triangles are its cover quad (R3); the ones before them are its stencil triangles.
+ */
+export type MeshCoverage = Readonly<{
+  coverage?: 'winding' | 'union';
+  /** Present exactly on a `winding` draw. */
+  fillRule?: 'nonzero' | 'evenodd';
 }>;
+export type MeshFillDraw = MeshCoverage &
+  Readonly<{
+    /** Number of analytic draws that precede this draw in paint order; equal values keep array order. */
+    position: number;
+    /** Path slot; selects the meshInstances record. */
+    instance: number;
+    /** Absolute record index in meshTriangles. */
+    firstTriangle: number;
+    /**
+     * Region and exterior triangles of the served variant, > 0; for a winding or union draw its
+     * stencil triangles then its two cover triangles (E39-R3), so at least 3.
+     */
+    triangleCount: number;
+    /**
+     * ST-U7 addendum, section 4.5: present only on a joint fill draw, which uses the joint
+     * pipeline over the overlay variant's triangles and reads the stroke record named by word 15
+     * of its instance record (stroke slot + 1). Absent on every other draw; layoutVersion stays 0.
+     */
+    composite?: 'joint-fill';
+    /** P4 contract, U2: the 1-based clip state of a clipped draw; absent when unclipped. */
+    clipState?: number;
+    /**
+     * E23 contract, U2: the 1-based paint-part record of this draw's paint (the fill for a fill
+     * or joint fill draw, the stroke for a stroke draw); absent for a solid paint.
+     */
+    gradient?: number;
+    /**
+     * E23 contract, U2: on a joint fill draw only, the record of the stroke paint it reads for
+     * a_S (E23-K4); absent when the stroke is solid. A joint fill draw with either field uses the
+     * paint variant.
+     */
+    strokeGradient?: number;
+  }>;
 export type MeshResource = Readonly<{
   id: MeshResourceId;
   incarnation: symbol;
@@ -150,7 +167,8 @@ export type MeshWrite = Readonly<{
   records: readonly MeshRecordRange[];
 }>;
 export type MeshPacketPart = Readonly<{
-  layoutVersion: 0;
+  /** E39-R8: layout version 1 adds the draws' coverage. */
+  layoutVersion: 1;
   originRevision: symbol;
   /** The six resources in fixed order, or none for a part that carries notices only. */
   resources: readonly MeshResource[];

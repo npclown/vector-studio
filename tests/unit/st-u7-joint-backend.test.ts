@@ -170,7 +170,7 @@ describe('ST-U7 joint pipeline creation (addendum section 4.5)', () => {
     expect(scene).toMatchObject({
       meshPipelineAvailable: true,
       // E17 section 3: the stencil reset pipeline and its module.
-      pipelinesCreated: 4,
+      pipelinesCreated: 8,
       shaderModulesCreated: 3,
     });
     expect(fixture.pipelineLabels).toEqual([
@@ -178,6 +178,10 @@ describe('ST-U7 joint pipeline creation (addendum section 4.5)', () => {
       'vector-studio/p3-mesh-fill-4x',
       'vector-studio/p3-mesh-joint-4x',
       'vector-studio/p3-mesh-stencil-reset-4x',
+      'vector-studio/e39-mesh-stencil-winding-bgra8unorm-4x',
+      'vector-studio/e39-mesh-stencil-union-bgra8unorm-4x',
+      'vector-studio/p3-mesh-cover-nonzero-4x',
+      'vector-studio/p3-mesh-cover-evenodd-4x',
     ]);
     const joint = fixture.descriptors.find((descriptor) => descriptor.label?.includes('joint'))!;
     const fill = fixture.descriptors.find((descriptor) => descriptor.label?.includes('mesh-fill'))!;
@@ -198,7 +202,7 @@ describe('ST-U7 joint pipeline creation (addendum section 4.5)', () => {
       'p3-mesh-fill-v0',
       'p3-mesh-joint-v0',
     ]);
-    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(4);
+    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(8);
     creation.dispose();
     expect(accounting.snapshot().live).toBe(0);
   });
