@@ -86,6 +86,8 @@ async function start() {
   service = new PrimitiveRendererService(backend, {
     fillMesh: await createFillMeshPort(bytes),
     strokeMesh: await createStrokeMeshPort(bytes),
+    // The leak fixture's zero-alpha gradient needs gradient paints (E23).
+    paints: 'gradient',
   });
   backend.attachPrimitiveFrameSource(service);
   const result = await backend.initialize({
