@@ -66,7 +66,7 @@ describe('AL-S2 configuration', () => {
     expect(configHash(config.native)).toBe(
       '0bc8c556a6999a9f138f2ec1db158c6daf4229b14df0775e69ad1e02bea7e47f',
     );
-    expect(config.operation.id).toBe('geometry-wasm/fill-v0+r5');
+    expect(config.operation.id).toBe('geometry-wasm/fill-v0+r6');
     expect(config.sampling).toMatchObject({ repetitions: 5, warmup: 3, timed: 20, calls: 100 });
     expect(config.sampling.onePath).toEqual({ cells: largestCells(), path: 0, calls: 1000 });
     expect(largestCells()).toEqual(['P2/s=16', 'P4/s=16', 'P8/s=8']);
@@ -210,7 +210,7 @@ function nativeOutputs(profile: 'functional' | 'reference'): RatioOutput[] {
     return {
       kind: 'ratio',
       repetition,
-      revision: 5,
+      revision: 6,
       clockQuantumNs: 100,
       calls: config.calls,
       onePathCalls: config.onePath.calls,
@@ -255,7 +255,7 @@ function captureFor(
     options: { ...pageOptions(config, wasmSha256), repetition },
     wasmSha256,
     corpusSha256: CORPUS_SHA256,
-    adapter: { operationId: 'geometry-wasm/fill-v0+r5', portVersion: 0 },
+    adapter: { operationId: 'geometry-wasm/fill-v0+r6', portVersion: 0 },
     crossOriginIsolated: true,
     clockProbe: {
       attempts: 10,

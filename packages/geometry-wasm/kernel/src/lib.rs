@@ -299,6 +299,13 @@ mod allocation_test_support {
             ENABLED.with(|enabled| {
                 if enabled.get() {
                     COUNT.with(|count| count.set(count.get() + 1));
+                    enabled.set(false);
+                    eprintln!(
+                        "ALLOC {} {}",
+                        layout.size(),
+                        std::backtrace::Backtrace::force_capture()
+                    );
+                    enabled.set(true);
                 }
             });
             // SAFETY: forwards the allocator contract unchanged to System.
@@ -537,3 +544,9 @@ mod stroke_band_tests;
 mod stroke_merge;
 #[cfg(test)]
 mod stroke_merge_tests;
+
+// D9 E38 (docs/plans/d9-e38-robust-path-rung-contract.md): the robust last rung of the fill and
+// stroke exports. Declared at the end of the file so that no existing line moves.
+#[cfg(test)]
+mod e38_robust_rung_tests;
+mod robust_mesh;

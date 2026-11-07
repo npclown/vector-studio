@@ -16,9 +16,9 @@ use crate::stroke_outline::{
 };
 use crate::stroke_outline_tests::{request, PathSpec};
 
-const CASES: [&str; 6] = ["node5", "node3a", "node3b", "node7", "node6", "triangle"];
+pub(crate) const CASES: [&str; 6] = ["node5", "node3a", "node3b", "node7", "node6", "triangle"];
 
-fn case(name: &str) -> PathSpec {
+pub(crate) fn case(name: &str) -> PathSpec {
     match name {
         "node5" => PathSpec::new()
             .m(339.20001220703125, 99.19999694824219)

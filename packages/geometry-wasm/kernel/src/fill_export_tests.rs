@@ -445,8 +445,8 @@ fn runtime_limits_equal_the_native_test_limits() {
         assert!(runtime >= test);
     }
     assert_eq!(FILL_V0_VERSION, 0);
-    // E14-U2 (2026-11-07): `fill-v0+r5`.
-    assert_eq!(FILL_V0_REVISION, 5);
+    // E38 (2026-11-07): `fill-v0+r6`.
+    assert_eq!(FILL_V0_REVISION, 6);
     assert_eq!(FILL_INPUT_MAGIC.to_le_bytes(), *b"VGF0");
     assert_eq!(FILL_OUTPUT_MAGIC.to_le_bytes(), *b"VGM0");
     let (slots, split, bytes) = FillEngine::scratch_sizes().unwrap();
@@ -2534,5 +2534,46 @@ fn e8_f6_output_bytes_equal_the_merge_base() {
             output_digest,
             "E8-F6 output at e = {exponent}"
         );
+    }
+}
+
+/// D9 E38 (`docs/plans/d9-e38-robust-path-rung-contract.md`): through the export, a path that the
+/// exact ladder gives up on (E14-U2's `x_f7` and the user's node-7 at `e = -3`) draws through the
+/// robust rung, with no boundary edges, no allocation and no storage move; without the rung it
+/// stays `work-limit`.
+#[test]
+fn e38_robust_rung_through_the_export() {
+    use crate::e14u2_fill_large_tier_tests::x_f7;
+    use crate::e38_robust_rung_tests::user_node7;
+    use crate::stroke_outline_tests::PathSpec;
+    let test_path = |id: u32, path: PathSpec, exponent: i32| TestPath {
+        id,
+        rule: NONZERO,
+        exponent,
+        verbs: path.verbs,
+        points: path.points,
+    };
+    let paths = [test_path(0, x_f7(), -4), test_path(1, user_node7(), -3)];
+    let input = pack(&paths);
+    for robust in [false, true] {
+        let mut engine = FillEngine::new();
+        engine.hooks().robust = robust;
+        load(&mut engine, &input, 1 << 22);
+        let storage = engine.storage();
+        engine.input_bytes_mut()[..input.len()].copy_from_slice(&input);
+        crate::allocation_test_support::start();
+        let status = engine.process(input.len() as u32);
+        let allocations = crate::allocation_test_support::stop();
+        assert_eq!((status, allocations), (BATCH_OK, 0));
+        assert_eq!(engine.storage(), storage);
+        for mesh in decode(engine.output_bytes(), &paths) {
+            if robust {
+                assert_eq!(mesh.status, FILL_PATH_OK, "path {}", mesh.id);
+                assert!(!mesh.indices.is_empty());
+                assert!(mesh.boundary.is_empty());
+            } else {
+                assert_eq!(mesh.status, FILL_PATH_WORK_LIMIT, "path {}", mesh.id);
+            }
+        }
     }
 }

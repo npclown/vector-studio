@@ -60,7 +60,7 @@ describe('P3 Alt-A1 AL-S1 configuration (section 5.3)', () => {
     const config = scenarioConfig('reference');
     expect(config.scenario).toEqual({ id: 'p3-fill-ladder', version: 1 });
     expect(config.runner).toBe('p3-fill-ladder-runner/1');
-    expect(config.operation).toMatchObject({ id: 'geometry-wasm/fill-v0+r5', revision: 5 });
+    expect(config.operation).toMatchObject({ id: 'geometry-wasm/fill-v0+r6', revision: 6 });
     expect(config.cells).toEqual(b0ScenarioConfig('reference').cells);
     expect(config.decision).toEqual(b0ScenarioConfig('reference').decision);
     expect(config.decision.wasmFactor).toBe(2);
@@ -116,7 +116,7 @@ describe('P3 Alt-A1 AL-S1 configuration (section 5.3)', () => {
 
 function syntheticOracle(): LadderOracleResults {
   return {
-    dump: { sha256: '0', bytes: 1, entries: 1, revision: 5 },
+    dump: { sha256: '0', bytes: 1, entries: 1, revision: 6 },
     gates: Object.fromEntries(
       ORACLE_GATES.map((id) => [id, { checked: 1, failures: [] }]),
     ) as unknown as LadderOracleResults['gates'],
@@ -144,7 +144,7 @@ function syntheticRecord(
     (_, repetition) => ({
       kind: 'decision',
       repetition,
-      revision: 5,
+      revision: 6,
       clockQuantumNs: 1,
       engine: { inlineBytes: 1, heapBytes: 1 },
       admission: decision.map((cell) => ({
@@ -435,7 +435,7 @@ function syntheticRatio(repetition: number): RatioOutput {
   return {
     kind: 'ratio',
     repetition,
-    revision: 5,
+    revision: 6,
     clockQuantumNs: 100,
     calls: config.calls,
     onePathCalls: config.onePath.calls,
@@ -544,7 +544,7 @@ describe('P3 Alt-A1 AL-S1 harness on the B0 corpus (AL-A13)', () => {
       P3_B0_LIN_TIMED: '1',
     });
     const decision = JSON.parse(readFileSync(output, 'utf8')) as LadderDecisionOutput;
-    expect(decision.revision).toBe(5);
+    expect(decision.revision).toBe(6);
     expect(decision.admission).toHaveLength(34);
     const paths = decision.admission.flatMap((cell) => cell.paths);
     expect(paths).toHaveLength(430);

@@ -767,7 +767,7 @@ describe('V3a failure classes, memo and notices', () => {
     expect(PATH_MESH_LIMITS.memoCapacity).toBe(4_096);
   });
 
-  it('V3-A8: a fringe-unsupported variant keeps the mesh cached and a different f prime retries', () => {
+  it('V3-A8: a fringe-unsupported variant keeps the mesh cached, draws region-only (E38) and a different f prime retries', () => {
     const built: number[] = [];
     const builder: PathFringeBuilder = (_mesh, f) => {
       built.push(f);
@@ -777,11 +777,13 @@ describe('V3a failure classes, memo and notices', () => {
     };
     const port = createCountingPort();
     const h = createPathHarness({ port, nodes: [pathNode('a', 0)], fringeBuilder: builder });
-    expect(h.prepare()).toEqual({
-      draws: [],
-      notices: [notice('a', 'renderer', 'fringe-unsupported', -3)],
-    });
-    expect(h.prepare()).toEqual({ draws: [], notices: [] });
+    // E38: the path is drawn without its fringe instead of hidden; the notice stays.
+    const first = h.prepare();
+    expect(first.draws.map((draw) => [draw.nodeId, draw.fringe])).toEqual([['a', null]]);
+    expect(first.notices).toEqual([notice('a', 'renderer', 'fringe-unsupported', -3)]);
+    const second = h.prepare();
+    expect(second.draws.map((draw) => [draw.nodeId, draw.fringe])).toEqual([['a', null]]);
+    expect(second.notices).toEqual([]);
     expect(built).toEqual([1]);
     expect(h.statistics()).toMatchObject({ entries: 1, bytes: 152 });
     h.setZoom(0.5);

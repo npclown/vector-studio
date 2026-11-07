@@ -535,7 +535,9 @@ describe('ST-U7 overlay cache, accounting and failures (addendum section 4.6)', 
     ]) {
       const over = run(limits);
       const first = over.prepare();
-      expect(first.draws.map((draw) => draw.nodeId)).toEqual(['f']);
+      // E38 (2026-11-07): overlay-unsupported no longer hides the path; its plain fill and
+      // stroke draw (without the joint overlay), and the notice stays.
+      expect(first.draws.map((draw) => draw.nodeId)).toEqual(['a', 'a', 'f']);
       expect(first.notices).toEqual([
         {
           nodeId: 'a',
@@ -551,7 +553,7 @@ describe('ST-U7 overlay cache, accounting and failures (addendum section 4.6)', 
       expect(over.shape()).toEqual(['a:fill', 'a:stroke', 'f:fill']);
       over.replace([strokedNode('a', 0, { opacity: 0.25 }), pathNode('f', 20)]);
       const again = over.prepare();
-      expect(again.draws.map((draw) => draw.nodeId)).toEqual(['f']);
+      expect(again.draws.map((draw) => draw.nodeId)).toEqual(['a', 'a', 'f']);
       expect(again.notices).toEqual([]);
       expect(over.pipeline.getOverlayBuildCount()).toBe(1);
       // Both cached meshes stay.
@@ -569,7 +571,7 @@ describe('ST-U7 overlay cache, accounting and failures (addendum section 4.6)', 
         },
         3,
       ).message,
-    ).toBe('Path a is not drawn (renderer overlay-unsupported).');
+    ).toBe('Path a is drawn without its joint coverage (renderer overlay-unsupported).');
   });
 
   it('ST-A15: the pipeline overlay equals the builder output for the served variant pair', () => {

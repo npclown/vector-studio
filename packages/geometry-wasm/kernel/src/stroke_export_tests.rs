@@ -508,7 +508,7 @@ fn assert_area(mesh: &Decoded, expected: f64, tolerance: f64, name: &str) {
 #[test]
 fn identity_constants_match_section_7_1() {
     assert_eq!(STROKE_V0_VERSION, 0);
-    assert_eq!(STROKE_V0_REVISION, 8);
+    assert_eq!(STROKE_V0_REVISION, 9);
     assert_eq!(STROKE_INPUT_MAGIC, 0x3054_4756);
     assert_eq!(STROKE_OUTPUT_MAGIC, 0x3055_4756);
     assert_eq!(STROKE_INPUT_MAGIC.to_le_bytes(), *b"VGT0");
@@ -1276,4 +1276,36 @@ fn former_interim_cubics_are_ok_through_the_export() {
         .m(0.0, 0.0)
         .c([1.0, 1.0, 0.0, 1.0, 1.0, 0.0]);
     assert_eq!(status_of(interim), STROKE_PATH_OK);
+}
+
+/// D9 E38: through the export, the user's node-7 (2026-11-07) at `e = -3` is a robust mesh
+/// (no boundary pairs), and `process` neither allocates nor moves storage.
+#[test]
+fn e38_robust_rung_through_the_export() {
+    let spec = crate::e38_robust_rung_tests::user_node7();
+    let mut path = TestPath::new(1);
+    path.width = 1.0;
+    path.verbs = spec.verbs.clone();
+    path.points = spec.points.clone();
+    let paths = [path];
+    let input = pack(&paths);
+    for robust in [false, true] {
+        let mut engine = StrokeEngine::new();
+        engine.hooks().robust = robust;
+        load(&mut engine, &input, 1 << 22);
+        let storage = engine.storage();
+        crate::allocation_test_support::start();
+        let status = engine.process(input.len() as u32);
+        let allocations = crate::allocation_test_support::stop();
+        assert_eq!((status, allocations), (BATCH_OK, 0));
+        assert_eq!(engine.storage(), storage);
+        let decoded = decode(engine.output_bytes(), &paths);
+        if robust {
+            assert_eq!(decoded[0].status, STROKE_PATH_OK);
+            assert!(decoded[0].indices.len() > 1_000);
+            assert!(decoded[0].boundary.is_empty());
+        } else {
+            assert_eq!(decoded[0].status, STROKE_PATH_WORK_LIMIT);
+        }
+    }
 }

@@ -22,6 +22,7 @@ use crate::fill_ladder::{FastRung, Reason, RungCaps, MAX_FAST_EXPONENT, MIN_FAST
 use crate::fill_predicates::orient2d;
 use crate::geometry::{validate_path, Point, VERB_CLOSE, VERB_CUBIC, VERB_LINE, VERB_MOVE};
 use crate::line_fill::LineFillRule;
+use crate::robust_mesh::RobustStroke;
 use crate::rounded_line_fill::{RoundedFillError, RoundedFillLimits, RoundedFillWorkspace};
 use crate::stroke_cubic::{
     classify_cubic, evaluate, measure_band, measure_leaf, measure_reversal, split_at, split_half,
@@ -467,6 +468,10 @@ pub(crate) struct StrokeDefects {
     /// have no retry.
     #[cfg(test)]
     pub(crate) no_retry: bool,
+    /// Not a defect: E38's robust last rung runs. Production always runs it; in tests it is
+    /// opt-in, so that the exact-rung fixtures keep observing `stroke-v0+r8`'s statuses.
+    #[cfg(test)]
+    pub(crate) robust: bool,
 }
 
 #[cfg(test)]
@@ -502,6 +507,13 @@ impl StrokeDefects {
     defect!(no_band_rule);
     defect!(no_family_b);
     defect!(no_retry);
+}
+
+#[cfg(test)]
+impl StrokeDefects {
+    pub(crate) fn no_robust(self) -> bool {
+        !self.robust
+    }
 }
 
 impl StrokeDefects {
@@ -600,6 +612,11 @@ impl StrokeDefects {
     pub(crate) fn no_retry(self) -> bool {
         false
     }
+
+    #[inline(always)]
+    pub(crate) fn no_robust(self) -> bool {
+        false
+    }
 }
 
 /// Tolerances of one request (section 3), built from exponent bits.
@@ -656,6 +673,8 @@ pub(crate) struct StrokeWorkspace {
     /// E2-K3: the stroke instance of Alt-A1 rung 0, and whether it published the last path.
     rung: FastRung,
     fast_published: bool,
+    /// E38: the robust last rung published the last path (its mesh is `scratch.robust`).
+    robust_published: bool,
     /// E2-K3's outcome on the last path: `None` when it was not tried, otherwise `Ok` or the
     /// fallback reason (`TOO_MANY_POINTS` is `Prefix`). Observational (E2-A7, E2-R2).
     family_b: Option<Result<(), Reason>>,
@@ -764,6 +783,7 @@ impl StrokeWorkspace {
             merge: SeamMerge::reserve()?,
             rung: FastRung::reserve_with(STROKE_RUNG_CAPS)?,
             fast_published: false,
+            robust_published: false,
             family_b: None,
             rounded,
             scratch,
@@ -831,6 +851,9 @@ impl StrokeWorkspace {
 
     /// The published mesh vertices, triangles and boundary pairs after `Mesh`.
     pub(crate) fn mesh(&self) -> Option<MeshView<'_>> {
+        if self.robust_published {
+            return Some(self.scratch.robust.mesh());
+        }
         if self.fast_published {
             let (vertices, _) = self.rung.mesh()?;
             return Some((vertices, self.scratch.triangles(), self.scratch.boundary()));
@@ -896,6 +919,7 @@ impl StrokeWorkspace {
         self.g_off = 0.0;
         self.merge.clear();
         self.fast_published = false;
+        self.robust_published = false;
         self.family_b = None;
         #[cfg(test)]
         {
@@ -907,6 +931,52 @@ impl StrokeWorkspace {
     /// Runs the per-path stage order of section 7.8 for one path. `Err` is a batch
     /// `internal-error`.
     pub(crate) fn build(
+        &mut self,
+        request: StrokeRequest,
+        verbs: &[u8],
+        point_bytes: &[u8],
+    ) -> Result<StrokeOutcome, SelfCheckFailure> {
+        let outcome = self.build_exact(request, verbs, point_bytes)?;
+        let refused = outcome == StrokeOutcome::Status(STROKE_PATH_WORK_LIMIT)
+            || outcome == StrokeOutcome::Status(STROKE_PATH_UNSUPPORTED_GEOMETRY);
+        // The older baselines (`r4` to `r7`) predate the robust rung.
+        let baseline = self.defects.unmerged()
+            || self.defects.no_band_rule()
+            || self.defects.no_family_b()
+            || self.defects.no_retry()
+            || self.defects.no_robust();
+        if !refused || baseline {
+            return Ok(outcome);
+        }
+        // E38: the robust last rung on the same (valid) path; it never refuses.
+        let style = RobustStroke {
+            width: request.width,
+            cap: request.cap,
+            join: request.join,
+            miter_limit: request.miter_limit,
+        };
+        let tol = power_of_two(request.exponent - 1);
+        let drawn = self
+            .scratch
+            .robust
+            .build_stroke(verbs, point_bytes, style, tol);
+        self.fast_published = false;
+        self.robust_published = drawn == Some(true);
+        Ok(match drawn {
+            Some(true) => StrokeOutcome::Mesh,
+            Some(false) => StrokeOutcome::Status(STROKE_PATH_EMPTY),
+            // Beyond the rung's reserved buffers at any tolerance: the exact status.
+            None => outcome,
+        })
+    }
+
+    /// Whether the robust rung published the last path (E38).
+    pub(crate) fn robust_published(&self) -> bool {
+        self.robust_published
+    }
+
+    /// The exact rungs (`stroke-v0+r8`): the build, and after a `work-limit` the E35 retry.
+    fn build_exact(
         &mut self,
         request: StrokeRequest,
         verbs: &[u8],
@@ -926,7 +996,7 @@ impl StrokeWorkspace {
         let retried = self.build_once(request, verbs, point_bytes);
         self.fan_mode = false;
         // The retry only ever adds a mesh: any other answer keeps the first build's
-        // `work-limit`, so the renderer's coarser retry still sees it.
+        // `work-limit`.
         match retried {
             Ok(StrokeOutcome::Mesh) | Ok(StrokeOutcome::Status(STROKE_PATH_EMPTY)) => retried,
             _ => Ok(outcome),

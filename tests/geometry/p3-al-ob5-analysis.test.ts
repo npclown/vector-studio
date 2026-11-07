@@ -150,7 +150,7 @@ function capture(profile: Profile, repetition: number, shape: Shape): Ob5Capture
     options: { ...pageOptions(config, WASM), repetition },
     wasmSha256: WASM,
     corpusSha256: OB5_CORPUS_SHA256,
-    adapter: { operationId: 'geometry-wasm/fill-v0+r5', portVersion: 0 },
+    adapter: { operationId: 'geometry-wasm/fill-v0+r6', portVersion: 0 },
     crossOriginIsolated: true,
     clockProbe: {
       attempts: 10,
@@ -187,7 +187,7 @@ function nativeOutput(profile: Profile, repetition: number): NativeOutput {
   return {
     kind: 'ob5-native',
     repetition,
-    revision: 5,
+    revision: 6,
     clockQuantumNs: 100,
     corpus: { bytes: CORPUS.bytes, fnv: CORPUS.fnv },
     setOrder: order,
@@ -237,7 +237,7 @@ function oracle(profile: Profile): MutableRecord['oracle'] {
   const passing = (checked: number) => ({ checked, failures: [] as string[] });
   const entries = oracleNames(profile).length;
   return {
-    dump: { sha256: 'cd'.repeat(32), bytes: 1, entries, revision: 5 },
+    dump: { sha256: 'cd'.repeat(32), bytes: 1, entries, revision: 6 },
     gates: {
       'SL-O1': passing(entries),
       'SL-O2': passing(entries),
