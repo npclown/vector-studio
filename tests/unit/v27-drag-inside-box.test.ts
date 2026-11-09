@@ -173,4 +173,69 @@ describe('V-27 drag inside the selection box', () => {
     expect(frameOf(target, group)).toEqual(before);
     expect(frameOf(target, copy!).x).toBeCloseTo(before.x + 20, 9);
   });
+  it('is one undo step, and one undo restores the frames', () => {
+    const target = editor();
+    const a = rect(target, 0, 0);
+    const b = rect(target, 80, 80);
+    ok(target, { type: 'setSelection', ids: [a, b] });
+    const depth = target.query({ type: 'history' }).undoDepth;
+    drag(target, [50, 50], [60, 60]);
+    expect(target.query({ type: 'history' }).undoDepth).toBe(depth + 1);
+    ok(target, { type: 'undo' });
+    expect(frameOf(target, a)).toMatchObject({ x: 0, y: 0 });
+    expect(frameOf(target, b)).toMatchObject({ x: 80, y: 80 });
+  });
+
+  it.each([
+    ['Escape', { type: 'input', event: { kind: 'keydown', key: 'Escape', modifiers: none } }],
+    ['pointercancel', { type: 'input', event: { kind: 'pointercancel', modifiers: none } }],
+  ] as const)('%s cancels the move and the Alt-drag', (_, cancel) => {
+    for (const modifiers of [none, { ...none, alt: true }]) {
+      const target = editor();
+      const { group } = grouped(target);
+      const before = target.query({ type: 'document' });
+      pointer(target, 'pointerdown', 50, 50, modifiers);
+      pointer(target, 'pointermove', 60, 60, modifiers);
+      ok(target, cancel);
+      expect(target.query({ type: 'document' })).toBe(before);
+      expect(selectionOf(target)).toEqual([group]);
+    }
+  });
+
+  it('a resize handle inside reach still wins over the box', () => {
+    const target = editor();
+    const a = rect(target, 0, 0);
+    const b = rect(target, 80, 80);
+    ok(target, { type: 'setSelection', ids: [a, b] });
+    // The right edge's middle handle at (100, 50): empty canvas just inside the box.
+    drag(target, [99, 50], [119, 50]);
+    expect(selectionOf(target)).toEqual([a, b]);
+    expect(frameOf(target, a).x).toBe(0);
+    expect(frameOf(target, b).x + frameOf(target, b).width).toBeCloseTo(120, 9);
+  });
+
+  it('a drag on the background of the artboard holding the selection moves the selection', () => {
+    const target = editor();
+    const [frame] = ok(target, {
+      type: 'createFrame',
+      frame: { x: -100, y: -100, width: 400, height: 400 },
+      fill: { r: 1, g: 1, b: 1, a: 1 },
+    });
+    const a = rect(target, 0, 0);
+    const b = rect(target, 80, 80);
+    ok(target, { type: 'moveNodes', ids: [a, b], parent: frame!, index: 0 });
+    ok(target, { type: 'setSelection', ids: [a, b] });
+    const before = target.query({ type: 'handles' })!.corners[0];
+    drag(target, [50, 50], [60, 50]);
+    expect(selectionOf(target)).toEqual([a, b]);
+    expect(frameOf(target, frame!)).toMatchObject({ x: -100, y: -100 });
+    expect(target.query({ type: 'handles' })!.corners[0]).toEqual({
+      x: before.x + 10,
+      y: before.y,
+    });
+    // A click there still selects the artboard.
+    pointer(target, 'pointerdown', 50, 50);
+    pointer(target, 'pointerup', 50, 50);
+    expect(selectionOf(target)).toEqual([frame]);
+  });
 });

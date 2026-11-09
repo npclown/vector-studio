@@ -1334,15 +1334,22 @@ export function createSelectTool(
     // V-27 (Figma): a drag from no node strictly inside the handle box moves the selection, and
     // an Alt-drag duplicates it, instead of starting a marquee; the scope stays. A click there
     // still acts as one on empty canvas (it clears the selection and may leave the scope), and
-    // Shift still starts an additive marquee.
+    // Shift still starts an additive marquee. A press on an unselected container of the whole
+    // selection (an artboard's background, for example) drags the selection the same way, and
+    // a click there still selects that container.
     const empty = hit === null || target === null;
-    if (
-      empty &&
+    const inBox =
       handles !== null &&
       selection.length > 0 &&
       !event.modifiers.shift &&
-      insideHandles(handles, event.point)
-    ) {
+      insideHandles(handles, event.point);
+    const container =
+      inBox && !empty && !selection.includes(hit) && containsAll(document, hit, selection);
+    if (container && !event.modifiers.alt) {
+      beginMove(event, context, hit, leaves);
+      return;
+    }
+    if (empty && inBox) {
       if (event.modifiers.alt) {
         if (context.gesture.begin()) {
           const bounds = boundsOf(document, selection);
@@ -1379,7 +1386,7 @@ export function createSelectTool(
       // Alt-drag: the selection and scope changes wait for the first movement or the release
       // (sections 4.3 and 5).
       if (context.gesture.begin()) {
-        const moveSet = selection.includes(hit) ? selection : [hit];
+        const moveSet = selection.includes(hit) || container ? selection : [hit];
         const bounds = boundsOf(document, moveSet);
         state = {
           kind: 'duplicate',
@@ -1729,6 +1736,12 @@ export function createSelectTool(
     context.snap(overlay);
   }
 
+  /** Whether `container` is an ancestor of every node of `ids` (V-27). */
+  function containsAll(document: DocumentV6, container: string, ids: readonly string[]): boolean {
+    const tree = documentTree(document);
+    return ids.every((id) => isAncestor(tree, container, id));
+  }
+
   /** A click on empty canvas: leaves the scope when `leaves`, then clears the selection. */
   function emptyClick(leaves: boolean, context: ToolContext): void {
     if (leaves) context.execute({ type: 'setScope', id: null });
@@ -1789,8 +1802,12 @@ export function createSelectTool(
       // A click without movement selects the target hit, even inside a larger selection; on
       // empty space inside the box (V-27) it acts as a click on empty canvas.
       if (current.kind === 'move' && !current.moved) {
-        if (current.hit !== null) context.execute({ type: 'setSelection', ids: [current.hit] });
-        else emptyClick(current.leaves, context);
+        if (current.hit === null) emptyClick(current.leaves, context);
+        else {
+          // A click on a container of the selection (V-27) applies its deferred scope change.
+          if (current.leaves) context.execute({ type: 'setScope', id: null });
+          context.execute({ type: 'setSelection', ids: [current.hit] });
+        }
       }
       if (current.kind === 'duplicate' && current.inBox) {
         // A drag keeps the scope, which holds the selection; a click acts as on empty canvas.
