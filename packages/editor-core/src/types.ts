@@ -1,7 +1,12 @@
 import type {
+  PathStroke,
   RenderCamera,
   RendererSceneSynchronization,
+  SceneAffine,
+  SceneClip,
+  ScenePaint,
   ScenePathGeometry,
+  SceneTextRun,
   SceneRejectionReason,
   TextLayoutResult,
 } from '@vector-studio/contracts';
@@ -721,7 +726,14 @@ export type Query =
    * The registered extensions (MVP M8 contract, M8-X1): a frozen list of `ExtensionSummary`
    * sorted by extension ID. It raises no event and is the same value for the editor's lifetime.
    */
-  | Readonly<{ type: 'extensions' }>;
+  | Readonly<{ type: 'extensions' }>
+  /**
+   * The export scene of `ids` on the active page, or of its top-level nodes when `ids` is
+   * omitted, or null when nothing would draw (V-30 export contract, V30-S1 to S4).
+   */
+  | Readonly<{ type: 'exportScene'; ids?: readonly string[] }>
+  /** The SVG text of the same export, or null (V30-S5). */
+  | Readonly<{ type: 'exportSvg'; ids?: readonly string[] }>;
 
 /**
  * What one registered extension contributes (MVP M8 contract, M8-X1), as the `extensions` query
@@ -769,6 +781,33 @@ export type SelectionHandles = Readonly<{
   content: Frame | null;
 }>;
 
+/**
+ * One node of an export scene (V-30 export contract, V30-S3): a container, a path (primitives
+ * are turned into their outline paths) or text. `transform` is parent-local, page-space for a
+ * root. Nodes with `visible: false` are not in the scene, except a mask source, which only clips.
+ */
+export type ExportNode = Readonly<{ id: string; transform: SceneAffine; opacity: number }> &
+  (
+    | Readonly<{ kind: 'container'; children: readonly string[]; clip: SceneClip }>
+    | Readonly<{
+        kind: 'path';
+        geometry: ScenePathGeometry;
+        fill: ScenePaint | null;
+        stroke: PathStroke | null;
+      }>
+    | Readonly<{ kind: 'text'; lang: string; runs: readonly SceneTextRun[] }>
+  );
+
+/** What an export draws (V30-S1 to S4). */
+export type ExportScene = Readonly<{
+  /** Page space, whole units, at least 1 × 1 (V30-S4); content outside it is cut off. */
+  bounds: Frame;
+  /** Every node of the roots' subtrees, by scene ID; a container's children name them. */
+  nodes: ReadonlyMap<string, ExportNode>;
+  /** The roots in paint order, back to front. */
+  rootOrder: readonly string[];
+}>;
+
 export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'committedDocument' }
   ? DocumentV6
   : Q extends { type: 'node' }
@@ -813,7 +852,11 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'commi
                                           ? TextEditOverlay | null
                                           : Q extends { type: 'extensions' }
                                             ? readonly ExtensionSummary[]
-                                            : number;
+                                            : Q extends { type: 'exportScene' }
+                                              ? ExportScene | null
+                                              : Q extends { type: 'exportSvg' }
+                                                ? string | null
+                                                : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';

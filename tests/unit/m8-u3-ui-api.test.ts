@@ -30,6 +30,8 @@ const OWN_VALUES = [
   'CanvasContextMenu',
   'EditorPanels',
   'EditorToolbar',
+  // V-30 (export).
+  'ExportPanel',
   'LayerTree',
   'PageList',
   'PanelBoundary',

@@ -51,6 +51,7 @@
     "test:m6c-observe": "playwright test --config playwright.m6c-observe.config.ts",
     "test:m7-next-host": "playwright test --config playwright.m7-next-host.config.ts",
     "test:m8-next-host": "playwright test --config playwright.m8-next-host.config.ts",
+    "test:v30-export": "playwright test --config playwright.v30-export.config.ts",
     "test:e26": "playwright test --config playwright.e26.config.ts",
     "test:v20-count": "playwright test --config playwright.v20-count.config.ts",
     "test:v21-count": "playwright test --config playwright.v21-count.config.ts",
