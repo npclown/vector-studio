@@ -28,6 +28,7 @@ import {
   E25_LAYER_TILE_SIZE,
   E28_ATLAS_PAGES_MAX,
   E28_ATLAS_PAGE_SIZE,
+  E41_LAYER_REACH_MAX,
   E41_SIGMA_PX_MAX,
   maskTileSet,
 } from '@vector-studio/renderer-core';
@@ -223,11 +224,6 @@ const RESOURCE_STRIDES: Readonly<Record<PrimitiveResourceId, number>> = Object.f
   frame: PRIMITIVE_FRAME_SIZE,
 });
 const STORAGE_BUFFER_USAGE = 0x80;
-/**
- * E41 U5b: how far a shifted layer's origin may be from the target's, in pixels. Its vertex
- * stages subtract the origin in binary32, which stays exact to a 1/64 pixel up to 2^17.
- */
-const SHIFTED_LAYER_REACH_MAX = 1 << 17;
 const UNIFORM_BUFFER_USAGE = 0x40;
 const COPY_DESTINATION_USAGE = 0x08;
 const VERTEX_BUFFER_USAGE = 0x20;
@@ -2724,8 +2720,10 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         (free
           ? bound.width > maximum ||
             bound.height > maximum ||
-            Math.abs(bound.x) > SHIFTED_LAYER_REACH_MAX ||
-            Math.abs(bound.y) > SHIFTED_LAYER_REACH_MAX
+            bound.x < -E41_LAYER_REACH_MAX ||
+            bound.y < -E41_LAYER_REACH_MAX ||
+            bound.x + bound.width > target.width + E41_LAYER_REACH_MAX ||
+            bound.y + bound.height > target.height + E41_LAYER_REACH_MAX
           : bound.x + bound.width > target.width || bound.y + bound.height > target.height) ||
         !Number.isSafeInteger(layer.parent) ||
         !(layer.parent === -1 || (layer.parent > index && layer.parent < count))

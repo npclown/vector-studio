@@ -47,6 +47,7 @@ export type { DeviceRect, LayerResourceNotice } from './layer-plan.js';
 export {
   E41_BLUR_LEVELS_MAX,
   E41_BLUR_TAPS_MAX,
+  E41_LAYER_REACH_MAX,
   E41_SIGMA_PX_MAX,
   blurLevels,
   effectResourceLimitDiagnostic,

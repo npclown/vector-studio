@@ -81,7 +81,7 @@ function prepare(nodes: readonly RenderNodeSnapshot[], target: PrimitiveTarget):
     identity,
     revision: 1,
     nodes,
-    rootOrder: nodes.map((node) => node.id),
+    rootOrder: nodes.filter((node) => node.parentId === null).map((node) => node.id),
   });
   expect(result.status).toBe('applied');
   return new PrimitiveSceneSource(mirror).prepare(target) as PrimitivePacket;
@@ -420,6 +420,61 @@ describe('E41 U5 effect passes in a frame', () => {
       'vector-studio/e25-layer-composite-4x',
     ]);
     expect(scene.effectPasses).toBe(1);
+  });
+
+  it('composites a layer inside a root, and a root inside a root, with the shifted set', async () => {
+    const fixture = nativeFixture();
+    const { scene, target } = await nativeScene(fixture, withEffects);
+    const group = (
+      id: string,
+      parentId: string | null,
+      children: readonly string[],
+      extra: Partial<{ effects: readonly SceneEffect[]; opacity: number }>,
+    ): RenderNodeSnapshot => ({
+      id,
+      parentId,
+      transform: [1, 0, 0, 1, 0, 0],
+      visible: true,
+      opacity: extra.opacity ?? 1,
+      kind: 'container',
+      clip: null,
+      children,
+      ...(extra.effects === undefined ? {} : { effects: extra.effects }),
+    });
+    const nodes: RenderNodeSnapshot[] = [
+      group('card', null, ['a', 'inner', 'leaf'], { effects: [shadow(70, 0, 2)] }),
+      { ...box('a', -50, { size: [60, 40] }), parentId: 'card' },
+      group('inner', 'card', ['b'], { opacity: 0.5 }),
+      { ...box('b', -40, { size: [30, 30] }), parentId: 'inner' },
+      { ...box('leaf', -30, { size: [20, 20], effects: [shadow(6, 0, 1)] }), parentId: 'card' },
+    ];
+    const packet = prepare(nodes, { ...target, offTargetEffectLayers: true });
+    const layers = packet.layers!.layers;
+    const index = (id: string) => layers.findIndex((layer) => layer.nodeId === id);
+    const card = layers[index('card')]!;
+    const leaf = layers[index('leaf')]!;
+    expect(layers[index('inner')]!.bound.x).toBeLessThan(0);
+    expect(leaf.bound.x).toBeLessThan(0);
+    fixture.calls.length = 0;
+    submitted(scene.submitPrimitivePacket(packet));
+    const calls = outline(fixture.calls);
+    // The card's tile pass composites its children with the shifted composite.
+    const cardPass = calls.findIndex(
+      (call) =>
+        call[0] === 'beginRenderPass' && call[1] === `vector-studio/layer-pass/${index('card')}`,
+    );
+    const end = calls.findIndex((call, at) => at > cardPass && call[0] === 'copyTextureToTexture');
+    const inCard = calls.slice(cardPass, end).filter((call) => call[0] === 'setPipeline');
+    expect(
+      inCard.filter((call) => call[1] === 'vector-studio/e25-layer-composite-4x+shift-v0'),
+    ).toHaveLength(2);
+    expect(inCard.map((call) => call[1])).not.toContain('vector-studio/e25-layer-composite-4x');
+    // The nested root's R stays inside the card's bound, past the target.
+    const result = fixture.textures.find(
+      (texture) => texture.label === `${frame}/effect-result-${index('leaf')}`,
+    )!;
+    expect(result.width).toBeLessThanOrEqual(card.bound.width);
+    expect(scene.effectPasses).toBe(2);
   });
 
   it('refuses a layer past the target that is not in an effect root', async () => {

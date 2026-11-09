@@ -18,6 +18,13 @@ import type { SceneBounds } from './scene-numeric.js';
 
 /** E41-K4: `σ_px` is clamped to this. */
 export const E41_SIGMA_PX_MAX = 256;
+
+/**
+ * E41 U5b: how far past the target an effect layer's bound may reach, in device pixels, on
+ * every side. The shifted layer variants subtract the tile origin in binary32, which stays
+ * exact to a 1/32 pixel within this reach of a target up to 4096 pixels wide.
+ */
+export const E41_LAYER_REACH_MAX = 1 << 17;
 /** E41-K4: taps per side of one blur pass. */
 export const E41_BLUR_TAPS_MAX = 32;
 /** E41-K4: downsample levels at most, so `σ_px ≤ 341` before the clamp. */

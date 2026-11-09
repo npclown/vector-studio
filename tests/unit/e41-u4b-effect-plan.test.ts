@@ -23,6 +23,7 @@ import type {
   PrimitivePacket,
   PrimitiveTarget,
 } from '../../packages/renderer-core/src/primitive-packet.js';
+import { E41_LAYER_REACH_MAX } from '../../packages/renderer-core/src/effect-plan.js';
 import { PrimitiveRendererService } from '../../packages/renderer-core/src/primitive-renderer-service.js';
 import { PrimitiveSceneSource } from '../../packages/renderer-core/src/primitive-scene-source.js';
 import { RetainedSceneMirror } from '../../packages/renderer-core/src/scene-mirror.js';
@@ -486,6 +487,23 @@ describe('E41 section 5.2 effect roots in the packet', () => {
     expect(of(free, 'inner').bound.x).toBeLessThan(-24);
     expect(of(free, 'inner').bound.x).toBeGreaterThanOrEqual(of(free, 'card').bound.x);
     expect(of(free, 'plain').bound.x).toBe(0);
+  });
+
+  it('stops an unclamped bound at the layer reach (a far caster draws without its shadow)', () => {
+    // DPR 16: the caster sits 160,000 device pixels left of the target, its shadow on it.
+    const far: PrimitiveTarget = { ...target, devicePixelRatio: 16, offTargetEffectLayers: true };
+    const { source } = setup([
+      box('near', null, 2, { effects: [shadow(4, 0, 1)] }),
+      box('far', null, -10000, { effects: [shadow(10002, 0, 1)] }),
+    ]);
+    const layers = source.prepare(far)!.layers!.layers;
+    for (const layer of layers) {
+      expect(layer.bound.x).toBeGreaterThanOrEqual(-E41_LAYER_REACH_MAX);
+      expect(layer.bound.x + layer.bound.width).toBeLessThanOrEqual(
+        far.width + E41_LAYER_REACH_MAX,
+      );
+    }
+    expect(layers.map((layer) => layer.nodeId)).toEqual(['near']);
   });
 
   it('keeps a root that holds a mask group inside the target, even unclamped', () => {
