@@ -22,6 +22,11 @@ export type PrimitiveTarget = Readonly<{
    * asks for the effect pipeline; absent, the source keeps its option's value.
    */
   maxTextureDimension2D?: number;
+  /**
+   * E41 U5b: whether the backend draws an effect root's layer (and the layers inside it) past
+   * the target. Absent or false, those bounds are clamped to the target (U4b's packet).
+   */
+  offTargetEffectLayers?: boolean;
 }>;
 export type PrimitiveRecordVersion = Readonly<{ index: number; version: symbol }>;
 export type PrimitiveResource = Readonly<{

@@ -1633,6 +1633,10 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       ...(this.#effectPipelineRequired && scene.maxTextureDimension2D !== undefined
         ? { maxTextureDimension2D: scene.maxTextureDimension2D }
         : {}),
+      // E41 U5b: effect layers may reach past the target once the shifted variants exist.
+      ...(this.#effectPipelineRequired && scene.effectPipelineAvailable
+        ? { offTargetEffectLayers: true }
+        : {}),
     });
   }
 

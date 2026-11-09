@@ -86,17 +86,18 @@ function container(
   id: string,
   children: readonly string[],
   effects: readonly SceneEffect[],
+  extra: Partial<{ parentId: string; opacity: number }> = {},
 ): RenderNodeSnapshot {
   return {
     id,
-    parentId: null,
+    parentId: extra.parentId ?? null,
     transform: [1, 0, 0, 1, 0, 0],
     visible: true,
-    opacity: 1,
+    opacity: extra.opacity ?? 1,
     kind: 'container',
     clip: null,
     children,
-    effects,
+    ...(effects.length === 0 ? {} : { effects }),
   };
 }
 
@@ -107,14 +108,25 @@ type Fixture = Readonly<{
   effects: readonly SceneEffect[];
   /** A leaf root's opacity (c), 1 for a container root. */
   contentOpacity: number;
+  /**
+   * U5b: how far the content capture's camera moves the scene (device pixels), so that `L`'s
+   * part past the target is on the capture too; zero for content inside the target.
+   */
+  shift: readonly [number, number];
 }>;
 
-function fixture(name: string, root: RenderNodeSnapshot, children: RenderNodeSnapshot[] = []) {
+function fixture(
+  name: string,
+  root: RenderNodeSnapshot,
+  children: RenderNodeSnapshot[] = [],
+  shift: readonly [number, number] = [0, 0],
+) {
   return {
     name,
     nodes: [root, ...children],
     effects: root.effects ?? [],
     contentOpacity: root.kind === 'container' ? 1 : root.opacity,
+    shift,
   } satisfies Fixture;
 }
 
@@ -150,6 +162,25 @@ const FIXTURES: readonly Fixture[] = [
       effects: [dropShadow(5.5, 3.25, 0, BLUE)],
     }),
   ),
+  // U5b (F10): casters past the target's edges whose shadows and blur reach into it.
+  fixture(
+    'caster past the left edge',
+    shape('l', null, 'rectangle', [-70, 200, 80, 60], RED, {
+      effects: [dropShadow(90, 4, 6)],
+    }),
+    [],
+    [120, 0],
+  ),
+  fixture(
+    'container past the top edge, nested isolated group, layer blur',
+    container('t', ['t1', 'tg'], [dropShadow(0, 46, 8), layerBlur(4)]),
+    [
+      shape('t1', 't', 'rectangle', [380, -60, 100, 76], AMBER),
+      container('tg', ['t2'], [], { parentId: 't', opacity: 0.5 }),
+      shape('t2', 'tg', 'ellipse', [420, -50, 64, 64], BLUE),
+    ],
+    [0, 120],
+  ),
 ];
 
 function snapshot(nodes: readonly RenderNodeSnapshot[]): RenderSceneSnapshot {
@@ -180,17 +211,22 @@ async function open(page: Page, options: PageOptions) {
   return { ready, pageErrors };
 }
 
-async function render(page: Page, nodes: readonly RenderNodeSnapshot[]) {
+async function render(
+  page: Page,
+  nodes: readonly RenderNodeSnapshot[],
+  camera: RenderCamera = HOME,
+) {
   const result = await page.evaluate(
     ([scene, view]) => window.__vectorStudioE23.render(scene, view),
-    [snapshot(nodes), HOME] as const,
+    [snapshot(nodes), camera] as const,
   );
   expect(result.status).toBe('applied');
   return { result, rgba: decodeFrame(result.frame.rgbaBase64) };
 }
 
+// It reaches past the target on every side, so its edges stay off every capture.
 const backdrop = (width: number, height: number) =>
-  shape('backdrop', null, 'rectangle', [-8, -8, width + 16, height + 16], WHITE);
+  shape('backdrop', null, 'rectangle', [-200, -200, width + 400, height + 400], WHITE);
 
 /** `L` (premultiplied) from captures over black and over white. */
 function contentOf(black: Uint8Array, white: Uint8Array, width: number, height: number) {
@@ -261,9 +297,12 @@ for (const samples of [1, 4] as const) {
       const drawn = await render(effectsPage, fixture.nodes);
       const { width, height } = drawn.result.frame;
       const drawnWhite = await render(effectsPage, [backdrop(width, height), ...fixture.nodes]);
-      const black = await render(contentPage, fixture.nodes);
-      const white = await render(contentPage, [backdrop(width, height), ...fixture.nodes]);
-      const l = contentOf(black.rgba, white.rgba, width, height);
+      // L from a camera that moves it by `shift`, placed back at its own pixels.
+      const [sx, sy] = fixture.shift;
+      const camera: RenderCamera = { position: { x: -sx, y: -sy }, zoom: 1 };
+      const black = await render(contentPage, fixture.nodes, camera);
+      const white = await render(contentPage, [backdrop(width, height), ...fixture.nodes], camera);
+      const l = { ...contentOf(black.rgba, white.rgba, width, height), x: -sx, y: -sy };
       const effect = oracleEffect(fixture);
       const expected = effectOracle(l, { x: 0, y: 0, width, height }, effect);
       const downsampled = [effect.blurSigmaPx ?? 0, ...effect.shadows.map((s) => s.sigmaPx)].some(
