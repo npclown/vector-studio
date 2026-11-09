@@ -55,7 +55,7 @@ const KEY_NAMES: Readonly<Record<string, string>> = Object.freeze({
   Alt: 'Alt',
   Shift: 'Shift',
   Delete: 'Del',
-  Backspace: '⌫',
+  Backspace: 'Backspace',
   Escape: 'Esc',
   Enter: 'Enter',
   Space: 'Space',
@@ -66,18 +66,53 @@ const KEY_NAMES: Readonly<Record<string, string>> = Object.freeze({
 });
 
 /**
- * A canonical chord (the `keymap` query's form, e.g. `Ctrl+Shift+KeyZ`) as a person reads it:
- * `Ctrl+Shift+Z`; `Meta` shows as ⌘. A `+` key token is the chord's last part (`Shift++`).
+ * The key a shifted US-layout character is typed on: the keymap writes `Shift+!` for the key
+ * a person reads as `Shift+1`.
  */
-export function chordLabel(chord: string): string {
+const SHIFTED_KEYS: Readonly<Record<string, string>> = Object.freeze({
+  '!': '1',
+  '@': '2',
+  '#': '3',
+  $: '4',
+  '%': '5',
+  '^': '6',
+  '&': '7',
+  '*': '8',
+  '(': '9',
+  ')': '0',
+  _: '-',
+  '+': '=',
+  '{': '[',
+  '}': ']',
+  '|': '\\',
+  ':': ';',
+  '"': "'",
+  '<': ',',
+  '>': '.',
+  '?': '/',
+  '~': '`',
+});
+
+/**
+ * A canonical chord (the `keymap` query's form, e.g. `Ctrl+Shift+KeyZ`) as a person reads it:
+ * `Ctrl+Shift+Z`; `Meta` shows as ⌘, and with Shift a shifted character shows as the key it is
+ * typed on (`Shift+!` as `Shift+1`, `Ctrl+Shift+}` as `Ctrl+Shift+]`). A `+` key token is the
+ * chord's last part (`Shift++` reads `Shift+=`); with `mac` true Backspace shows as ⌫.
+ */
+export function chordLabel(chord: string, mac = false): string {
   const parts =
     chord === '+'
       ? ['+']
       : chord.endsWith('++')
         ? [...chord.slice(0, -2).split('+'), '+']
         : chord.split('+');
+  const shifted = parts.length > 1 && parts.slice(0, -1).includes('Shift');
   return parts
-    .map((part) => {
+    .map((part, index) => {
+      if (mac && part === 'Backspace') return '⌫';
+      if (shifted && index === parts.length - 1 && SHIFTED_KEYS[part] !== undefined) {
+        return SHIFTED_KEYS[part];
+      }
       const named = KEY_NAMES[part];
       if (named !== undefined) return named;
       const letter = /^Key([A-Z])$/u.exec(part);
@@ -86,6 +121,12 @@ export function chordLabel(chord: string): string {
       return digit === null ? part : digit[1]!;
     })
     .join('+');
+}
+
+/** Whether a keymap is a Mac one: its undo chord uses `Meta` (`Mod` resolves to it). */
+export function macKeymap(bindings: readonly KeyBinding[]): boolean {
+  const undo = bindings.find((binding) => binding.action === 'undo');
+  return undo !== undefined && undo.chord.split('+').includes('Meta');
 }
 
 /** Whether `args` holds every entry of `wanted` (shallow, JSON values compared as text). */
@@ -104,15 +145,22 @@ function argsMatch(
 
 /**
  * The first binding (in the keymap's chord order) of `action` whose args hold `args`, as a
- * label, or null when the action has no chord.
+ * label, or null when the action has no chord. Off a Mac keymap a non-Backspace chord is
+ * preferred, so delete reads `Del` on Windows and ⌫ on a Mac.
  */
 export function shortcutFor(
   bindings: readonly KeyBinding[],
   action: string,
   args: Readonly<Record<string, JsonValue>> = {},
 ): string | null {
-  const binding = bindings.find((entry) => entry.action === action && argsMatch(entry.args, args));
-  return binding === undefined ? null : chordLabel(binding.chord);
+  const matches = bindings.filter(
+    (entry) => entry.action === action && argsMatch(entry.args, args),
+  );
+  const mac = macKeymap(bindings);
+  // Off a Mac, a Backspace chord shows only when the action has no other one (Delete reads Del).
+  const binding =
+    (mac ? undefined : matches.find((entry) => !entry.chord.endsWith('Backspace'))) ?? matches[0];
+  return binding === undefined ? null : chordLabel(binding.chord, mac);
 }
 
 /** A tooltip: the name, then the shortcut in parentheses when there is one. */

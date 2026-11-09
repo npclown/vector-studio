@@ -6,7 +6,7 @@ import type {
   PagePoint,
   SelectionHandles,
 } from '@vector-studio/react';
-import { chordLabel, shortcutFor } from './editor-toolbar-model.js';
+import { chordLabel, macKeymap, shortcutFor } from './editor-toolbar-model.js';
 import { runAction, symbolActions, type ActionButton } from './toolbar-model.js';
 
 // V-25 slice 10 (editor UI usability): the pure parts of `CanvasContextMenu`, the canvas's right
@@ -39,12 +39,6 @@ export type ContextMenuInput = Readonly<{
   point: PagePoint;
 }>;
 
-/** Whether the keymap is a Mac one: its undo chord uses `Meta` (`Mod` resolves to it). */
-function macKeymap(keymap: readonly KeyBinding[]): boolean {
-  const undo = keymap.find((binding) => binding.action === 'undo');
-  return undo !== undefined && undo.chord.split('+').includes('Meta');
-}
-
 /**
  * The chord of the clipboard keymap action `action` when a layer binds it (the built-in
  * `copy`, `cut` and `paste` actions are unbound by default), else the browser's own chord for
@@ -52,7 +46,8 @@ function macKeymap(keymap: readonly KeyBinding[]): boolean {
  */
 function clipboardChord(keymap: readonly KeyBinding[], action: string, key: string): string {
   return (
-    shortcutFor(keymap, action) ?? chordLabel(`${macKeymap(keymap) ? 'Meta' : 'Ctrl'}+Key${key}`)
+    shortcutFor(keymap, action) ??
+    chordLabel(`${macKeymap(keymap) ? 'Meta' : 'Ctrl'}+Key${key}`, macKeymap(keymap))
   );
 }
 
