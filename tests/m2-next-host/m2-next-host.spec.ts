@@ -662,7 +662,8 @@ test('M2-A13 host: zoom controls, snap overlay and the rotate cursor', async ({ 
   await expect(page.getByTestId('snap')).toHaveCount(0);
   expect(await frameOf(page, ids.s1)).toEqual({ x: 380, y: 100, width: 120, height: 120 });
 
-  // Rotate cursor: outside the selected box near a corner, but not over its handle.
+  // Rotate cursor: outside the selected box near a corner; over the corner handle the resize
+  // cursor wins (V-28), as the press resizes there.
   await click(page, await screen(AT.b));
   const host = page.getByTestId('canvas-host');
   const zone = await screen({ x: 328, y: 92 });
@@ -673,7 +674,7 @@ test('M2-A13 host: zoom controls, snap overlay and the rotate cursor', async ({ 
   await expect(host).toHaveAttribute('data-cursor', 'default');
   const handle = await screen({ x: 321, y: 99 });
   await page.mouse.move(handle.x, handle.y);
-  await expect(host).toHaveAttribute('data-cursor', 'default');
+  await expect(host).toHaveAttribute('data-cursor', 'resize');
 
   // A Shift rotation from the zone steps by 15 degrees and shows the snapped angle, with
   // snapping on and, after an undo, with it off (the Shift step is section 4.1's, M2-U3 note 5).

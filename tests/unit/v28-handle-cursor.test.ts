@@ -86,6 +86,43 @@ describe('V-28 handle cursor', () => {
     };
     expect(fold(handleCursorAt(handles, right, 1)!.angle)).toBe(30);
     expect(fold(handleCursorAt(handles, handles.corners[2], 1)!.angle)).toBe(75);
+    // The rotate cursor curls around the corner's outward diagonal, turned too.
+    const [, , br] = handles.corners;
+    const centre = {
+      x: (handles.corners[0].x + br.x) / 2,
+      y: (handles.corners[0].y + br.y) / 2,
+    };
+    const length = Math.hypot(br.x - centre.x, br.y - centre.y);
+    const beyond = {
+      x: br.x + ((br.x - centre.x) / length) * 10,
+      y: br.y + ((br.y - centre.y) / length) * 10,
+    };
+    const rotate = handleCursorAt(handles, beyond, 1)!;
+    expect(rotate.kind).toBe('rotate');
+    expect(fold(rotate.angle)).toBe(75);
+  });
+
+  it('points the handles of a flat (zero-width) box along its one axis', () => {
+    const flat: SelectionHandles = {
+      corners: [
+        { x: 10, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 80 },
+        { x: 10, y: 80 },
+      ],
+      rotation: 0,
+      // activeHandles keeps the corners and the top and bottom middles of a zero-width box.
+      handles: [
+        { x: 10, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 80 },
+        { x: 10, y: 80 },
+        { x: 10, y: 80 },
+      ],
+    };
+    expect(handleCursorAt(flat, { x: 11, y: 1 }, 1)).toEqual({ kind: 'resize', angle: -90 });
+    expect(handleCursorAt(flat, { x: 9, y: 79 }, 1)).toEqual({ kind: 'resize', angle: 90 });
   });
 
   it('shows the rotate cursor outside a corner and nothing elsewhere', () => {
@@ -132,16 +169,31 @@ describe('V-28 handle cursor', () => {
         const resized =
           after.frame.width !== before.frame.width || after.frame.height !== before.frame.height;
         const rotated = after.rotation !== before.rotation;
-        expect(cursor?.kind ?? 'none').toBe(resized ? 'resize' : rotated ? 'rotate' : 'none');
-        expect(cursor).not.toBeNull();
+        expect(resized || rotated).toBe(true);
+        expect(cursor?.kind).toBe(resized ? 'resize' : 'rotate');
       }
     }
   });
 
   it('shows no resize cursor inside a box too small for its handles', () => {
-    const { handles } = selected(0, 16, 16);
+    const { target, id, handles } = selected(0, 16, 16);
     const [tl] = handles.corners;
-    expect(handleCursorAt(handles, { x: tl.x + 2, y: tl.y + 2 }, 1)).toBeNull();
+    const inside = { x: tl.x + 2, y: tl.y + 2 };
+    expect(handleCursorAt(handles, inside, 1)).toBeNull();
+    // The press there on the selected node moves it, keeping its size.
+    const to = { x: inside.x + 10, y: inside.y + 5 };
+    for (const [kind, p] of [
+      ['pointerdown', inside],
+      ['pointermove', to],
+      ['pointerup', to],
+    ] as const)
+      target.execute({ type: 'input', event: { kind, point: p, modifiers: none } });
+    expect(target.query({ type: 'node', id })!.frame).toEqual({
+      x: 110,
+      y: 105,
+      width: 16,
+      height: 16,
+    });
     expect(handleCursorAt(handles, { x: tl.x - 2, y: tl.y - 2 }, 1)?.kind).toBe('resize');
   });
 
@@ -151,7 +203,7 @@ describe('V-28 handle cursor', () => {
     expect(resize).toContain(encodeURIComponent('rotate(30 12 12)'));
     expect(resize.endsWith(', nwse-resize')).toBe(true);
     expect(handleCursorCss({ kind: 'resize', angle: 31 })).toBe(resize);
-    expect(handleCursorCss({ kind: 'rotate', angle: -135 })!.endsWith(', grab')).toBe(true);
+    expect(handleCursorCss({ kind: 'rotate', angle: -135 })!.endsWith(', crosshair')).toBe(true);
     expect([0, 45, 90, 135, 180, 225, 270, 315].map(standardResizeCursor)).toEqual([
       'ew-resize',
       'nwse-resize',

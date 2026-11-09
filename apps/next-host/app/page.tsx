@@ -621,7 +621,8 @@ function Surface({
   const pathOverlay = usePathOverlay();
   const textEdit = useTextEditMarkers();
   // V-28: the resize cursor over a handle and the rotate cursor over a rotate zone, both turned to
-  // the box, while no button is held; kept during the drag that a press there starts.
+  // the box, while no button is held; during the drag a press there starts it stays at its
+  // press-time angle (the hover does not run while a button is held).
   const [handleCursor, setHandleCursor] = useState<HandleCursor | null>(null);
   const [penCursor, setPenCursor] = useState<PagePoint | null>(null);
   const hover = (event: PointerEvent<HTMLDivElement>) => {

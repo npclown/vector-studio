@@ -60,7 +60,7 @@ export function handleCursorCss(cursor: HandleCursor | null): string | undefined
         '<path d="M14 7.5 18 3l4 4.5z" fill="#000" stroke="#fff" stroke-linejoin="round"/>' +
         '<path d="M7.5 14 3 18l4.5 4z" fill="#000" stroke="#fff" stroke-linejoin="round"/>' +
         '</g>',
-      'grab',
+      'crosshair',
     );
   }
   cache.set(key, css);
