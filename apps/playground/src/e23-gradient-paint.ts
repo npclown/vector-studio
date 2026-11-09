@@ -53,6 +53,10 @@ const parameters = new URLSearchParams(window.location.search);
 const samples = parameters.get('samples') === '1' ? 1 : 4;
 const groups = parameters.get('groups') === 'isolated' ? 'isolated' : 'flat';
 const isolateUnit = parameters.get('isolate') === '1';
+/** E41 U5: `effects=v0` draws node effects (with `groups=isolated`). */
+const effects = parameters.get('effects') === 'v0' && groups === 'isolated' ? 'v0' : 'none';
+/** E41-A05: `effectcontent=1` composites effect roots' content only, for the oracle. */
+const effectContent = parameters.get('effectcontent') === '1';
 const tileParameter = parameters.get('tile');
 const text = parameters.get('text') === 'atlas' ? 'atlas' : 'none';
 const canvasRaster = createCanvasGlyphRaster();
@@ -109,6 +113,8 @@ export type E23PacketSummary = Readonly<{
       parent: number;
       draws: number;
       meshDraws: number;
+      /** E41: the effect record's output bound, null without one. */
+      effectOutput: Readonly<{ x: number; y: number; width: number; height: number }> | null;
     }>[];
     composites: number;
     notices: readonly string[];
@@ -137,6 +143,10 @@ export type E23Counters = Readonly<{
   preparation: ReturnType<PrimitiveRendererService['getPreparationStatistics']>;
   /** E25: layer passes of the current generation so far, one per layer (section 4, Lifetime). */
   layerPasses: number;
+  /** E41 U5: effect roots drawn with their effects, one per root and frame. */
+  effectPasses: number;
+  /** E41 section 5.3: whether this generation draws effects. */
+  effectPipelineAvailable: boolean;
   /** E28: glyph raster port calls and bitmaps uploaded by acknowledged packets. */
   glyphRasterCalls: number;
   glyphUploads: number;
@@ -206,6 +216,7 @@ function summarize(packet: PrimitivePacket): E23PacketSummary {
               parent: layer.parent,
               draws: layer.draws.length,
               meshDraws: layer.meshDraws.length,
+              effectOutput: layer.effect?.output ?? null,
             })),
             composites: packet.layers.composites.length,
             notices: packet.layers.notices.map((notice) => notice.nodeId),
@@ -239,6 +250,7 @@ const backend = new WebGpuBackend({
   sampleCountForTesting: samples,
   frameCaptureForTesting: true,
   ...(tileParameter === null ? {} : { layerTileSizeForTesting: Number(tileParameter) }),
+  ...(effectContent ? { effectContentForTesting: true } : {}),
 });
 backend.subscribeDiagnostics((event) => diagnostics.push(event));
 let service: PrimitiveRendererService | null = null;
@@ -275,6 +287,7 @@ async function start() {
     clips: 'all',
     paints: 'gradient',
     groups,
+    ...(effects === 'v0' ? { effects } : {}),
     ...(isolateUnit ? { isolateUnitOpacityForTesting: true } : {}),
     ...(text === 'atlas' ? { text, glyphRaster } : {}),
     ...(pagesParameter === null ? {} : { textAtlasPagesForTesting: Number(pagesParameter) }),
@@ -289,6 +302,7 @@ async function start() {
     requiresPaintPipeline: product.requiresPaintPipeline,
     requiresLayerPipeline: product.requiresLayerPipeline,
     requiresTextPipeline: product.requiresTextPipeline,
+    requiresEffectPipeline: product.requiresEffectPipeline,
     prepare(target) {
       const packet = product.prepare(target);
       if (packet !== null) lastPacket = summarize(packet);
@@ -349,6 +363,8 @@ function counters(): E23Counters {
     dashExpansions: service!.getDashExpansionCountForTesting(),
     preparation: service!.getPreparationStatistics(),
     layerPasses: backend.getLayerPassesForTesting(),
+    effectPasses: backend.getEffectPassesForTesting(),
+    effectPipelineAvailable: backend.effectPipelineAvailable,
     glyphRasterCalls: service!.getGlyphRasterCallsForTesting(),
     glyphUploads: service!.getGlyphUploadsForTesting(),
     atlasEvictions: service!.getAtlasEvictionsForTesting(),

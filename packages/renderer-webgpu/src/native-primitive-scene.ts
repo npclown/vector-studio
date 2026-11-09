@@ -2,7 +2,9 @@ import type { ResourceDescriptor } from '@vector-studio/contracts';
 import type {
   ClipMaskPacketLevel,
   ClipPacketPart,
+  DeviceRect,
   GradientPaintRecord,
+  LayerEffectRecord,
   LayerPacketPart,
   MeshCoverage,
   MeshFillDraw,
@@ -26,6 +28,7 @@ import {
   E25_LAYER_TILE_SIZE,
   E28_ATLAS_PAGES_MAX,
   E28_ATLAS_PAGE_SIZE,
+  E41_SIGMA_PX_MAX,
   maskTileSet,
 } from '@vector-studio/renderer-core';
 import {
@@ -119,6 +122,20 @@ import {
   packLayerPassRecord,
   type LayerVariantBase,
 } from './layer-pipeline.js';
+import {
+  EFFECT_BINDINGS,
+  EFFECT_PASS_KINDS,
+  EFFECT_PASS_RECORD_SIZE,
+  EFFECT_SHADER,
+  createEffectBindGroupLayoutDescriptor,
+  createEffectPipelineDescriptor,
+  effectPipelineKey,
+  packEffectPassRecord,
+  planEffectPasses,
+  type EffectPassKind,
+  type EffectPassPlan,
+  type EffectSurface,
+} from './effect-pipeline.js';
 import { PipelineCache, type PipelineCacheSnapshot } from './pipeline-cache.js';
 import { PRIMITIVE_ANALYTIC_SHADER } from './primitive-analytic-shader.js';
 import {
@@ -367,6 +384,12 @@ interface TextPipelineState {
   readonly clipLayer: GPURenderPipeline | null;
 }
 
+/** E41 U5: the effect module's bind group layout and its pipelines, one per pass kind. */
+interface EffectPipelineState {
+  readonly bindGroupLayout: GPUBindGroupLayout;
+  readonly pipelines: ReadonlyMap<EffectPassKind, GPURenderPipeline>;
+}
+
 /** E28 U3: an atlas page; a new texture is a new incarnation. */
 interface TextPage {
   readonly id: string;
@@ -604,17 +627,43 @@ type ValidatedLayers = Readonly<{
   tileWidth: number;
   tileHeight: number;
   tiles: readonly (readonly LayerTile[])[];
-  /** Pass records (0: the main pass, then the tiles), then one composite record per layer. */
+  /**
+   * Pass records (0: the main pass, then the tiles), one composite record per layer, then the
+   * effect pass records.
+   */
   records: Uint8Array;
   stride: number;
   compositeRecordBase: number;
+  /** E41 U5: per layer, its effect passes, or null for a layer composited as E25's. */
+  effects: readonly (LayerEffectFrame | null)[];
+  /** E41 U5: the scratch pairs' sizes, in slot order; empty without passes that use them. */
+  scratch: readonly Readonly<{ width: number; height: number }>[];
 }> | null;
+
+/**
+ * E41 U5: an effect root's passes in a frame. `result` is `R`'s bound (the output bound inside
+ * the target and the parent layer), or null when that is empty: the root then has no passes
+ * and no composite.
+ */
+type LayerEffectFrame = Readonly<{
+  result: DeviceRect | null;
+  plan: EffectPassPlan;
+  /** The first pass's record index. */
+  recordBase: number;
+  /**
+   * The scratch pair the root's passes use (an index into `scratch`), or -1 without scratch.
+   * Roots run one after another, so a pair is shared by every root that fits it.
+   */
+  scratchSlot: number;
+}>;
 
 /** E25 U3: a frame's layer resources, released with the frame's transients. */
 type LayerFrame = Readonly<{
   passGroup: GPUBindGroup;
   compositeGroups: readonly GPUBindGroup[];
   textures: readonly GPUTexture[];
+  /** E41 U5: layers without a composite (an effect root whose `R` is empty). */
+  skipped: ReadonlySet<number>;
 }>;
 
 type MaskSourceDraw = Readonly<{ instance: number; firstTriangle: number; triangleCount: number }> &
@@ -743,6 +792,62 @@ function targetEquals(left: PrimitiveTarget, right: PrimitiveTarget): boolean {
   );
 }
 
+/** E41 U5: the intersection of two device rectangles, or null when empty; `b` null is no bound. */
+function intersectRects(a: DeviceRect | null, b: DeviceRect | null): DeviceRect | null {
+  if (a === null) return null;
+  if (b === null) return a;
+  const x = Math.max(a.x, b.x);
+  const y = Math.max(a.y, b.y);
+  const right = Math.min(a.x + a.width, b.x + b.width);
+  const bottom = Math.min(a.y + a.height, b.y + b.height);
+  return right > x && bottom > y ? { x, y, width: right - x, height: bottom - y } : null;
+}
+
+/** E41 U5: a layer's effect record as section 5.2 and K4 bound it; throws otherwise. */
+function validateEffectRecord(effect: LayerEffectRecord): void {
+  const rect = (value: unknown) => {
+    const box = value as Partial<DeviceRect> | null;
+    return (
+      typeof box === 'object' &&
+      box !== null &&
+      Number.isSafeInteger(box.x) &&
+      Number.isSafeInteger(box.y) &&
+      isPositiveSafeInteger(box.width!) &&
+      isPositiveSafeInteger(box.height!)
+    );
+  };
+  const sigma = (value: unknown) =>
+    typeof value === 'number' && value >= 0 && value <= E41_SIGMA_PX_MAX;
+  const unit = (value: unknown) => typeof value === 'number' && value >= 0 && value <= 1;
+  if (
+    typeof effect !== 'object' ||
+    effect === null ||
+    !rect(effect.source) ||
+    !rect(effect.output) ||
+    !Array.isArray(effect.shadows) ||
+    effect.shadows.length > 8 ||
+    !(effect.shadows as readonly unknown[]).every((value) => {
+      const shadow = value as Partial<LayerEffectRecord['shadows'][number]> | null;
+      const color = shadow?.color as Partial<LayerEffectRecord['shadows'][number]['color']> | null;
+      return (
+        typeof shadow === 'object' &&
+        shadow !== null &&
+        Number.isFinite(shadow.dx) &&
+        Number.isFinite(shadow.dy) &&
+        sigma(shadow.sigmaPx) &&
+        typeof color === 'object' &&
+        color !== null &&
+        [color.r, color.g, color.b, color.a].every(unit)
+      );
+    }) ||
+    !(effect.blurSigmaPx === null || sigma(effect.blurSigmaPx)) ||
+    typeof effect.contentOpacity !== 'number' ||
+    !(effect.contentOpacity > 0 && effect.contentOpacity <= 1)
+  ) {
+    throw new Error('Invalid layer effect.');
+  }
+}
+
 function isPositiveSafeInteger(value: number): boolean {
   return Number.isSafeInteger(value) && value > 0;
 }
@@ -828,6 +933,12 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   readonly #layerTileSize: number;
   #nextLayerFrame = 1;
   #layerPasses = 0;
+  /** E41 U5: true when the effect pipelines exist; effect roots then draw with their effects. */
+  readonly effectPipelineAvailable: boolean;
+  readonly #effect: EffectPipelineState | null;
+  /** @internal Tests only (E41-A05): effect roots composite `L`, without their effects. */
+  readonly #effectContentForTesting: boolean;
+  #effectPasses = 0;
   readonly textPipelineAvailable: boolean;
   readonly #text: TextPipelineState | null;
   /** E28 section 4, Atlas pages: index i holds page i, as the packet's `pageCount` asks. */
@@ -882,7 +993,12 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     layer: LayerPipelineState | null = null,
     layerTileSize: number = E25_LAYER_TILE_SIZE,
     text: TextPipelineState | null = null,
+    effect: EffectPipelineState | null = null,
+    effectContentForTesting = false,
   ) {
+    this.#effect = effect;
+    this.effectPipelineAvailable = effect !== null;
+    this.#effectContentForTesting = effectContentForTesting;
     this.#text = text;
     this.textPipelineAvailable = text !== null;
     this.#layerTileSize = layerTileSize;
@@ -941,7 +1057,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       clipModules +
       paintModules +
       layerModules +
-      textVariants;
+      textVariants +
+      (effect === null ? 0 : 1);
     this.pipelinesCreated =
       // E39-R8: with the mesh path, four stencil pass pipelines per target (two plain, two
       // joint) and seven covers per mesh variant (two rules, five joint covers; plain, clip,
@@ -953,7 +1070,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         ? 0
         : (1 + (paint.mesh === null ? 0 : 9)) * (paint.analyticClip === null ? 1 : 2)) +
       (layer === null ? 0 : 1 + analyticLayerModules + 9 * meshLayerModules) +
-      textVariants;
+      textVariants +
+      (effect === null ? 0 : EFFECT_PASS_KINDS.length);
     this.#device = device;
     this.#context = context;
     this.#format = format;
@@ -1539,7 +1657,10 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       if (mesh !== null && !mesh.skipped) this.#commitMesh(mesh);
       this.#releaseTransients(transients);
       this.#commitMasks(clip);
-      if (layers !== null) this.#layerPasses += layers.layers.length;
+      if (layers !== null) {
+        this.#layerPasses += layers.layers.length;
+        this.#effectPasses += layers.effects.filter((effect) => effect?.result != null).length;
+      }
       this.#observeCompletion();
       return Object.freeze({
         status: 'submitted',
@@ -2018,6 +2139,16 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   /** E25 section 4, Lifetime: the layer passes submitted, one per layer, not per tile. */
   public get layerPasses(): number {
     return this.#layerPasses;
+  }
+
+  /** E41 U5: effect roots submitted with their effects this generation, one per root and frame. */
+  public get effectPasses(): number {
+    return this.#effectPasses;
+  }
+
+  /** E41 section 5.4: the device limit that bounds effect textures. */
+  public get maxTextureDimension2D(): number {
+    return safeLimit(this.#device.limits.maxTextureDimension2D, 0);
   }
 
   public get maskPasses(): number {
@@ -2557,7 +2688,10 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     );
     const alignment = this.#device.limits.minUniformBufferOffsetAlignment;
     if (typeof alignment !== 'number' || !isPowerOfTwo(alignment)) throw new AllocationError();
-    const stride = align(Math.max(LAYER_PASS_RECORD_SIZE, LAYER_COMPOSITE_RECORD_SIZE), alignment);
+    const stride = align(
+      Math.max(LAYER_PASS_RECORD_SIZE, LAYER_COMPOSITE_RECORD_SIZE, EFFECT_PASS_RECORD_SIZE),
+      alignment,
+    );
     const passRecords: Uint8Array[] = [
       packLayerPassRecord({ x: 0, y: 0 }, { width: target.width, height: target.height }),
     ];
@@ -2585,13 +2719,82 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       return Object.freeze(list);
     });
     const compositeRecordBase = passRecords.length;
-    const records = new Uint8Array((compositeRecordBase + count) * stride);
+    // E41 U5: each effect root's passes, recorded after the composite records.
+    let effectRecords = compositeRecordBase + count;
+    const maximum = safeLimit(this.#device.limits.maxTextureDimension2D, 0);
+    const effects = layers.map(
+      (layer): { -readonly [K in keyof LayerEffectFrame]: LayerEffectFrame[K] } | null => {
+        if (layer.effect === undefined) return null;
+        validateEffectRecord(layer.effect);
+        if (this.#effect === null || this.#effectContentForTesting) return null;
+        const parent = layer.parent === -1 ? null : layers[layer.parent]!.bound;
+        const result = intersectRects(
+          intersectRects(layer.effect.output, { x: 0, y: 0, ...target }),
+          parent,
+        );
+        if (result === null) {
+          return {
+            result: null,
+            plan: Object.freeze({ passes: [], scratch: { width: 0, height: 0 } }),
+            recordBase: effectRecords,
+            scratchSlot: -1,
+          };
+        }
+        const plan = planEffectPasses(layer.bound, result, layer.effect);
+        // Section 5.4: an effect texture past the device limit draws the root without effects.
+        // This drop is silent (no notice): the packet's own budget already admitted the root.
+        if (plan.scratch.width > maximum || plan.scratch.height > maximum) return null;
+        const recordBase = effectRecords;
+        effectRecords += plan.passes.length;
+        return { result, plan, recordBase, scratchSlot: -1 };
+      },
+    );
+    // Scratch pairs: largest roots first, each root takes the first pair that fits it, or that
+    // fits it when grown to both extents within twice the larger area; otherwise a new pair. So
+    // similar roots share one pair, and a wide and a tall root never make one of both extents.
+    const scratch: { width: number; height: number }[] = [];
+    const byArea = effects
+      .filter((effect) => effect !== null && effect.plan.scratch.width > 0)
+      .sort(
+        (a, b) =>
+          b!.plan.scratch.width * b!.plan.scratch.height -
+          a!.plan.scratch.width * a!.plan.scratch.height,
+      );
+    for (const effect of byArea) {
+      const { width, height } = effect!.plan.scratch;
+      let slot = scratch.findIndex((pair) => width <= pair.width && height <= pair.height);
+      if (slot === -1) {
+        slot = scratch.findIndex((pair) => {
+          const grown = Math.max(pair.width, width) * Math.max(pair.height, height);
+          return grown <= 2 * Math.max(pair.width * pair.height, width * height);
+        });
+        if (slot === -1) {
+          slot = scratch.length;
+          scratch.push({ width, height });
+        } else {
+          scratch[slot]!.width = Math.max(scratch[slot]!.width, width);
+          scratch[slot]!.height = Math.max(scratch[slot]!.height, height);
+        }
+      }
+      effect!.scratchSlot = slot;
+    }
+    for (const effect of effects) if (effect !== null) Object.freeze(effect);
+    const records = new Uint8Array(effectRecords * stride);
     passRecords.forEach((bytes, index) => records.set(bytes, index * stride));
     layers.forEach((layer, index) => {
+      const effect = effects[index];
       records.set(
-        packLayerCompositeRecord(layer.bound, layer.opacity),
+        effect === null || effect === undefined
+          ? packLayerCompositeRecord(layer.bound, layer.opacity)
+          : packLayerCompositeRecord(
+              effect.result ?? layer.bound,
+              layer.opacity * layer.effect!.contentOpacity,
+            ),
         (compositeRecordBase + index) * stride,
       );
+      effect?.plan.passes.forEach((pass, offset) => {
+        records.set(packEffectPassRecord(pass), (effect.recordBase + offset) * stride);
+      });
     });
     if (records.byteLength > safeLimit(this.#device.limits.maxBufferSize, 0)) {
       throw new AllocationError();
@@ -2606,6 +2809,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       records,
       stride,
       compositeRecordBase,
+      effects: Object.freeze(effects),
+      scratch: Object.freeze(scratch.map((pair) => Object.freeze({ ...pair }))),
     });
   }
 
@@ -2713,12 +2918,42 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         { binding: 0, resource: { buffer: records, offset: 0, size: LAYER_PASS_RECORD_SIZE } },
       ],
     });
+    // E41 U5: an effect root's `R`, which its composite draws instead of `L`.
+    const results = layers.effects.map((effect, index) =>
+      effect?.result == null
+        ? null
+        : texture(
+            `effect-result-${index}`,
+            effect.result.width,
+            effect.result.height,
+            this.#format,
+            1,
+            4,
+            TEXTURE_BINDING_USAGE,
+          ),
+    );
+    const scratch = layers.scratch.map((pair, slot) =>
+      ([0, 1] as const).map((index) =>
+        texture(
+          `effect-scratch-${slot}-${index}`,
+          pair.width,
+          pair.height,
+          this.#format,
+          1,
+          4,
+          TEXTURE_BINDING_USAGE,
+        ),
+      ),
+    );
     const compositeGroups = textures.map((layerTexture, index) =>
       this.#device.createBindGroup({
         label: `${prefix}/composite-${index}`,
         layout: pipelines.compositeBindGroupLayout,
         entries: [
-          { binding: LAYER_COMPOSITE_BINDINGS.layer, resource: layerTexture.createView() },
+          {
+            binding: LAYER_COMPOSITE_BINDINGS.layer,
+            resource: (results[index] ?? layerTexture).createView(),
+          },
           {
             binding: LAYER_COMPOSITE_BINDINGS.record,
             resource: {
@@ -2730,7 +2965,30 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         ],
       }),
     );
-    const frame: LayerFrame = Object.freeze({ passGroup, compositeGroups, textures });
+    const skipped = new Set<number>();
+    layers.effects.forEach((effect, index) => {
+      if (effect !== null && effect.result === null) skipped.add(index);
+    });
+    const frame: LayerFrame = Object.freeze({ passGroup, compositeGroups, textures, skipped });
+    const effectGroups = new Map<GPUTexture, GPUBindGroup>();
+    const effectGroup = (source: GPUTexture) => {
+      let group = effectGroups.get(source);
+      if (group === undefined) {
+        group = this.#device.createBindGroup({
+          label: `${prefix}/effect-${effectGroups.size}`,
+          layout: this.#effect!.bindGroupLayout,
+          entries: [
+            { binding: EFFECT_BINDINGS.source, resource: source.createView() },
+            {
+              binding: EFFECT_BINDINGS.record,
+              resource: { buffer: records, offset: 0, size: EFFECT_PASS_RECORD_SIZE },
+            },
+          ],
+        });
+        effectGroups.set(source, group);
+      }
+      return group;
+    };
     const colorView = color.createView();
     const resolveView = resolve?.createView();
     const stencilView = stencil?.createView();
@@ -2781,6 +3039,36 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           { width: tile.width, height: tile.height },
         );
       }
+      // E41 U5: `L` is complete; build `R` before any later pass composites it.
+      const effect = layers.effects[index];
+      if (effect == null || effect.result === null) return;
+      const pair = scratch[effect.scratchSlot];
+      const surfaces: Record<EffectSurface, GPUTexture | null> = {
+        content: textures[index]!,
+        result: results[index]!,
+        scratch0: pair?.[0] ?? null,
+        scratch1: pair?.[1] ?? null,
+      };
+      effect.plan.passes.forEach((planned, offset) => {
+        const pass = encoder.beginRenderPass({
+          label: `vector-studio/effect-pass/${index}/${planned.kind}`,
+          colorAttachments: [
+            {
+              view: surfaces[planned.target]!.createView(),
+              clearValue: { r: 0, g: 0, b: 0, a: 0 },
+              loadOp: planned.clear ? 'clear' : 'load',
+              storeOp: 'store',
+            },
+          ],
+        });
+        pass.setViewport(0, 0, planned.width, planned.height, 0, 1);
+        pass.setPipeline(this.#effect!.pipelines.get(planned.kind)!);
+        pass.setBindGroup(0, effectGroup(surfaces[planned.source]!), [
+          (effect.recordBase + offset) * layers.stride,
+        ]);
+        pass.draw(3);
+        pass.end();
+      });
     });
     return frame;
   }
@@ -3028,6 +3316,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     layer: number,
     passOffset: number,
   ): void {
+    if (frame.skipped.has(layer)) return;
     const pipelines = this.#layer!;
     pass.setPipeline(pipelines.composite);
     pass.setBindGroup(0, frame.compositeGroups[layer]!);
@@ -5385,6 +5674,57 @@ export function createNativePrimitiveSceneCreation(
         text = null;
       }
     }
+    // E41 contract, U5: the effect module and its five pipelines, created here like the layer
+    // variants and never on the frame path, and only with the layer pipeline (effect roots are
+    // layers). A failure leaves them unavailable: effect roots then composite their content
+    // as E25 layers, without effects (section 5.3).
+    let effect: EffectPipelineState | null = null;
+    if (options.effectPipeline === true && layer !== null && !disposed) {
+      const effectTracked: string[] = [];
+      const trackEffect = (id: string, descriptor: ResourceDescriptor) => {
+        track(id, descriptor);
+        effectTracked.push(id);
+      };
+      try {
+        const effectBindGroupLayout = device.createBindGroupLayout(
+          createEffectBindGroupLayoutDescriptor(),
+        );
+        trackEffect(`${prefix}/effect-bind-group-layout`, { category: 'bind-group-layout' });
+        const pipelineLayout = device.createPipelineLayout({
+          label: `${prefix}/effect-pipeline-layout`,
+          bindGroupLayouts: [effectBindGroupLayout],
+        });
+        trackEffect(`${prefix}/effect-pipeline-layout`, { category: 'pipeline-layout' });
+        const shader = device.createShaderModule({
+          label: `${prefix}/effect-shader`,
+          code: EFFECT_SHADER,
+        });
+        trackEffect(`${prefix}/effect-shader`, { category: 'shader-module' });
+        const pipelines = new Map<EffectPassKind, GPURenderPipeline>();
+        for (const kind of EFFECT_PASS_KINDS) {
+          const created = await pipelineCache.getOrCreate(effectPipelineKey(format, kind), () =>
+            device.createRenderPipelineAsync(
+              createEffectPipelineDescriptor(shader, pipelineLayout, format, kind),
+            ),
+          );
+          trackEffect(`${prefix}/effect-${kind}-pipeline`, { category: 'render-pipeline' });
+          pipelines.set(kind, created);
+        }
+        effect = Object.freeze({ bindGroupLayout: effectBindGroupLayout, pipelines });
+      } catch {
+        // The E22-K5 rule: no effect pipeline this attempt cached outlives the failure.
+        for (const kind of EFFECT_PASS_KINDS) pipelineCache.evict(effectPipelineKey(format, kind));
+        for (const id of effectTracked) {
+          tracked.delete(id);
+          try {
+            resources.release(id);
+          } catch {
+            // Accounting cleanup is best effort.
+          }
+        }
+        effect = null;
+      }
+    }
     if (disposed || vertexBuffer === undefined || indexBuffer === undefined) {
       throw new Error('Primitive scene creation completed after disposal.');
     }
@@ -5411,6 +5751,8 @@ export function createNativePrimitiveSceneCreation(
       layer,
       options.layerTileSizeForTesting,
       text,
+      effect,
+      options.effectContentForTesting === true,
     );
     vertexBuffer = undefined;
     indexBuffer = undefined;

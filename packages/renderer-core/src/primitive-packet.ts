@@ -17,6 +17,11 @@ export type PrimitiveTarget = Readonly<{
   devicePixelRatio: number;
   sampleCount: 1 | 4;
   targetFormat: 'bgra8unorm' | 'rgba8unorm';
+  /**
+   * E41 section 5.4: the device's `maxTextureDimension2D`, set by a backend for a source that
+   * asks for the effect pipeline; absent, the source keeps its option's value.
+   */
+  maxTextureDimension2D?: number;
 }>;
 export type PrimitiveRecordVersion = Readonly<{ index: number; version: symbol }>;
 export type PrimitiveResource = Readonly<{
@@ -377,6 +382,11 @@ export interface PrimitiveFrameSource {
    * at initialization and recovery. Optional; absent means false.
    */
   readonly requiresTextPipeline?: boolean;
+  /**
+   * E41 contract, U5: true when the backend must create the effect pipelines (with the layer
+   * pipeline) at initialization and recovery. Optional; absent means false.
+   */
+  readonly requiresEffectPipeline?: boolean;
   prepare(target: PrimitiveTarget): PrimitivePacket | null;
   acknowledge(receipt: PrimitiveReceipt): void;
 }

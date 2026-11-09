@@ -91,6 +91,15 @@ export interface WebGpuPrimitiveScenePort extends PrimitivePacketConsumer {
   readonly textPipelineAvailable?: boolean;
   /** E28-D1: true once an atlas page or the text buffer could not be created; text stays undrawn. */
   readonly textPageAllocationFailed?: boolean;
+  /**
+   * E41 contract, U5: true when this generation created the effect pipelines. Absent or false:
+   * effect roots draw their content without effects (section 5.3).
+   */
+  readonly effectPipelineAvailable?: boolean;
+  /** E41 U5: effect roots this generation has drawn with their effects, one per root and frame. */
+  readonly effectPasses?: number;
+  /** E41 section 5.4: the device's `maxTextureDimension2D`, which effect bounds respect. */
+  readonly maxTextureDimension2D?: number;
   setTarget(target: PrimitiveTarget): void;
   submitPrimitivePacket: PrimitivePacketConsumer['submitPrimitivePacket'];
   /**
@@ -167,6 +176,13 @@ export interface WebGpuPrimitiveSceneOptions {
    * generation has the clip and layer variants) and the sampler. Without it text is not drawn.
    */
   readonly textPipeline?: boolean;
+  /**
+   * E41 contract, U5: creates the effect pipelines (with the layer pipeline only). Without them
+   * effect roots composite their content as E25 layers, without effects (section 5.3).
+   */
+  readonly effectPipeline?: boolean;
+  /** @internal Tests only (E41-A05): effect roots composite their content `L` only. */
+  readonly effectContentForTesting?: boolean;
   /**
    * @internal Tests only (E25 contract, section 4): the layer tile edge instead of 1024; a
    * positive even integer.
