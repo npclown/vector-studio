@@ -76,9 +76,8 @@ function run(op: BooleanOp, shapes: readonly BShape[]): BooleanResult {
   }
   if (box === null) return { ok: false, code: 'empty', detail: 'no segments' };
   const diag = Math.sqrt((box.maxX - box.minX) ** 2 + (box.maxY - box.minY) ** 2);
-  if (!(diag > 0) || !Number.isFinite(diag)) {
-    return { ok: false, code: 'empty', detail: 'degenerate bounds' };
-  }
+  if (!Number.isFinite(diag)) return { ok: false, code: 'failed', detail: 'bounds overflow' };
+  if (!(diag > 0)) return { ok: false, code: 'empty', detail: 'degenerate bounds' };
   const eps = BOOLEAN_EPSILON * diag;
   const eta = BOOLEAN_ETA * diag;
   const vertices = new VertexPool(eta, box.minX, box.minY);
@@ -335,8 +334,9 @@ function nextClockwise(incoming: BSegment, candidates: readonly Directed[]): Dir
       while (delta > 2 * Math.PI) delta -= 2 * Math.PI;
       return delta;
     });
-    const key = (i: number) => (ambiguous[i] ? (secondary[i] as number) : (primary[i] as number));
-    for (let i = 1; i < candidates.length; i++) if (key(i) < key(index)) index = i;
+    // One frame for every candidate: all chord directions at the same distance.
+    for (let i = 1; i < candidates.length; i++)
+      if ((secondary[i] as number) < (secondary[index] as number)) index = i;
   } else {
     for (let i = 1; i < candidates.length; i++)
       if ((primary[i] as number) < (primary[index] as number)) index = i;
@@ -710,7 +710,8 @@ function chordHit(a: BSegment, b: BSegment): Hit | null {
  * Section 2.4 step 2: null unless five samples each way lie within η of the other piece. Then
  * the pieces are coincident, and the result lists the crossings inside the stretch (local
  * parameters): a change of side between consecutive samples, refined by bisection, or an end
- * sample within ε of the other piece where the others are not.
+ * sample within ε of the other piece where the others are not. A crossing within ε of an
+ * interior sample, or seen only from `b`'s samples, is not found; the error stays within η.
  */
 function coincident(a: BSegment, b: BSegment, eta: number, eps: number): Hit[] | null {
   // Cheap necessary condition: each midpoint lies in the other's box grown by η.
@@ -750,7 +751,9 @@ function coincident(a: BSegment, b: BSegment, eta: number, eps: number): Hit[] |
     let hi = COINCIDENT_SAMPLES[i] as number;
     for (let k = 0; k < 60; k++) {
       const mid = (lo + hi) / 2;
-      const side = sideOf(a, b, mid, eps) ?? 0;
+      const side = sideOf(a, b, mid, eps);
+      // Left the η band mid-stretch: not a coincident pair after all, subdivide instead.
+      if (side === null) return null;
       if (side === 0) {
         lo = hi = mid;
         break;

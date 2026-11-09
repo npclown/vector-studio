@@ -23,6 +23,8 @@ Cloud container, 4 vCPU, Node 22.23.4, vitest 4.1.11, 2026-11-09.
   - The cause is that its self-crossing point and the copy's give four vertices within about 2 `η` of each other. Vertex clustering is not transitive, so they do not all merge.
   - It is kept as the fixture "seed 11 case 621", which accepts a closed failure or a correct result, never a wrong one.
 
+- **Re-review findings, same class, fail closed.** Seed 12 case 804 (`intersect`) and seed 13 case 155 (`subtract`) are near-coincident evenodd self-crossing blobs, like seed 11 case 621. An ellipse against a copy rotated by 3e-7 rad fails closed for union and exclude; from 1e-6 rad up, the result is correct. None of these gives a wrong fill.
+
 The oracle in the test is independent of the engine. It has its own:
 
 - row crossings with cubic root finding;
