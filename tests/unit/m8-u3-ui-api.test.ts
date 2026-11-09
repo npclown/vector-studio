@@ -29,6 +29,8 @@ const OWN_VALUES = [
   'AppearancePanel',
   'EditorPanels',
   'EditorToolbar',
+  // V-30 (export).
+  'ExportPanel',
   'LayerTree',
   'PageList',
   'PanelBoundary',

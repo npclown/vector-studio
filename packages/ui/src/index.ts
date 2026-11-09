@@ -13,6 +13,7 @@
 export {
   EditorCanvas,
   EditorProvider,
+  exportPng,
   extensionCommand,
   useActivePage,
   useEditor,
@@ -57,6 +58,9 @@ export type {
   EditorProviderProps,
   EditorSnapshot,
   EllipseNodeV6,
+  ExportNode,
+  ExportPngOptions,
+  ExportScene,
   Extension,
   ExtensionApi,
   ExtensionCommand,
@@ -210,3 +214,6 @@ export { PropertyPanel, PropertySections } from './property-panel.js';
 
 // V-25 (editor UI usability): a one-row icon toolbar and a zoom menu for a full-window editor.
 export { EditorToolbar, ZoomMenu, type EditorToolbarProps } from './editor-toolbar.js';
+
+// V-30 (export): the Export section, PNG at a scale or SVG, of the selection or the page.
+export { ExportPanel } from './export-panel.js';

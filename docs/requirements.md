@@ -142,7 +142,7 @@ Decided 2026-10-24 for P3 ([E11-Q3 (a)](plans/d9-e11-p3-c03-c05-closure-contract
 
 Initially, trusted extensions are registered by the host at build time. They may contribute node definitions, tools, commands, shortcuts, and UI panels. Extensions use commands, queries, and events rather than mutating the store or renderer directly.
 
-Untrusted plugins, sandbox execution, a marketplace, import/export, raster editing, animation, and real-time collaboration are deferred.
+Untrusted plugins, sandbox execution, a marketplace, import, raster editing, animation, and real-time collaboration are deferred. Export to PNG (at a scale) and SVG of the page, the selection or an artboard is supported since 2026-11-09 (requested by the user; [V-30 export contract](plans/viz-v30-export-contract.md)); other formats (JPEG, PDF) and export settings stored in the document stay deferred.
 
 Future considerations (recorded 2026-11-04 at the user's request; no work is scheduled). Today's extension surface ([host API guide](host-api.md#extensions)) covers path-shaped custom node types that use the node's own fill and stroke, commands, tools, key bindings and UI panels; import or export (deferred above) could later be built as extension commands on the public commands and queries. These need engine or core changes first, because the scene contract or the extension boundary has no place for them:
 

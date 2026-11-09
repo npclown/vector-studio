@@ -110,12 +110,18 @@ const REEXPORTS: Readonly<Record<keyof typeof AT_17A2B0A, readonly string[]>> = 
 /** The exports M8 added that the check covers, per package. */
 const ADDED: Readonly<Record<keyof typeof AT_17A2B0A, readonly string[]>> = {
   'editor-core': [
+    // V-30 (export) adds the export scene types of the `exportScene` query.
+    'ExportNode',
+    'ExportScene',
     'ExtensionCommandBuilder',
     'ExtensionSummary',
     'StarCreateArgs',
     'extensionCommand',
   ],
   react: [
+    // V-30 (export) adds the PNG export.
+    'ExportPngOptions',
+    'exportPng',
     'extensionCommand',
     'useActivePage',
     'useEditorQuery',
@@ -135,6 +141,8 @@ const ADDED: Readonly<Record<keyof typeof AT_17A2B0A, readonly string[]>> = {
     // V-25 (editor UI usability) adds the icon toolbar, the zoom menu and the tree's props.
     'EditorToolbar',
     'EditorToolbarProps',
+    // V-30 (export).
+    'ExportPanel',
     'LayerTree',
     'LayerTreeProps',
     'PageList',

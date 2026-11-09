@@ -152,6 +152,8 @@ describe('M8-A02 react re-exports the editor-core types and one value (M8-T2, T3
     expect(await runtimeKeys(REACT)).toEqual([
       'EditorCanvas',
       'EditorProvider',
+      // V-30 (export contract, section 3).
+      'exportPng',
       'extensionCommand',
       'useActivePage',
       'useEditor',

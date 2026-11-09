@@ -182,6 +182,7 @@ describe('V-25 next-host studio layout', () => {
     expect(studio.studioLayout('?test=1&fixture=text')).toBe(false);
     expect(studio.studioLayout('?bench=1&doc=m9-v2')).toBe(false);
     expect(studio.studioLayout('?layout=legacy')).toBe(false);
+    expect(studio.studioLayout('?test=1&layout=studio')).toBe(true);
   });
 
   it('sizes the canvas in whole pixels, never below its minimum', () => {
