@@ -1,6 +1,6 @@
 # V-30 export contract: PNG and SVG
 
-Status: DRAFT 2026-11-09, Full tier. Visualization-track item [V-30](d9-visualization-track.md#status-index). Requested by the user on 2026-11-09 (the comparison with Figma, Illustrator and Excalidraw listed export as the largest missing feature; item 1 was the default). It moves export (PNG and SVG) out of the deferred list in [requirements](../requirements.md#extension-direction); import stays deferred. Questions V30-Q1 to V30-Q5 (section 7) are adopted as recommended under the user's standing instruction of 2026-10-24 (추천안 자동 채택, recommended option auto-adopted).
+Status: DONE 2026-11-09 (#550, `e739809`), Full tier. Visualization-track item [V-30](d9-visualization-track.md#status-index). Requested by the user on 2026-11-09 (the comparison with Figma, Illustrator and Excalidraw listed export as the largest missing feature; item 1 was the default). It moves export (PNG and SVG) out of the deferred list in [requirements](../requirements.md#extension-direction); import stays deferred. Questions V30-Q1 to V30-Q5 (section 7) are adopted as recommended under the user's standing instruction of 2026-10-24 (추천안 자동 채택, recommended option auto-adopted).
 
 It changes three packages: `editor-core` (two queries and their types), `react` (one function) and `ui` (one panel). It changes no scene contract, renderer, document schema or command.
 
@@ -80,3 +80,10 @@ Numbers are written with at most 4 decimals. Text stays live text: the file name
 - **V30-Q3 ancestors.** (a) A nested node exports without its ancestors' clip, mask and opacity (Figma). (b) With them. Recommended (a).
 - **V30-Q4 SVG text.** (a) Live text. (b) Outlines. Recommended (a); (b) needs glyph outlines the engine does not have.
 - **V30-Q5 background.** (a) Transparent; a frame's fill is its own background. (b) The canvas colour. Recommended (a).
+
+## 8. Record
+
+- Implemented and merged 2026-11-09 (#550, `e739809`). Independent review r1 NOT READY (host-api heading list, gradient spread ends, size errors shown as "Nothing to export", hidden-group filter order: fixed; full-image scratch layers and fixed-text overflow: disclosed in section 6), r2 READY WITH FOLLOW-UPS (repeat gradients hold end colours to each cycle boundary: applied).
+- V30-A01 to A03, A05 (names) and A06: unit tests and the M8 export-list tests, CI green on the merged head.
+- V30-A04 and A05: `pnpm test:v30-export` passed 2/2 headed (Chrome and Edge) on the main PC at `e739809`; `pnpm test:m8-next-host` 36/36 there as the regression check. :4194 relaunched at `e739809`.
+- Follow-up: export of effects (E41, schema v7) when they land.
