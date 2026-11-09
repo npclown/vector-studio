@@ -13,6 +13,7 @@
 export {
   EditorCanvas,
   EditorProvider,
+  exportPng,
   extensionCommand,
   useActivePage,
   useEditor,
@@ -57,6 +58,9 @@ export type {
   EditorProviderProps,
   EditorSnapshot,
   EllipseNodeV6,
+  ExportNode,
+  ExportPngOptions,
+  ExportScene,
   Extension,
   ExtensionApi,
   ExtensionCommand,
@@ -218,3 +222,6 @@ export {
   type CanvasContextMenuAt,
   type CanvasContextMenuProps,
 } from './context-menu.js';
+
+// V-30 (export): the Export section, PNG at a scale or SVG, of the selection or the page.
+export { ExportPanel } from './export-panel.js';

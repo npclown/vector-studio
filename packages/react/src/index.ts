@@ -29,6 +29,8 @@ export {
   useTool,
   useViewport,
 } from './hooks.js';
+// V-30 export contract, section 3: a PNG of the page or of some nodes.
+export { exportPng, type ExportPngOptions } from './export-image.js';
 
 // MVP M8 contract, M8-T2: the one value re-export of `editor-core`, a pure builder with no state,
 // so an extension's UI types its commands without importing `editor-core`.
@@ -73,6 +75,8 @@ export type {
   EditorOptions,
   EditorSnapshot,
   EllipseNodeV6,
+  ExportNode,
+  ExportScene,
   Extension,
   ExtensionApi,
   ExtensionCommand,

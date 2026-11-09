@@ -1,6 +1,7 @@
 import {
   EditorPanels,
   EditorToolbar,
+  ExportPanel,
   LayerTree,
   PageList,
   PropertyPanel,
@@ -18,11 +19,16 @@ import { PathDebugPanel } from './v25-path-debug';
 // rest; slice 2 adds the artboards, src/v25-artboards.tsx) and
 // a right sidebar (properties, then the extension panels), with a one-line status bar below.
 // `?test=1`, `?bench=1` and `?layout=legacy` keep the M8 layout, so every headed spec, the
-// M8-N3 budget and the bench measurements see the page they were written for.
+// M8-N3 budget and the bench measurements see the page they were written for. V-30:
+// `?test=1&layout=studio` shows the studio with the test hook, for the studio's own specs.
 
-/** Whether the page shows the studio layout: not under `?test=1`, `?bench=1` or `?layout=legacy`. */
+/**
+ * Whether the page shows the studio layout: not under `?test=1`, `?bench=1` or `?layout=legacy`,
+ * except `?test=1&layout=studio` (V-30's export spec).
+ */
 export function studioLayout(search: string): boolean {
   const query = new URLSearchParams(search);
+  if (query.get('test') === '1' && query.get('layout') === 'studio') return true;
   return (
     query.get('test') !== '1' && query.get('bench') !== '1' && query.get('layout') !== 'legacy'
   );
@@ -161,6 +167,7 @@ export function StudioShell({ canvas, fileControls, ...status }: StudioShellProp
         <PropertyPanel />
         <PathDebugPanel />
         <EditorPanels />
+        <ExportPanel />
       </aside>
       <StudioStatus {...status} />
     </div>

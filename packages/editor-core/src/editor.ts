@@ -20,6 +20,7 @@ import {
   pasteSource,
   pasteTargetOf,
 } from './clipboard.js';
+import { buildExportScene, exportSceneToSvg } from './export.js';
 import { ExpansionCache, expansionFailure } from './expansion.js';
 import {
   applyEdit,
@@ -1647,6 +1648,23 @@ class EditorCore implements Editor {
         }
         case 'extensions':
           return this.extensionSummaries;
+        case 'exportScene':
+        case 'exportSvg': {
+          const ids: unknown = query.ids;
+          if (ids !== undefined && !Array.isArray(ids)) return null;
+          const scene = buildExportScene(
+            {
+              document: this.document,
+              pageId: this.activePage,
+              custom: (node) => this.extensions.geometry(node),
+              expansions: this.expansions,
+              layout: this.layout,
+            },
+            ids as readonly string[] | undefined,
+          );
+          if (scene === null) return null;
+          return query.type === 'exportScene' ? scene : exportSceneToSvg(scene);
+        }
       }
     })();
     return value as QueryResult<Q>;
