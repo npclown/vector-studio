@@ -144,9 +144,10 @@ export function handleCursorAt(
   // The select tool moves instead of resizing inside a box under four handle radii; the hover
   // cannot see the node under the pointer, so it shows no resize cursor anywhere inside such a box.
   const reach = (4 * HANDLE_PX) / zoom;
-  const small = width < reach || height < reach;
+  const small = width < reach - 1e-9 || height < reach - 1e-9;
   if (!(small && inside)) {
     let best: PagePoint | null = null;
+    let edgeCursor: HandleCursor | null = null;
     let bestDistance = HANDLE_PX / zoom;
     for (const handle of handles.handles) {
       const d = Math.hypot(point.x - handle.x, point.y - handle.y);
@@ -155,6 +156,32 @@ export function handleCursorAt(
         bestDistance = d;
       }
     }
+    // V-29 (Figma): anywhere along an edge, on or just outside the box within the handle reach
+    // and between its corners, resizes that edge, as the select tool's press does.
+    if (best === null && !inside) {
+      const reachEdge = HANDLE_PX / zoom;
+      const alongX = local.x >= 0 && local.x <= width;
+      const alongY = local.y >= 0 && local.y <= height;
+      // No edges across an axis thinner than the small-box reach (the select tool's rule).
+      // A tolerance absorbs the float noise of sizes rebuilt from rotated corners.
+      const scalesY = height >= reach - 1e-9;
+      const scalesX = width >= reach - 1e-9;
+      const edges: [PagePoint, number, boolean][] = [
+        [{ x: width / 2, y: 0 }, Math.abs(local.y), alongX && scalesY],
+        [{ x: width, y: height / 2 }, Math.abs(local.x - width), alongY && scalesX],
+        [{ x: width / 2, y: height }, Math.abs(local.y - height), alongX && scalesY],
+        [{ x: 0, y: height / 2 }, Math.abs(local.x), alongY && scalesX],
+      ];
+      let edgeDistance = reachEdge;
+      for (const [middle, d, along] of edges) {
+        if (along && d <= edgeDistance) {
+          edgeDistance = d;
+          const angle = direction(middle);
+          if (angle !== null) edgeCursor = { kind: 'resize', angle };
+        }
+      }
+    }
+    if (edgeCursor !== null) return edgeCursor;
     if (best !== null) {
       const angle = direction(toLocal(best));
       // A handle at the centre of a flat box points along its one axis.

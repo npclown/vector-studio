@@ -855,10 +855,10 @@ describe('M2-A03 rotate gesture', () => {
       const inside = selected(['r']);
       drag(inside, at(90, 10), [at(95, 15)]);
       expect(nodeOf(inside, 'r')).toMatchObject({ frame: f(5, 5, 100, 50), rotation: 0 });
-      // On the box edge (not strictly outside), between handles: a press on the node moves it.
+      // On the box edge (not strictly outside), between handles: the edge resizes (V-29).
       const edge = selected(['r']);
       drag(edge, at(85, 0), [at(85, 5)]);
-      expect(nodeOf(edge, 'r')).toMatchObject({ frame: f(0, 5, 100, 50), rotation: 0 });
+      expect(nodeOf(edge, 'r')).toMatchObject({ frame: f(0, 5, 100, 45), rotation: 0 });
       // 18 away from the corner is still in the zone; just beyond it is empty canvas.
       const near = selected(['r']);
       rotatesExactly(near, 'r', at(118, 0), at(118, 40));
