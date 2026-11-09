@@ -535,7 +535,7 @@ describe('M8-R5: symbol buttons', () => {
   });
 });
 
-describe('M8-A11 markup: one node editable, several read-only, R5 buttons without test IDs', () => {
+describe('M8-A11 markup: one node editable, several read-only (V-25: transform aside), R5 buttons without test IDs', () => {
   it('one node: every field enabled with its value, sections by node type', () => {
     const target = editor();
     target.execute({ type: 'setSelection', ids: ['c'] });
@@ -558,20 +558,23 @@ describe('M8-A11 markup: one node editable, several read-only, R5 buttons withou
     expect(html).not.toContain('Create instance');
   });
 
-  it('several nodes: common values or "mixed", all read-only', () => {
+  it('several nodes: common values or "mixed", read-only but the V-25 transform box', () => {
     const target = editor();
     target.execute({ type: 'setSelection', ids: ['r', 'q', 'l'] });
     const html = markup(target, PropertySections);
-    expect(control(html, 'X')).toContain('value="10"');
-    expect(control(html, 'X')).toContain('disabled');
-    expect(control(html, 'Y')).toContain('placeholder="mixed"');
-    expect(control(html, 'Y')).toContain('data-mixed="true"');
+    // V-25 slice 9 amends M8-R2: the transform fields show the box around the selection; X, Y
+    // and the rotation (mixed here) are editable, W and H only for unrotated page-root nodes.
+    const box = target.query({ type: 'handles' })!.corners[0];
+    expect(control(html, 'X')).toContain(`value="${Number(box.x.toFixed(2))}"`);
+    expect(control(html, 'Rotation')).toContain('placeholder="mixed"');
+    expect(control(html, 'Rotation')).toContain('data-mixed="true"');
+    for (const label of ['X', 'Y', 'Rotation'])
+      expect(control(html, label)).not.toContain('disabled');
     expect(control(html, 'Name')).toContain('placeholder="mixed"');
     expect(control(html, 'Visible')).toContain('disabled');
     expect(control(html, 'Start arrow')).toContain('disabled');
     expect(control(html, 'End arrow')).toContain('disabled');
-    for (const label of ['X', 'Y', 'W', 'H', 'Rotation', 'Name'])
-      expect(control(html, label)).toContain('disabled');
+    for (const label of ['W', 'H', 'Name']) expect(control(html, label)).toContain('disabled');
   });
 
   it('text: the run fields are disabled at a collapsed caret and enabled over a selection', () => {

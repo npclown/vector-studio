@@ -760,6 +760,13 @@ export type SelectionHandles = Readonly<{
    * line) has no top or bottom edge handle and keeps only its left and right ones and corners.
    */
   handles: readonly PagePoint[];
+  /**
+   * V-25 slice 9 (the property panel's X, Y, W and H): for a selection of one node, the box the
+   * handles sit on in that node's own unrotated axes, relative to its frame's top-left corner:
+   * its content box (V-26: a path's curve, a group's children), else `{ 0, 0, width, height }`.
+   * Null for several nodes.
+   */
+  content: Frame | null;
 }>;
 
 export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'committedDocument' }
