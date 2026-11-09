@@ -428,13 +428,19 @@ describe('E41 section 5.2 effect roots in the packet', () => {
   });
 
   it('clamps a mask group that is itself an effect root to the target', () => {
+    const odd: PrimitiveTarget = { ...target, width: 641 };
     const { source } = setup([
-      group('m', null, ['s', 'c'], 1, { effects: [shadow(40, 0, 2)], clip: { kind: 'mask' } }),
-      box('s', 'm', -30),
-      box('c', 'm', -30),
+      group('m', null, ['s', 'c'], 1, {
+        effects: [shadow(40, 0, 2), blur(2)],
+        clip: { kind: 'mask' },
+      }),
+      box('s', 'm', 600),
+      box('c', 'm', 600),
     ]);
-    const packet = source.prepare(target);
-    expect(packet?.layers?.layers.some((layer) => layer.nodeId === 'm') ?? false).toBe(false);
+    const layer = source.prepare(odd)!.layers!.layers[0]!;
+    expect(layer.nodeId).toBe('m');
+    // Without the clamp the output would reach V ⊕ b, 641 + 6.
+    expect(layer.effect!.output.x + layer.effect!.output.width).toBe(641);
   });
 
   it('drops only the isolated subtree over budget when a tree drops its effects', () => {

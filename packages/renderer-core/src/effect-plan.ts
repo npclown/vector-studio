@@ -160,6 +160,16 @@ function boxOf(rect: DeviceRect): DeviceBox {
   return { minX: rect.x, minY: rect.y, maxX: rect.x + rect.width, maxY: rect.y + rect.height };
 }
 
+function clampRect(rect: DeviceRect, to: DeviceRect): DeviceRect | null {
+  const x = Math.max(rect.x, to.x);
+  const y = Math.max(rect.y, to.y);
+  const right = Math.min(rect.x + rect.width, to.x + to.width);
+  const bottom = Math.min(rect.y + rect.height, to.y + to.height);
+  return x < right && y < bottom
+    ? Object.freeze({ x, y, width: right - x, height: bottom - y })
+    : null;
+}
+
 /** An effect root's two device rectangles (E41-K2). */
 export type EffectBounds = Readonly<{
   /** Where `L` is rendered. */
@@ -201,8 +211,13 @@ export function effectBounds(
     source = source === null ? null : intersect(source, target);
     output = output === null ? null : intersect(output, target);
   }
-  const sourceRect = evenRect(source);
-  const outputRect = evenRect(output);
+  let sourceRect = evenRect(source);
+  let outputRect = evenRect(output);
+  // Rounding the size up to even can pass an odd target edge: clamp again, as `layerBound` does.
+  if (clampTo !== null) {
+    sourceRect = sourceRect === null ? null : clampRect(sourceRect, clampTo);
+    outputRect = outputRect === null ? null : clampRect(outputRect, clampTo);
+  }
   if (sourceRect === null || outputRect === null) return null;
   return Object.freeze({ source: sourceRect, output: outputRect });
 }
@@ -353,7 +368,7 @@ export function effectResourceLimitDiagnostic(
   return Object.freeze({
     code: DIAGNOSTIC_CODES.EFFECT_RESOURCE_LIMIT,
     severity: 'warning',
-    message: `Effects of ${notice.nodeId} and the effect roots under it are drawn without effects: ${reason}.`,
+    message: `Effect roots in the layer tree of ${notice.nodeId} are drawn without effects: ${reason}.`,
     generation,
     context: Object.freeze({
       nodeId: notice.nodeId,
