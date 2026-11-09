@@ -131,6 +131,10 @@ const ADDED: Readonly<Record<keyof typeof AT_17A2B0A, readonly string[]>> = {
   ui: [
     'AppearancePanel',
     'AppearancePanelProps',
+    // V-25 slice 10 adds the canvas context menu.
+    'CanvasContextMenu',
+    'CanvasContextMenuAt',
+    'CanvasContextMenuProps',
     'EditorPanels',
     // V-25 (editor UI usability) adds the icon toolbar, the zoom menu and the tree's props.
     'EditorToolbar',
@@ -156,6 +160,7 @@ const ADDED: Readonly<Record<keyof typeof AT_17A2B0A, readonly string[]>> = {
     'UiExtension',
     'ZoomMenu',
     'resolvePanels',
+    'selectForContextMenu',
     'usePanelErrors',
   ],
 };

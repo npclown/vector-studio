@@ -253,6 +253,8 @@ const STUDIO_CSS = `
 .vs-menu .vs-menu-item:hover:not(:disabled) { background: var(--vs-accent); }
 .vs-menu .vs-menu-item:disabled { color: #6b6b6b; }
 .vs-menu-shortcut { opacity: 0.6; }
+.vs-menu-separator { height: 1px; margin: 4px 0; background: #3a3a3a; }
+.vs-context-menu { min-width: 220px; }
 
 .vs-left, .vs-right { min-height: 0; overflow-y: auto; background: var(--vs-bg); }
 .vs-left {

@@ -25,6 +25,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { handleCursorAt, type HandleCursor } from '../src/m2-geometry';
 import { handleCursorCss } from '../src/v28-handle-cursor';
+import { useStudioContextMenu } from '../src/v25-context-menu';
 import {
   attachPersistence,
   createPressGate,
@@ -690,6 +691,8 @@ function Surface({
     };
     return caretColour(snapshot.document, snapshot.activePage, point);
   };
+  // V-25 slice 10: the studio's right click menu on the canvas.
+  const contextMenu = useStudioContextMenu(editor, studio);
   // V-25: the canvas host, at the fixed size of the M8 layout or the studio's measured size.
   const canvasHost = (size: StudioCanvasSize) => (
     <div
@@ -698,6 +701,7 @@ function Surface({
       style={{ width: size.width, cursor: handleCursorCss(handleCursor) }}
       onPointerMove={hover}
       onPointerDownCapture={studio ? readableText : undefined}
+      onContextMenu={contextMenu.onContextMenu}
       onPointerLeave={() => {
         setHandleCursor(null);
         setPenCursor(null);
@@ -727,6 +731,7 @@ function Surface({
           height={size.height}
         />
       </EditorCanvas>
+      {contextMenu.menu}
     </div>
   );
   if (studio) {
