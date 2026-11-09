@@ -210,3 +210,11 @@ export { PropertyPanel, PropertySections } from './property-panel.js';
 
 // V-25 (editor UI usability): a one-row icon toolbar and a zoom menu for a full-window editor.
 export { EditorToolbar, ZoomMenu, type EditorToolbarProps } from './editor-toolbar.js';
+
+// V-25 slice 10: the canvas's right click menu.
+export {
+  CanvasContextMenu,
+  selectForContextMenu,
+  type CanvasContextMenuAt,
+  type CanvasContextMenuProps,
+} from './context-menu.js';

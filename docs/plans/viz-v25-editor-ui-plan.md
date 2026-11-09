@@ -37,7 +37,7 @@ Recommendation: no new artboard node type and no schema change. A top-level fram
 | 7 | Readable text on the black canvas: new text and the caret contrast with what lies under them; the outline clears the caret | Done (#517, `351e0cd`) |
 | 8 | Pen paths and curves: a new line or path is stroked to read on what lies under it; the pen previews its pending curves, the last anchor's handles and the next segment to the pointer; Alt-drag breaks the handles | In review |
 | 9 | Property panel: X/Y/W/H grid showing and editing the selection box (one or several nodes); collapsible sections not done | In review |
-| 10 | Context menu (right click): group, arrange, delete, symbol actions | Proposed |
+| 10 | Context menu (right click): clipboard, duplicate, delete, arrange, group, hide, symbol and zoom actions on a selection; paste, select all and zoom on empty canvas | In review |
 | 11 | Export per artboard (SVG, PNG) | Proposed; needs its own contract |
 
 The order after slice 1 is the user's call: on 2026-11-06 the user chose slice 2 (artboards) next, then asked for slice 3 ("make colour picking easy, and always switch to Select when a shape is drawn"), which takes the colour swatches out of the old property panel slice. Slice 4 answers the user's question the same day ("how do I put a shape inside a Frame? I can't find a way"): the only way was cut and paste with the frame selected or entered.
@@ -258,3 +258,32 @@ The user asked on 2026-11-09 for an X/Y/W/H number panel, as in Figma. The M8 tr
 
 - `pnpm check` parts in the container: format, lint, typecheck, boundaries pass; `test:unit` 5427 of 5428, the one failure being the known Node 22 environment failure of `p3-b0r-identity`.
 - `test:m8-next-host` headless smoke in the container's Chromium: see the PR. Headed Chrome and Edge on the main PC after merge.
+
+## Slice 10 design: canvas context menu
+
+- Request (2026-11-09): the user asked for the right click menu ("우클릭 메뉴") after a comparison with Figma named it missing.
+- `@vector-studio/ui` adds `CanvasContextMenu` and `selectForContextMenu` (`context-menu.tsx`, pure parts in `context-menu-model.ts`). Every item runs a public command the toolbar, the layer tree or a keymap action already runs, with the toolbar's selection follow-ups: copy, cut, paste here, duplicate, delete; bring to front, forward, send backward, to back; group, ungroup (one selected group or mask group), use as mask (two or more); hide or show (hide when any selected node is visible; one `setNodeProps` per node, as the layer tree's toggle, so one undo step per node); create symbol, instance, detach (the toolbar's rules); zoom to selection. On empty canvas: paste here, select all (the scope's children, else the page's), zoom to fit, zoom to 100%. A disabled item sends nothing.
+- Shortcuts come from the `keymap` query as in the toolbar (the first chord in keymap order, so delete shows ⌫); copy, cut and paste, built-in actions unbound by default, show their bound chord or else the browser's (⌘ on a Mac keymap, else Ctrl), which the canvas handles as DOM clipboard events.
+- In path edit mode Delete reads "Delete points" and removes the selected anchors, as the Delete key does there (all of them deletes the path, M3-Q4); it is disabled with no anchor selected.
+- Clipboard: copy and cut also write the in-memory text to the system clipboard; paste here first reads the system clipboard's text (as Ctrl+V on the canvas pastes it) and falls back to the in-memory clipboard when it cannot be read. Both are best effort. The paste is centred on the press (`paste at`, and `pointer` for plain text).
+- Selection on right click (Figma): with the select tool and outside path and text edit mode, a press that is not on or within 8 / zoom page units of the selection box gets the selection a left click there would (the click is sent as `input` events: a node selected, empty canvas clearing the selection; no undo step). On or near the box the selection stays, so a right click on one node of a multiple selection keeps all of it. With another tool or in path edit mode the selection stays.
+- Menu behaviour: the menu pattern of the zoom menu (first enabled item focused, arrow keys, Home and End; Escape, Tab, a pick or a wheel closes with focus back on the canvas; a press outside or a window blur closes). It stays inside the canvas cell and scrolls when the cell is shorter than it. Keys inside the menu do not reach the canvas. No selection click is sent while the primary button is held (its release would end that drag). The menu key or Shift+F10 on the focused canvas opens the menu at the canvas centre and keeps the selection.
+- next-host: the studio opens it from the canvas host's `contextmenu` (`v25-context-menu.tsx`); text edit mode, and the M8 layout (`?test=1`, `?bench=1`, `?layout=legacy`), keep the browser's menu, so no headed spec sees a change.
+- Not in this slice: lock (the document schema has no lock flag), rename, copy as SVG or PNG, align and distribute submenus, and a menu on the layer tree rows.
+
+## Acceptance criteria (slice 10)
+
+| ID | Criterion | Method |
+| --- | --- | --- |
+| V25-A40 | A right click on the studio canvas opens the menu at the press, kept inside the canvas cell; the M8 layout and text edit mode keep the browser's menu | DOM check in the container's Chromium; headed check |
+| V25-A41 | The menu shows the selection items or the empty canvas items with the enable rules above, each with its keymap shortcut (browser chords for the clipboard) | Unit tests against a real editor (both platforms); markup test |
+| V25-A42 | Each item runs its public command with the toolbar's selection follow-up; paste here centres the paste on the press | Unit tests against a real editor |
+| V25-A43 | A right click away from the selection box selects as a left click there would; on or near it the selection stays; another tool or path edit mode keeps the selection | Unit tests against a real editor |
+| V25-A44 | New `ui` exports carry TSDoc, are in the export lists and in `docs/host-api.md` | `m8-u3-ui-api`, `m8-u6-host-api` tests |
+
+## Validation (slice 10)
+
+- Unit: `tests/unit/v25-context-menu.test.ts` (14 tests); `m8-u3-ui-api` and `m8-u6-host-api` export lists gain the four names.
+- DOM check in the container's Chromium on the studio layout (renderer down, DOM only): two rectangles drawn; a right click on the first selects it and opens the menu with focus on Copy; ArrowDown moves to Cut; Duplicate adds a layer and returns focus to the canvas; a right click near the canvas's bottom-right corner opens the empty canvas menu inside the cell (box 752,627 228 x 149 in a canvas 240..1000 x 44..776); Escape closes it; Select all selects 3; a right click on one of them keeps all 3; Group makes one layer.
+- Review r1 READY WITH FOLLOW-UPS, applied: Delete in path edit mode removes the selected anchors (it deleted the whole path); the menu scrolls in a short cell; no selection click during a held primary press (it committed the drag); the keyboard menu key opens at the canvas centre without a click; Tab and a wheel refocus the canvas; bound clipboard chords win over the browser's. Kept: the refusal code stays until the menu next opens; paste here stays enabled with an empty clipboard (it shows `editor.empty-clipboard`); Duplicate ignores a host binding's `offset`.
+- Headed: on the main PC after merge.
