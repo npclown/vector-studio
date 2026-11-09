@@ -120,6 +120,7 @@ describe('V-28 handle cursor', () => {
         { x: 10, y: 80 },
         { x: 10, y: 80 },
       ],
+      content: null,
     };
     expect(handleCursorAt(flat, { x: 11, y: 1 }, 1)).toEqual({ kind: 'resize', angle: -90 });
     expect(handleCursorAt(flat, { x: 9, y: 79 }, 1)).toEqual({ kind: 'resize', angle: 90 });

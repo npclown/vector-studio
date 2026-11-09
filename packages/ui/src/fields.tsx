@@ -1,4 +1,10 @@
-import { useState, type FocusEvent, type KeyboardEvent, type ReactNode } from 'react';
+import {
+  useState,
+  type CSSProperties,
+  type FocusEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 
 // MVP M8 contract, section 7 (M8-U5): the field controls of the property panel, moved with the M4
 // appearance panel (M4 contract, section 8) and shared by its sections. A text field commits on
@@ -13,8 +19,11 @@ export function TextField({
   identity,
   commit,
   onLeaveTextEdit,
+  inputStyle,
 }: {
   label: string;
+  /** The input's own style (V-25 slice 9: the transform grid's fields fill their cells). */
+  inputStyle?: CSSProperties;
   /**
    * What the field edits (the property panel passes the node IDs): a change resets the draft
    * and its invalid mark even when the shown value stays the same. The appearance panel passes
@@ -72,6 +81,7 @@ export function TextField({
       value={draft}
       disabled={disabled}
       size={8}
+      style={inputStyle}
       onChange={(event) => setDraft(event.currentTarget.value)}
       onKeyDown={onKeyDown}
       onBlur={onBlur}

@@ -136,6 +136,7 @@ describe('M2-U8 rotate cursor zone', () => {
       { x: 0, y: 50 },
       { x: 0, y: 25 },
     ],
+    content: null,
   };
 
   it('is outside the box near a corner, after the handles, at zoom 1 and 2', () => {

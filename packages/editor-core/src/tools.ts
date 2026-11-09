@@ -62,7 +62,7 @@ import {
   type SnapSet,
   type ValueIndex,
 } from './snap.js';
-import { hasInnerContentBox } from './content-box.js';
+import { contentBox, hasInnerContentBox } from './content-box.js';
 import { childrenOf, documentTree, isAncestor, isContainer, spaceOf } from './tree.js';
 import type {
   InputEvent,
@@ -753,6 +753,10 @@ export function selectionHandles(
     ],
     rotation: box.mode === 'single' ? normalizeRotation(box.turn) : 0,
     handles: activeHandles(box.box).map((handle) => handlePoint(box, handle)),
+    content:
+      selection.length === 1
+        ? contentBox(document.nodes[selection[0]!]!, (id) => document.nodes[id])
+        : null,
   });
 }
 

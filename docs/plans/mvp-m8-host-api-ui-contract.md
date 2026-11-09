@@ -97,7 +97,7 @@ Each control commits through one public command (one undo step for a document co
 ### 7.3 Property panel
 
 - **M8-R1 appearance.** The M4 panel unchanged (multi-node through `setStyle`), keeping its `complementary` landmark named "Appearance" (M8-Q11).
-- **M8-R2 transform.** X, Y, W and H of the stored parent-local frame and the rotation in degrees, through one `setFrames` (M8-Q8 (a)).
+- **M8-R2 transform.** X, Y, W and H of the stored parent-local frame and the rotation in degrees, through one `setFrames` (M8-Q8 (a)). **V-25 slice 9 amendment (2026-11-09):** the fields show the selection's handle box instead (for one node its content box, X and Y at its turned top-left corner in the parent's space; for several the box around them all, editable through `nudgeNodes` and `setFrames`), with the rules in the [V-25 plan, slice 9](viz-v25-editor-ui-plan.md#slice-9-design-xywh-of-the-selection-box).
 - **M8-R3 layer, line and constraints.** Name and visibility; line start and end arrows (`setNodeProps startArrow`, `endArrow`); constraints of a child of a frame or symbol (`setNodeProps constraints`).
 - **M8-R4 text.** Sizing, alignment, letter spacing and line height (`setTextProps`); family, size and colour (`setTextStyle`) over the text edit selection when it is not collapsed, else over the node's whole text; with a collapsed caret the run fields are disabled (M8-Q9 (a)).
 - **M8-R5 symbols.** On a source: "Create instance"; on an instance: "Detach instance" and, per overridden text node, "Reset text" (`clearInstanceText`). These buttons carry no test IDs, so the toolbar's `create-instance` and `detach` stay unique in Playwright strict mode.
