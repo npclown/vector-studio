@@ -175,9 +175,16 @@ export function targetText(target: TransformTarget, key: TransformKey): string |
   return rotation.state === 'one' ? boxText(rotation.value) : null;
 }
 
-/** Whether a transform field takes input for the target (W and H of an unscalable group: no). */
+/**
+ * Whether a transform field takes input for the target: W and H of several nodes only when they
+ * scale (unrotated page-root nodes) and their box has a size on that axis.
+ */
 export const targetEditable = (target: TransformTarget, key: TransformKey): boolean =>
-  target.kind === 'one' || target.scalable || key === 'x' || key === 'y' || key === 'rotation';
+  target.kind === 'one' ||
+  key === 'x' ||
+  key === 'y' ||
+  key === 'rotation' ||
+  (target.scalable && target.box[key] !== 0);
 
 /**
  * One transform edit of the target as one command, or null when it cannot apply. X and Y move

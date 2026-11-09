@@ -229,6 +229,19 @@ describe('V-25 slice 9: several nodes', () => {
   });
 });
 
+describe('V-25 slice 9: zero-size multi box', () => {
+  it('keeps W read-only for several vertical lines', () => {
+    const e = editor();
+    const a = ok(e, { type: 'createLine', start: { x: 0, y: 0 }, end: { x: 0, y: 80 } })[0]!;
+    const b = ok(e, { type: 'createLine', start: { x: 0, y: 100 }, end: { x: 0, y: 160 } })[0]!;
+    ok(e, { type: 'setSelection', ids: [a, b] });
+    const t = target(e);
+    expect(targetText(t, 'width')).toBe('0');
+    expect(targetEditable(t, 'width')).toBe(false);
+    expect(targetEditable(t, 'height')).toBe(true);
+  });
+});
+
 describe('V-25 slice 9: display', () => {
   it('rounds to two decimals without a negative zero', () => {
     expect(boxText(12.3456)).toBe('12.35');

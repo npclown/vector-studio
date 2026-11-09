@@ -61,7 +61,7 @@ import { countRender } from './render-probe.js';
 // appearance panel come the transform, layer (name and visibility), line, constraint, text and
 // symbol sections, each shown when a selected node has its fields. A field shows the common
 // value or "mixed"; it is editable for one selected node only and read-only (disabled) for
-// several. One committed edit is one command (one undo step); text that cannot be a value marks
+// several, except the transform fields (V-25 slice 9, below). One committed edit is one command (one undo step); text that cannot be a value marks
 // the field `aria-invalid` and sends nothing; a refused command also marks it and shows its code
 // (`property-refusal`). The section 7.3 buttons carry no test ID (M8-R5). V-25 slice 9 amends
 // M8-R2: the transform fields show the selection box and edit several nodes too.
@@ -428,7 +428,7 @@ function SymbolSection({
  * The transform, layer, line, constraint, text and symbol sections of the property panel
  * (MVP M8 contract, M8-R2 to M8-R5), without the appearance panel. Each section shows when a
  * selected node has its fields; a field is editable for one selected node and shows the common
- * value or "mixed", read-only, for several; one committed edit is one command; a refused command
+ * value or "mixed", read-only, for several (the transform fields, V-25 slice 9, edit several); one committed edit is one command; a refused command
  * shows its code (`property-refusal`).
  */
 export function PropertySections() {
