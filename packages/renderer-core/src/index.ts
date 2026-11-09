@@ -45,6 +45,14 @@ export {
 } from './layer-plan.js';
 export type { DeviceRect, LayerResourceNotice } from './layer-plan.js';
 export {
+  E41_BLUR_LEVELS_MAX,
+  E41_BLUR_TAPS_MAX,
+  E41_SIGMA_PX_MAX,
+  blurLevels,
+  effectResourceLimitDiagnostic,
+} from './effect-plan.js';
+export type { EffectBudgetNotice } from './effect-plan.js';
+export {
   E28_ATLAS_PAGES_MAX,
   E28_ATLAS_PAGE_SIZE,
   E28_RASTER_CAP,

@@ -9,6 +9,7 @@ import type {
   ClipMaskPacketLevel,
   MeshFillDraw,
   MeshPacketPart,
+  LayerEffectRecord,
   LayerPacketPart,
   PrimitiveDraw,
   PrimitiveFrameSource,
@@ -84,6 +85,13 @@ import {
   type AtlasFrame,
   type TextFrame,
 } from './text-atlas.js';
+import { planEffectLayers, type EffectLayer } from './effect-layers.js';
+import {
+  cullTarget,
+  extendEffectReach,
+  type EffectBudgetNotice,
+  type EffectReach,
+} from './effect-plan.js';
 import {
   layerBound,
   planLayerBudget,
@@ -119,6 +127,8 @@ type DerivedPrimitive = Readonly<{
   sequence: number;
   /** E25 contract, U2: the innermost isolated container, or null outside layers. */
   layer: LayerScope | null;
+  /** E41-K3: the reach of the effect roots above it; culling tests its grown bound. */
+  reach?: EffectReach;
 }>;
 type MaskSource = Readonly<{ source: MaskSourceRecord; key: string }>;
 type MaskSourceMemo = Readonly<{ inputs: readonly unknown[]; result: MaskSource }>;
@@ -133,6 +143,8 @@ type DerivedText = Readonly<{
   clip: ClipChain | null;
   sequence: number;
   layer: LayerScope | null;
+  /** E41-K3, as a primitive's. */
+  reach?: EffectReach;
 }>;
 type DerivedTexts = { leaves: DerivedText[]; held: boolean };
 type VersionedRecords = {
@@ -174,6 +186,7 @@ const MASK_NOTICES_QUEUED = 4096;
 const MASK_NOTICES_PER_PACKET = 32;
 /** E25 contract, section 5: the queue limits of `render.layer-resource-limit`, as for masks. */
 const LAYER_NOTICES_QUEUED = 4096;
+const NO_EFFECT_STATISTICS = Object.freeze({ roots: 0, clampedSigmas: 0 });
 const LAYER_NOTICES_PER_PACKET = 32;
 const IDENTITY: SceneAffine = [1, 0, 0, 1, 0, 0];
 /** P1 contract (position error): the packet v1 budget, in physical pixels, on both measures. */
@@ -377,6 +390,13 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   #layersOverBudget = new Set<string>();
   #layerNotices: LayerResourceNotice[] = [];
   #layerNoticesDropped = 0;
+  /** E41-S8: the effect budget's notices, queued as the layer notices are. */
+  #effectsOverBudget = new Set<string>();
+  #effectNotices: EffectBudgetNotice[] = [];
+  #effectNoticesDropped = 0;
+  #effectStatistics: Readonly<{ roots: number; clampedSigmas: number }> = NO_EFFECT_STATISTICS;
+  /** E41-K2 and section 5.4: the device's `maxTextureDimension2D`. */
+  readonly #maxTextureDimension: number;
   /** @internal Tests only (E25-A05): every visible container with opacity 1 is a layer too. */
   readonly #isolateUnitOpacity: boolean;
   /** E28 contract, U2: the glyph atlas plan; null without `text: 'atlas'`. */
@@ -402,6 +422,8 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     pathMeshes?: PathMeshPipeline,
     options: Readonly<{
       isolateUnitOpacityForTesting?: boolean;
+      /** E41 section 5.4: the device's `maxTextureDimension2D`; default 8192. */
+      maxTextureDimension2D?: number;
       /**
        * E28 contract, U2: the glyph raster port and the atlas size, and the callback the service
        * invalidates through when a packet with deferred clusters is acknowledged.
@@ -415,6 +437,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     }> = {},
   ) {
     this.#isolateUnitOpacity = options.isolateUnitOpacityForTesting === true;
+    this.#maxTextureDimension = options.maxTextureDimension2D ?? 8192;
     const text = options.text;
     this.#atlas =
       text === undefined
@@ -513,9 +536,8 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
         cameraState.camera,
         target,
       );
-      const drawn = layerPlan.indices;
-      const inDrawn = (layer: LayerScope | null | undefined) =>
-        layer === null || layer === undefined || drawn.has(layer);
+      const plan = layerPlan;
+      const inDrawn = (layer: LayerScope | null | undefined) => plan.contains(layer);
       visible = this.#intern(
         'layer-visible',
         visible.filter((primitive) => inDrawn(primitive.layer)),
@@ -530,8 +552,10 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
           (draw) => draw.maskSource === true || inDrawn(pathLayers.get(draw.nodeId)),
         ),
       );
-    } else if (this.#layersOverBudget.size > 0) {
-      this.#layersOverBudget = new Set();
+    } else {
+      if (this.#layersOverBudget.size > 0) this.#layersOverBudget = new Set();
+      if (this.#effectsOverBudget.size > 0) this.#effectsOverBudget = new Set();
+      this.#effectStatistics = NO_EFFECT_STATISTICS;
     }
     // P4 contract, U4: mask levels are planned over the drawn content in paint order; content
     // under an undrawable level (empty bound, a source covering nothing, over the budget) is
@@ -890,8 +914,9 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       });
     }
     const layerNotices = this.#layerNotices.slice(0, LAYER_NOTICES_PER_PACKET);
+    const effectNotices = this.#effectNotices.slice(0, LAYER_NOTICES_PER_PACKET);
     const layersPart: LayerPacketPart | null =
-      layered === null && layerNotices.length === 0
+      layered === null && layerNotices.length === 0 && effectNotices.length === 0
         ? null
         : Object.freeze({
             layoutVersion: 0 as const,
@@ -904,11 +929,13 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
                   parent: layerPlan!.indexOf(layer.parent),
                   draws: Object.freeze(layered?.layers[index] ?? []),
                   meshDraws: Object.freeze(meshByLayer.get(index) ?? []),
+                  ...effectRecordOf(layerPlan!.effects.get(layer)),
                 }),
               ),
             ),
             composites: Object.freeze(layered?.composites ?? []),
             notices: Object.freeze(layerNotices),
+            ...(effectNotices.length === 0 ? {} : { effectNotices: Object.freeze(effectNotices) }),
           });
     // E28 contract, section 4: the text part; present while text is drawn, the atlas holds or
     // releases pages, a notice is pending or clusters are deferred (whose acknowledgement
@@ -1012,6 +1039,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     // Notices leave the queue only once the packet exists, so a throwing prepare keeps them.
     this.#maskNotices.splice(0, packet.clipNotices?.length ?? 0);
     this.#layerNotices.splice(0, packet.layers?.notices.length ?? 0);
+    this.#effectNotices.splice(0, packet.layers?.effectNotices?.length ?? 0);
     this.#atlas?.consumeNotices(textPart?.notices.length ?? 0);
     this.#pending = Object.freeze({
       packet,
@@ -1199,6 +1227,9 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
         : this.#layerContentOf(visible, texts, pathDraws, paths, pathLayers);
     if (!this.#fullDerivation) this.#layerContent = Object.freeze({ inputs, content });
     const view = { x: camera.position.x, y: camera.position.y, zoom: camera.zoom };
+    if (scopes.some((scope) => scope.effects !== undefined)) {
+      return this.#planWithEffects(scopes, content, view, target);
+    }
     // Scopes are in pre-order, so the reverse visits every layer after the layers nested in it.
     const unclamped = new Map<LayerScope, DeviceRect>();
     const nested = new Map<LayerScope, DeviceRect[]>();
@@ -1261,12 +1292,101 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
           left.end - right.end || right.start - left.start || right.depth - left.depth,
       );
     const indices = new Map(order.map((scope, index) => [scope, index] as const));
+    this.#queueEffectNotices([]);
+    this.#effectStatistics = NO_EFFECT_STATISTICS;
     return {
-      indices: new Set(order),
       order,
       bounds,
+      effects: new Map(),
+      contains: (layer) => layer === null || layer === undefined || indices.has(layer),
       indexOf: (layer) => (layer === null || layer === undefined ? -1 : (indices.get(layer) ?? -1)),
     };
+  }
+
+  /**
+   * E41 contract, U4b: the layer plan of a scene with effect roots (`planEffectLayers`). A
+   * dissolved scope's content draws in its nearest drawn ancestor.
+   */
+  #planWithEffects(
+    scopes: readonly LayerScope[],
+    content: ReadonlyMap<LayerScope, readonly SceneBounds[]>,
+    view: Readonly<{ x: number; y: number; zoom: number }>,
+    target: PrimitiveTarget,
+  ): DrawnLayers {
+    const plan = planEffectLayers(scopes, content, view, target, this.#maxTextureDimension);
+    this.#queueLayerNotices(plan.layerNotices);
+    this.#queueEffectNotices(plan.effectNotices);
+    const states = new Map(plan.states);
+    const resolve = (layer: LayerScope | null | undefined): LayerScope | null => {
+      let scope = layer ?? null;
+      while (scope !== null && states.get(scope) === 'dissolved') scope = scope.parent;
+      return scope;
+    };
+    // Until a backend draws the effect passes (U5), an effect root composites as an E25 layer
+    // of its content: its packet bound is its source bound inside the target and its drawn
+    // parent's bound (E25-K5's clamps); an empty one draws nothing (section 5.3).
+    const bounds = new Map<LayerScope, DeviceRect>();
+    const targetRect: DeviceRect = { x: 0, y: 0, width: target.width, height: target.height };
+    for (const scope of scopes) {
+      if (states.get(scope) !== 'drawn') continue;
+      const parent = resolve(scope.parent);
+      if (parent !== null && states.get(parent) !== 'drawn') {
+        states.set(scope, 'dropped');
+        continue;
+      }
+      let bound = intersectRects(plan.bounds.get(scope)!, targetRect);
+      if (bound !== null && parent !== null) bound = intersectRects(bound, bounds.get(parent)!);
+      if (bound === null) {
+        states.set(scope, 'dropped');
+        continue;
+      }
+      bounds.set(scope, bound);
+    }
+    const effects = new Map([...plan.effects].filter(([scope]) => states.get(scope) === 'drawn'));
+    this.#effectStatistics = Object.freeze({
+      roots: effects.size,
+      clampedSigmas: [...effects.values()].reduce((sum, e) => sum + e.effects.clamped, 0),
+    });
+    const order = scopes
+      .filter((scope) => states.get(scope) === 'drawn')
+      .sort(
+        (left, right) =>
+          left.end - right.end || right.start - left.start || right.depth - left.depth,
+      );
+    const indices = new Map(order.map((scope, index) => [scope, index] as const));
+    return {
+      order,
+      bounds,
+      effects,
+      contains: (layer) => {
+        const scope = resolve(layer);
+        return scope === null || indices.has(scope);
+      },
+      indexOf: (layer) => {
+        const scope = resolve(layer);
+        return scope === null ? -1 : (indices.get(scope) ?? -1);
+      },
+    };
+  }
+
+  #queueEffectNotices(notices: readonly EffectBudgetNotice[]): void {
+    const current = new Set(notices.map((notice) => notice.nodeId));
+    for (const notice of notices) {
+      if (this.#effectsOverBudget.has(notice.nodeId)) continue;
+      if (this.#effectNotices.length < LAYER_NOTICES_QUEUED) this.#effectNotices.push(notice);
+      else this.#effectNoticesDropped += 1;
+    }
+    this.#effectsOverBudget = current;
+  }
+
+  /** E41-S8: effect budget notices dropped because the queue was full. */
+  public getEffectNoticesDropped(): number {
+    return this.#effectNoticesDropped;
+  }
+
+  /** E41-K4: the last frame's drawn effect roots and clamped σ (statistics). */
+  public getEffectStatistics(): Readonly<{ roots: number; clampedSigmas: number }> {
+    return this.#effectStatistics;
   }
 
   #queueLayerNotices(notices: readonly LayerResourceNotice[]): void {
@@ -1727,15 +1847,17 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       const items: { bounds: SceneBounds; clip: ClipChain | null; drawn: boolean }[] = [];
       for (const primitive of candidates) {
         items.push({
-          bounds: primitive.worldBounds,
-          clip: primitive.clip,
+          ...cullTarget(primitive.worldBounds, primitive.clip, primitive.reach),
           drawn: drawnPrimitives.has(primitive),
         });
       }
       for (const text of textCandidates) {
         // A leaf without a bound is never drawn, at any camera.
         if (text.worldBounds === null) continue;
-        items.push({ bounds: text.worldBounds, clip: text.clip, drawn: drawnTexts.has(text) });
+        items.push({
+          ...cullTarget(text.worldBounds, text.clip, text.reach),
+          drawn: drawnTexts.has(text),
+        });
       }
       range = decisionRange(camera, target, undefined, items);
       this.#cullCounts.ranges += 1;
@@ -1776,7 +1898,10 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       (primitive) => {
         if (primitive.hidden || primitive.omitted || primitive.clip?.empty === true) return false;
         const drawn = cullPrimitives([primitive], camera, target).length === 1;
-        items.push({ bounds: primitive.worldBounds, clip: primitive.clip, drawn });
+        items.push({
+          ...cullTarget(primitive.worldBounds, primitive.clip, primitive.reach),
+          drawn,
+        });
         return drawn;
       },
     );
@@ -1789,7 +1914,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
         if (text.hidden || text.clip?.empty === true) return false;
         const drawn = cullTexts([text], camera, target).length === 1;
         if (text.worldBounds !== null) {
-          items.push({ bounds: text.worldBounds, clip: text.clip, drawn });
+          items.push({ ...cullTarget(text.worldBounds, text.clip, text.reach), drawn });
         }
         return drawn;
       },
@@ -2286,6 +2411,8 @@ type DeriveItem = Readonly<{
   sourceChain: ClipChain | null;
   /** E25 contract, U2: the innermost isolated container above the node. */
   layer: LayerScope | null;
+  /** E41-K3: the reach of the effect roots above the node, or null outside them. */
+  reach: EffectReach | null;
 }>;
 
 /** Where a leaf sits in the derivation, so a set that changes only leaves can patch it. */
@@ -2343,6 +2470,7 @@ function derivePrimitives(
     maskSource: false,
     sourceChain: null,
     layer: null,
+    reach: null,
   }));
   // E25 contract, U2: a leaf extends every enclosing layer's sequence range.
   const extendLayers = (layer: LayerScope | null) => {
@@ -2353,7 +2481,18 @@ function derivePrimitives(
     const node = scene.getNode(item.id)!;
     present.add(node.id);
     if (node.kind !== 'container') {
-      const leaf = deriveLeaf(node, item, sequence, cache, slots);
+      // E41 section 5.2: a visible leaf with effects is a layer root of its own.
+      const leafRoot = leafEffectScope(node, item, sequence);
+      if (leafRoot !== null) layerScopes.push(leafRoot);
+      const leafItem =
+        leafRoot === null
+          ? item
+          : {
+              ...item,
+              layer: leafRoot,
+              reach: extendEffectReach(item.reach, leafRoot.effects!, leafRoot.world!, item.chain),
+            };
+      const leaf = deriveLeaf(node, leafItem, sequence, cache, slots);
       if (leaf.kind === 'primitive') {
         leaves.set(node.id, { kind: 'primitive', item, sequence, index: result.length });
         result.push(leaf.primitive);
@@ -2361,13 +2500,13 @@ function derivePrimitives(
         leaves.set(node.id, { kind: 'path', item, sequence, index: paths.length });
         paths.push(leaf.path);
         pathSequences.set(node.id, sequence);
-        if (item.layer !== null) pathLayers.set(node.id, item.layer);
+        if (leafItem.layer !== null) pathLayers.set(node.id, leafItem.layer);
       } else {
         texts.held = true;
         leaves.set(node.id, { kind: 'text', item, sequence, index: texts.leaves.length });
         texts.leaves.push(leaf.text);
       }
-      extendLayers(item.layer);
+      extendLayers(leafItem.layer);
       sequence += 1;
       continue;
     }
@@ -2396,7 +2535,19 @@ function derivePrimitives(
     // a visible container with 0 < opacity < 1 is a layer.
     const subtreeHidden = hidden || node.opacity === 0;
     let layer = item.layer;
-    if (!subtreeHidden && (node.opacity < 1 || isolateUnitOpacity)) {
+    // E41-K2: a mask group under an effect root clamps that root's bounds to the target.
+    if (isMask && !subtreeHidden) {
+      for (let scope = item.layer; scope !== null; scope = scope.parent) {
+        if (scope.effects !== undefined) scope.hasMask = true;
+      }
+    }
+    // E41 section 5.2: a visible container with effects is a layer root too; with
+    // 0 < opacity < 1 it is one layer, not two.
+    const effects = node.effects !== undefined && node.effects.length > 0 ? node.effects : null;
+    const isolated = node.opacity < 1 || isolateUnitOpacity;
+    let reach = item.reach;
+    if (!subtreeHidden && (isolated || effects !== null)) {
+      if (effects !== null) reach = extendEffectReach(item.reach, effects, world, item.chain);
       layer = {
         nodeId: node.id,
         opacity: node.opacity,
@@ -2405,6 +2556,10 @@ function derivePrimitives(
         chain,
         start: sequence,
         end: sequence,
+        ...(effects === null
+          ? {}
+          : // E41-K2: the root's own mask is target-based too.
+            { effects, world, isolated, outerChain: item.chain, hasMask: isMask }),
       };
       layerScopes.push(layer);
     }
@@ -2432,6 +2587,7 @@ function derivePrimitives(
         maskSource: isMask && index === 0,
         sourceChain: item.chain,
         layer,
+        reach,
       });
     }
   }
@@ -2448,6 +2604,37 @@ function derivePrimitives(
     texts,
     leaves,
   });
+}
+
+/**
+ * E41 section 5.2: the layer scope of a leaf effect root (a visible leaf with effects and
+ * opacity above 0, not a mask source), or null. Its draws keep the leaf's opacity
+ * (`contentOpacity`), so the composite itself is at opacity 1; dropping its effects dissolves it.
+ */
+function leafEffectScope(
+  node: Exclude<RenderNodeSnapshot, { kind: 'container' }>,
+  item: DeriveItem,
+  sequence: number,
+): LayerScope | null {
+  if (node.effects === undefined || node.effects.length === 0) return null;
+  if (item.parentHidden || item.maskSource || !node.visible || !(node.opacity > 0)) return null;
+  const world = composeSceneAffine(item.parentWorld, node.transform);
+  if (world === null) return null;
+  return {
+    nodeId: node.id,
+    opacity: 1,
+    parent: item.layer,
+    depth: item.layer === null ? 0 : item.layer.depth + 1,
+    chain: item.chain,
+    start: sequence,
+    end: sequence,
+    effects: node.effects,
+    world,
+    isolated: false,
+    contentOpacity: node.opacity,
+    outerChain: item.chain,
+    hasMask: false,
+  };
 }
 
 type LeafOutput =
@@ -2509,6 +2696,7 @@ function deriveLeaf(
               world,
               hidden: hidden || item.chain?.empty === true,
               ...(item.chain === null ? {} : { clip: item.chain }),
+              ...(item.reach === null ? {} : { reach: item.reach }),
             },
       ),
     };
@@ -2542,6 +2730,7 @@ function deriveLeaf(
         clip: item.chain,
         sequence,
         layer: item.layer,
+        ...(item.reach === null ? {} : { reach: item.reach }),
       }),
     };
   }
@@ -2581,6 +2770,7 @@ function deriveLeaf(
       clip: item.chain,
       sequence,
       layer: item.layer,
+      ...(item.reach === null ? {} : { reach: item.reach }),
     }),
   };
 }
@@ -2616,6 +2806,8 @@ function patchDerivation(
           : previous.texts.leaves[leaf.index]!.node;
     // Defensive: a valid set that moves a leaf also writes a container or the root order.
     if (before.parentId !== node.parentId) return null;
+    // E41: a leaf effect root owns a layer scope, which only a full derivation rebuilds.
+    if ((before.effects?.length ?? 0) > 0 || (node.effects?.length ?? 0) > 0) return null;
     updates.push({ leaf, node });
   }
   if (updates.length === 0) return Object.freeze({ ...previous, serial: scene.changeSerial });
@@ -2803,12 +2995,29 @@ function flatOrders(positions: readonly number[]): number[] {
 
 /** E25 contract, U2: the frame's drawn layers, indexed in post-order. */
 type DrawnLayers = Readonly<{
-  indices: ReadonlySet<LayerScope>;
   order: readonly LayerScope[];
   bounds: ReadonlyMap<LayerScope, DeviceRect>;
-  /** The layer's index in `order`, or -1 for the main pass. */
+  /** E41: the drawn effect roots. */
+  effects: ReadonlyMap<LayerScope, EffectLayer>;
+  /** Whether content of `layer` is drawn (in it, or in an ancestor it dissolves into). */
+  contains(layer: LayerScope | null | undefined): boolean;
+  /** The layer's index in `order` (after dissolving), or -1 for the main pass. */
   indexOf(layer: LayerScope | null | undefined): number;
 }>;
+
+/** E41: the packet record of a drawn effect root, spread into its layer entry. */
+function effectRecordOf(effect: EffectLayer | undefined): { effect?: LayerEffectRecord } {
+  if (effect === undefined) return {};
+  return {
+    effect: Object.freeze({
+      source: effect.source,
+      output: effect.output,
+      shadows: effect.effects.shadows,
+      blurSigmaPx: effect.effects.blurSigmaPx,
+      contentOpacity: effect.contentOpacity,
+    }),
+  };
+}
 
 function intersectRects(left: DeviceRect, right: DeviceRect): DeviceRect | null {
   const x = Math.max(left.x, right.x);
@@ -3101,14 +3310,17 @@ function cullPrimitives(
     maxX: camera.position.x + target.width / target.devicePixelRatio / camera.zoom + guard,
     maxY: camera.position.y + target.height / target.devicePixelRatio / camera.zoom + guard,
   };
-  return primitives.filter(
-    ({ worldBounds, clip }) =>
-      worldBounds.maxX >= viewport.minX &&
-      worldBounds.minX <= viewport.maxX &&
-      worldBounds.maxY >= viewport.minY &&
-      worldBounds.minY <= viewport.maxY &&
-      meetsClipChain(worldBounds, clip, guard),
-  );
+  return primitives.filter((primitive) => {
+    // E41-K3: inside effect roots, the bound grown by their reach.
+    const { bounds, clip } = cullTarget(primitive.worldBounds, primitive.clip, primitive.reach);
+    return (
+      bounds.maxX >= viewport.minX &&
+      bounds.minX <= viewport.maxX &&
+      bounds.maxY >= viewport.minY &&
+      bounds.minY <= viewport.maxY &&
+      meetsClipChain(bounds, clip, guard)
+    );
+  });
 }
 
 /** The kept cull (E26-U5c, E30-U3b). */
@@ -3192,14 +3404,14 @@ function cullTexts(
   const maxX = camera.position.x + target.width / target.devicePixelRatio / camera.zoom + guard;
   const maxY = camera.position.y + target.height / target.devicePixelRatio / camera.zoom + guard;
   return texts.filter((text) => {
-    const bounds = text.worldBounds;
+    if (text.worldBounds === null) return false;
+    const { bounds, clip } = cullTarget(text.worldBounds, text.clip, text.reach);
     return (
-      bounds !== null &&
       bounds.maxX >= minX &&
       bounds.minX <= maxX &&
       bounds.maxY >= minY &&
       bounds.minY <= maxY &&
-      meetsClipChain(bounds, text.clip, guard)
+      meetsClipChain(bounds, clip, guard)
     );
   });
 }

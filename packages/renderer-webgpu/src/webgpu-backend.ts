@@ -21,6 +21,7 @@ import {
   FrameScheduler,
   ResourceAccounting,
   clipResourceLimitDiagnostic,
+  effectResourceLimitDiagnostic,
   layerResourceLimitDiagnostic,
   pathMeshNoticeDiagnostic,
   textNoticeDiagnostic,
@@ -1388,6 +1389,13 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         if (layerNotices !== undefined && isList(layerNotices)) {
           for (const notice of layerNotices.slice(0, NOTICES_PER_PACKET)) {
             this.#diagnostics.emit(layerResourceLimitDiagnostic(notice, generation));
+          }
+        }
+        // E41-S8: effect budget notices, likewise CPU state.
+        const effectNotices = packet.layers?.effectNotices;
+        if (effectNotices !== undefined && isList(effectNotices)) {
+          for (const notice of effectNotices.slice(0, NOTICES_PER_PACKET)) {
+            this.#diagnostics.emit(effectResourceLimitDiagnostic(notice, generation));
           }
         }
         // E28 contract, section 5: E28-D2 and D3, likewise CPU state.

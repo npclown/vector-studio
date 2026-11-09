@@ -62,6 +62,14 @@ export type PrimitiveRendererServiceOptions = Readonly<{
    */
   groups?: 'flat' | 'isolated';
   /**
+   * E41 contract, E41-S6: 'v0' accepts node effects (drop shadows, layer blur) and plans each
+   * effect root as a layer with its effect bounds and budget (U4b). It needs `groups:
+   * 'isolated'`. Until a backend draws the effect passes (U5), effect roots draw their content
+   * without effects (section 5.3). Default 'none': a node with effects is reported as
+   * `unsupported-feature`, and nothing else changes.
+   */
+  effects?: 'none' | 'v0';
+  /**
    * @internal Tests only (E25-A05): with `groups: 'isolated'`, every visible container with
    * opacity 1 is drawn as a layer too, so its layer variants can be compared with the main pass.
    */
@@ -149,6 +157,13 @@ export class PrimitiveRendererService
     if (typeof isolateUnit !== 'boolean' || (isolateUnit && groups !== 'isolated')) {
       throw new TypeError("isolateUnitOpacityForTesting needs groups: 'isolated'.");
     }
+    const effects = options.effects ?? 'none';
+    if (effects !== 'none' && effects !== 'v0') {
+      throw new TypeError("effects must be 'none' or 'v0'.");
+    }
+    if (effects === 'v0' && groups !== 'isolated') {
+      throw new TypeError("effects: 'v0' needs groups: 'isolated'.");
+    }
     const text = options.text ?? 'none';
     if (text !== 'none' && text !== 'atlas') {
       throw new TypeError("text must be 'none' or 'atlas'.");
@@ -198,6 +213,7 @@ export class PrimitiveRendererService
       paints,
       groupOpacity: groups === 'isolated' ? 'supported' : 'unsupported',
       textNodes: text === 'atlas' ? 'supported' : 'unsupported',
+      effects,
     });
     this.#source = new PrimitiveSceneSource(
       this.#mirror,
