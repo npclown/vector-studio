@@ -27,6 +27,7 @@ const REACT = 'packages/react';
 /** The runtime exports of `ui` beyond `react`'s: sections 6, 7.1, 7.2 (M8-U4) and 7.3 (M8-U5). */
 const OWN_VALUES = [
   'AppearancePanel',
+  'CanvasContextMenu',
   'EditorPanels',
   'EditorToolbar',
   // V-30 (export).
@@ -41,11 +42,14 @@ const OWN_VALUES = [
   'ToolbarSecondaryRow',
   'ZoomMenu',
   'resolvePanels',
+  'selectForContextMenu',
   'usePanelErrors',
 ];
 /** The type exports of `ui` beyond `react`'s. */
 const OWN_TYPES = [
   'AppearancePanelProps',
+  'CanvasContextMenuAt',
+  'CanvasContextMenuProps',
   'EditorToolbarProps',
   'LayerTreeProps',
   'PanelBoundaryProps',
