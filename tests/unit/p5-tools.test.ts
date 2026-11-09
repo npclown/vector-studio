@@ -466,11 +466,11 @@ describe('Path tool', () => {
     });
   });
 
-  it('Escape cancels without a document change; Enter with one anchor does nothing', () => {
+  it('Escape with one anchor cancels without a document change; Enter with one does nothing', () => {
+    // V-25 slice 8 follow-up 4: Escape with two or more anchors ends the path open (v25-pen-finish tests).
     const { target, seen } = pathTool();
     click(target, 0, 0);
     key(target, 'Enter');
-    click(target, 10, 0);
     key(target, 'Escape');
     expect(seen.filter((event) => event.type === 'document')).toEqual([]);
     expect(target.query({ type: 'overlay' })).toBeNull();
