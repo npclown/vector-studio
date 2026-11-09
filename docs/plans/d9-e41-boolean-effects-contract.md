@@ -1,6 +1,6 @@
 # E41 contract: boolean path operations, drop shadows and layer blur
 
-Status: **DRAFT 2026-11-09, review round 2**, Full tier. The user asked for this work on 2026-11-09 (project chat, item 4 of the post-MVP gap list: "4번도 진행하자"). The open choices in section 9 take the recommended option under the user's standing instruction of 2026-10-24 unless the user picks otherwise. Review round 1 (NOT READY: B1 clipped shadows, B2 blur arithmetic, S1 to S15) is applied; section 12 records it.
+Status: **DRAFT 2026-11-09, review round 3**, Full tier. The user asked for this work on 2026-11-09 (project chat, item 4 of the post-MVP gap list: "4번도 진행하자"). The open choices in section 9 take the recommended option under the user's standing instruction of 2026-10-24 unless the user picks otherwise. Review rounds 1 and 2 (NOT READY) are applied; section 12 records them.
 
 This is rendering-track item E41 ([D9 rendering track](d9-rendering-track.md#status-index)). Its editor units (U2, U3, U6, U7) run on the visualization track. It changes shared surface:
 
@@ -57,9 +57,10 @@ Inputs in paint order, bottom first: `A₀`, `A₁`, …, `Aₙ`.
 A deterministic, synchronous module `packages/editor-core/src/boolean/` with plain-data inputs and outputs and no WASM, so commands stay synchronous. `D` is the diagonal of the union of input bounds. Three scales: `ε = 1e-9 D` (intersection refinement), `η = 1e-7 D` (snap and coincidence), `δ = η / 4` (probe distance).
 
 1. **Segments.** Each input becomes closed contours of lines and cubics in parent space, using the projector's cubic arcs for radii and ellipses, with rotation applied exactly to control points.
-2. **Intersections.** Line-line in closed form; line-cubic by the cubic's roots on the line; cubic-cubic by bounding-box subdivision to `ε`, then Newton refinement. Candidate points within `η` of each other (tangencies give clusters) merge into **one shared vertex**, which cuts every segment involved. Pieces whose five sample points lie within `η` of another piece are **coincident**: one representative is kept for classification.
+2. **Intersections.** Line-line in closed form; line-cubic by the cubic's roots on the line; cubic-cubic by bounding-box subdivision to `ε`, then Newton refinement. Candidate points within `η` of each other (tangencies give clusters) merge into **one shared vertex**, which cuts every segment involved. Overlaps are split explicitly: each segment end point within `η` of another segment becomes a shared vertex on it, and subdivision stops on a pair of pieces whose five sample points lie within `η` of each other. Such pieces are **coincident**: one representative is kept for classification.
 3. **Split.** De Casteljau cuts at the shared vertices' parameters. Pieces shorter than `η` collapse into their vertex.
-4. **Classify by sides.** At each piece's midpoint, probe at `±min(δ, length / 4)` along the normal (where the tangent vanishes, use the chord direction). Membership per input is its winding number under its fill rule, by ray crossings with exact cubic roots and the half-open rule (a crossing counts when the segment spans `[y₀, y₁)`). The piece is kept when `in(left) ≠ in(right)`, oriented with the result on its left. Edges closer than `η` were snapped in step 2, so a probe never crosses another edge.
+4. **Classify.** Membership per input is its winding number under its fill rule, by ray crossings with exact cubic roots and the half-open rule (a crossing counts when the segment spans `[y₀, y₁)`). For the inputs that do not own the piece or a coincident copy of it, membership is evaluated at the piece's midpoint: a split piece crosses no other edge, so this is unambiguous. For the owning input and its coincident group, membership is evaluated at probes `±δ` along the midpoint normal (where the tangent vanishes, the chord direction). The piece is kept when `in(left) ≠ in(right)`, oriented with the result on its left.
+   Coordinates are y-down; "left" of a direction `(dx, dy)` is `(dy, −dx)`, and "clockwise" in step 5 is in the same screen convention.
 5. **Chain.** Pieces join at shared vertices (exact, no tolerance). At a vertex with four or more kept pieces, an incoming piece continues on the next outgoing piece clockwise from its reversed direction, which gives contours that touch at a point instead of self-touching ones. Any unpaired piece fails the command with `editor.boolean-failed` and no change (fail closed).
 
 ## 3. Effects model (schema v7)
@@ -102,10 +103,15 @@ For an effect root `N` (a visible node with non-empty `effects` and `opacity > 0
 
 - An effect root is a layer root, leaf or container. A leaf root's own opacity is removed from its draws in `L` and applied at the composite. A container with `0 < opacity < 1` and effects is one layer, not two.
 - **E41-K1 margin.** In device pixels, with `s` the transform scale: `m = ⌈3 σ_blur s⌉ + maxᵢ(⌈3 σᵢ s⌉ + |offsetᵢ| s)`, with σ after K2's clamp.
-- **E41-K2 bounds.** Let `V` be the target intersected with E25-K5's clip-chain bound of `N`'s ancestors. The layer bound is `N`'s content bound intersected with `V` grown by `⌈3 σ_blur s⌉`, united with, per shadow, `V` translated by `−offsetᵢ` and grown by `⌈3 σᵢ s⌉ + ⌈3 σ_blur s⌉`; then E25-K5's even rounding. E25-K5's target clamp does not apply to effect roots, except when `N`'s subtree contains a mask group (mask textures are target-based): then the clamp applies and an off-screen caster's shadow is not drawn (disclosed limit). A bound above the device's `maxTextureDimension2D` goes to section 5.4.
+- **E41-K2 bounds.** Let `V` be the target, or for a root nested in an effect root or an E25 layer the enclosing layer's source bound, intersected with E25-K5's clip-chain bound of `N`'s ancestors up to that layer. With `b = ⌈3 σ_blur s⌉` and `C` `N`'s content bound, two rectangles, each with E25-K5's even rounding:
+  - **source bound** (for `L`): `C ∩ ((V ⊕ b) ∪ ⋃ᵢ ((V − offsetᵢ) ⊕ (⌈3 σᵢ s⌉ + b)))`;
+  - **output bound** (for `R` and the composite quad): `(C ⊕ m) ∩ (V ⊕ b)`.
+
+  E25-K5's target clamp does not apply to effect roots, except when `N`'s subtree contains a mask group (mask textures are target-based): then both bounds are clamped to the target and an off-screen caster's shadow is not drawn (disclosed limit). A bound above the device's `maxTextureDimension2D` goes to section 5.4.
+- **E41-K2b clips inside an effect layer.** Draws in `L` have their clip chain rebased at `N`: rect levels above `N` are dropped, and mask levels inside `N` are planned as separate `MaskPlan` levels with no parent above `N`, with their own keys, counted against the E22 mask budget and under K2's target clamp. Ancestor clips and masks of `N` apply once, at `N`'s composite (5.1 step 4).
 - **E41-K3 culling.** Culling (`cullPrimitives`, `cullTexts`, E30's kept ranges) and path requests use, for an effect root's subtree, the content bound grown by `m`. A node whose content is off screen but whose shadow reaches `V` is drawn.
 - **E41-K4 blur.** Separable Gaussian, horizontal then vertical, at 1 sample, between two scratch textures. Half-width `⌈3 σ_px⌉`, at most 32 taps per side, so one level covers `σ_px ≤ 10.6`. Larger σ downsample the source by 2 per level, up to 5 levels (`σ_px ≤ 341`), blur there and upsample bilinearly. `σ_px` is clamped to 256; the frame counts clamped effects (statistics, no diagnostic).
-- **E41-K5 composite.** A new pipeline `effect-composite-v0` with clip and mask variants (as the paint variants have) draws a shadow (tinted alpha at the device offset, sampled bilinearly) and the final `R` into its target. `R` is its own texture when there are two or more shadows, a blur or `opacity < 1`; otherwise the single shadow and `L` are composited directly.
+- **E41-K5 composite.** Each root's passes accumulate into its own `R` texture (output bound): the blurred, tinted shadows at their device offsets (sampled bilinearly) in list order, then `L`, then the layer blur. Per-root `R` is needed because E25 runs all layer passes in post-order before the main pass, so shared scratch is overwritten before the parent composites. A new pipeline `effect-composite-v0` draws `R` into the parent target with `N.opacity`. Its variants are {plain, clip} × {main, layer} × {stencil, no stencil}: the clip variant carries rect clips and masks through the clip block, and the layer variant applies E25's `+layer-v0` position shift for roots inside a layer.
 - **E41-K6 invalidation.** An effect edit changes composite records and pass parameters only: 0 fill or stroke port calls, 0 geometry builds. An edit that grows `m` so that a culled node comes into reach costs what making that node visible costs (as E25-A04's 0 to 0.5 case).
 
 ### 5.3 Unavailable pipeline
@@ -114,12 +120,13 @@ When the layer or effect pipeline is unavailable, effect roots draw their conten
 
 ### 5.4 Budget
 
-Per frame, with `Aᵣ` the pixel area of effect root `r`'s layer and 4 bytes per pixel:
+Per frame, with `Sᵣ` and `Oᵣ` the pixel areas of root `r`'s source and output bounds and 4 bytes per pixel:
 
-- per root, `L` and, when K5 needs it, `R`: `4 Aᵣ` each;
-- shared scratch, reused root by root in post-order: two textures at the largest root's area plus their downsample chain, `4 × (2 + 2/3) × maxᵣ Aᵣ`.
+- per root, `L` at `4 Sᵣ` and `R` at `4 Oᵣ`;
+- shared scratch, reused root by root in post-order: two textures at the largest source area plus their downsample chain, `4 × (2 + 2/3) × maxᵣ Sᵣ`;
+- E25's `tileBytes` (the tile set `L` renders through: 25.2 MB for a 1024² tile at 4x).
 
-These count against E25's 96 MiB layer budget together with E25 layers. Admission is per tree, as E25's `planLayerBudget` does. A tree over the budget drops the effects of all its effect roots (they become ordinary layers when isolated, or draw directly), raises one `render.effect-resource-limit`, and is re-admitted under E25's rule. Figures: one full-screen root at 1920 × 1080 is 8.29 MB per texture, 38.7 MB with `R` and scratch; at 3840 × 2160 it is 155 MB, over budget, so a full-screen effect at 4K draws without effects (disclosed; effect tiling is backlog).
+These count against E25's 96 MiB layer budget together with E25 layers. Admission is per tree, as E25's `planLayerBudget` does. A root whose source or output bound exceeds `maxTextureDimension2D` counts as over budget. A tree over the budget drops the effects of all its effect roots (they become ordinary layers when isolated, or draw directly), raises one `render.effect-resource-limit`, and is re-admitted under E25's rule. Figures: one full-screen root at 1920 × 1080 is 8.29 MB per texture, 63.9 MB with `R`, scratch and the tile set; `e41-cards` (50 cards of about 400 × 300 output pixels) is about 74 MB; at 3840 × 2160 one full-screen root is about 180 MB, over budget, so a full-screen effect at 4K draws without effects (disclosed; effect tiling is backlog).
 
 ### 5.5 Editor visual bounds
 
@@ -131,7 +138,7 @@ On the reference PC (GTX 1660 SUPER, Chrome, 1920 × 1080, DPR 1, 4x), scene `e4
 
 ### 5.7 Export
 
-PNG export through the renderer includes effects. For SVG, wrap the node in a `<g>` outside its own `clip-path` (SVG filters apply before clip) with a filter in `color-interpolation-filters="sRGB"`: per shadow `feGaussianBlur(SourceAlpha, stdDeviation = radius / 2)` → `feOffset` → `feFlood` → `feComposite operator="in"`, then `feMerge` of the shadows in list order and `SourceGraphic` last; a layer blur is one more `feGaussianBlur` over the merge result. Browsers may approximate the Gaussian, so this is equivalent within tolerance, not exact. Booleans need nothing: the result is a plain path.
+PNG export through the renderer includes effects. For SVG, wrap the node in a `<g>` outside its own `clip-path` (SVG filters apply before clip) with a filter in `color-interpolation-filters="sRGB"` and `filterUnits="userSpaceOnUse"`, its region the node's bound grown by section 5.5's margin: per shadow `feGaussianBlur(SourceAlpha, stdDeviation = radius / 2)` → `feOffset` → `feFlood` → `feComposite operator="in"`, then `feMerge` of the shadows in list order and `SourceGraphic` last; a layer blur is one more `feGaussianBlur` over the merge result. Browsers may approximate the Gaussian, so this is equivalent within tolerance, not exact. Booleans need nothing: the result is a plain path.
 
 ## 6. Editor
 
@@ -144,7 +151,7 @@ PNG export through the renderer includes effects. For SVG, wrap the node in a `<
 | ID | Criterion | Evidence |
 | --- | --- | --- |
 | E41-A01 | Schema v7: parse, validate (S2, S3, each refusal), migrate v6 → v7, serialize round trip; every v6 fixture loads | Unit (model) |
-| E41-A02 | Boolean correctness on B1 to B14 and 1,000 seeded random cases (polygons, cubic blobs, rounded rects, ellipses, rotated inputs, evenodd self-crossing inputs, near-coincident edges within 10 η). On a 256 × 256 grid over the input bounds, every sample farther than `4 η` from any input edge has `in(result) = op(in(Aᵢ))` under both fill rules. Every result piece lies on an input segment within `η`; every contour is closed and has area above `η D`. `boolean-failed`: 0 on B1 to B14, at most 5 per 1,000 random cases, each listed in the record and added as a fixture | Unit (editor-core) |
+| E41-A02 | Boolean correctness on B1 to B15 and 1,000 seeded random cases (polygons, cubic blobs, rounded rects, ellipses, rotated inputs, evenodd self-crossing inputs, near-coincident edges within 10 η). On a 256 × 256 grid over the input bounds, every sample farther than `4 η` from any input edge has `in(result) = op(in(Aᵢ))` under both fill rules. Every result piece lies on an input segment within `η`; every contour is closed and has area above `η D`. `boolean-failed`: 0 on B1 to B15, at most 5 per 1,000 random cases, each listed in the record and added as a fixture | Unit (editor-core) |
 | E41-A03 | Commands: B1 to B5 of section 2.3, gradient re-map (page pixels equal before and after on a sampled grid), group refit, each rejection with no change and its notice, one undo step restores inputs, order and selection | Unit (editor-core) |
 | E41-A04 | Boolean cost: two inputs of 512 cubic segments each with 1,000 crossings finish in ≤ 100 ms (median of 5) in the CI container | Unit with timing record under `docs/evidence/e41/` |
 | E41-A05 | Effect passes against a CPU oracle: the oracle reads back `L` (test hook `effectContentForTesting`, effects off) and applies section 5.1 with exact Gaussian convolution. Fixtures F1 to F11; tolerance 3/255 per channel, 6/255 for downsampled σ (F9), excluding pixels within 1 px of a radius-0 shadow's edge | Headed GPU spec, reference PC |
@@ -158,8 +165,8 @@ PNG export through the renderer includes effects. For SVG, wrap the node in a `<
 
 ## 8. Fixtures
 
-- **Booleans.** B1 two overlapping circles, every operation; B2 rectangle minus circle; B3 star intersect circle; B4 two rectangles sharing an edge (union: one rectangle, no seam); B5 two squares touching at a corner (union: two contours meeting at one vertex); B6 identical inputs (union = intersect = the input, exclude empty); B7 circle inside a rectangle (subtract: a hole); B8 rotated rectangles; B9 rounded rectangles; B10 an evenodd self-crossing pen path; B11 three inputs (subtract uses `A₀`); B12 two unit circles tangent outside (union: two contours touching at one vertex; intersect: `boolean-empty`; subtract: `A₀` unchanged); B13 circles tangent inside; B14 rectangles whose edges are 0.5 η apart.
-- **Effects.** F1 shadow on a rectangle; F2 the same rotated 30°; F3 layer blur on a group; F4 three shadows of different colours and offsets; F5 shadow under a 50 %-alpha fill; F6 shadowed child in a clipping frame, offset past the clip edge (clipped, per 5.1 step 4); F7 shadow on text; F8 shadow, layer blur and opacity 0.5; F9 zoom 8 with radius 40 (`σ_px` 160, 4 levels); F10 caster off screen, shadow on screen; F11 shadowed child of a mask group.
+- **Booleans.** B1 two overlapping circles, every operation; B2 rectangle minus circle; B3 star intersect circle; B4 two rectangles sharing an edge (union: one rectangle, no seam); B5 two squares touching at a corner (union: two contours meeting at one vertex); B6 identical inputs (union = intersect = the input, exclude empty); B7 circle inside a rectangle (subtract: a hole); B8 rotated rectangles; B9 rounded rectangles; B10 an evenodd self-crossing pen path; B11 three inputs (subtract uses `A₀`); B12 two unit circles tangent outside (union: two contours touching at one vertex; intersect: `boolean-empty`; subtract: `A₀` unchanged); B13 circles tangent inside; B14 two rectangles whose shared edge is 0.5 η apart (snapped as coincident: union is one rectangle, no seam); B15 two rectangles crossing at 1°.
+- **Effects.** F1 shadow on a rectangle; F2 the same rotated 30°; F3 layer blur on a group; F4 three shadows of different colours and offsets; F5 shadow under a 50 %-alpha fill; F6 shadowed child in a clipping frame, offset past the clip edge (clipped, per 5.1 step 4); F7 shadow on text; F8 shadow, layer blur and opacity 0.5; F9 zoom 8 with radius 40 (`σ_px` 160, 4 levels); F10 caster off screen, shadow on screen; F11 shadowed child of a mask group; F12 a shadowed group inside a clipping frame that contains a mask group (K2b: the shadow is built from unclipped content, then clipped once).
 
 ## 9. Open choices (recommended option first)
 
@@ -177,12 +184,12 @@ PNG export through the renderer includes effects. For SVG, wrap the node in a `<
 | Unit | Track | Scope | Gate |
 | --- | --- | --- | --- |
 | U1 | Rendering | This contract; requirements.md, ARCHITECTURE.md note (Q2), track rows | Independent review READY |
-| U2 | Visualization | Boolean engine `editor-core/src/boolean/`, B1 to B14, random corpus, cost record | E41-A02, A04; CI |
+| U2 | Visualization | Boolean engine `editor-core/src/boolean/`, B1 to B15, random corpus, cost record | E41-A02, A04; CI |
 | U3 | Visualization | Boolean commands and notices, keys, context menu and panel buttons | E41-A03, the boolean half of A12 |
-| U4 | Rendering | Schema v7 and migration, projector `effects` behind its option, `SceneEffect`, validation (S5 to S7, S9), diagnostic, layer plan for effect roots (K1 to K3, K6), budget, architecture amendment | E41-A01, A07, A08 unit parts |
+| U4 | Rendering | Schema v7 and migration, projector `effects` behind its option, `SceneEffect`, validation (S5 to S7, S9), diagnostic, layer plan for effect roots (K1 to K3, K2b rebased clip chains, K6), budget, architecture amendment | E41-A01, A07, A08 unit parts |
 | U5 | Rendering | Blur, downsample and effect composite passes with clip and mask variants, fallback, accounting, `effectPasses`, `effectContentForTesting`, SwiftShader captures | E41-A06, A09 on SwiftShader |
 | U6 | Visualization | Effect commands and visual bounds in `editor-core` | E41-A11 |
-| U7 | Visualization | Effects panel, projector option on in next-host, headed page and spec with the CPU oracle, cards benchmark | E41-A05, A08, A10, A12 on the reference PC |
+| U7 | Visualization | Effects panel, projector option and renderer `effects: 'v0'` on in next-host and `webgpu-host`, headed page and spec with the CPU oracle, cards benchmark | E41-A05, A08, A10, A12 on the reference PC |
 | U8 | Rendering | Evidence index `docs/evidence/e41/`, exit record | Index merged; user accepts |
 
 U2 and U4 can run in parallel; U3 follows U2; U5 and U6 follow U4; U7 follows U3, U5 and U6.
@@ -198,3 +205,4 @@ U2 and U4 can run in parallel; U3 follows U2; U5 and U6 follow U4; U7 follows U3
 ## 12. Review record
 
 - Round 1 (2026-11-09, independent reviewer): NOT READY. B1 ancestor clips: E41-Q8 (a), clipped composite with clip and mask variants, K2 bounds and the mask-group clamp. B2 blur levels: 5 levels, clamp 256, F9 re-stated. S1 budget formula and per-tree admission (5.4). S2 margin and texture limit (K1, K2). S3 culling (K3, K6). S4 leaf and container roots (5.2). S5 depth (S7). S6 oracle from `L` readback (A05). S7 SVG mapping rewritten (5.7). S8 scene gaps (S5, S6, S9, 3, 5.3). S9 visual bounds (5.5). S10 names. S11 to S13 tolerances, shared vertices, chaining, thresholds (2.4, A02, B12 to B14). S14 command cases (2.1, B1 to B3). S15 ARCHITECTURE note in U1, projector option, U6 effect commands (A11). Nits applied: phase cell, open subpaths, σ wording, MVP plan pointer.
+- Round 2 (2026-11-09): NOT READY. Fixed: 1 K2 split into source and output bounds, nested `V`; 2 K2b rebased clip chains, F12; 3 per-root `R` always (K5), 5.4 figures; 4 composite variant matrix; 5 midpoint membership for non-owning inputs; 6 overlap end points restored; 7 texture-size limit in 5.4; 8 tile set in 5.4; 9 SVG filter region; nits 10 to 13 (handedness, B14 result, B15, renderer option in U7, phase cell `Fix`).
