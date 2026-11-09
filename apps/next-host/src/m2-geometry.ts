@@ -98,6 +98,90 @@ export function inRotateZone(handles: SelectionHandles, point: PagePoint, zoom: 
   return outside && handles.corners.some((corner) => near(corner, ROTATE_PX / zoom));
 }
 
+/**
+ * V-28 (Figma): the cursor a select-tool hover at `point` shows over the handle box, mirroring the
+ * press order of the select tool (M2 contract, section 4.1): a resize handle within `6 / zoom`
+ * (except inside a box too small for its handles, where a press on the node moves it), then the
+ * rotate zone. `angle` is the screen direction in degrees (y down) the handle or corner points away
+ * from the box: a resize cursor is a double arrow along it, a rotate cursor curls around it. Null
+ * shows the default cursor.
+ */
+export type HandleCursor = Readonly<{ kind: 'resize' | 'rotate'; angle: number }>;
+
+export function handleCursorAt(
+  handles: SelectionHandles,
+  point: PagePoint,
+  zoom: number,
+): HandleCursor | null {
+  const [origin, right, , bottom] = handles.corners;
+  const width = Math.hypot(right.x - origin.x, right.y - origin.y);
+  const height = Math.hypot(bottom.x - origin.x, bottom.y - origin.y);
+  const cos = Math.cos(handles.rotation);
+  const sin = Math.sin(handles.rotation);
+  // A page point in the box's own axes, from its top-left corner.
+  const toLocal = (p: PagePoint) => {
+    const dx = p.x - origin.x;
+    const dy = p.y - origin.y;
+    return { x: dx * cos + dy * sin, y: -dx * sin + dy * cos };
+  };
+  // The side (-1, 0 or 1) of a local coordinate along an axis of `size`; 0 on a flat axis.
+  const side = (value: number, size: number) => {
+    if (size <= 0) return 0;
+    const t = value / size;
+    return t < 0.25 ? -1 : t > 0.75 ? 1 : 0;
+  };
+  // The outward direction of a local handle position, turned by the box rotation, in degrees.
+  const direction = (local: PagePoint): number | null => {
+    const sx = side(local.x, width);
+    const sy = side(local.y, height);
+    if (sx === 0 && sy === 0) return null;
+    const x = sx * cos - sy * sin;
+    const y = sx * sin + sy * cos;
+    return (Math.atan2(y, x) * 180) / Math.PI;
+  };
+  const local = toLocal(point);
+  const inside = local.x > 0 && local.x < width && local.y > 0 && local.y < height;
+  // The select tool moves instead of resizing inside a box under four handle radii; the hover
+  // cannot see the node under the pointer, so it shows no resize cursor anywhere inside such a box.
+  const reach = (4 * HANDLE_PX) / zoom;
+  const small = width < reach || height < reach;
+  if (!(small && inside)) {
+    let best: PagePoint | null = null;
+    let bestDistance = HANDLE_PX / zoom;
+    for (const handle of handles.handles) {
+      const d = Math.hypot(point.x - handle.x, point.y - handle.y);
+      if (d <= bestDistance) {
+        best = handle;
+        bestDistance = d;
+      }
+    }
+    if (best !== null) {
+      const angle = direction(toLocal(best));
+      // A handle at the centre of a flat box points along its one axis.
+      return {
+        kind: 'resize',
+        angle: angle ?? (width > 0 ? 0 : 90) + (handles.rotation * 180) / Math.PI,
+      };
+    }
+  }
+  if (!inRotateZone(handles, point, zoom)) return null;
+  // The nearest corner, whose outward diagonal the rotate cursor curls around.
+  let corner = handles.corners[0];
+  for (const candidate of handles.corners) {
+    if (
+      Math.hypot(point.x - candidate.x, point.y - candidate.y) <
+      Math.hypot(point.x - corner.x, point.y - corner.y)
+    )
+      corner = candidate;
+  }
+  const local2 = toLocal(corner);
+  const sx = width > 0 && local2.x > width / 2 ? 1 : -1;
+  const sy = height > 0 && local2.y > height / 2 ? 1 : -1;
+  const x = sx * cos - sy * sin;
+  const y = sx * sin + sy * cos;
+  return { kind: 'rotate', angle: (Math.atan2(y, x) * 180) / Math.PI };
+}
+
 /** A page-space angle in radians as degrees with at most one decimal, for the snap label. */
 export function degreesLabel(radians: number): string {
   return `${Math.round((radians * 1800) / Math.PI) / 10}°`;

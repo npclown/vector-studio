@@ -23,7 +23,8 @@ import {
   usePanelErrors,
 } from '@vector-studio/ui';
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
-import { inRotateZone } from '../src/m2-geometry';
+import { handleCursorAt, type HandleCursor } from '../src/m2-geometry';
+import { handleCursorCss } from '../src/v28-handle-cursor';
 import {
   attachPersistence,
   createPressGate,
@@ -173,17 +174,6 @@ const FIXTURES: Readonly<
     font: true,
   },
 };
-/** A rotate cursor (a circular arrow) with a standard fallback; the hotspot is its centre. */
-const ROTATE_CURSOR =
-  'url("data:image/svg+xml,' +
-  encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">' +
-      '<path d="M15 5.5A7 7 0 1 0 17 11" fill="none" stroke="#fff" stroke-width="4"/>' +
-      '<path d="M15 5.5A7 7 0 1 0 17 11" fill="none" stroke="#000" stroke-width="2"/>' +
-      '<path d="M17.5 1.5v6h-6z" fill="#000" stroke="#fff"/></svg>',
-  ) +
-  '") 10 10, crosshair';
-
 /** `Mod` is Meta on macOS (M2 contract, section 7); the editor reads no browser global itself. */
 function hostPlatform(): Platform {
   return typeof navigator !== 'undefined' && /^Mac/u.test(navigator.platform) ? 'mac' : 'other';
@@ -630,9 +620,9 @@ function Surface({
   const handles = editor.query({ type: 'handles' });
   const pathOverlay = usePathOverlay();
   const textEdit = useTextEditMarkers();
-  // The rotate cursor over the select tool's rotate zone while no button is held (hover only:
-  // EditorCanvas forwards no move without a press). Set only when it changes.
-  const [rotating, setRotating] = useState(false);
+  // V-28: the resize cursor over a handle and the rotate cursor over a rotate zone, both turned to
+  // the box, while no button is held; kept during the drag that a press there starts.
+  const [handleCursor, setHandleCursor] = useState<HandleCursor | null>(null);
   const [penCursor, setPenCursor] = useState<PagePoint | null>(null);
   const hover = (event: PointerEvent<HTMLDivElement>) => {
     const canvas = event.currentTarget.querySelector('canvas');
@@ -650,7 +640,7 @@ function Surface({
         y: position.y + (event.clientY - rect.top - canvas.clientTop) / zoom,
       });
     } else setPenCursor(null);
-    let zone = false;
+    let zone: HandleCursor | null = null;
     if (current.tool === 'select' && box !== null) {
       const { position, zoom } = current.viewport;
       const rect = canvas.getBoundingClientRect();
@@ -658,9 +648,12 @@ function Surface({
         x: position.x + (event.clientX - rect.left - canvas.clientLeft) / zoom,
         y: position.y + (event.clientY - rect.top - canvas.clientTop) / zoom,
       };
-      zone = inRotateZone(box, point, zoom);
+      zone = handleCursorAt(box, point, zoom);
     }
-    setRotating(zone);
+    // Set only when it changes, so a hover does not re-render the page on every move.
+    setHandleCursor((previous) =>
+      previous?.kind === zone?.kind && previous?.angle === zone?.angle ? previous : zone,
+    );
   };
   // V-25 slice 7: the empty canvas is black, so the studio starts the text tool white (a plain-text
   // paste outside text edit mode uses it too); a press then picks black or white from its backdrop.
@@ -700,12 +693,12 @@ function Surface({
   const canvasHost = (size: StudioCanvasSize) => (
     <div
       data-testid="canvas-host"
-      data-cursor={rotating ? 'rotate' : 'default'}
-      style={{ width: size.width, cursor: rotating ? ROTATE_CURSOR : undefined }}
+      data-cursor={handleCursor?.kind ?? 'default'}
+      style={{ width: size.width, cursor: handleCursorCss(handleCursor) }}
       onPointerMove={hover}
       onPointerDownCapture={studio ? readableText : undefined}
       onPointerLeave={() => {
-        setRotating(false);
+        setHandleCursor(null);
         setPenCursor(null);
       }}
     >
