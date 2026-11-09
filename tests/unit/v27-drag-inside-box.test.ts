@@ -238,4 +238,51 @@ describe('V-27 drag inside the selection box', () => {
     pointer(target, 'pointerup', 50, 50);
     expect(selectionOf(target)).toEqual([frame]);
   });
+  /** An artboard at (-100, -100, 400 x 400) holding squares a (0, 0) and b (80, 80). */
+  function artboard(target: Editor, group = false) {
+    const [frame] = ok(target, {
+      type: 'createFrame',
+      frame: { x: -100, y: -100, width: 400, height: 400 },
+      fill: { r: 1, g: 1, b: 1, a: 1 },
+    });
+    const a = rect(target, 0, 0);
+    const b = rect(target, 80, 80);
+    ok(target, { type: 'moveNodes', ids: [a, b], parent: frame!, index: 0 });
+    const g = group ? ok(target, { type: 'groupNodes', ids: [a, b], kind: 'group' })[0]! : null;
+    ok(target, { type: 'setSelection', ids: [a, b] });
+    return { frame: frame!, a, b, g };
+  }
+
+  it('Alt-drag on the artboard background duplicates the selection; Alt-click cycles', () => {
+    const alt = { ...none, alt: true };
+    const target = editor();
+    const { frame, a, b } = artboard(target);
+    drag(target, [50, 50], [70, 50], alt);
+    const copies = selectionOf(target);
+    expect(copies).toHaveLength(2);
+    expect(copies).not.toContain(a);
+    expect(copies).not.toContain(frame);
+    expect(frameOf(target, frame)).toMatchObject({ x: -100, y: -100 });
+    expect(frameOf(target, a)).toMatchObject({ x: 100, y: 100 });
+    expect(frameOf(target, b)).toMatchObject({ x: 180, y: 180 });
+    ok(target, { type: 'setSelection', ids: [a, b] });
+    pointer(target, 'pointerdown', 50, 50, alt);
+    pointer(target, 'pointerup', 50, 50, alt);
+    expect(selectionOf(target)).toEqual([frame]);
+  });
+
+  it('a drag or Alt-drag on the artboard keeps a scope inside it; a click leaves it', () => {
+    for (const modifiers of [none, { ...none, alt: true }]) {
+      const target = editor();
+      const { frame, a, b, g } = artboard(target, true);
+      ok(target, { type: 'setScope', id: g });
+      ok(target, { type: 'setSelection', ids: [a, b] });
+      drag(target, [50, 50], [70, 50], modifiers);
+      expect(target.query({ type: 'scope' })).toBe(g);
+      pointer(target, 'pointerdown', 50, 50, modifiers);
+      pointer(target, 'pointerup', 50, 50, modifiers);
+      expect(target.query({ type: 'scope' })).toBeNull();
+      expect(selectionOf(target)).toEqual([frame]);
+    }
+  });
 });

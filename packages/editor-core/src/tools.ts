@@ -827,6 +827,11 @@ type SelectState =
       /** A press on empty space inside the handle box (V-27): a click acts as on empty canvas. */
       inBox: boolean;
       /**
+       * A press on a container of the whole selection (V-27): a drag keeps the session scope
+       * (snapping with it) and `leaves` applies only to a click.
+       */
+      container: boolean;
+      /**
        * The copies' duplicated frames, parent-chain rotations and snap candidates; null before
        * the first movement.
        */
@@ -1363,6 +1368,7 @@ export function createSelectTool(
             leaves,
             selection,
             inBox: true,
+            container: false,
             copies: null,
           };
         }
@@ -1398,6 +1404,7 @@ export function createSelectTool(
           leaves,
           selection,
           inBox: false,
+          container,
           copies: null,
         };
       }
@@ -1691,7 +1698,11 @@ export function createSelectTool(
           // The copies move; the originals stay and are candidates. Every other box is as in
           // the pre-gesture document, since the copies are the only change. The scope owner is
           // the one the press resolved to.
-          candidates: lazySnapSet(context, ids, state.scope),
+          candidates: lazySnapSet(
+            context,
+            ids,
+            state.container ? context.query({ type: 'scope' }) : state.scope,
+          ),
         };
       }
       const { frames, turns, candidates } = state.copies;
@@ -1813,8 +1824,11 @@ export function createSelectTool(
         // A drag keeps the scope, which holds the selection; a click acts as on empty canvas.
         if (!current.moved) emptyClick(current.leaves, context);
       } else if (current.kind === 'duplicate') {
-        // The Alt press's deferred scope change, then an Alt-click cycles (section 5).
-        if (current.leaves) context.execute({ type: 'setScope', id: null });
+        // The Alt press's deferred scope change, then an Alt-click cycles (section 5); a drag
+        // from a container of the selection keeps the scope (V-27).
+        if (current.leaves && !(current.container && current.moved)) {
+          context.execute({ type: 'setScope', id: null });
+        }
         if (!current.moved) cycle(current, context);
       }
       // A click on an anchor or segment selects only it (M3 contract, section 5).
