@@ -78,6 +78,11 @@ export interface WebGpuBackendOptions {
   readonly countPassForTesting?: boolean;
   /** @internal Tests only (E25 contract, section 4): the layer tile edge, positive and even. */
   readonly layerTileSizeForTesting?: number;
+  /**
+   * @internal Tests only (E41-A05): effect roots composite their content `L` without their
+   * effects, for the oracle's read-back.
+   */
+  readonly effectContentForTesting?: boolean;
 }
 
 /** @internal Tests only (E10 contract, section 3.2): one captured frame. */
@@ -187,6 +192,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   #layerPipelineRequired = false;
   /** E28 contract, U3: the attached source draws text through the glyph atlas. */
   #textPipelineRequired = false;
+  #effectPipelineRequired = false;
   /** E28-D1: the generation that last reported `render.text-unavailable`. */
   #textUnavailableGeneration = 0;
   #primitiveMode = false;
@@ -233,6 +239,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   readonly #frameCapture: boolean;
   readonly #countPass: boolean;
   readonly #layerTileSizeForTesting: number | undefined;
+  readonly #effectContentForTesting: boolean;
   #capture: ArmedCapture | undefined;
 
   constructor(options: WebGpuBackendOptions = {}) {
@@ -266,6 +273,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       throw new RangeError('layerTileSizeForTesting must be a positive even integer.');
     }
     this.#layerTileSizeForTesting = tileSize;
+    this.#effectContentForTesting = options.effectContentForTesting === true;
     this.#scheduler = new FrameScheduler({
       ...(options.animationFrameClock === undefined ? {} : { clock: options.animationFrameClock }),
       render: (timestampMs) => this.#render(timestampMs),
@@ -317,6 +325,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     this.#paintPipelineRequired = source.requiresPaintPipeline === true;
     this.#layerPipelineRequired = source.requiresLayerPipeline === true;
     this.#textPipelineRequired = source.requiresTextPipeline === true;
+    this.#effectPipelineRequired = source.requiresEffectPipeline === true;
     let disposed = false;
     return {
       get disposed() {
@@ -332,6 +341,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
           this.#paintPipelineRequired = false;
           this.#layerPipelineRequired = false;
           this.#textPipelineRequired = false;
+          this.#effectPipelineRequired = false;
         }
       },
     };
@@ -427,6 +437,22 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
    */
   getLayerPassesForTesting(): number {
     return this.#primitiveScene?.layerPasses ?? 0;
+  }
+
+  /**
+   * @internal Tests only (E41 U5): the current generation's effect roots drawn with their
+   * effects so far, one per root and frame; 0 without the effect pipeline.
+   */
+  getEffectPassesForTesting(): number {
+    return this.#primitiveScene?.effectPasses ?? 0;
+  }
+
+  /**
+   * E41 section 5.3: whether this generation draws effects; false before initialization, for a
+   * source that does not ask for them, or when the effect pipelines are unavailable.
+   */
+  get effectPipelineAvailable(): boolean {
+    return this.#primitiveScene?.effectPipelineAvailable === true;
   }
 
   destroyDeviceForTesting(): void {
@@ -811,6 +837,9 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
           ...(this.#layerTileSizeForTesting === undefined || !this.#layerPipelineRequired
             ? {}
             : { layerTileSizeForTesting: this.#layerTileSizeForTesting }),
+          ...(this.#effectContentForTesting && this.#effectPipelineRequired
+            ? { effectContentForTesting: true }
+            : {}),
         };
         primitiveCreation =
           this.#meshPipelineRequired ||
@@ -818,6 +847,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
           this.#paintPipelineRequired ||
           this.#layerPipelineRequired ||
           this.#textPipelineRequired ||
+          this.#effectPipelineRequired ||
           Object.keys(hooks).length > 0
             ? device.createPrimitiveScene(context, format, generation, tracker, {
                 ...(this.#meshPipelineRequired ? { meshPipeline: true } : {}),
@@ -825,6 +855,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
                 ...(this.#paintPipelineRequired ? { paintPipeline: true } : {}),
                 ...(this.#layerPipelineRequired ? { layerPipeline: true } : {}),
                 ...(this.#textPipelineRequired ? { textPipeline: true } : {}),
+                ...(this.#effectPipelineRequired ? { effectPipeline: true } : {}),
                 ...hooks,
               })
             : device.createPrimitiveScene(context, format, generation, tracker);
@@ -1598,6 +1629,10 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       devicePixelRatio: size.devicePixelRatio,
       sampleCount: scene.sampleCount,
       targetFormat: format,
+      // E41 section 5.4: the device limit, for a source that draws effects.
+      ...(this.#effectPipelineRequired && scene.maxTextureDimension2D !== undefined
+        ? { maxTextureDimension2D: scene.maxTextureDimension2D }
+        : {}),
     });
   }
 

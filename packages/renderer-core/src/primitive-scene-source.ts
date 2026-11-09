@@ -1313,7 +1313,14 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     view: Readonly<{ x: number; y: number; zoom: number }>,
     target: PrimitiveTarget,
   ): DrawnLayers {
-    const plan = planEffectLayers(scopes, content, view, target, this.#maxTextureDimension);
+    // Section 5.4: the device limit when the backend passes it (U5), else the option's.
+    const plan = planEffectLayers(
+      scopes,
+      content,
+      view,
+      target,
+      target.maxTextureDimension2D ?? this.#maxTextureDimension,
+    );
     this.#queueLayerNotices(plan.layerNotices);
     this.#queueEffectNotices(plan.effectNotices);
     const states = new Map(plan.states);

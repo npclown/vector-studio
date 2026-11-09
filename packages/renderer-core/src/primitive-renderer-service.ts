@@ -116,6 +116,8 @@ export class PrimitiveRendererService
   public readonly requiresLayerPipeline: boolean;
   /** E28 contract, E28-S3: true exactly when the `text` option is 'atlas'; read at attach. */
   public readonly requiresTextPipeline: boolean;
+  /** E41 contract, U5: true exactly when the `effects` option is 'v0'; read at attach. */
+  public readonly requiresEffectPipeline: boolean;
 
   public constructor(
     invalidationTarget: RendererInvalidationTarget,
@@ -198,6 +200,7 @@ export class PrimitiveRendererService
     this.requiresClipPipeline = clips !== 'none';
     this.requiresPaintPipeline = paints === 'gradient';
     this.requiresLayerPipeline = groups === 'isolated';
+    this.requiresEffectPipeline = effects === 'v0';
     const anyPort = port !== undefined || strokePort !== undefined;
     this.requiresMeshPipeline = anyPort;
     // P3 V3 section a with the B2 section 9.1 amendment (S4): path nodes are supported when a

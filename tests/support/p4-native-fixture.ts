@@ -205,6 +205,8 @@ export async function nativeScene(
     paintPipeline?: boolean;
     layerPipeline?: boolean;
     textPipeline?: boolean;
+    effectPipeline?: boolean;
+    effectContentForTesting?: boolean;
     layerTileSizeForTesting?: number;
     sampleCount?: 1 | 4;
   }> = {
