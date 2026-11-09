@@ -136,9 +136,12 @@ export function buildExportScene(
       ),
     ),
   ];
-  const roots = candidates
-    .filter((id) => !candidates.some((other) => other !== id && isAncestor(tree, other, id)))
-    .filter((id) => tree.node(id)!.visible && order.has(id) && projection.nodes.has(id))
+  // Hidden and unprojected IDs go first, so a visible child of a hidden selected group stays.
+  const drawable = candidates.filter(
+    (id) => tree.node(id)!.visible && order.has(id) && projection.nodes.has(id),
+  );
+  const roots = drawable
+    .filter((id) => !drawable.some((other) => other !== id && isAncestor(tree, other, id)))
     .sort((a, b) => order.get(a)! - order.get(b)!);
   if (roots.length === 0) return null;
 

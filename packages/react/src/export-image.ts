@@ -103,17 +103,39 @@ export function spreadStops(
   if (gradient.spread === 'pad' || !(span > 0)) {
     return stops.map((stop) => ({ offset: stop.offset, color: cssColor(stop.color) }));
   }
+  // Every stop of the cycles that touch [t0, t1], then cut at t0 and t1 with the colour
+  // interpolated there, so partial first and last cycles keep their true colours.
   const first = Math.floor(t0);
   const last = Math.min(Math.ceil(t1), first + MAX_SPREAD_CYCLES);
-  const out: { offset: number; color: string }[] = [];
+  const points: { t: number; color: SceneGradient['stops'][number]['color'] }[] = [];
   for (let cycle = first; cycle < last; cycle += 1) {
     const mirrored = gradient.spread === 'reflect' && Math.abs(cycle % 2) === 1;
     const ordered = mirrored ? [...stops].reverse() : stops;
     for (const stop of ordered) {
-      const t = cycle + (mirrored ? 1 - stop.offset : stop.offset);
-      out.push({ offset: Math.min(1, Math.max(0, at(t))), color: cssColor(stop.color) });
+      points.push({ t: cycle + (mirrored ? 1 - stop.offset : stop.offset), color: stop.color });
     }
   }
+  const colorAt = (t: number) => {
+    const after = points.findIndex((point) => point.t >= t);
+    if (after <= 0) return points[after === 0 ? 0 : points.length - 1]!.color;
+    const a = points[after - 1]!;
+    const b = points[after]!;
+    const f = b.t > a.t ? (t - a.t) / (b.t - a.t) : 1;
+    const mix = (x: number, y: number) => x + (y - x) * f;
+    return {
+      r: mix(a.color.r, b.color.r),
+      g: mix(a.color.g, b.color.g),
+      b: mix(a.color.b, b.color.b),
+      a: mix(a.color.a, b.color.a),
+    };
+  };
+  const end = Math.min(t1, last);
+  const out = [{ offset: 0, color: cssColor(colorAt(t0)) }];
+  for (const point of points) {
+    if (point.t > t0 && point.t < end)
+      out.push({ offset: at(point.t), color: cssColor(point.color) });
+  }
+  out.push({ offset: at(end), color: cssColor(colorAt(end)) });
   return out;
 }
 
@@ -331,21 +353,29 @@ export function exportPixelSize(
 
 /**
  * Paints the export scene of `ids` (or of the active page) at `scale` and returns it as a PNG
- * (V-30 export contract, section 3), or null when nothing would draw, the scale is out of
- * (0, 16] or the image would exceed 16,384 px on a side or 2^27 pixels. Call it in the browser,
- * where the text layout port registered its fonts. Rejects when the browser cannot encode it.
+ * (V-30 export contract, section 3), or null when nothing would draw. Rejects with a
+ * `RangeError` when the scale is out of (0, 16] or the image would exceed 16,384 px on a side or
+ * 2^27 pixels, and with an `Error` when the browser cannot paint or encode it. Call it in the
+ * browser, where the text layout port registered its fonts.
  */
 export async function exportPng(
   editor: Editor,
   options: ExportPngOptions = {},
 ): Promise<Blob | null> {
   const scale = options.scale ?? 1;
+  if (!(scale > 0 && scale <= EXPORT_MAX_SCALE)) {
+    throw new RangeError(`exportPng: scale ${scale} is outside (0, ${EXPORT_MAX_SCALE}]`);
+  }
   const scene = editor.query(
     options.ids === undefined ? { type: 'exportScene' } : { type: 'exportScene', ids: options.ids },
   );
   if (scene === null) return null;
   const size = exportPixelSize(scene, scale);
-  if (size === null) return null;
+  if (size === null) {
+    throw new RangeError(
+      `exportPng: the image would be ${Math.ceil(scene.bounds.width * scale)} × ${Math.ceil(scene.bounds.height * scale)} px, over the ${EXPORT_MAX_SIDE} px side or 2^27 pixel limit`,
+    );
+  }
   const painter = new Painter(size.width, size.height, defaultSurface, scene);
   const { surface, context } = painter.layer();
   const { x, y } = scene.bounds;

@@ -63,6 +63,13 @@ export function ExportPanel() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  // A message belongs to the export that showed it: a new selection clears it.
+  const [shownFor, setShownFor] = useState(selection);
+  if (shownFor !== selection) {
+    setShownFor(selection);
+    setMessage(null);
+  }
+
   const pageName = pages.find((page) => page.id === activePage)?.name;
   const name = exportTargetName(selection, single?.name, pageName);
   const label = exportButtonLabel(selection, name);
@@ -92,7 +99,11 @@ export function ExportPanel() {
         download(blob, file);
       }
     } catch (error) {
-      setMessage(`Export failed: ${error instanceof Error ? error.message : String(error)}`);
+      setMessage(
+        error instanceof RangeError
+          ? `Image too large at ${scale}x`
+          : `Export failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     } finally {
       setBusy(false);
     }
@@ -105,7 +116,10 @@ export function ExportPanel() {
         <select
           aria-label="Export format"
           value={format}
-          onChange={(event) => setFormat(event.currentTarget.value as ExportFormat)}
+          onChange={(event) => {
+            setFormat(event.currentTarget.value as ExportFormat);
+            setMessage(null);
+          }}
         >
           <option value="png">PNG</option>
           <option value="svg">SVG</option>
@@ -114,7 +128,10 @@ export function ExportPanel() {
           aria-label="Export scale"
           value={String(scale)}
           disabled={format === 'svg'}
-          onChange={(event) => setScale(Number(event.currentTarget.value))}
+          onChange={(event) => {
+            setScale(Number(event.currentTarget.value));
+            setMessage(null);
+          }}
         >
           {EXPORT_SCALES.map((value) => (
             <option key={value} value={String(value)}>

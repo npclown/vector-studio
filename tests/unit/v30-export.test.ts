@@ -153,6 +153,23 @@ describe('V30-A01 export scene roots and content', () => {
     expect(editor().query({ type: 'exportScene' })).toBeNull();
   });
 
+  it('keeps a visible child of a hidden selected group', () => {
+    const target = editor();
+    const [a] = ok(target, {
+      type: 'createRectangle',
+      frame: { x: 0, y: 0, width: 5, height: 5 },
+      fill: RED,
+    });
+    const [b] = ok(target, {
+      type: 'createRectangle',
+      frame: { x: 10, y: 0, width: 5, height: 5 },
+      fill: RED,
+    });
+    const [group] = ok(target, { type: 'groupNodes', ids: [a!, b!], kind: 'group' });
+    ok(target, { type: 'setNodeProps', id: group!, props: { visible: false } });
+    expect(scene(target, [group!, b!]).rootOrder).toEqual([b]);
+  });
+
   it('gives a nested root its page transform and no ancestor clip or opacity', () => {
     const target = editor();
     const [frame] = ok(target, {
@@ -403,5 +420,11 @@ describe('V30-P1/P2 PNG helpers (react)', () => {
     expect(reflect.map((s) => s.offset)).toEqual([0, 0.5, 0.5, 1]);
     // The mirrored cycle [-1, 0] runs blue to red.
     expect(reflect[0]!.color).toBe('rgba(0, 0, 255, 0.5)');
+    // A partial last cycle ends at its interpolated colour, not at the cycle's last stop.
+    const partial = image.spreadStops({ stops, spread: 'repeat' }, 0, 2.5);
+    expect(partial.map((s) => s.offset)).toEqual([0, 0.4, 0.4, 0.8, 0.8, 1]);
+    expect(partial[5]!.color).toBe('rgba(128, 0, 128, 0.75)');
+    const head = image.spreadStops({ stops, spread: 'repeat' }, -0.5, 1);
+    expect(head[0]!.color).toBe('rgba(128, 0, 128, 0.75)');
   });
 });

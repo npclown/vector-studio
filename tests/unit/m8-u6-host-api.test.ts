@@ -222,6 +222,7 @@ describe('M8-A13: the host API guide (docs/host-api.md, M8-Q14 (a))', () => {
       'The provider and the canvas',
       'Hooks',
       'Commands and queries',
+      'Export',
       'Events',
       'Extensions',
       'Panels',

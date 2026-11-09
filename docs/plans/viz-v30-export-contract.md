@@ -14,7 +14,7 @@ It changes three packages: `editor-core` (two queries and their types), `react` 
 
 **V30-S1 query.** `{ type: 'exportScene'; ids?: readonly string[] }` returns an `ExportScene` or null. `ids` omitted means the active page's top-level nodes in paint order.
 
-**V30-S2 roots.** From `ids` the editor keeps the IDs that name a node on the active page, drops an ID whose ancestor is also kept, drops nodes with `visible: false`, and orders the rest in paint order (document pre-order, back to front). A kept node is drawn as itself: its ancestors' clips, masks and opacity do not apply (as Figma exports a layer). Its transform is its page-space transform (its ancestors' transforms composed with its own). With no root left, or no root that projects (a text node without a layout port, an invalid instance, an unowned custom node), the result is null.
+**V30-S2 roots.** From `ids` the editor keeps the IDs that name a node on the active page, drops nodes with `visible: false` (and nodes that do not project), then drops an ID whose ancestor is still kept, and orders the rest in paint order (document pre-order, back to front). A kept node is drawn as itself: its ancestors' clips, masks and opacity do not apply (as Figma exports a layer). Its transform is its page-space transform (its ancestors' transforms composed with its own). With no root left, or no root that projects (a text node without a layout port, an invalid instance, an unowned custom node), the result is null.
 
 **V30-S3 content.** Each root brings its subtree as the editor projects it to the renderer (`projectPage`): frames as their container, content clip, background and border; instances with their expansion; text as the laid-out clusters; custom nodes through their extension. The export scene holds three node kinds only:
 
@@ -44,7 +44,7 @@ Numbers are written with at most 4 decimals. Text stays live text: the file name
 
 ## 3. PNG (`react`)
 
-**V30-P1 function.** `exportPng(editor, { ids?, scale? })` returns a `Promise<Blob | null>`: null when `exportScene` is null. `scale` is in (0, 16], default 1; the image is `ceil(width × scale) × ceil(height × scale)` pixels, refused (null) above 16,384 px on a side or 2^27 pixels.
+**V30-P1 function.** `exportPng(editor, { ids?, scale? })` returns a `Promise<Blob | null>`: null when `exportScene` is null. `scale` is in (0, 16], default 1; the image is `ceil(width × scale) × ceil(height × scale)` pixels. A scale outside the range, or an image above 16,384 px on a side or 2^27 pixels, rejects with a `RangeError` (the panel shows `Image too large at <scale>x`).
 
 **V30-P2 painter.** The image is painted from the export scene with the browser's Canvas 2D on a transparent background, in the main document, so the fonts the text layout port registered draw as on the canvas. Isolated opacity paints a layer and composites it once; rect clips and masks are `clip()` paths; a gradient paints its shape into a layer and fills the layer `source-in` with the gradient under the paint's transform; `reflect` and `repeat` spreads repeat the stops over the shape's extent (canvas gradients only pad).
 
@@ -68,6 +68,8 @@ Numbers are written with at most 4 decimals. Text stays live text: the file name
 - The PNG is painted by Canvas 2D, not the WebGPU renderer: anti-aliasing and gradient interpolation may differ from the canvas by a few levels at edges. The scene and fonts are the same.
 - SVG gradients interpolate unpremultiplied in most viewers, while the renderer interpolates premultiplied (E23): stops with different alpha shade differently.
 - SVG text depends on the viewer's fonts; no outline-text option yet.
+- Bounds take a text node's frame (as `visualBounds` does), so lines of a `fixed` text box that overflow its frame are cut off in the export.
+- Each isolated-opacity layer and each gradient paint uses a scratch canvas the size of the whole image, so a large export with many gradients or nested translucent groups is memory heavy; a failed allocation shows `Export failed`.
 - Export per artboard in one click (all artboards as separate files), JPEG, PDF and export settings stored in the document are not in V-30.
 
 ## 7. Questions (adopted as recommended, 2026-11-09)
