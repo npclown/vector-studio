@@ -1017,11 +1017,16 @@ export function createSelectTool(
     const reach = HANDLE_RADIUS / zoom;
     const alongX = local.x >= box.x && local.x <= box.x + box.width;
     const alongY = local.y >= box.y && local.y <= box.y + box.height;
+    // An axis thinner than the small-box reach has no edges across it: presses there near a thin
+    // node (a line's stroke, for example) keep moving it, as M1-U4's small-box rule intends.
+    const thick = (4 * HANDLE_RADIUS) / zoom;
+    const scalesY = box.height >= thick;
+    const scalesX = box.width >= thick;
     const sides: [Handle, number, boolean][] = [
-      [HANDLES[1], Math.abs(local.y - box.y), alongX && box.height > 0],
-      [HANDLES[3], Math.abs(local.x - (box.x + box.width)), alongY && box.width > 0],
-      [HANDLES[5], Math.abs(local.y - (box.y + box.height)), alongX && box.height > 0],
-      [HANDLES[7], Math.abs(local.x - box.x), alongY && box.width > 0],
+      [HANDLES[1], Math.abs(local.y - box.y), alongX && scalesY],
+      [HANDLES[3], Math.abs(local.x - (box.x + box.width)), alongY && scalesX],
+      [HANDLES[5], Math.abs(local.y - (box.y + box.height)), alongX && scalesY],
+      [HANDLES[7], Math.abs(local.x - box.x), alongY && scalesX],
     ];
     let edgeDistance = reach;
     for (const [handle, d, along] of sides) {

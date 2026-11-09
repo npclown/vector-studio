@@ -173,4 +173,61 @@ describe('V-29 edge resize', () => {
       expect(right.angle).toBeCloseTo((rotation * 180) / Math.PI, 9);
     }
   });
+
+  it('keeps the rotate zone beyond the corners, and Escape and clicks leave no change', () => {
+    // Past the top-right corner in both axes: still a rotation.
+    const corner = setup();
+    const beyond = { x: 300 + 6, y: 100 - 6 };
+    drag(corner.target, beyond, { x: 340, y: 160 });
+    expect(corner.target.query({ type: 'node', id: corner.id })!.rotation).not.toBe(0);
+    // 12 along the top edge and 3 outside: the edge band comes first (Figma).
+    const band = setup();
+    drag(band.target, { x: 112, y: 97 }, { x: 112, y: 60 });
+    const node = band.target.query({ type: 'node', id: band.id })!;
+    expect(node.rotation).toBe(0);
+    expect(node.frame.height).toBe(137);
+    // Escape during an edge drag restores the frame and keeps the selection.
+    const escaped = setup();
+    const from = along(escaped.handles, 3, 2, 0.3, 2);
+    send(escaped.target, 'pointerdown', from);
+    send(escaped.target, 'pointermove', { x: from.x, y: from.y + 30 });
+    escaped.target.execute({
+      type: 'input',
+      event: { kind: 'keydown', key: 'Escape', modifiers: none },
+    });
+    send(escaped.target, 'pointerup', { x: from.x, y: from.y + 30 });
+    expect(escaped.target.query({ type: 'node', id: escaped.id })!.frame.height).toBe(100);
+    expect(escaped.target.query({ type: 'selection' })).toEqual([escaped.id]);
+    // A click on the edge adds no undo step.
+    const clicked = setup();
+    const depth = clicked.target.query({ type: 'history' }).undoDepth;
+    const point = along(clicked.handles, 1, 2, 0.3, 2);
+    send(clicked.target, 'pointerdown', point);
+    send(clicked.target, 'pointerup', point);
+    expect(clicked.target.query({ type: 'history' }).undoDepth).toBe(depth);
+  });
+
+  it('scales the band with zoom and leaves thin boxes to the small-box rule', () => {
+    const zoomed = setup();
+    ok(zoomed.target, { type: 'setViewport', camera: { position: { x: 0, y: 0 }, zoom: 2 } });
+    const near = along(zoomed.handles, 3, 2, 0.3, 2.9);
+    drag(zoomed.target, near, { x: near.x, y: near.y + 10 });
+    expect(zoomed.target.query({ type: 'node', id: zoomed.id })!.frame.height).toBeCloseTo(110, 9);
+    // A nearly flat line (height 3): a press on its stroke just outside the box moves it.
+    const target = createEditor({ ids: createCounterIdSource('n') });
+    ok(target, { type: 'setSnapping', enabled: false });
+    const [line] = ok(target, {
+      type: 'createLine',
+      start: { x: 100, y: 100 },
+      end: { x: 300, y: 103 },
+    });
+    ok(target, { type: 'setSelection', ids: [line!] });
+    const before = target.query({ type: 'node', id: line! })!.frame;
+    const handles = target.query({ type: 'handles' })!;
+    drag(target, { x: 150, y: 103.35 }, { x: 160, y: 123.35 });
+    const after = target.query({ type: 'node', id: line! })!.frame;
+    expect(after.height).toBe(before.height);
+    expect(after.y).toBeCloseTo(before.y + 20, 9);
+    expect(handleCursorAt(handles, { x: 150, y: 104 }, 1)).toBeNull();
+  });
 });

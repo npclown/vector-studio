@@ -162,11 +162,14 @@ export function handleCursorAt(
       const reachEdge = HANDLE_PX / zoom;
       const alongX = local.x >= 0 && local.x <= width;
       const alongY = local.y >= 0 && local.y <= height;
+      // No edges across an axis thinner than the small-box reach (the select tool's rule).
+      const scalesY = height >= reach;
+      const scalesX = width >= reach;
       const edges: [PagePoint, number, boolean][] = [
-        [{ x: width / 2, y: 0 }, Math.abs(local.y), alongX && height > 0],
-        [{ x: width, y: height / 2 }, Math.abs(local.x - width), alongY && width > 0],
-        [{ x: width / 2, y: height }, Math.abs(local.y - height), alongX && height > 0],
-        [{ x: 0, y: height / 2 }, Math.abs(local.x), alongY && width > 0],
+        [{ x: width / 2, y: 0 }, Math.abs(local.y), alongX && scalesY],
+        [{ x: width, y: height / 2 }, Math.abs(local.x - width), alongY && scalesX],
+        [{ x: width / 2, y: height }, Math.abs(local.y - height), alongX && scalesY],
+        [{ x: 0, y: height / 2 }, Math.abs(local.x), alongY && scalesX],
       ];
       let edgeDistance = reachEdge;
       for (const [middle, d, along] of edges) {
