@@ -1,6 +1,6 @@
 # V-25: editor UI usability plan
 
-Status: slice 1 DONE 2026-11-06 (#511, `82002c1`; review r1 NOT READY applied, r2 READY WITH FOLLOW-UPS applied); slice 2 DONE 2026-11-06 (#512, `f2c48d5`; review r1 NOT READY fixed, r2 READY WITH FOLLOW-UPS fixed); slice 3 DONE 2026-11-06 (#513, `b41a9b6`; review r1 READY WITH FOLLOW-UPS applied); slice 4 DONE 2026-11-06 (#514, `f95ea08`; review r1 NOT READY fixed, r2 READY WITH FOLLOW-UPS applied); slices 5 to 7 DONE 2026-11-06 (#515 `41acd8a`, #516 `a4e6b4c`, #517 `351e0cd`); slice 8 (pen paths and curves) IN REVIEW 2026-11-06; slice 9 merged 2026-11-09 (#545); slice 10 DONE 2026-11-09 (#546, `4eec2c1`; review r1 READY WITH FOLLOW-UPS applied, headed at `4eec2c1`); slice 11 proposed. Tier: Full (product UI behaviour, new `@vector-studio/ui` exports). Track: visualization.
+Status: slice 1 DONE 2026-11-06 (#511, `82002c1`; review r1 NOT READY applied, r2 READY WITH FOLLOW-UPS applied); slice 2 DONE 2026-11-06 (#512, `f2c48d5`; review r1 NOT READY fixed, r2 READY WITH FOLLOW-UPS fixed); slice 3 DONE 2026-11-06 (#513, `b41a9b6`; review r1 READY WITH FOLLOW-UPS applied); slice 4 DONE 2026-11-06 (#514, `f95ea08`; review r1 NOT READY fixed, r2 READY WITH FOLLOW-UPS applied); slices 5 to 7 DONE 2026-11-06 (#515 `41acd8a`, #516 `a4e6b4c`, #517 `351e0cd`); slice 8 (pen paths and curves) IN REVIEW 2026-11-06; slice 9 DONE 2026-11-09 (#545); slice 10 DONE 2026-11-09 (#546, `4eec2c1`; review r1 READY WITH FOLLOW-UPS applied, headed at `4eec2c1`); slice 11 proposed. Tier: Full (product UI behaviour, new `@vector-studio/ui` exports). Track: visualization.
 
 ## Request
 
@@ -36,7 +36,7 @@ Recommendation: no new artboard node type and no schema change. A top-level fram
 | 6 | Text box outline: text edit mode outlines the edited text's box | Done (#516, `a4e6b4c`) |
 | 7 | Readable text on the black canvas: new text and the caret contrast with what lies under them; the outline clears the caret | Done (#517, `351e0cd`) |
 | 8 | Pen paths and curves: a new line or path is stroked to read on what lies under it; the pen previews its pending curves, the last anchor's handles and the next segment to the pointer; Alt-drag breaks the handles | In review |
-| 9 | Property panel: X/Y/W/H grid showing and editing the selection box (one or several nodes); collapsible sections not done | Merged (#545, `350c6b2`) |
+| 9 | Property panel: X/Y/W/H grid showing and editing the selection box (one or several nodes); collapsible sections not done | Done (#545, `350c6b2`) |
 | 10 | Context menu (right click): clipboard, duplicate, delete, arrange, group, hide, symbol and zoom actions on a selection; paste, select all and zoom on empty canvas | Done (#546, `4eec2c1`) |
 | 11 | Export per artboard (SVG, PNG) | Proposed; needs its own contract |
 
@@ -257,7 +257,8 @@ The user asked on 2026-11-09 for an X/Y/W/H number panel, as in Figma. The M8 tr
 ## Validation (slice 9)
 
 - `pnpm check` parts in the container: format, lint, typecheck, boundaries pass; `test:unit` 5427 of 5428, the one failure being the known Node 22 environment failure of `p3-b0r-identity`.
-- `test:m8-next-host` headless smoke in the container's Chromium: see the PR. Headed Chrome and Edge on the main PC after merge.
+- `test:m8-next-host` headless smoke in the container's Chromium: 18 of 18 at `f06f9ad`.
+- Headed `test:m8-next-host` on the main PC (DESKTOP-DKVUSAV), Chrome and Edge at `4eec2c1` (main after #545 and #546), 2026-11-09: 36 of 36, the rotated node's X and Y reading 92.06 and 3.04 (V25-A32). :4194 relaunched at that commit.
 
 ## Slice 10 design: canvas context menu
 
