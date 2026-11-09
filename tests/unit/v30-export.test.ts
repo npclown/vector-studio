@@ -414,17 +414,38 @@ describe('V30-P1/P2 PNG helpers (react)', () => {
     ];
     expect(image.spreadStops({ stops, spread: 'pad' }, 0, 1).map((s) => s.offset)).toEqual([0, 1]);
     const repeat = image.spreadStops({ stops, spread: 'repeat' }, 0, 2);
-    expect(repeat.map((s) => s.offset)).toEqual([0, 0.5, 0.5, 1]);
-    expect(repeat[2]!.color).toBe('rgba(255, 0, 0, 1)');
-    const reflect = image.spreadStops({ stops, spread: 'reflect' }, -1, 1);
-    expect(reflect.map((s) => s.offset)).toEqual([0, 0.5, 0.5, 1]);
+    expect(repeat[0]!.color).toBe('rgba(255, 0, 0, 1)');
+    expect(repeat.at(-1)!.color).toBe('rgba(0, 0, 255, 0.5)');
+    // At the cycle boundary the colour switches from blue to red with no blend.
+    const boundary = repeat.filter((stop) => stop.offset === 0.5).map((stop) => stop.color);
+    expect(boundary[0]).toBe('rgba(0, 0, 255, 0.5)');
+    expect(boundary.at(-1)).toBe('rgba(255, 0, 0, 1)');
     // The mirrored cycle [-1, 0] runs blue to red.
+    const reflect = image.spreadStops({ stops, spread: 'reflect' }, -1, 1);
     expect(reflect[0]!.color).toBe('rgba(0, 0, 255, 0.5)');
+    expect(reflect.at(-1)!.color).toBe('rgba(0, 0, 255, 0.5)');
     // A partial last cycle ends at its interpolated colour, not at the cycle's last stop.
     const partial = image.spreadStops({ stops, spread: 'repeat' }, 0, 2.5);
-    expect(partial.map((s) => s.offset)).toEqual([0, 0.4, 0.4, 0.8, 0.8, 1]);
-    expect(partial[5]!.color).toBe('rgba(128, 0, 128, 0.75)');
+    expect(partial.at(-1)).toEqual({ offset: 1, color: 'rgba(128, 0, 128, 0.75)' });
     const head = image.spreadStops({ stops, spread: 'repeat' }, -0.5, 1);
-    expect(head[0]!.color).toBe('rgba(128, 0, 128, 0.75)');
+    expect(head[0]).toEqual({ offset: 0, color: 'rgba(128, 0, 128, 0.75)' });
+    // Inner stops (0.2, 0.8): each cycle holds red before 0.2 and blue after 0.8.
+    const inner = image.spreadStops(
+      {
+        stops: [
+          { offset: 0.2, color: RED },
+          { offset: 0.8, color: BLUE },
+        ],
+        spread: 'repeat',
+      },
+      0,
+      2,
+    );
+    expect(inner[0]!.color).toBe('rgba(255, 0, 0, 1)');
+    const held = inner.filter((stop) => stop.offset === 0.5).map((stop) => stop.color);
+    expect(held[0]).toBe('rgba(0, 0, 255, 0.5)');
+    expect(held.at(-1)).toBe('rgba(255, 0, 0, 1)');
+    expect(inner.filter((stop) => stop.offset === 0.4)[0]!.color).toBe('rgba(0, 0, 255, 0.5)');
+    expect(inner.filter((stop) => stop.offset === 0.6)[0]!.color).toBe('rgba(255, 0, 0, 1)');
   });
 });

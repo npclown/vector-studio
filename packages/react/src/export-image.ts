@@ -111,9 +111,16 @@ export function spreadStops(
   for (let cycle = first; cycle < last; cycle += 1) {
     const mirrored = gradient.spread === 'reflect' && Math.abs(cycle % 2) === 1;
     const ordered = mirrored ? [...stops].reverse() : stops;
-    for (const stop of ordered) {
-      points.push({ t: cycle + (mirrored ? 1 - stop.offset : stop.offset), color: stop.color });
-    }
+    // Each cycle holds its end stops' colours out to its own ends, so the colour switches at
+    // the cycle boundary instead of blending into the next cycle (SVG `spreadMethod`).
+    const inCycle = ordered.map((stop) => ({
+      t: cycle + (mirrored ? 1 - stop.offset : stop.offset),
+      color: stop.color,
+    }));
+    points.push({ t: cycle, color: inCycle[0]!.color }, ...inCycle, {
+      t: cycle + 1,
+      color: inCycle[inCycle.length - 1]!.color,
+    });
   }
   const colorAt = (t: number) => {
     const after = points.findIndex((point) => point.t >= t);
