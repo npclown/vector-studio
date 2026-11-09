@@ -62,10 +62,14 @@ describe('V-25 shortcut labels', () => {
     expect(chordLabel('Ctrl+Shift+KeyZ')).toBe('Ctrl+Shift+Z');
     expect(chordLabel('Meta+Alt+KeyM')).toBe('⌘+Alt+M');
     expect(chordLabel('Shift+Digit1')).toBe('Shift+1');
-    expect(chordLabel('Shift+!')).toBe('Shift+!');
+    expect(chordLabel('Shift+!')).toBe('Shift+1');
+    expect(chordLabel('Ctrl+Shift+}')).toBe('Ctrl+Shift+]');
+    expect(chordLabel('!')).toBe('!');
+    expect(chordLabel('Backspace')).toBe('Backspace');
+    expect(chordLabel('Backspace', true)).toBe('⌫');
     expect(chordLabel('Delete')).toBe('Del');
     expect(chordLabel('ArrowLeft')).toBe('←');
-    expect(chordLabel('Shift++')).toBe('Shift++');
+    expect(chordLabel('Shift++')).toBe('Shift+=');
     expect(chordLabel('+')).toBe('+');
   });
 
@@ -88,7 +92,7 @@ describe('V-25 shortcut labels', () => {
     expect(actionTitle('ungroup', other)).toBe('Ungroup (Ctrl+Shift+G)');
     expect(actionTitle('mask', other)).toBe('Use as mask (Ctrl+Alt+M)');
     expect(actionShortcut('zoom-in', other)).toBe('=');
-    expect(actionShortcut('zoom-fit', other)).toBe('Shift+!');
+    expect(actionShortcut('zoom-fit', other)).toBe('Shift+1');
     // No default chord: the name alone (M3-Q11, M7: unbound).
     expect(actionTitle('toggle-closed', other)).toBe('Open or close path');
     expect(actionTitle('create-symbol', other)).toBe('Create symbol');
