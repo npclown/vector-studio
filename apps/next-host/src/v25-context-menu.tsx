@@ -44,13 +44,21 @@ export function useStudioContextMenu(editor: Editor, enabled: boolean): StudioCo
     if (editor.getSnapshot().textEdit !== null) return;
     event.preventDefault();
     canvas.current = element;
-    const point = pagePoint(editor, element, event.clientX, event.clientY);
-    selectForContextMenu(editor, point);
     const parent = (host.offsetParent as HTMLElement | null) ?? host;
     const box = parent.getBoundingClientRect();
+    // The menu key or Shift+F10 on the focused canvas: no pointer position (a right button press
+    // reports button 2; a Mac Ctrl+click button 0 with Ctrl). The menu opens at the canvas's
+    // centre and the selection stays.
+    const keyboard = event.button !== 2 && !event.ctrlKey;
+    const canvasBox = element.getBoundingClientRect();
+    const clientX = keyboard ? canvasBox.left + canvasBox.width / 2 : event.clientX;
+    const clientY = keyboard ? canvasBox.top + canvasBox.height / 2 : event.clientY;
+    const point = pagePoint(editor, element, clientX, clientY);
+    // No click while the primary button is held: its release would end that drag.
+    if (!keyboard && (event.buttons & 1) === 0) selectForContextMenu(editor, point);
     setAt({
-      left: event.clientX - box.left - parent.clientLeft,
-      top: event.clientY - box.top - parent.clientTop,
+      left: clientX - box.left - parent.clientLeft,
+      top: clientY - box.top - parent.clientTop,
       point,
     });
   };

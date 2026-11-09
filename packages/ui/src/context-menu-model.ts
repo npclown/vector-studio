@@ -46,11 +46,14 @@ function macKeymap(keymap: readonly KeyBinding[]): boolean {
 }
 
 /**
- * The browser's own clipboard chord for `key` (copy, cut and paste are DOM events on the canvas,
- * not keymap actions): ⌘ on a Mac keymap, Ctrl otherwise.
+ * The chord of the clipboard keymap action `action` when a layer binds it (the built-in
+ * `copy`, `cut` and `paste` actions are unbound by default), else the browser's own chord for
+ * `key`, which the canvas handles as a DOM clipboard event: ⌘ on a Mac keymap, Ctrl otherwise.
  */
-function clipboardChord(keymap: readonly KeyBinding[], key: string): string {
-  return chordLabel(`${macKeymap(keymap) ? 'Meta' : 'Ctrl'}+Key${key}`);
+function clipboardChord(keymap: readonly KeyBinding[], action: string, key: string): string {
+  return (
+    shortcutFor(keymap, action) ?? chordLabel(`${macKeymap(keymap) ? 'Meta' : 'Ctrl'}+Key${key}`)
+  );
 }
 
 function item(
@@ -89,12 +92,41 @@ function thenSelect(command: Command): NonNullable<ContextMenuItem['run']> {
   };
 }
 
+/**
+ * The delete item. In path edit mode it removes the selected anchors, as the Delete key does
+ * there (removing every anchor deletes the path, M3-Q4), and is disabled with none selected;
+ * otherwise it deletes the selected nodes.
+ */
+function deleteItem(snapshot: EditorSnapshot, shortcut: string | null): ContextMenuItem {
+  const edit = snapshot.pathEdit;
+  if (edit === null) {
+    return item(
+      'delete',
+      'Delete',
+      shortcut,
+      single({ type: 'deleteNodes', ids: snapshot.selection }),
+    );
+  }
+  return item(
+    'delete',
+    'Delete points',
+    shortcut,
+    edit.anchors.length === 0
+      ? null
+      : (execute) => {
+          const result = execute({ type: 'removePathAnchors', id: edit.id, anchors: edit.anchors });
+          if (result.ok || result.code !== 'editor.empty-path') return result;
+          return execute({ type: 'deleteNodes', ids: [edit.id] });
+        },
+  );
+}
+
 /** The paste item: the in-memory clipboard pasted with its bounds centred on `point`. */
 function pasteItem(keymap: readonly KeyBinding[], point: PagePoint): ContextMenuItem {
   return item(
     'paste',
     'Paste here',
-    clipboardChord(keymap, 'V'),
+    clipboardChord(keymap, 'paste', 'V'),
     (execute) => execute({ type: 'paste', at: point, pointer: point }),
     'paste',
   );
@@ -157,8 +189,14 @@ export function contextMenuItems({ snapshot, point }: ContextMenuInput): Context
     item(id, label, null, fromButton(symbols.get(id)!));
   return [
     [
-      item('copy', 'Copy', clipboardChord(keymap, 'C'), single({ type: 'copy', ids }), 'copy'),
-      item('cut', 'Cut', clipboardChord(keymap, 'X'), single({ type: 'cut', ids }), 'cut'),
+      item(
+        'copy',
+        'Copy',
+        clipboardChord(keymap, 'copy', 'C'),
+        single({ type: 'copy', ids }),
+        'copy',
+      ),
+      item('cut', 'Cut', clipboardChord(keymap, 'cut', 'X'), single({ type: 'cut', ids }), 'cut'),
       pasteItem(keymap, point),
       item(
         'duplicate',
@@ -166,7 +204,7 @@ export function contextMenuItems({ snapshot, point }: ContextMenuInput): Context
         shortcut('duplicate'),
         thenSelect({ type: 'duplicateNodes', ids }),
       ),
-      item('delete', 'Delete', shortcut('delete'), single({ type: 'deleteNodes', ids })),
+      deleteItem(snapshot, shortcut('delete')),
     ],
     [
       reorder('front', 'Bring to front', 'front'),

@@ -33,7 +33,8 @@ const NO_MODIFIERS = { shift: false, alt: false, meta: false, ctrl: false } as c
  * Gives a right click at page `point` the selection a plain left click there would (a node
  * under it selected, empty canvas clearing the selection), by sending that click as `input`
  * events, when `contextClickSelects` says so: the select tool, no path or text edit mode, and
- * the press not on or near the current selection box. Returns whether it sent the click.
+ * the press not on or near the current selection box. Returns whether it sent the click. A host
+ * must not call it while a primary press is held: the click's release would end that gesture.
  */
 export function selectForContextMenu(editor: Editor, point: PagePoint): boolean {
   const snapshot = editor.getSnapshot();
@@ -54,8 +55,8 @@ export type CanvasContextMenuProps = Readonly<{
   /** Where the menu is open, or null when it is closed. */
   at: CanvasContextMenuAt | null;
   /**
-   * Called when the menu closes. `refocus` is true after a pick or Escape: the host returns focus
-   * to the canvas, so its shortcuts keep working.
+   * Called when the menu closes. `refocus` is true after a pick, Escape, Tab or a wheel: the host
+   * returns focus to the canvas, so its shortcuts keep working.
    */
   onClose: (refocus: boolean) => void;
 }>;
@@ -111,16 +112,21 @@ async function runItem(
  * zoom to selection. On empty canvas: paste here, select all, zoom to fit, zoom to 100%. Each
  * item shows its shortcut from the `keymap` query (copy, cut and paste the browser's chords)
  * and is disabled when it would do nothing. It follows the menu pattern: the first enabled item
- * takes focus, ArrowUp, ArrowDown, Home and End move between enabled items, Escape or a pick
- * closes it (`onClose(true)`), and Tab, a press outside, a wheel or a window blur close it
- * (`onClose(false)`). A refused command shows its code (`context-refusal`) after it closes.
+ * takes focus, ArrowUp, ArrowDown, Home and End move between enabled items, Escape, Tab, a pick
+ * or a wheel closes it (`onClose(true)`), and a press outside or a window blur closes it
+ * (`onClose(false)`). A menu taller than its offset parent scrolls. A refused command shows its
+ * code (`context-refusal`) after it closes.
  */
 export function CanvasContextMenu({ at, onClose }: CanvasContextMenuProps) {
   const editor = useEditor();
   const execute = useEditorCommands();
   const snapshot = useEditorSelector((value) => value);
   const menu = useRef<HTMLDivElement>(null);
-  const [offset, setOffset] = useState<Readonly<{ left: number; top: number }> | null>(null);
+  const [offset, setOffset] = useState<Readonly<{
+    left: number;
+    top: number;
+    maxHeight?: number;
+  }> | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   const groups = at === null ? [] : contextMenuItems({ snapshot, point: at.point });
   const items = groups.flat();
@@ -138,7 +144,12 @@ export function CanvasContextMenu({ at, onClose }: CanvasContextMenuProps) {
     const height = parent?.clientHeight ?? Infinity;
     const left = at.left + element.offsetWidth > width ? at.left - element.offsetWidth : at.left;
     const top = at.top + element.offsetHeight > height ? height - element.offsetHeight : at.top;
-    setOffset({ left: Math.max(0, left), top: Math.max(0, top) });
+    // A cell shorter than the menu caps its height; the menu then scrolls.
+    setOffset({
+      left: Math.max(0, left),
+      top: Math.max(0, top),
+      ...(Number.isFinite(height) ? { maxHeight: height } : {}),
+    });
   }, [at]);
   // Once placed (a hidden menu cannot take focus), the first enabled item takes focus.
   useEffect(() => {
@@ -150,8 +161,11 @@ export function CanvasContextMenu({ at, onClose }: CanvasContextMenuProps) {
   }, [offset]);
   useEffect(() => {
     if (at === null) return;
+    // A press outside focuses its own target; a wheel focuses nothing, so the canvas gets focus.
     const outside = (event: Event) => {
-      if (!(event.target instanceof Node) || !menu.current?.contains(event.target)) onClose(false);
+      if (!(event.target instanceof Node) || !menu.current?.contains(event.target)) {
+        onClose(event.type === 'wheel');
+      }
     };
     const blur = () => onClose(false);
     document.addEventListener('pointerdown', outside, true);
@@ -170,8 +184,9 @@ export function CanvasContextMenu({ at, onClose }: CanvasContextMenuProps) {
     // Keys stay in the menu: the canvas's shortcuts must not run under it.
     event.stopPropagation();
     if (event.key === 'Escape' || event.key === 'Tab') {
+      // Both hand focus back to the canvas, so its shortcuts keep working.
       event.preventDefault();
-      onClose(event.key === 'Escape');
+      onClose(true);
       return;
     }
     const buttons = [...(menu.current?.querySelectorAll('[role="menuitem"]') ?? [])];
@@ -207,6 +222,9 @@ export function CanvasContextMenu({ at, onClose }: CanvasContextMenuProps) {
             position: 'absolute',
             left: offset?.left ?? at.left,
             top: offset?.top ?? at.top,
+            maxHeight: offset?.maxHeight,
+            overflowY: 'auto',
+            boxSizing: 'border-box',
             margin: 0,
             zIndex: 20,
             visibility: offset === null ? 'hidden' : 'visible',

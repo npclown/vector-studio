@@ -186,6 +186,33 @@ describe('V-25 slice 10: the context menu items', () => {
   });
 });
 
+describe('V-25 slice 10: review follow-ups', () => {
+  it('deletes the selected anchors, not the path, in path edit mode', () => {
+    const target = editor();
+    const path = ok(target, {
+      type: 'createPath',
+      verbs: ['move', 'line', 'line', 'line', 'close'],
+      points: [0, 0, 40, 0, 40, 40, 0, 40],
+    })[0]!;
+    ok(target, { type: 'enterPathEdit', id: path });
+    expect(menu(target).get('context-delete')!.disabled).toBe(true);
+    ok(target, { type: 'setPathSelection', anchors: [{ subpath: 0, anchor: 1 }] });
+    const entry = menu(target).get('context-delete')!;
+    expect(entry.label).toBe('Delete points');
+    expect(run(target, 'delete')?.ok).toBe(true);
+    expect(pageChildren(target)).toEqual([path]);
+    expect(target.query({ type: 'pathOverlay' })!.subpaths[0]!.anchors).toHaveLength(3);
+  });
+
+  it('shows a bound clipboard chord instead of the browser one', () => {
+    const target = editor();
+    ok(target, { type: 'setKeymap', bindings: [{ chord: 'Mod+Shift+C', action: 'copy' }] });
+    ok(target, { type: 'setSelection', ids: [rect(target, 0, 0)] });
+    expect(menu(target).get('context-copy')!.shortcut).toBe('Ctrl+Shift+C');
+    expect(menu(target).get('context-cut')!.shortcut).toBe('Ctrl+X');
+  });
+});
+
 describe('V-25 slice 10: the right click selection rule', () => {
   it('tests a point against a rotated box grown by a margin', () => {
     const handles = {
