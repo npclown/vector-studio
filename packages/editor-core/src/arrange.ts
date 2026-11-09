@@ -13,6 +13,7 @@ import {
   type EditResult,
 } from './edit-support.js';
 import { rotate } from './geometry.js';
+import { hasInnerContentBox } from './content-box.js';
 import { boundsOf } from './hit-test.js';
 import { remappedOverrides } from './instance-text.js';
 import {
@@ -32,9 +33,9 @@ import type { AlignEdge, DocumentCommand, PagePoint, ReorderOp } from './types.j
 
 // Arrange commands (MVP M2 contract, section 4.3). They act on nodes of the active page at any
 // depth; a listed descendant of a listed node is ignored (the M1 selection rule). Boxes are the
-// page-aligned bounds of the nodes' rotated frames (`boundsOf`), and each node moves by a page
-// vector turned into its parent space, so nodes of different parents mix freely. A command that
-// changes nothing returns the document itself, which the editor records as no step.
+// page-aligned bounds of the nodes' rotated content boxes (`boundsOf`, V-26), and each node moves
+// by a page vector turned into its parent space, so nodes of different parents mix freely. A
+// command that changes nothing returns the document itself, which the editor records as no step.
 
 export type Finish = (draft: Draft) => DocumentV6 | Failure;
 type Arranged = Readonly<{ tree: TreeView; roots: readonly string[] }>;
@@ -130,7 +131,9 @@ export function alignNodes(
   const draft = new Draft(document);
   for (const id of roots) {
     const node = document.nodes[id]!;
-    if (tree.page(node.parent) !== undefined && node.rotation === 0) {
+    // The exact path needs the box to be the frame: not for a path whose curve box is inside it.
+    const exactPath = tree.page(node.parent) !== undefined && node.rotation === 0;
+    if (exactPath && !hasInnerContentBox(node)) {
       const own = horizontal ? node.frame.width : node.frame.height;
       const exact = at === 0 ? low : at === 0.5 ? low + size / 2 - own / 2 : low + size - own;
       place(draft, node, horizontal ? { ...node.frame, x: exact } : { ...node.frame, y: exact });
@@ -184,7 +187,7 @@ export function distributeNodes(
   for (const entry of entries.slice(1, -1)) {
     const min = previous + gap;
     const node = document.nodes[entry.id]!;
-    if (tree.page(node.parent) !== undefined && node.rotation === 0) {
+    if (tree.page(node.parent) !== undefined && node.rotation === 0 && !hasInnerContentBox(node)) {
       // A page-root node with rotation 0 sets its min exactly, as align does (its box's min is
       // its own `x` or `y`).
       place(draft, node, horizontal ? { ...node.frame, x: min } : { ...node.frame, y: min });
