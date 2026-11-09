@@ -224,6 +224,7 @@ describe('V-25 slice 10: the right click selection rule', () => {
       ],
       rotation: Math.PI / 2,
       handles: [],
+      content: null,
     } as const;
     expect(insideSelectionBox(handles, { x: -5, y: 5 }, 0)).toBe(true);
     expect(insideSelectionBox(handles, { x: 3, y: 5 }, 0)).toBe(false);
