@@ -147,6 +147,7 @@ export function handleCursorAt(
   const small = width < reach || height < reach;
   if (!(small && inside)) {
     let best: PagePoint | null = null;
+    let edgeCursor: HandleCursor | null = null;
     let bestDistance = HANDLE_PX / zoom;
     for (const handle of handles.handles) {
       const d = Math.hypot(point.x - handle.x, point.y - handle.y);
@@ -155,6 +156,28 @@ export function handleCursorAt(
         bestDistance = d;
       }
     }
+    // V-29 (Figma): anywhere along an edge, on or just outside the box within the handle reach
+    // and between its corners, resizes that edge, as the select tool's press does.
+    if (best === null && !inside) {
+      const reachEdge = HANDLE_PX / zoom;
+      const alongX = local.x >= 0 && local.x <= width;
+      const alongY = local.y >= 0 && local.y <= height;
+      const edges: [PagePoint, number, boolean][] = [
+        [{ x: width / 2, y: 0 }, Math.abs(local.y), alongX && height > 0],
+        [{ x: width, y: height / 2 }, Math.abs(local.x - width), alongY && width > 0],
+        [{ x: width / 2, y: height }, Math.abs(local.y - height), alongX && height > 0],
+        [{ x: 0, y: height / 2 }, Math.abs(local.x), alongY && width > 0],
+      ];
+      let edgeDistance = reachEdge;
+      for (const [middle, d, along] of edges) {
+        if (along && d <= edgeDistance) {
+          edgeDistance = d;
+          const angle = direction(middle);
+          if (angle !== null) edgeCursor = { kind: 'resize', angle };
+        }
+      }
+    }
+    if (edgeCursor !== null) return edgeCursor;
     if (best !== null) {
       const angle = direction(toLocal(best));
       // A handle at the centre of a flat box points along its one axis.

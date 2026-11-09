@@ -38,6 +38,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | V-26 | A path's (and a group's) selection box fits its drawn curve, not its Bézier handles | Full | Done | Done 2026-11-09 (#538, #539) ([M1 section 4.4 amendment](mvp-m1-document-v2-contract.md#44-resize-rules)) |
 | V-27 | A drag from empty space inside the selection box moves the selection (Figma) | Full | Done | Done 2026-11-09 (#540) ([M2 section 4.1 amendment](mvp-m2-interaction-contract.md#41-rotation)) |
 | V-28 | Hovering a selection handle shows a resize cursor along the handle's direction, and the rotate zone a rotate cursor curled around its corner, both turned with a rotated box (Figma) | Full | Done | Done 2026-11-09 (#541), headed M2-A13 Chrome+Edge 10/10 at ad4ff05 ([M2 section 4.1 amendment](mvp-m2-interaction-contract.md#41-rotation)) |
+| V-29 | A press anywhere along a selection box edge (on it or just outside) resizes that edge, and the hover shows the resize cursor there (Figma) | Full | Active | In review ([M2 section 4.1 amendment](mvp-m2-interaction-contract.md#41-rotation)) |
 
 ## V-1: path appearance editing
 

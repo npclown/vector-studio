@@ -783,6 +783,11 @@ type SelectState =
       handle: Handle;
       moved: boolean;
       /**
+       * V-29: the press when it hit an edge between the handles, else null. A release without
+       * movement replays it with edges off, so a click there keeps its old meaning.
+       */
+      edge: Pointer | null;
+      /**
        * Whether an update of this gesture flipped an axis: from then on every update mirrors the
        * content from its pre-gesture state, so dragging back unflips it.
        */
@@ -987,7 +992,12 @@ export function createSelectTool(
   }
 
   /** The nearest handle within reach that can scale at least one axis of the box. */
-  function handleAt(handles: HandleBox, point: PagePoint, zoom: number): Handle | null {
+  function handleAt(
+    handles: HandleBox,
+    point: PagePoint,
+    zoom: number,
+    edges = true,
+  ): Handle | null {
     const { box } = handles;
     let best: Handle | null = null;
     let bestDistance = HANDLE_RADIUS / zoom;
@@ -996,6 +1006,28 @@ export function createSelectTool(
       if (d <= bestDistance) {
         best = handle;
         bestDistance = d;
+      }
+    }
+    if (best !== null || !edges) return best;
+    // V-29 (Figma): anywhere along an edge, within the handle reach of it and between its
+    // corners, picks that edge's middle handle (when it can scale its axis). The caller turns
+    // `edges` off strictly inside the box.
+    const local =
+      handles.mode === 'single' ? apply(invertRigid(handles.matrix), point.x, point.y) : point;
+    const reach = HANDLE_RADIUS / zoom;
+    const alongX = local.x >= box.x && local.x <= box.x + box.width;
+    const alongY = local.y >= box.y && local.y <= box.y + box.height;
+    const sides: [Handle, number, boolean][] = [
+      [HANDLES[1], Math.abs(local.y - box.y), alongX && box.height > 0],
+      [HANDLES[3], Math.abs(local.x - (box.x + box.width)), alongY && box.width > 0],
+      [HANDLES[5], Math.abs(local.y - (box.y + box.height)), alongX && box.height > 0],
+      [HANDLES[7], Math.abs(local.x - box.x), alongY && box.width > 0],
+    ];
+    let edgeDistance = reach;
+    for (const [handle, d, along] of sides) {
+      if (along && d <= edgeDistance) {
+        best = handle;
+        edgeDistance = d;
       }
     }
     return best;
@@ -1271,7 +1303,12 @@ export function createSelectTool(
   }
 
   /** `handlesOff`: a press that just ended path edit mode on another node gets no handles. */
-  function pointerDown(event: Pointer, context: ToolContext, handlesOff = false): void {
+  function pointerDown(
+    event: Pointer,
+    context: ToolContext,
+    handlesOff = false,
+    edgesOff = false,
+  ): void {
     if (state.kind !== 'idle') return;
     const document = context.query({ type: 'document' });
     const selection = context.query({ type: 'selection' });
@@ -1295,7 +1332,12 @@ export function createSelectTool(
     const small = handles !== null && (handles.box.width < reach || handles.box.height < reach);
     const movesSmall =
       small && hit !== null && selection.includes(hit) && insideHandles(handles, event.point);
-    const handle = handles === null || movesSmall ? null : handleAt(handles, event.point, zoom);
+    // V-29: an edge between the handles resizes from on or just outside the box (inside it a
+    // press keeps acting on the node or the selection there, V-27).
+    const edgesOn = !edgesOff && handles !== null && !insideHandles(handles, event.point);
+    const handle =
+      handles === null || movesSmall ? null : handleAt(handles, event.point, zoom, edgesOn);
+    const onEdge = handle !== null && handleAt(handles!, event.point, zoom, false) === null;
     if (handles !== null && handle !== null) {
       if (context.gesture.begin()) {
         // Resize snaps when the handle box is page-aligned (section 4.2): modes `p5` and `map`,
@@ -1309,6 +1351,7 @@ export function createSelectTool(
           handles,
           handle,
           moved: false,
+          edge: onEdge ? event : null,
           flipped: false,
           bounds: bounds === null ? null : boxOfFrame(bounds),
           candidates: lazySnapSet(context, selection),
@@ -1760,6 +1803,19 @@ export function createSelectTool(
   }
 
   function pointerUp(event: Pointer, context: ToolContext): void {
+    // V-29: a click (no movement) on an edge between the handles is not a resize; it replays
+    // the press with edges off, so it selects, cycles or clears as it did before.
+    if (state.kind === 'resize' && state.edge !== null && !state.moved) {
+      const at = event.point;
+      if (at.x === state.start.x && at.y === state.start.y) {
+        const press = state.edge;
+        context.gesture.cancel();
+        state = { kind: 'idle' };
+        pointerDown(press, context, false, true);
+        if (state.kind !== 'idle') pointerUp(event, context);
+        return;
+      }
+    }
     // The up point ends the drag, so it updates like a move first.
     const gesture = (kind: SelectState['kind']) =>
       kind === 'move' ||
