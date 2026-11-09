@@ -232,3 +232,126 @@ describe('V-26 arrange on the curve box', () => {
     expect(b[0] - a[1]).toBeCloseTo(c[0] - b[1], 9);
   });
 });
+
+describe('V-26 group box from its children curve boxes', () => {
+  function groupOf(target: Editor, ids: string[]): string {
+    return ok(target, { type: 'groupNodes', ids, kind: 'group' })[0]!;
+  }
+
+  it('fits a group of curves to the curves, not their handles', () => {
+    const target = editor();
+    const a = arch(target);
+    const b = arch(target, 50, 40);
+    const g = groupOf(target, [a, b]);
+    // The group's frame still spans the handles (0..150 x 0..140).
+    expect(target.query({ type: 'node', id: g })!.frame).toEqual({
+      x: 0,
+      y: 0,
+      width: 150,
+      height: 140,
+    });
+    ok(target, { type: 'setSelection', ids: [g] });
+    close(corners(target), [
+      [0, 0],
+      [150, 0],
+      [150, 115],
+      [0, 115],
+    ]);
+  });
+
+  it('fits nested groups and resizes about the opposite curve edge', () => {
+    const target = editor();
+    const inner = groupOf(target, [arch(target), arch(target, 50, 40)]);
+    const [r] = ok(target, {
+      type: 'createRectangle',
+      frame: { x: 0, y: -20, width: 10, height: 10 },
+      fill: { r: 1, g: 0, b: 0, a: 1 },
+      stroke: null,
+    });
+    const outer = groupOf(target, [inner, r!]);
+    ok(target, { type: 'setSelection', ids: [outer] });
+    close(corners(target), [
+      [0, -20],
+      [150, -20],
+      [150, 115],
+      [0, 115],
+    ]);
+    drag(target, [150, 115], [300, 250]);
+    close(corners(target), [
+      [0, -20],
+      [300, -20],
+      [300, 250],
+      [0, 250],
+    ]);
+  });
+
+  it('fits a group of a rectangle and a curve', () => {
+    const target = editor();
+    const [r] = ok(target, {
+      type: 'createRectangle',
+      frame: { x: 0, y: 0, width: 10, height: 10 },
+      fill: { r: 1, g: 0, b: 0, a: 1 },
+      stroke: null,
+    });
+    const g = groupOf(target, [r!, arch(target, 20, 0)]);
+    ok(target, { type: 'setSelection', ids: [g] });
+    // The arch's handles reach y = 100 but the curve only 75.
+    close(corners(target), [
+      [0, 0],
+      [120, 0],
+      [120, 75],
+      [0, 75],
+    ]);
+  });
+});
+
+describe('V-26 group box exactness', () => {
+  it('aligns a group whose curve box equals its frame exactly', () => {
+    const target = editor();
+    const red = { r: 1, g: 0, b: 0, a: 1 };
+    const [big] = ok(target, {
+      type: 'createRectangle',
+      frame: { x: 3.3, y: 0.1, width: 100.3, height: 80.7 },
+      fill: red,
+      stroke: null,
+    });
+    const a = ok(target, {
+      type: 'createPath',
+      verbs: ['move', 'cubic'],
+      points: [10, 10, 10, 30, 30, 30, 30, 10],
+    })[0]!;
+    const g = ok(target, { type: 'groupNodes', ids: [big!, a], kind: 'group' })[0]!;
+    const [r] = ok(target, {
+      type: 'createRectangle',
+      frame: { x: 0.1, y: 0, width: 5, height: 5 },
+      fill: red,
+      stroke: null,
+    });
+    ok(target, { type: 'alignNodes', ids: [g, r!], edge: 'left' });
+    expect(target.query({ type: 'node', id: g })!.frame.x).toBe(0.1);
+  });
+
+  it('keeps the opposite corner of a rotated group box in place on resize', () => {
+    const target = editor();
+    const g = ok(target, {
+      type: 'groupNodes',
+      ids: [arch(target), arch(target, 50, 40)],
+      kind: 'group',
+    })[0]!;
+    ok(target, { type: 'rotateNodes', ids: [g], angle: 0.4 });
+    ok(target, { type: 'setSelection', ids: [g] });
+    const before = corners(target);
+    const anchor = before[0]!;
+    const handle = before[2]!;
+    drag(
+      target,
+      [handle.x, handle.y],
+      [anchor.x + 1.5 * (handle.x - anchor.x), anchor.y + 1.5 * (handle.y - anchor.y)],
+    );
+    const after = corners(target);
+    expect(after[0]!.x).toBeCloseTo(anchor.x, 9);
+    expect(after[0]!.y).toBeCloseTo(anchor.y, 9);
+    expect(after[2]!.x).toBeCloseTo(anchor.x + 1.5 * (handle.x - anchor.x), 6);
+    expect(after[2]!.y).toBeCloseTo(anchor.y + 1.5 * (handle.y - anchor.y), 6);
+  });
+});

@@ -613,6 +613,7 @@ export function marqueeHits(
   scope: string | null = null,
 ): string[] {
   const tree = documentTree(document);
+  const lookup = (id: string) => tree.node(id);
   return childrenOf(tree, scope ?? page).filter((id) => {
     const node = tree.node(id);
     if (node === undefined || !node.visible) return false;
@@ -621,8 +622,8 @@ export function marqueeHits(
     // A path uses the box of its curve (V-26), which is inside its frame.
     const frame =
       scope === null
-        ? hasInnerContentBox(node)
-          ? contentBounds(node)
+        ? hasInnerContentBox(node, lookup)
+          ? contentBounds(node, lookup)
           : node.rotation === 0
             ? node.frame
             : rotatedBounds(node)
@@ -634,16 +635,17 @@ export function marqueeHits(
 /**
  * The page-aligned bounds of the rotated frames of `ids` in page space, at any depth (M1
  * contract, section 6), or null when there are none. A path counts its curve's box, not the
- * handles in its frame (V-26, `contentCorners`).
+ * handles in its frame, and a group the bounds of its children's (V-26, `contentCorners`).
  */
 export function boundsOf(document: DocumentV6, ids: readonly string[]): Frame | null {
   const tree = documentTree(document);
+  const lookup = (id: string) => tree.node(id);
   const points: PagePoint[] = [];
   for (const id of ids) {
     const node = tree.node(id);
     if (node === undefined) continue;
     const { matrix } = spaceOf(tree, node.parent);
-    for (const corner of contentCorners(node)) {
+    for (const corner of contentCorners(node, lookup)) {
       points.push(apply(matrix, corner.x, corner.y));
     }
   }

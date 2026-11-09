@@ -5,9 +5,9 @@ import type { PagePoint } from './types.js';
 // V-26: the box the select tool shows and works with for a node. A path's frame is the bounding
 // box of its points, Bézier handles included, so a curve whose handles reach past it got a box
 // larger than the drawn curve. The content box of a path is the box of the curve itself (its
-// anchors and the extrema of each cubic) in the node's own axes; every other node's content box
-// is its whole frame. The document model is unchanged: the frame still holds the handles, and
-// the content box sits inside it.
+// anchors and the extrema of each cubic) in the node's own axes; a group's is the bounds of
+// its children's; every other node's content box is its whole frame. The document model is
+// unchanged: the frame still holds the handles, and the content box sits inside it.
 
 /** The tight unit-box bounds `[minX, minY, maxX, maxY]` of each path's curve, by data object. */
 const unitBounds = new WeakMap<PathData, readonly [number, number, number, number]>();
@@ -96,36 +96,46 @@ export function pathUnitBounds(path: PathData): readonly [number, number, number
   return bounds;
 }
 
-/**
- * A node's content box in its own unrotated axes, relative to its frame's top-left corner: for
- * a path the box of its curve, for any other node `{ 0, 0, width, height }`.
- */
-export function contentBox(node: NodeV6): Frame {
-  const { width, height } = node.frame;
-  const whole = { x: 0, y: 0, width, height };
-  if (node.type !== 'path') return whole;
+/** Reads a node of the same document by ID (a group's children). */
+export type NodeLookup = (id: string) => NodeV6 | undefined;
+
+/** A path's curve box in its own axes, or null when the curve fills its frame. */
+function pathBox(node: Extract<NodeV6, { type: 'path' }>): Frame | null {
+  // Cached by node object, so a group's cache sees the same box object while the path is unchanged.
+  const cached = pathBoxes.get(node);
+  if (cached !== undefined) return cached;
+  let box: Frame | null = null;
   const b = pathUnitBounds(node.path);
-  if (b === null) return whole;
-  const [x0, y0, x1, y1] = b;
-  if (x0 === 0 && y0 === 0 && x1 === 1 && y1 === 1) return whole;
-  const x = x0 * width;
-  const y = y0 * height;
-  return { x, y, width: x1 * width - x, height: y1 * height - y };
+  if (b !== null && !(b[0] === 0 && b[1] === 0 && b[2] === 1 && b[3] === 1)) {
+    const [x0, y0, x1, y1] = b;
+    const { width, height } = node.frame;
+    const x = x0 * width;
+    const y = y0 * height;
+    box = { x, y, width: x1 * width - x, height: y1 * height - y };
+  }
+  pathBoxes.set(node, box);
+  return box;
 }
 
-/** Whether a node's content box is smaller than its frame. */
-export function hasInnerContentBox(node: NodeV6): boolean {
-  if (node.type !== 'path') return false;
-  const box = contentBox(node);
-  return (
-    box.x !== 0 || box.y !== 0 || box.width !== node.frame.width || box.height !== node.frame.height
-  );
-}
+const pathBoxes = new WeakMap<NodeV6, Frame | null>();
 
-/** The four corners of a node's rotated content box in its parent's space. */
-export function contentCorners(node: NodeV6): PagePoint[] {
-  if (!hasInnerContentBox(node)) return corners(node.frame, node.rotation);
-  const box = contentBox(node);
+/** A group's computed box with the child nodes and child boxes it was computed from. */
+type GroupEntry = {
+  children: readonly (NodeV6 | undefined)[];
+  boxes: readonly (Frame | null)[];
+  box: Frame | null;
+};
+
+/**
+ * Groups' computed boxes by node object. Nodes are frozen, but a descendant can change while the
+ * group object stays, so an entry holds only while its child objects and their own (cached, so
+ * identical) boxes are the same: a lookup costs one pass over the subtree, with no repeated work.
+ */
+const groupBoxes = new WeakMap<NodeV6, GroupEntry>();
+
+/** A node's corners in its parent's space for its content box `box` (null: its whole frame). */
+function cornersOf(node: NodeV6, box: Frame | null): PagePoint[] {
+  if (box === null) return corners(node.frame, node.rotation);
   const left = box.x;
   const top = box.y;
   const right = box.x + box.width;
@@ -148,7 +158,66 @@ export function contentCorners(node: NodeV6): PagePoint[] {
   ];
 }
 
+/**
+ * A node's content box when it differs from its frame, else null: a path whose curve is inside
+ * its frame; a group or mask group whose children's content boxes (through groups only; a frame,
+ * symbol or instance clips or owns its box) bound a box other than its frame.
+ */
+function innerBox(node: NodeV6, lookup: NodeLookup): Frame | null {
+  if (node.type === 'path') return pathBox(node);
+  if (node.type !== 'group' && node.type !== 'maskGroup') return null;
+  const children = node.children.map(lookup);
+  const boxes = children.map((child) => (child === undefined ? null : innerBox(child, lookup)));
+  const cached = groupBoxes.get(node);
+  if (
+    cached !== undefined &&
+    cached.children.length === children.length &&
+    children.every((child, i) => child === cached.children[i] && boxes[i] === cached.boxes[i])
+  ) {
+    return cached.box;
+  }
+  let box: Frame | null = null;
+  if (boxes.some((b) => b !== null)) {
+    const points: PagePoint[] = [];
+    children.forEach((child, i) => {
+      if (child !== undefined) points.push(...cornersOf(child, boxes[i] ?? null));
+    });
+    const b = boundsOfPoints(points);
+    const { width, height } = node.frame;
+    if (b !== null && (b.x !== 0 || b.y !== 0 || b.width !== width || b.height !== height)) {
+      box = b;
+    }
+  }
+  groupBoxes.set(node, { children, boxes, box });
+  return box;
+}
+
+/**
+ * Whether a node's content box differs from its frame (`innerBox`). Every other node keeps its
+ * frame, bit for bit.
+ */
+export function hasInnerContentBox(node: NodeV6, lookup: NodeLookup): boolean {
+  return innerBox(node, lookup) !== null;
+}
+
+/**
+ * A node's content box in its own unrotated axes, relative to its frame's top-left corner: for
+ * a path the box of its curve; for a group or mask group, the bounds of its children's content
+ * boxes in its own space (V-26; the group's frame is still fitted to its children's frames); for
+ * any other node `{ 0, 0, width, height }`.
+ */
+export function contentBox(node: NodeV6, lookup: NodeLookup): Frame {
+  return (
+    innerBox(node, lookup) ?? { x: 0, y: 0, width: node.frame.width, height: node.frame.height }
+  );
+}
+
+/** The four corners of a node's rotated content box in its parent's space. */
+export function contentCorners(node: NodeV6, lookup: NodeLookup): PagePoint[] {
+  return cornersOf(node, innerBox(node, lookup));
+}
+
 /** The page-aligned bounds of a node's rotated content box in its parent's space. */
-export function contentBounds(node: NodeV6): Frame {
-  return boundsOfPoints(contentCorners(node))!;
+export function contentBounds(node: NodeV6, lookup: NodeLookup): Frame {
+  return boundsOfPoints(contentCorners(node, lookup))!;
 }
