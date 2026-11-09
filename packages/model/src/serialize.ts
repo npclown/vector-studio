@@ -1,4 +1,14 @@
-import type { Dash, DocumentV6, JsonValue, NodeV6, Paint, Stroke, TextRun } from './types.js';
+import type {
+  Dash,
+  DocumentV7,
+  Effect,
+  JsonValue,
+  NodeV6,
+  NodeV7,
+  Paint,
+  Stroke,
+  TextRun,
+} from './types.js';
 
 // Fixed key order (plan section 3.3). Node and custom-data keys are inserted in code-unit order,
 // so the text does not depend on the order nodes were created, deleted or restored in. (Object
@@ -89,6 +99,26 @@ function compareCodeUnits(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+/** E41-S2 key order: `kind`, then a shadow's `visible, color, offsetX, offsetY, radius`. */
+function effect(value: Effect): Ordered {
+  if (value.kind === 'layerBlur') {
+    return { kind: value.kind, visible: value.visible, radius: value.radius };
+  }
+  return {
+    kind: value.kind,
+    visible: value.visible,
+    color: color(value.color),
+    offsetX: value.offsetX,
+    offsetY: value.offsetY,
+    radius: value.radius,
+  };
+}
+
+/** A v7 node: the v6 fields, then `effects` (E41-S1). */
+function nodeV7(value: NodeV7): Ordered {
+  return { ...nodeV6(value), effects: value.effects.map(effect) };
+}
+
 function nodeV6(value: NodeV6): Ordered {
   const base = {
     id: value.id,
@@ -167,7 +197,7 @@ function nodeV6(value: NodeV6): Ordered {
  * The document as a plain object in canonical key order, for `serializeDocument` and the
  * persistence envelope (MVP M5 contract, M5-E3). Not exported from the package.
  */
-export function orderedDocument(document: DocumentV6): Ordered {
+export function orderedDocument(document: DocumentV7): Ordered {
   return {
     schemaVersion: document.schemaVersion,
     id: document.id,
@@ -179,22 +209,23 @@ export function orderedDocument(document: DocumentV6): Ordered {
     nodes: Object.fromEntries(
       Object.keys(document.nodes)
         .sort(compareCodeUnits)
-        .map((key) => [key, nodeV6(document.nodes[key]!)]),
+        .map((key) => [key, nodeV7(document.nodes[key]!)]),
     ),
   };
 }
 
 /**
- * Emits canonical schema v6 JSON (M1 contract, section 2.1; M7 contract, section 2.1; M6a
- * contract, sections 2 and 9; M4 contract, section 2): two-space indentation, fixed key order and
+ * Emits canonical schema v7 JSON (M1 contract, section 2.1; M7 contract, section 2.1; M6a
+ * contract, sections 2 and 9; M4 contract, section 2; E41 contract, section 3): two-space indentation, fixed key order and
  * a final newline. A paint is written as a colour (`r, g, b, a`) or a gradient (`kind`,
  * `transform`, `stops`, each `offset`, `color`, then `spread`), a stroke as `color`, `width`,
  * `cap`, `join`, `miterLimit`, `dash` (`null` or `pattern`, `phase`). A
  * symbol's keys are in a frame's order, an instance's in the base order followed by `symbol` and
  * `textOverrides` (its keys in code unit order, each value `{ runs }`), a text
  * node's in the base order followed by `runs` (each `text`, `family`, `size`, `color`),
- * `sizing`, `align`, `letterSpacing`, `lineHeight`.
+ * `sizing`, `align`, `letterSpacing`, `lineHeight`. Every node ends with `effects`, each effect in
+ * the E41-S2 key order.
  */
-export function serializeDocument(document: DocumentV6): string {
+export function serializeDocument(document: DocumentV7): string {
   return `${JSON.stringify(orderedDocument(document), null, 2)}\n`;
 }

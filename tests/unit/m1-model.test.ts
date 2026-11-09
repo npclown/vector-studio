@@ -11,11 +11,12 @@ import {
   validateDocument,
   validateNode,
   type DocumentV1,
-  type DocumentV6,
+  type DocumentV7,
   type ParseResult,
   type ParseResultV2,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
+import { v6Value, v7Text } from '../support/schema-v7.js';
 
 // MVP M1-U1 (M1 contract, section 2): schema v2, the v1 migration and the new codes
 // (M1-A01 model half, M1-A02). Since M1-U2 `parseDocument`, `validateDocument`,
@@ -44,7 +45,7 @@ function read(dir: string, name: string): Promise<string> {
   return readFile(path.join(dir, `${name}.json`), 'utf8');
 }
 
-function parsed(text: string): DocumentV6 {
+function parsed(text: string): DocumentV7 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -109,7 +110,7 @@ describe('M1-A01 migration and round trip', () => {
     async (name) => {
       const v1 = await read(p5, name);
       const v2 = await read(m1, `${name}.v2`);
-      expect(serializeDocument(parsed(v1))).toBe(await read(m4, v6Name(name)));
+      expect(serializeDocument(parsed(v1))).toBe(v7Text(await read(m4, v6Name(name))));
       const migrated = migrateV1toV2(JSON.parse(v1) as DocumentV1);
       expect(migrated.ok && migrated.document).toEqual(JSON.parse(v2));
     },
@@ -120,7 +121,7 @@ describe('M1-A01 migration and round trip', () => {
     async (name) => {
       const text = await read(m1, name);
       const document = parsed(text);
-      expect(serializeDocument(document)).toBe(await read(m4, v6Name(name)));
+      expect(serializeDocument(document)).toBe(v7Text(await read(m4, v6Name(name))));
       expect(parsed(serializeDocument(document))).toEqual(document);
     },
   );
@@ -154,21 +155,23 @@ describe('M1-A01 migration and round trip', () => {
     }
   });
 
-  it('validates in-memory v6 only through validateDocument', async () => {
+  it('validates in-memory v7 only through validateDocument', async () => {
     const v1 = JSON.parse(await read(p5, 'shapes')) as unknown;
     const v2 = JSON.parse(await read(m1, 'shapes.v2')) as unknown;
     const v3 = JSON.parse(await read(m7, 'shapes.v3')) as unknown;
     const v4 = JSON.parse(await read(m6, 'shapes.v4')) as unknown;
     const v5 = JSON.parse(await read(m7, 'shapes.v5')) as unknown;
-    const v6 = await read(m4, 'shapes.v6');
-    for (const old of [v1, v2, v3, v4, v5]) {
+    const v6 = JSON.parse(await read(m4, 'shapes.v6')) as unknown;
+    const v7 = v7Text(await read(m4, 'shapes.v6'));
+    for (const old of [v1, v2, v3, v4, v5, v6]) {
       expect(failure(validateDocument(old))).toEqual({
         code: 'document.unsupported-version',
         path: '/schemaVersion',
       });
     }
-    const result = validateDocument(JSON.parse(v6));
-    expect(result.ok && serializeDocument(result.document)).toBe(v6);
+    const result = validateDocument(JSON.parse(v7));
+    expect(result.ok && serializeDocument(result.document)).toBe(v7);
+    expect(v6Value(JSON.parse(v7))).toEqual(v6);
   });
 
   it('accepts in-memory v1 and v2 values through validateAnyDocument', async () => {
@@ -292,7 +295,7 @@ describe('rotation normalization (M1-S1)', () => {
   });
 
   it('normalizes rotation on parse and rejects a non-finite one in a node', () => {
-    const node = { ...rect('a', 'p'), rotation: 4 * Math.PI + 1 };
+    const node = { ...rect('a', 'p'), rotation: 4 * Math.PI + 1, effects: [] };
     const result = validateNode(node);
     expect(result.ok && result.node.rotation).toBeCloseTo(1, 12);
     expect(validateNode({ ...node, rotation: Number.POSITIVE_INFINITY })).toEqual({

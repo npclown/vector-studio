@@ -13,6 +13,7 @@ import {
   type ExtensionApi,
 } from '../../packages/editor-core/src/index.js';
 import { RecordingRenderer } from '../support/p5-recording-renderer.js';
+import { v7Text } from '../support/schema-v7.js';
 
 // P5-U5 (P5 editor-slice plan, section 5): the extension registry and `ext.star` (P5-A10), and
 // the two custom-node codes of P5-A07.
@@ -415,9 +416,11 @@ describe('P5-A07 custom-node codes', () => {
     // The v1 fixture loads migrated to the latest schema (MVP M1 contract, section 2.1), v6
     // since M4-U1 (M4 contract, section 2.1).
     expect(text(editor([starExtension], document))).toBe(
-      await readFile(
-        path.join(root, 'tests/fixtures/m4-appearance/migrated/ext-star.v6.json'),
-        'utf8',
+      v7Text(
+        await readFile(
+          path.join(root, 'tests/fixtures/m4-appearance/migrated/ext-star.v6.json'),
+          'utf8',
+        ),
       ),
     );
   });

@@ -16,17 +16,17 @@ import type {
   Constraints,
   CornerRadii,
   DocumentErrorCode,
-  DocumentV6,
+  DocumentV7,
   FillRule,
   Frame,
   JsonValue,
   ModelErrorCode,
-  NodeV6,
+  NodeV7,
   PageV2,
   Paint,
   PathVerb,
   Stroke,
-  TextNode,
+  TextNodeV7,
   TextRun,
 } from '@vector-studio/model';
 
@@ -464,8 +464,8 @@ export type DocumentCommand =
       type: 'createText';
       frame: Frame;
       runs: readonly TextRun[];
-      sizing?: TextNode['sizing'];
-      align?: TextNode['align'];
+      sizing?: TextNodeV7['sizing'];
+      align?: TextNodeV7['align'];
       letterSpacing?: number;
       lineHeight?: number;
     }> &
@@ -484,8 +484,8 @@ export type DocumentCommand =
   | Readonly<{
       type: 'setTextProps';
       id: string;
-      sizing?: TextNode['sizing'];
-      align?: TextNode['align'];
+      sizing?: TextNodeV7['sizing'];
+      align?: TextNodeV7['align'];
       letterSpacing?: number;
       lineHeight?: number;
     }>
@@ -649,7 +649,7 @@ export type CommandResult =
 export type HistoryState = Readonly<{ undoDepth: number; redoDepth: number }>;
 
 export type EditorSnapshot = Readonly<{
-  document: DocumentV6;
+  document: DocumentV7;
   /** The page tools, hit testing and the projector work on (M1 contract, section 3). */
   activePage: string;
   /** Increases by one for every document change, including gesture updates, undo and redo. */
@@ -809,9 +809,9 @@ export type ExportScene = Readonly<{
 }>;
 
 export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'committedDocument' }
-  ? DocumentV6
+  ? DocumentV7
   : Q extends { type: 'node' }
-    ? NodeV6 | null
+    ? NodeV7 | null
     : Q extends { type: 'selection' }
       ? readonly string[]
       : Q extends { type: 'tool' }

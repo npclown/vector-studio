@@ -46,8 +46,11 @@ const STRESS_SHA256 = 'dc5cf1a75b00e460fa638ec2197024287671beced964522a03d093ded
 const TYPICAL_ZOOM = 0.44287156211454926;
 const TYPICAL_VISIBLE = 995;
 const TYPICAL_VISIBLE_DPR2 = 987;
-/** The configuration hash of `e26-mixed-view-edit-10k/v1` at DPR 1, five repetitions. */
-const VIEW_EDIT_HASH = 'fbacd41cb86ccb66be4dbae73c827cd57934963b741761db21d7e317d777d4a6';
+/**
+ * The configuration hash of `e26-mixed-view-edit-10k/v1` at DPR 1, five repetitions; re-pinned at
+ * E41-U4, where the loaded document became schema v7 (E41-S1).
+ */
+const VIEW_EDIT_HASH = '3b2e8d79cfb1cd1b3c799159a854c9324743e48d6111827b633e5addbf3c7291';
 
 function allInside(bounds: typeof mixed.bounds, camera: E26Camera) {
   const { inside, leaves } = visibility(bounds, camera);

@@ -1,5 +1,5 @@
 import type { TextLayoutRequest } from '@vector-studio/contracts';
-import { validateNode, type DocumentV6, type TextNode } from '@vector-studio/model';
+import { validateNode, type DocumentV7, type TextNodeV7 } from '@vector-studio/model';
 import { TEXT_LINE_HEIGHT } from './edits.js';
 import { deepFreeze } from './freeze.js';
 import { nodePlacement, type NodePlacement } from './path-edit.js';
@@ -65,14 +65,18 @@ export function samePending(a: TextEditPending | null, b: TextEditPending | null
 }
 
 /** The text node `id` of `page`, or undefined. */
-export function editableText(document: DocumentV6, page: string, id: string): TextNode | undefined {
+export function editableText(
+  document: DocumentV7,
+  page: string,
+  id: string,
+): TextNodeV7 | undefined {
   const node = Object.hasOwn(document.nodes, id) ? document.nodes[id] : undefined;
   if (node?.type !== 'text') return undefined;
   return pageOf(documentTree(document), id) === page ? node : undefined;
 }
 
 /** Whether `parent` is the page `page` or a container of it (section 3.3, pending exit). */
-export function pendingParentHolds(document: DocumentV6, page: string, parent: string): boolean {
+export function pendingParentHolds(document: DocumentV7, page: string, parent: string): boolean {
   if (parent === page) return true;
   const tree = documentTree(document);
   return isContainer(tree.node(parent)) && pageOf(tree, parent) === page;
@@ -105,8 +109,8 @@ export function pendingPlacement(pending: TextEditPending): NodePlacement {
 
 /** A text node's target over `model`. */
 export function nodeTarget(
-  document: DocumentV6,
-  node: TextNode,
+  document: DocumentV7,
+  node: TextNodeV7,
   model: CaretModel,
 ): TextEditTarget {
   const { width, height } = node.frame;
@@ -208,13 +212,14 @@ export function checkTextStyle(value: unknown): TextStyle | StyleFailure {
     align: 'left',
     letterSpacing: 0,
     lineHeight: TEXT_LINE_HEIGHT,
+    effects: [],
   });
   if (!result.ok) {
     const prefix = '/runs/0';
     const path = result.path.startsWith(prefix) ? result.path.slice(prefix.length) : '';
     return { ok: false, code: result.code, path: `/style${path}` };
   }
-  const checked = (result.node as TextNode).runs[0]!;
+  const checked = (result.node as TextNodeV7).runs[0]!;
   if (checked.size < MIN_AUTHORED_TEXT_SIZE) return invalid('/style/size');
   const { r, g, b, a } = checked.color;
   return deepFreeze({ family: checked.family, size: checked.size, color: { r, g, b, a } });

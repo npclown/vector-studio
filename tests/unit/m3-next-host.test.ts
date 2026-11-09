@@ -21,9 +21,10 @@ import {
   validateAnyDocument,
   validateDocument,
   type DocumentV2,
-  type DocumentV6,
+  type DocumentV7,
 } from '../../packages/model/src/index.js';
 import { RecordingRenderer } from '../support/p5-recording-renderer.js';
+import { v7Value } from '../support/schema-v7.js';
 
 // MVP M3-U4 (M3 contract, sections 4, 5.1 and M3-A12): the next-host page's pure path edit
 // chrome, in Node: the committed `?fixture=path-edit` document, the anchor and handle markers
@@ -96,7 +97,7 @@ function pathsDocument(
     verbs: Extract<Command, { type: 'createPath' }>['verbs'];
     points: readonly number[];
   }>[],
-): DocumentV6 {
+): DocumentV7 {
   const target = createEditor({ ids: createCounterIdSource('p') });
   for (const entry of paths) ok(target, { type: 'createPath', ...entry });
   return target.query({ type: 'document' });
@@ -144,7 +145,9 @@ describe('M3-U4 path-edit fixture', () => {
         ]),
       ),
     };
-    expect(JSON.stringify(target.query({ type: 'document' }))).toBe(JSON.stringify(migrated));
+    expect(JSON.stringify(target.query({ type: 'document' }))).toBe(
+      JSON.stringify(v7Value(migrated)),
+    );
   });
 });
 

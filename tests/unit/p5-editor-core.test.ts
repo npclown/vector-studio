@@ -9,7 +9,7 @@ import {
   type EditorEvent,
 } from '../../packages/editor-core/src/index.js';
 import { createEditor as createPackagedEditor } from '@vector-studio/editor-core';
-import { serializeDocument, type DocumentV6 } from '@vector-studio/model';
+import { serializeDocument, type DocumentV7 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 // Source imports: the gesture API is package-internal, so the test shares the source module.
 import { internalsOf } from '../../packages/editor-core/src/editor.js';
@@ -65,8 +65,8 @@ describe('P5-A01 creation through execute', () => {
       stroke: { color: black, width: 2, ...SHAPE },
     });
     expect(ids).toEqual(['n3']);
-    const expected: DocumentV6 = {
-      schemaVersion: 6,
+    const expected: DocumentV7 = {
+      schemaVersion: 7,
       id: 'n1',
       pages: [{ id: 'n2', name: 'Page 1', children: ['n3'] }],
       nodes: {
@@ -83,6 +83,7 @@ describe('P5-A01 creation through execute', () => {
           cornerRadii: [0, 0, 0, 0],
           fill: { r: 1, g: 0, b: 0, a: 1 },
           stroke: { color: black, width: 2, ...SHAPE },
+          effects: [],
         },
       },
     };
@@ -144,6 +145,7 @@ describe('P5-A01 creation through execute', () => {
       },
       fill: black,
       stroke: null,
+      effects: [],
     });
   });
 
@@ -488,7 +490,7 @@ describe('P5-A05 failed commands and session state', () => {
     ['deleting nothing', () => ({ type: 'deleteNodes', ids: [] }), 'editor.invalid-command'],
     [
       'an invalid document',
-      () => ({ type: 'loadDocument', document: { schemaVersion: 7 } }),
+      () => ({ type: 'loadDocument', document: { schemaVersion: 8 } }),
       'document.unsupported-version',
     ],
     ['an unknown command', () => ({ type: 'rotate' }) as never, 'editor.invalid-command'],

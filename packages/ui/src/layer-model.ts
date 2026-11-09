@@ -1,9 +1,9 @@
 import type {
   Command,
   CommandResult,
-  DocumentV6,
-  NodeV6,
-  PageV6,
+  DocumentV7,
+  NodeV7,
+  PageV7,
   ReorderOp,
 } from '@vector-studio/react';
 import type { ActionButton } from './toolbar-model.js';
@@ -36,7 +36,7 @@ export type PageButton = Readonly<{
 }>;
 
 /** The page buttons, one per page in document order, the active one pressed (`setActivePage`). */
-export function pageButtons(pages: readonly PageV6[], active: string): readonly PageButton[] {
+export function pageButtons(pages: readonly PageV7[], active: string): readonly PageButton[] {
   return pages.map((page) => ({
     id: page.id,
     testId: `page-${page.id}`,
@@ -47,7 +47,7 @@ export function pageButtons(pages: readonly PageV6[], active: string): readonly 
 }
 
 /** The rename of a page to `name` (`renamePage`): blank is invalid, the same name sends nothing. */
-export function renamePageEdit(page: PageV6, name: string): FieldEdit {
+export function renamePageEdit(page: PageV7, name: string): FieldEdit {
   if (blank(name)) return INVALID;
   if (name === page.name) return UNCHANGED;
   return { invalid: false, command: { type: 'renamePage', id: page.id, name } };
@@ -58,7 +58,7 @@ export function renamePageEdit(page: PageV6, name: string): FieldEdit {
  * new page becomes active) and `remove-page` (`removePage` of the active page, disabled while it
  * is the only page). Neither changes the selection; `runPageAction` switches pages.
  */
-export function pageActions(pages: readonly PageV6[], active: string): readonly ActionButton[] {
+export function pageActions(pages: readonly PageV7[], active: string): readonly ActionButton[] {
   return [
     {
       testId: 'add-page',
@@ -103,7 +103,7 @@ export type LayerRow = Readonly<{
   /** Test ID `layer-<id>`. */
   testId: string;
   name: string;
-  type: NodeV6['type'];
+  type: NodeV7['type'];
   /** 0 for a child of the page, one more per container above it. */
   depth: number;
   /** A group, mask group, frame or symbol: a node with children. */
@@ -114,7 +114,7 @@ export type LayerRow = Readonly<{
   visible: boolean;
 }>;
 
-const childrenOf = (node: NodeV6): readonly string[] | null =>
+const childrenOf = (node: NodeV7): readonly string[] | null =>
   'children' in node ? node.children : null;
 
 /**
@@ -123,7 +123,7 @@ const childrenOf = (node: NodeV6): readonly string[] | null =>
  * leaf: its expansion is no document node and is not listed (M7). An unknown page gives none.
  */
 export function layerRows(
-  document: DocumentV6,
+  document: DocumentV7,
   activePage: string,
   expanded: ReadonlySet<string>,
   selection: readonly string[],
@@ -175,7 +175,7 @@ export function layerRows(
  * node object, depth, expanded and selected state are unchanged is returned as the same object,
  * so a memoized row component skips its render. The walk itself runs on every call.
  */
-export type LayerRowCache = { entries: Map<string, Readonly<{ node: NodeV6; row: LayerRow }>> };
+export type LayerRowCache = { entries: Map<string, Readonly<{ node: NodeV7; row: LayerRow }>> };
 
 /** An empty row cache, one per layer tree. */
 export function createLayerRowCache(): LayerRowCache {

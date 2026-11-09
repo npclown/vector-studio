@@ -1,5 +1,5 @@
 import type { TextLayoutPort } from '@vector-studio/contracts';
-import type { Color, DocumentV6, Frame, TextRun } from '@vector-studio/model';
+import type { Color, DocumentV7, Frame, TextRun } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   createCounterIdSource,
@@ -100,7 +100,7 @@ function path(id: string, parent: string, frame: Frame): Loose {
  * local (5, 6); hidden `th`; `tc` "e" + U+0301 + "😀"; `ro` a rectangle under `t`, overlapping
  * it at (12, 22) to (17, 27). Page `p2`: `t2`.
  */
-function fixture(): DocumentV6 {
+function fixture(): DocumentV7 {
   const nodes: Loose[] = [
     text('t', 'p1', f(10, 20, 22.5, 12)),
     text('tr', 'p1', f(50, 50, 22.5, 12), 'ab cd', { rotation: Math.PI / 2 }),
@@ -129,7 +129,7 @@ function fixture(): DocumentV6 {
       { id: 'p2', name: 'Page 2', children: ['t2'] },
     ],
     nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
-  } as unknown as DocumentV6;
+  } as unknown as DocumentV7;
 }
 
 function editor(port: TextLayoutPort | null = createFakeTextLayout()): Editor {

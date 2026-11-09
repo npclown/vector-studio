@@ -32,7 +32,7 @@
 // The move selection keeps the M1-A13 definition (`m1A13MoveSelection`): cluster 0 is unchanged.
 import { createHash } from 'node:crypto';
 import type { TextLayoutResult } from '@vector-studio/contracts';
-import { parseDocument, type DocumentV6, type TextNode } from '@vector-studio/model';
+import { parseDocument, type DocumentV7, type TextNodeV7 } from '@vector-studio/model';
 import { projectPage } from '../../packages/editor-core/src/projector.js';
 import { generateM1A13Document, m1A13MoveSelection } from '../m1-a13/document.js';
 
@@ -47,7 +47,7 @@ type Node = Record<string, unknown> & {
 };
 
 export type M9GeneratedDocument = {
-  schemaVersion: 6;
+  schemaVersion: 7;
   id: string;
   pages: { id: string; name: string; children: string[] }[];
   nodes: Record<string, Node>;
@@ -185,7 +185,7 @@ export function m9DocumentSha256(document: unknown): string {
 }
 
 /** A layout with no clusters: enough to count projected scene nodes, never to draw. */
-function countingLayout(node: TextNode): TextLayoutResult {
+function countingLayout(node: TextNodeV7): TextLayoutResult {
   return {
     generation: 0,
     lang: 'ko',
@@ -199,9 +199,9 @@ function countingLayout(node: TextNode): TextLayoutResult {
 
 /** The page projection with every text node laid out (by `layout`, or counting only). */
 export function projectM9Page(
-  document: DocumentV6,
+  document: DocumentV7,
   pageId: string,
-  layout: (node: TextNode) => TextLayoutResult = countingLayout,
+  layout: (node: TextNodeV7) => TextLayoutResult = countingLayout,
 ) {
   return projectPage(
     document,
@@ -241,7 +241,7 @@ export function generateM9V2Document(seed = M9_V2_SEED): M9GeneratedDocument {
   if (!parsed.ok) throw new Error(`M1-A13 parse: ${parsed.code} ${parsed.path}`);
   // A plain, writable copy at the current schema version.
   const document = JSON.parse(JSON.stringify(parsed.document)) as M9GeneratedDocument;
-  if ((document.schemaVersion as number) !== 6) throw new Error('not schema version 6');
+  if ((document.schemaVersion as number) !== 7) throw new Error('not schema version 7');
   document.id = 'm9-v2';
   const nodes = document.nodes;
   const [page1, page2] = document.pages as [
@@ -289,6 +289,8 @@ export function generateM9V2Document(seed = M9_V2_SEED): M9GeneratedDocument {
       opacity: 1,
       visible: true,
       ...rest,
+      // Schema v7 (E41-S1): no effects.
+      effects: [],
     } as unknown as Node;
     nodes[id] = value;
     return value;
@@ -453,6 +455,7 @@ export function generateM9V2Document(seed = M9_V2_SEED): M9GeneratedDocument {
       constraints: rest.constraints,
       opacity: rest.opacity,
       visible: rest.visible,
+      effects: [],
     };
   };
   const instances: string[] = [];
@@ -661,7 +664,7 @@ export function m9V2Counts(document: M9GeneratedDocument): M9V2Counts {
     visit(value.id);
   }
   const texts = all.filter(
-    (value): value is TextNode => value.type === 'text' && !sourceIds.has(value.id),
+    (value): value is TextNodeV7 => value.type === 'text' && !sourceIds.has(value.id),
   );
   const ids = [...projection.nodes.keys()];
   return {

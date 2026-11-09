@@ -1,4 +1,4 @@
-import type { DocumentV6, Frame, NodeV6, Stroke } from '@vector-studio/model';
+import type { DocumentV7, Frame, NodeV7, Stroke } from '@vector-studio/model';
 import { apply, boundsOfPoints, localTransform } from './geometry.js';
 import type { PagePoint } from './types.js';
 
@@ -44,7 +44,7 @@ function include(box: Box, p: PagePoint, by = 0): Box {
 }
 
 /** The path rule above, in the node's unrotated frame. */
-function pathBox(node: Extract<NodeV6, { type: 'path' }>): Box {
+function pathBox(node: Extract<NodeV7, { type: 'path' }>): Box {
   const { frame, stroke } = node;
   let box = boxOf(frame);
   const points = node.path.points;
@@ -80,7 +80,7 @@ function strokeGrowth(stroke: Stroke): number {
  * - A `triangle` end (fill mode): one filled outline, the shaft and caps as above, triangle heads
  *   exactly, a `line` head as two w-wide bars (so its points grow by w/2).
  */
-function lineBox(node: Extract<NodeV6, { type: 'line' }>): Box {
+function lineBox(node: Extract<NodeV7, { type: 'line' }>): Box {
   const { frame, stroke } = node;
   const [x0, y0, x1, y1] = node.points;
   const p0 = { x: frame.x + x0 * frame.width, y: frame.y + y0 * frame.height };
@@ -126,7 +126,7 @@ function lineBox(node: Extract<NodeV6, { type: 'line' }>): Box {
 }
 
 /** A node's visual box in its own unrotated frame (coordinates of its parent's space). */
-function ownBox(document: DocumentV6, node: NodeV6): Box {
+function ownBox(document: DocumentV7, node: NodeV7): Box {
   switch (node.type) {
     case 'rectangle':
     case 'ellipse': {
@@ -185,7 +185,7 @@ function ownBox(document: DocumentV6, node: NodeV6): Box {
  * The visual bounds of `node` in its parent's space: its own visual box turned by its rotation
  * about its frame's centre. Contains `rotatedBounds(node)`.
  */
-export function visualBounds(document: DocumentV6, node: NodeV6): Frame {
+export function visualBounds(document: DocumentV7, node: NodeV7): Frame {
   const box = ownBox(document, node);
   if (node.rotation === 0) {
     return { x: box.minX, y: box.minY, width: box.maxX - box.minX, height: box.maxY - box.minY };

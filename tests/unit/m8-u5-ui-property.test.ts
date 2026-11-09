@@ -8,8 +8,8 @@ import {
 import {
   serializeDocument,
   validateDocument,
-  type DocumentV6,
-  type TextNode,
+  type DocumentV7,
+  type TextNodeV7,
 } from '@vector-studio/model';
 import {
   AppearancePanel,
@@ -51,6 +51,7 @@ import {
   transformValue,
 } from '../../packages/ui/src/property-model.js';
 import { createFakeTextLayout } from '../support/fake-text-layout.js';
+import { v7Value } from '../support/schema-v7.js';
 
 // MVP M8 contract, unit M8-U5, M8-A11 (section 7.3, M8-R1 to M8-R5): the property panel. The M4
 // appearance panel's pure module and component moved to `ui` (the moved M4 tests,
@@ -104,9 +105,10 @@ const run = (value: string, extra: object = {}) => ({
 /**
  * One page: a rectangle `r` (rotated), a second rectangle `q`, a line `l`, a frame `f` with a
  * child `c` (end and scale constraints), a two-run text `t`, a symbol `s` holding the text `st`
- * and the text `su`, and an instance `i` of it with text overrides of `st` and `su`.
+ * and the text `su`, and an instance `i` of it with text overrides of `st` and `su`. Written at
+ * v6, upgraded to v7 (E41-S1).
  */
-const DOCUMENT = {
+const DOCUMENT = v7Value({
   schemaVersion: 6,
   id: 'doc',
   pages: [{ id: 'p1', name: 'Page 1', children: ['r', 'q', 'l', 'f', 't', 's', 'i'] }],
@@ -172,9 +174,9 @@ const DOCUMENT = {
       textOverrides: { st: { runs: [run('Changed')] }, su: { runs: [run('Note')] } },
     },
   },
-};
+});
 
-function parsed(): DocumentV6 {
+function parsed(): DocumentV7 {
   const result = validateDocument(DOCUMENT);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -380,7 +382,7 @@ describe('M8-R4: text fields (M8-Q9 (a))', () => {
   });
 
   it('the run fields edit the non-collapsed selection, else the whole text; a caret disables them', () => {
-    const t = parsed().nodes.t as TextNode;
+    const t = parsed().nodes.t as TextNodeV7;
     expect(textLength(t)).toBe(11);
     expect(textRange(t, null)).toEqual({ start: 0, end: 11 });
     expect(textRange(t, editing(8, 2))).toEqual({ start: 2, end: 8 });
@@ -405,7 +407,7 @@ describe('M8-R4: text fields (M8-Q9 (a))', () => {
 
   it('setTextStyle over the range and setTextProps, literal, each one undo step', () => {
     const target = editor();
-    const t = node(target, 't') as TextNode;
+    const t = node(target, 't') as TextNodeV7;
     expect(textStyleCommand(t, { start: 2, end: 8 }, { size: 20 })).toEqual({
       type: 'setTextStyle',
       id: 't',
@@ -419,15 +421,17 @@ describe('M8-R4: text fields (M8-Q9 (a))', () => {
       align: 'center',
     });
     oneStep(target, textStyleCommand(t, { start: 0, end: 11 }, { family: 'Serif' }));
-    expect((node(target, 't') as TextNode).runs.map((entry) => entry.family)).toEqual([
+    expect((node(target, 't') as TextNodeV7).runs.map((entry) => entry.family)).toEqual([
       'Serif',
       'Serif',
     ]);
     target.execute({ type: 'enterTextEdit', id: 't', anchor: 0, focus: 5 });
-    const range = textRange(node(target, 't') as TextNode, target.getSnapshot().textEdit)!;
+    const range = textRange(node(target, 't') as TextNodeV7, target.getSnapshot().textEdit)!;
     expect(range).toEqual({ start: 0, end: 5 });
     oneStep(target, textStyleCommand(t, range, { color: RED }));
-    expect((node(target, 't') as TextNode).runs.map((entry) => [entry.text, entry.color])).toEqual([
+    expect(
+      (node(target, 't') as TextNodeV7).runs.map((entry) => [entry.text, entry.color]),
+    ).toEqual([
       ['Hello', RED],
       [' ', BLACK],
       ['world', RED],
@@ -456,7 +460,7 @@ describe('M8-R4: text fields (M8-Q9 (a))', () => {
     expect(parseFamily('   ')).toBeNull();
     const target = editor();
     const before = serialized(target);
-    const t = node(target, 't') as TextNode;
+    const t = node(target, 't') as TextNodeV7;
     const result = target.execute(
       textStyleCommand(t, { start: 0, end: 11 }, { family: 'a\u0001' }),
     );

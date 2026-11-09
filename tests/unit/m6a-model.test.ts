@@ -14,13 +14,15 @@ import {
   validateFragmentTree,
   validateNode,
   type DocumentV3,
-  type DocumentV6,
+  type DocumentV7,
   type EnvelopeResult,
   type FragmentTreeResult,
   type NodeResult,
   type ParseResult,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
+
+import { v6Value, v7Text, v7Value } from '../support/schema-v7.js';
 
 // MVP M6a-U1 (M6a contract, sections 2, 2.1 and 8): schema v4 with the `text` leaf, the M6a-S
 // rules and bounds with their codes and paths and the section 2 check order (M6a-A01), the
@@ -42,7 +44,7 @@ function read(file: string): Promise<string> {
   return readFile(path.join(fixtures, file), 'utf8');
 }
 
-function parsed(text: string): DocumentV6 {
+function parsed(text: string): DocumentV7 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -93,7 +95,8 @@ const V4_FIXTURES = [
  * The committed v6 migration of a v4 fixture (M6a contract, section 9, then M4 contract, section
  * 2.1), what the model now writes for it.
  */
-const v6 = (name: string) => read(`m4-appearance/migrated/${name}.v6.json`);
+// Upgraded to v7 (E41-S1), the version the model writes.
+const v6 = async (name: string) => v7Text(await read(`m4-appearance/migrated/${name}.v6.json`));
 
 const START = { horizontal: 'start', vertical: 'start' } as const;
 const black = { r: 0, g: 0, b: 0, a: 1 };
@@ -154,8 +157,10 @@ type Loose = {
   nodes: Record<string, unknown>;
 };
 
-function document(nodes: Record<string, unknown>, children: string[], version = 6): Loose {
-  return { schemaVersion: version, id: 'd', pages: [{ id: 'p', name: 'P', children }], nodes };
+/** At v7 every node gains `effects: []` (E41-S1). */
+function document(nodes: Record<string, unknown>, children: string[], version = 7): Loose {
+  const value = { schemaVersion: 6, id: 'd', pages: [{ id: 'p', name: 'P', children }], nodes };
+  return version === 7 ? v7Value(value) : { ...value, schemaVersion: version };
 }
 
 /** A document with the one text node `t` on page `p`. */
@@ -256,9 +261,9 @@ describe('M6a-A02 migration v3 to v4 (section 2.1)', () => {
     'm1-model/malformed/unsupported-version.json',
     'm7-symbols/malformed/unsupported-version.json',
     'm6-text/malformed/unsupported-version.json',
-  ])('fails %s at schemaVersion 7', async (file) => {
+  ])('fails %s at schemaVersion 8', async (file) => {
     const text = await read(file);
-    expect((JSON.parse(text) as { schemaVersion: number }).schemaVersion).toBe(7);
+    expect((JSON.parse(text) as { schemaVersion: number }).schemaVersion).toBe(8);
     expect(failure(parseDocument(text))).toEqual({
       code: 'document.unsupported-version',
       path: '/schemaVersion',
@@ -267,12 +272,12 @@ describe('M6a-A02 migration v3 to v4 (section 2.1)', () => {
 
   // `order-5-6` holds an unknown key as well, so its step 5 failure is checked in M5's tests.
   it.each(['document-unsupported-version', 'order-5-6'])(
-    'holds document schemaVersion 7 in the M5 envelope %s',
+    'holds document schemaVersion 8 in the M5 envelope %s',
     async (name) => {
       const text = await read(`m5-persistence/malformed/${name}.json`);
       expect(
         (JSON.parse(text) as { document: { schemaVersion: number } }).document.schemaVersion,
-      ).toBe(7);
+      ).toBe(8);
     },
   );
 
@@ -284,13 +289,13 @@ describe('M6a-A02 migration v3 to v4 (section 2.1)', () => {
     });
   });
 
-  it('accepts versions 1 to 6, validateDocument only 6', () => {
+  it('accepts versions 1 to 7, validateDocument only 7', () => {
     const value = single();
     expect(validateDocument(value).ok).toBe(true);
     expect(validateAnyDocument(value).ok).toBe(true);
-    expect(validateAnyDocument({ ...value, schemaVersion: 4 }).ok).toBe(true);
-    expect(validateAnyDocument({ ...value, schemaVersion: 5 }).ok).toBe(true);
-    for (const version of [1, 2, 3, 4, 5, 7]) {
+    expect(validateAnyDocument({ ...v6Value(value), schemaVersion: 4 }).ok).toBe(true);
+    expect(validateAnyDocument({ ...v6Value(value), schemaVersion: 5 }).ok).toBe(true);
+    for (const version of [1, 2, 3, 4, 5, 6, 8]) {
       expect(failure(validateDocument({ ...value, schemaVersion: version }))).toEqual({
         code: 'document.unsupported-version',
         path: '/schemaVersion',
@@ -374,7 +379,7 @@ describe('M6a-A02 round trip and serialize order (section 2)', () => {
     }
     // The order holds for an in-memory value built in another key order.
     const value = parsed(text);
-    const node = value.nodes.t2 as Extract<DocumentV6['nodes'][string], { type: 'text' }>;
+    const node = value.nodes.t2 as Extract<DocumentV7['nodes'][string], { type: 'text' }>;
     const { runs, lineHeight, ...rest } = node;
     const shuffled = {
       ...value,
@@ -391,7 +396,7 @@ describe('M6a-A02 round trip and serialize order (section 2)', () => {
           ...rest,
         },
       },
-    } as DocumentV6;
+    } as DocumentV7;
     expect(serializeDocument(shuffled)).toBe(await v6('text'));
   });
 });
@@ -447,7 +452,7 @@ describe('M6a-A01 malformed text documents (M6a-S1 to M6a-S4)', () => {
   it.each(atV4)('enforces %s at every entry point', async (name) => {
     const value = JSON.parse(await read(`m6-text/malformed/${name}.json`)) as Loose;
     const [code, p] = expected[name]!;
-    fails({ ...value, schemaVersion: 6 }, p, code);
+    fails(v7Value({ ...v6Value(value), schemaVersion: 6 }), p, code);
   });
 
   it('holds 16,385 units in the over-long fixtures and adds no code', async () => {
@@ -685,7 +690,7 @@ describe('M6a-A13 (model half): text nodes and symbols', () => {
       ['s'],
     );
     expect(validateDocument(value).ok).toBe(true);
-    expect(validateAnyDocument({ ...value, schemaVersion: 4 }).ok).toBe(true);
+    expect(validateAnyDocument({ ...v6Value(value), schemaVersion: 4 }).ok).toBe(true);
     expect(validateFragmentTree(value).ok).toBe(true);
   });
 
@@ -724,12 +729,15 @@ describe('M6a-A13 (model half): text nodes and symbols', () => {
 
 describe('M6a-A01 validateNode on text nodes', () => {
   it('accepts a text node and reports paths relative to it', () => {
-    expect(validateNode(textNode('t', 'p'))).toEqual({ ok: true, node: textNode('t', 'p') });
-    expect(failure(validateNode(textNode('t', 'p', [run('a'), run('b')])))).toEqual({
+    const node = { ...textNode('t', 'p'), effects: [] };
+    expect(validateNode(node)).toEqual({ ok: true, node });
+    expect(
+      failure(validateNode(textNode('t', 'p', [run('a'), run('b')], { effects: [] }))),
+    ).toEqual({
       code: 'document.invalid-field',
       path: '/runs/1',
     });
-    expect(failure(validateNode(textNode('t', 'p', [run('a ')])))).toEqual({
+    expect(failure(validateNode(textNode('t', 'p', [run('a ')], { effects: [] })))).toEqual({
       code: 'document.invalid-field',
       path: '/runs/0/text',
     });

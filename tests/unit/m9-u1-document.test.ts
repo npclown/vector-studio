@@ -3,7 +3,7 @@
 // it, its text uses only the committed subset; every M9 scenario has a configuration, a
 // configuration hash and a stable ID; the v2 typical view holds 900 to 1,100 drawn leaves (text
 // bounds from the committed font's recorded layouts) and every drawn leaf is inside the viewport
-// at F; and the v1 scenarios and their hashes are unchanged.
+// at F; and the v1 scenarios are unchanged (their hashes re-pinned at E41-U4 for schema v7).
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseDocument, type TextNode } from '@vector-studio/model';
@@ -63,9 +63,10 @@ const loaded = loadScenarioDocument('m9-v2');
 
 /**
  * Pinned digest of the canonical generated v2 document (U1); a change is a new version. The
- * M9-U1 pre-run fix (run boundaries at word starts) changed it from 6104db99…0407.
+ * M9-U1 pre-run fix (run boundaries at word starts) changed it from 6104db99…0407, and schema v7
+ * (E41-U4: `effects: []` on every node, E41-S1) from cae67383…895c.
  */
-const M9_V2_SHA256 = 'cae673836f01b38f0849bfbb282a2d69fb309bf51f0c4366f9bd0fa71560895c';
+const M9_V2_SHA256 = '876b18687fb0aa58a478ba8c369df7c68f734d8099267ee187b62677fb5dfd89';
 /** The section 3.1 counts, pinned. */
 const COUNTS = {
   documentNodes: 10_000,
@@ -88,21 +89,25 @@ const TYPICAL_ZOOM = 0.5159188439084609;
 const TYPICAL_VISIBLE = 999;
 const TYPICAL_VISIBLE_DPR2 = 997;
 const DRAWN_LEAVES = 6_809;
-/** The configuration hashes at DPR 1, five repetitions: the v1 ones as at 75be15b. */
+/**
+ * The configuration hashes at DPR 1, five repetitions: the v1 ones as at 75be15b, re-pinned at
+ * E41-U4, where the loaded documents became schema v7 (E41-S1) and so did each configuration's
+ * `schemaVersion` and document digest.
+ */
 const V1_HASHES = {
-  'e26-mixed-view-edit-10k/v1': 'fbacd41cb86ccb66be4dbae73c827cd57934963b741761db21d7e317d777d4a6',
-  'e26-mixed-all-edit-10k/v1': '115ac4873a673cbc3dfce752f09fdbe3647e2b612518884be9bdebaff58e73d4',
-  'e26-mixed-all-pan-10k/v1': 'ed884b4faf2246f02946a3ce40f1113941a448521fd315561bde47eb08a77345',
-  'e26-simple-stress-10k/v1': '76665ddc402ad3c6f4e365d499444a0d9a5e869f3110545f52cb610a1bfe7cd1',
-  'e26-pointer-busy-10k/v1': 'ede80cbc0f054cb636b78f9c25e92297df852bebbd53824dd589b80ea54cbda5',
+  'e26-mixed-view-edit-10k/v1': '3b2e8d79cfb1cd1b3c799159a854c9324743e48d6111827b633e5addbf3c7291',
+  'e26-mixed-all-edit-10k/v1': '21ec60ae53592a0ea3900e4b3301fb5252639a036e0d342af91d70f2be46b5ad',
+  'e26-mixed-all-pan-10k/v1': '106c223da6ea735c5fe1e63e85515ad0ff8d9cdef6dd5c14d4b28c760255b000',
+  'e26-simple-stress-10k/v1': '7a3bcd6ebf93111cdf2526e09836a2c87df5e2229ac65c81223dd271e97a68c0',
+  'e26-pointer-busy-10k/v1': '66639ed274ebf79e11afc251898a6245706cad3df39981bd59235526e6187ab5',
 };
 const V2_HASHES = {
-  'e26-mixed-view-edit-10k/v2': 'ab08fe2a7c9253b22612b24013e7fe3d3eb548f63a80ad27b233734f58fe508b',
-  'e26-mixed-all-edit-10k/v2': '3ef51975b4f90d5b952eccaa69a251477c88a858a1c6dfb95015ba659f344da3',
-  'e26-mixed-all-pan-10k/v2': '166c6e3e17ef00044c4cbf2f98eddc86c806f72497f6009c79ccbba0cc41ba1a',
-  'e26-simple-stress-10k/v2': 'ce0fab1e69a868c74efce7c77dbec160f1e2b6c1353f337e2b78c5c8ec62d9d9',
-  'e26-pointer-busy-10k/v2': '4244e7ba542e6ad4013b10c4d76971766fba2752ca855a2de35e5e332507c59c',
-  'm9-typing-10k/v1': '17fd41d6ada536186561927df91bde7fc2c4dfd3c7746bd05ee2cd27188a60ec',
+  'e26-mixed-view-edit-10k/v2': '7cc090a1faca8e0d8a58485d91427c9e5551f1a3315f003a590f15ba6a2d9bca',
+  'e26-mixed-all-edit-10k/v2': '88ff140aa76c844c79bc292480a95b8a34f9123b11b2e574ee20952c63ddcc5f',
+  'e26-mixed-all-pan-10k/v2': '01ab1947f725155eeeb601aef1876875d93f3aea58ef4437412b6d829c91204f',
+  'e26-simple-stress-10k/v2': '7e2df9bff756f2e1c5c6f89b07dc4b2b91f41d614c9c5a168ac87069d4f71f0b',
+  'e26-pointer-busy-10k/v2': '7aff707c276cf3d01b425a86867fd3aa63b403368b6e7dba0aaa954dd5af8e86',
+  'm9-typing-10k/v1': 'c4951691f7191e24515bf8db6d50de824511b2d02dbb11184d3688ac69370851',
 };
 
 /** Generating, projecting and hashing 10,000 nodes takes seconds. */
@@ -119,7 +124,7 @@ describe('M9-A01: the v2 document', () => {
       expect(m9DocumentSha256(generateM9V2Document(M9_V2_SEED + 1))).not.toBe(M9_V2_SHA256);
       const parsed = parseDocument(JSON.stringify(generated));
       expect(parsed.ok).toBe(true);
-      expect(generated.schemaVersion).toBe(6);
+      expect(generated.schemaVersion).toBe(7);
       // Built at the current version: parsing changes nothing.
       if (parsed.ok) expect(JSON.parse(JSON.stringify(parsed.document))).toEqual(generated);
     },
@@ -292,7 +297,7 @@ describe('M9-A02: the M9 scenarios', () => {
       });
       expect(M9_TYPING.text).toHaveLength(40);
       expect(/^[\x21-\x7e]+$/u.test(M9_TYPING.text)).toBe(true);
-      // v1 is unchanged: five scenarios, none with m9.
+      // v1 keeps its five scenarios, none with m9.
       expect(E26_SCENARIOS).toHaveLength(5);
       for (const scenario of E26_SCENARIOS) expect('m9' in scenario).toBe(false);
     },
@@ -300,7 +305,7 @@ describe('M9-A02: the M9 scenarios', () => {
   );
 
   it(
-    'pins every configuration hash, v1 unchanged, and records the layer tree',
+    'pins every configuration hash and records the layer tree',
     () => {
       for (const scenario of E26_SCENARIOS) {
         const hash = configurationHash(e26Configuration(scenario, 1, 5));
@@ -320,7 +325,7 @@ describe('M9-A02: the M9 scenarios', () => {
             ? M9_V2_SHA256
             : 'dc5cf1a75b00e460fa638ec2197024287671beced964522a03d093ded541fae1',
         );
-        expect(configuration.schemaVersion).toBe(6);
+        expect(configuration.schemaVersion).toBe(7);
         if (scenario.document === 'm9-v2') {
           expect(configuration.m9.expanded).toEqual(['f1', 'g3']);
           expect(configuration.m9.layerRows).toBe(655);

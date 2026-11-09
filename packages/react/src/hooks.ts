@@ -1,7 +1,7 @@
 import type {
   HistoryState,
-  NodeV6,
-  PageV6,
+  NodeV7,
+  PageV7,
   RenderCamera,
   ToolId,
 } from '@vector-studio/editor-core';
@@ -25,7 +25,7 @@ export function useActivePage(): string {
 }
 
 /** The document's pages in order, `snapshot.document.pages` (MVP M8 contract, M8-H1). */
-export function usePages(): readonly PageV6[] {
+export function usePages(): readonly PageV7[] {
   return useEditorSelector(select.pages);
 }
 
@@ -65,6 +65,6 @@ export function useScope(): string | null {
  *
  * @param id The node ID.
  */
-export function useNode(id: string): NodeV6 | null {
+export function useNode(id: string): NodeV7 | null {
   return useEditorSelector(useMemo(() => nodeSelector(id), [id]));
 }

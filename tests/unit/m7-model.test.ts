@@ -8,6 +8,7 @@ import {
   migrateV3toV4,
   migrateV4toV5,
   migrateV5toV6,
+  migrateV6toV7,
   parseDocument,
   parseEnvelope,
   serializeDocument,
@@ -18,13 +19,14 @@ import {
   validateNode,
   type DocumentV1,
   type DocumentV2,
-  type DocumentV6,
+  type DocumentV7,
   type EnvelopeResult,
   type FragmentTreeResult,
   type ParseResult,
   type ParseResultV3,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
+import { v7Text, v7Value } from '../support/schema-v7.js';
 
 // MVP M7-U1 (M7 contract, section 2): schema v3 with `symbol` and `instance`, the M7-S rules and
 // codes, the version-only migration, the serialize order and `validateFragmentTree` (M7-A01).
@@ -48,7 +50,12 @@ function read(file: string): Promise<string> {
   return readFile(path.join(fixtures, file), 'utf8');
 }
 
-function parsed(text: string): DocumentV6 {
+/** A committed v6 text as the model now writes it, at v7 (E41-S1: `effects: []` on every node). */
+async function readV7(file: string): Promise<string> {
+  return v7Text(await read(file));
+}
+
+function parsed(text: string): DocumentV7 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -139,19 +146,30 @@ type Loose = {
   nodes: Record<string, unknown>;
 };
 
-function document(nodes: Record<string, unknown>, children: string[], version = 6): Loose {
-  return { schemaVersion: version, id: 'd', pages: [{ id: 'p', name: 'P', children }], nodes };
+/** A document at `version`; at v7 each node without `effects` gains `effects: []` (E41-S1). */
+function document(nodes: Record<string, unknown>, children: string[], version = 7): Loose {
+  const at =
+    version === 7
+      ? Object.fromEntries(
+          Object.entries(nodes).map(([key, node]) => [
+            key,
+            'effects' in (node as object) ? node : { ...(node as object), effects: [] },
+          ]),
+        )
+      : nodes;
+  return { schemaVersion: version, id: 'd', pages: [{ id: 'p', name: 'P', children }], nodes: at };
 }
 
 const SHAPE_TYPES = new Set(['rectangle', 'ellipse', 'frame', 'symbol']);
 const PATH_TYPES = new Set(['line', 'path', 'custom']);
 
 /**
- * A v3, v4 or v5 value read at the latest version, 6: its version set, `textOverrides: {}` added
- * to each instance that has none, as `migrateV4toV5` does (M6a contract, section 9), and each
- * stroke rewritten as `migrateV5toV6` does (M4-M1).
+ * A v3 to v6 value read at the latest version, 7: its version set, `textOverrides: {}` added
+ * to each instance that has none, as `migrateV4toV5` does (M6a contract, section 9), each
+ * stroke rewritten as `migrateV5toV6` does (M4-M1) and `effects: []` added to each node, as
+ * `migrateV6toV7` does (E41-S1).
  */
-function atV6<T extends Loose>(value: T): T {
+function atLatest<T extends Loose>(value: T): T {
   const nodes = Object.fromEntries(
     Object.entries(value.nodes).map(([key, node]) => {
       const record = node as Record<string, unknown>;
@@ -170,7 +188,7 @@ function atV6<T extends Loose>(value: T): T {
       return [key, node];
     }),
   );
-  return { ...value, schemaVersion: 6, nodes };
+  return v7Value({ ...value, schemaVersion: 6, nodes });
 }
 
 /**
@@ -184,7 +202,7 @@ function everyEntryPoint(value: Loose): Failed[] {
   );
   return [
     failure(parseDocument(text)),
-    failure(validateDocument(atV6(value))),
+    failure(validateDocument(atLatest(value))),
     failure(validateAnyDocument(value)),
     { code: envelope.code, path: envelope.path.replace(/^\/document/, '') },
   ];
@@ -196,12 +214,13 @@ describe('M7-A01 migration v2 to v3', () => {
     async (file, name) => {
       const v2 = await read(file);
       const v3 = await read(`m7-symbols/migrated/${name}.v3.json`);
-      expect(serializeDocument(parsed(v2))).toBe(await read(v6(`${name}.v3.json`)));
+      expect(serializeDocument(parsed(v2))).toBe(await readV7(v6(`${name}.v3.json`)));
       const migrated = migrateV2toV3(JSON.parse(v2) as DocumentV2);
       expect(migrated.ok && migrated.document).toEqual(JSON.parse(v3));
       const v4 = migrated.ok ? migrateV3toV4(migrated.document) : migrated;
       const v5 = v4.ok ? migrateV4toV5(v4.document) : v4;
-      const latest = v5.ok ? migrateV5toV6(v5.document) : v5;
+      const v6Result = v5.ok ? migrateV5toV6(v5.document) : v5;
+      const latest = v6Result.ok ? migrateV6toV7(v6Result.document) : v6Result;
       expect(latest.ok && serializeDocument(latest.document)).toBe(serializeDocument(parsed(v3)));
       // Only the version changes (M7-Q12 (a)); the M3 host fixture is not in canonical text form.
       expect(JSON.parse(v3)).toEqual({ ...(JSON.parse(v2) as object), schemaVersion: 3 });
@@ -213,7 +232,7 @@ describe('M7-A01 migration v2 to v3', () => {
     const v3 = await read(`m7-symbols/migrated/${name}.envelope.v3.json`);
     const result = parseEnvelope(v2);
     expect(result.ok && serializeEnvelope(result.envelope)).toBe(
-      await read(`m4-appearance/migrated/${name}.envelope.v6.json`),
+      await readV7(`m4-appearance/migrated/${name}.envelope.v6.json`),
     );
     expect(v3).toBe(v2.replace('"schemaVersion": 2,', '"schemaVersion": 3,'));
   });
@@ -223,7 +242,7 @@ describe('M7-A01 migration v2 to v3', () => {
     async (name) => {
       const v1 = await read(`p5-model/${name}.json`);
       const v3 = await read(`m7-symbols/migrated/${name}.v3.json`);
-      expect(serializeDocument(parsed(v1))).toBe(await read(v6(`${name}.v3.json`)));
+      expect(serializeDocument(parsed(v1))).toBe(await readV7(v6(`${name}.v3.json`)));
       const v2 = migrateV1toV2(JSON.parse(v1) as DocumentV1);
       expect(v2.ok && v2.document.schemaVersion).toBe(2);
       const chained = v2.ok ? migrateV2toV3(v2.document) : v2;
@@ -247,37 +266,40 @@ describe('M7-A01 migration v2 to v3', () => {
     });
   });
 
-  it('accepts versions 1 to 6 and validateDocument only 6 (since M4-U1)', async () => {
+  it('accepts versions 1 to 7 and validateDocument only 7 (since E41-U4)', async () => {
     const v1 = JSON.parse(await read('p5-model/shapes.json')) as unknown;
     const v2 = JSON.parse(await read('m1-model/shapes.v2.json')) as unknown;
     const v3 = JSON.parse(await read('m7-symbols/migrated/shapes.v3.json')) as unknown;
     const v4 = JSON.parse(await read('m6-text/migrated/shapes.v4.json')) as unknown;
     const v5 = JSON.parse(await read('m7-symbols/migrated/shapes.v5.json')) as unknown;
-    const latest = JSON.parse(await read(v6('shapes.v3.json'))) as unknown;
+    const v6Value = JSON.parse(await read(v6('shapes.v3.json'))) as unknown;
+    const latest = JSON.parse(await readV7(v6('shapes.v3.json'))) as unknown;
     const unsupported = { code: 'document.unsupported-version', path: '/schemaVersion' };
     expect(failure(validateDocument(v1))).toEqual(unsupported);
     expect(failure(validateDocument(v2))).toEqual(unsupported);
     expect(failure(validateDocument(v3))).toEqual(unsupported);
     expect(failure(validateDocument(v4))).toEqual(unsupported);
     expect(failure(validateDocument(v5))).toEqual(unsupported);
+    expect(failure(validateDocument(v6Value))).toEqual(unsupported);
     const all = [
       validateAnyDocument(v1),
       validateAnyDocument(v2),
       validateAnyDocument(v3),
       validateAnyDocument(v4),
       validateAnyDocument(v5),
+      validateAnyDocument(v6Value),
       validateDocument(latest),
     ];
     for (const result of all)
-      expect(result.ok && result.document).toEqual(all[5]!.ok && all[5]!.document);
-    expect(all[5]!.ok && all[5]!.document.schemaVersion).toBe(6);
+      expect(result.ok && result.document).toEqual(all[6]!.ok && all[6]!.document);
+    expect(all[6]!.ok && all[6]!.document.schemaVersion).toBe(7);
   });
 
   it.each(['p5-model', 'm1-model', 'm7-symbols'])(
-    'fails the %s unsupported-version fixture at schemaVersion 7 (since M4-U1)',
+    'fails the %s unsupported-version fixture at schemaVersion 8 (since E41-U4)',
     async (dir) => {
       const text = await read(`${dir}/malformed/unsupported-version.json`);
-      expect((JSON.parse(text) as { schemaVersion: number }).schemaVersion).toBe(7);
+      expect((JSON.parse(text) as { schemaVersion: number }).schemaVersion).toBe(8);
       expect(failure(parseDocument(text))).toEqual({
         code: 'document.unsupported-version',
         path: '/schemaVersion',
@@ -285,11 +307,11 @@ describe('M7-A01 migration v2 to v3', () => {
     },
   );
 
-  it('fails the M5 document-unsupported-version envelope at schemaVersion 7', async () => {
+  it('fails the M5 document-unsupported-version envelope at schemaVersion 8', async () => {
     const text = await read('m5-persistence/malformed/document-unsupported-version.json');
     expect(
       (JSON.parse(text) as { document: { schemaVersion: number } }).document.schemaVersion,
-    ).toBe(7);
+    ).toBe(8);
     expect(failure(parseEnvelope(text))).toEqual({
       code: 'document.unsupported-version',
       path: '/document/schemaVersion',
@@ -298,8 +320,8 @@ describe('M7-A01 migration v2 to v3', () => {
 });
 
 describe('M7-A01 round trip and serialize order (section 7)', () => {
-  it.each(V3_FIXTURES)('round-trips %s byte for byte as its v6 migration', async (file) => {
-    const text = await read(v6(file));
+  it.each(V3_FIXTURES)('round-trips %s byte for byte as its v7 migration', async (file) => {
+    const text = await readV7(v6(file));
     const value = parsed(await read(file));
     expect(serializeDocument(value)).toBe(text);
     expect(parsed(serializeDocument(value))).toEqual(value);
@@ -336,8 +358,8 @@ describe('M7-A01 round trip and serialize order (section 7)', () => {
     expect([nodes.i2!.parent, nodes.i4!.parent, nodes.i2!.rotation]).toEqual(['g1', 'f2', -1.25]);
   });
 
-  it('writes symbol keys as a frame and instance keys as the base followed by symbol and textOverrides', async () => {
-    const text = await read(v6('symbols.v3.json'));
+  it('writes symbol keys as a frame and instance keys as the base followed by symbol, textOverrides and effects', async () => {
+    const text = await readV7(v6('symbols.v3.json'));
     const raw = JSON.parse(text) as { nodes: Record<string, object> };
     const BASE = [
       'id',
@@ -350,19 +372,19 @@ describe('M7-A01 round trip and serialize order (section 7)', () => {
       'visible',
       'type',
     ];
-    expect(Object.keys(raw.nodes.s1!)).toEqual([...BASE, 'children', 'fill', 'stroke']);
+    expect(Object.keys(raw.nodes.s1!)).toEqual([...BASE, 'children', 'fill', 'stroke', 'effects']);
     expect(Object.keys(raw.nodes.s1!)).toEqual(Object.keys(raw.nodes.d1!));
-    expect(Object.keys(raw.nodes.i1!)).toEqual([...BASE, 'symbol', 'textOverrides']);
+    expect(Object.keys(raw.nodes.i1!)).toEqual([...BASE, 'symbol', 'textOverrides', 'effects']);
     // The order holds for an in-memory value built in another key order.
     const value = parsed(text);
     const { symbol: source, ...rest } = value.nodes.i1 as Extract<
-      DocumentV6['nodes'][string],
+      DocumentV7['nodes'][string],
       { type: 'instance' }
     >;
     const shuffled = {
       ...value,
       nodes: { ...value.nodes, i1: { symbol: source, ...rest } },
-    } as DocumentV6;
+    } as DocumentV7;
     expect(serializeDocument(shuffled)).toBe(text);
   });
 });
@@ -542,7 +564,7 @@ describe('M7-A01 malformed v3 documents (M7-S1 to M7-S5)', () => {
 describe('M7-A01 check order (section 2)', () => {
   // Read at the latest version, as `validateDocument` takes it.
   const deep = async () =>
-    atV6(
+    atLatest(
       JSON.parse(await read('m7-symbols/malformed/tree-depth-257.json')) as Loose & {
         pages: { children: string[] }[];
         nodes: Record<string, Record<string, unknown>>;
@@ -592,7 +614,7 @@ describe('M7-A01 check order (section 2)', () => {
   it('M7-S3 before the M7-S5 tree depth', async () => {
     const value = await deep();
     value.nodes.s!.children = [...(value.nodes.s!.children as string[]), 'j'];
-    value.nodes.j = instance('j', 's', 's');
+    value.nodes.j = { ...instance('j', 's', 's'), effects: [] };
     expect(failure(validateDocument(value))).toEqual({
       code: 'document.invalid-symbol',
       path: '/nodes/j/parent',
@@ -602,7 +624,7 @@ describe('M7-A01 check order (section 2)', () => {
   it('the M7-S5 tree depth before the group rules', async () => {
     const value = await deep();
     value.pages[0]!.children.push('e');
-    value.nodes.e = group('e', 'p', []);
+    value.nodes.e = { ...group('e', 'p', []), effects: [] };
     expect(failure(validateDocument(value))).toEqual({
       code: 'document.invalid-field',
       path: '/nodes/i/parent',
@@ -620,7 +642,7 @@ describe('M7-A01 validateFragmentTree (section 6)', () => {
   // A holder at the latest version; the unsupported-version fixture keeps its version.
   const holder = async (name: string) => {
     const value = JSON.parse(await read(name)) as Loose;
-    return value.schemaVersion === 3 ? atV6(value) : value;
+    return value.schemaVersion === 3 || value.schemaVersion === 6 ? atLatest(value) : value;
   };
 
   it('skips M7-S2 and M7-S5 only, and returns a node map, never a document', async () => {
@@ -689,14 +711,18 @@ describe('M7-A01 validateFragmentTree (section 6)', () => {
 
 describe('M7-A01 validateNode on v3 nodes', () => {
   it('accepts a symbol and an instance and applies M7-S4 to older inputs only', () => {
-    expect(validateNode(symbol('s', 'p')).ok).toBe(true);
-    expect(validateNode(instance('i', 'p', 's'))).toEqual({
+    // At v7 every node has `effects` (E41-S1).
+    const at = (node: object) => ({ ...node, effects: [] });
+    expect(validateNode(at(symbol('s', 'p'))).ok).toBe(true);
+    expect(validateNode(at(instance('i', 'p', 's')))).toEqual({
       ok: true,
-      node: instance('i', 'p', 's'),
+      node: at(instance('i', 'p', 's')),
     });
     // M7-S4 ends at v6 (MVP M4 contract, M4-L1) and holds for older inputs (M4-M2).
-    expect(validateNode({ ...instance('i', 'p', 's'), opacity: 0 }).ok).toBe(true);
-    expect(validateNode({ ...instance('i', 'p', 's'), opacity: 0 }, { olderInput: true })).toEqual({
+    expect(validateNode({ ...at(instance('i', 'p', 's')), opacity: 0 }).ok).toBe(true);
+    expect(
+      validateNode({ ...at(instance('i', 'p', 's')), opacity: 0 }, { olderInput: true }),
+    ).toEqual({
       ok: false,
       code: 'document.invalid-field',
       path: '/opacity',

@@ -8,7 +8,7 @@ import type {
   SceneTextRun,
 } from '@vector-studio/contracts';
 import { isSceneGradient } from '@vector-studio/contracts';
-import type { DocumentV6, Frame } from '@vector-studio/model';
+import type { DocumentV7, Frame } from '@vector-studio/model';
 import type { ExpansionCache } from './expansion.js';
 import { apply, boundsOfPoints, multiply } from './geometry.js';
 import {
@@ -30,7 +30,7 @@ const PRIMITIVE_MITER_LIMIT = 4;
 
 /** What the editor hands the export: its projection inputs. */
 export type ExportSource = Readonly<{
-  document: DocumentV6;
+  document: DocumentV7;
   pageId: string;
   custom: CustomProjection;
   expansions: ExpansionCache;

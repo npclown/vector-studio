@@ -12,13 +12,14 @@ import {
   scanJson,
   serializeDocument,
   serializeEnvelope,
-  type DocumentV6,
+  type DocumentV7,
   type EnvelopeResult,
   type PersistenceEnvelope,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 // @ts-expect-error The repository's executable boundary policy is JavaScript tooling.
 import { boundaries } from '../../tooling/boundary-policy.mjs';
+import { v7Text } from '../support/schema-v7.js';
 
 // MVP M5-U1 (M5 contract, section 2): the persistence envelope, its text form and codes, and the
 // `scanJson` `maxDepth` option (M5-A01 to M5-A03). The committed envelope fixtures under
@@ -49,7 +50,12 @@ function read(dir: string, name: string): Promise<string> {
   return readFile(path.join(dir, `${name}.json`), 'utf8');
 }
 
-function parsedDocument(text: string): DocumentV6 {
+/** A committed M4 v6 migration text as the model now writes it, at v7 (E41-S1). */
+async function readV7(name: string): Promise<string> {
+  return v7Text(await read(m4, name));
+}
+
+function parsedDocument(text: string): DocumentV7 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -115,8 +121,8 @@ describe('M5-A01 envelope text and round trip', () => {
     'serializes the %s envelope byte for byte to its committed fixture',
     async (name, documentName, page) => {
       const text = await read(m5, `${name}.envelope`);
-      const v6 = await read(m4, `${name}.envelope.v6`);
-      const document = parsedDocument(await read(m4, v6Name(documentName)));
+      const v6 = await readV7(`${name}.envelope.v6`);
+      const document = parsedDocument(await readV7(v6Name(documentName)));
       expect(serializeEnvelope({ document, lastOpenPageId: page })).toBe(v6);
       expect(serializeEnvelope(parsed(text))).toBe(v6);
       expect(serializeEnvelope(parsed(v6))).toBe(v6);
@@ -130,7 +136,7 @@ describe('M5-A01 envelope text and round trip', () => {
     });
     expect(
       text.startsWith(
-        '{\n  "envelopeVersion": 1,\n  "lastOpenPageId": "page-1",\n  "document": {\n    "schemaVersion": 6,\n',
+        '{\n  "envelopeVersion": 1,\n  "lastOpenPageId": "page-1",\n  "document": {\n    "schemaVersion": 7,\n',
       ),
     ).toBe(true);
     expect(Object.keys(JSON.parse(text) as object)).toEqual([
@@ -144,7 +150,7 @@ describe('M5-A01 envelope text and round trip', () => {
   it.each(ENVELOPES.map(([, documentName]) => documentName))(
     'round-trips the M1 fixture %s with each page as lastOpenPageId',
     async (documentName) => {
-      const documentText = await read(m4, v6Name(documentName));
+      const documentText = await readV7(v6Name(documentName));
       const document = parsedDocument(await read(m1, documentName));
       expect(document.pages.length).toBeGreaterThan(0);
       for (const page of document.pages) {
@@ -169,9 +175,9 @@ describe('M5-A01 envelope text and round trip', () => {
         (JSON.parse(v1) as { document: { schemaVersion: number } }).document.schemaVersion,
       ).toBe(1);
       const envelope = parsed(v1);
-      expect(envelope.document.schemaVersion).toBe(6);
-      expect(serializeEnvelope(envelope)).toBe(await read(m4, `${name}.envelope.v6`));
-      expect(serializeDocument(envelope.document)).toBe(await read(m4, `${name}.v6`));
+      expect(envelope.document.schemaVersion).toBe(7);
+      expect(serializeEnvelope(envelope)).toBe(await readV7(`${name}.envelope.v6`));
+      expect(serializeDocument(envelope.document)).toBe(await readV7(`${name}.v6`));
     },
   );
 
@@ -442,8 +448,8 @@ describe('M5-A03 model stays unchanged and import-free', () => {
     'm1-model/malformed/unsupported-version.json':
       // Moved from schemaVersion 3 to 4 by M7-U1 (M7 contract, section 2.1), to 5 by M6a-U1 (M6a
       // contract, section 2.1), to 6 by M7-U7 (M6a contract, section 9), to 7 by M4-U1 (M4
-      // contract, section 2.1).
-      '19443ac30ab86707a7d7a98507177617a364fa817ac8a3419eb548a3f585971f',
+      // contract, section 2.1), to 8 by E41-U4 (E41 contract, section 3).
+      '862dcf69350a07f8c841f6940d60aff45081270f36876ceb79db37bb9602b36b',
     'm1-model/shapes.v2.json': '7d03fa27cb8ce892150eea79aba402a596a9dfd0f26a8115efc9c5fd90226948',
     'p5-model/empty.json': '5935aafb5604fd7847dfe5c1a6e843f021aaa523bfb26ff50fdf3c4d13b5dc7f',
     'p5-model/ext-star.json': '942ad8c439902aaf1c30bce6b0e8cf0690eeff2613c899372ab250a9f43b9246',
@@ -462,8 +468,8 @@ describe('M5-A03 model stays unchanged and import-free', () => {
     'p5-model/malformed/unsupported-version.json':
       // Moved from schemaVersion 3 to 4 by M7-U1 (M7 contract, section 2.1), to 5 by M6a-U1 (M6a
       // contract, section 2.1), to 6 by M7-U7 (M6a contract, section 9), to 7 by M4-U1 (M4
-      // contract, section 2.1).
-      '542c036673bb62925bf2aba70a9ae7d73930f4f36c06a5ab8591e1f5a94eef84',
+      // contract, section 2.1), to 8 by E41-U4 (E41 contract, section 3).
+      'b3be0411d6b83c74558e080ff628ae326680091f288b0584163da39075bf9b08',
     'p5-model/shapes.json': '82f2172b30188618e5e925cba612bc72ac439eeed189bdd0eae2eba63a9f0474',
   };
 
@@ -492,11 +498,11 @@ describe('M5-A03 model stays unchanged and import-free', () => {
   it('keeps parseDocument and serializeDocument on the M1 fixtures', async () => {
     for (const name of ['empty.v2', 'shapes.v2', 'ext-star.v2', 'containers']) {
       const text = await read(m1, name);
-      expect(serializeDocument(parsedDocument(text))).toBe(await read(m4, v6Name(name)));
+      expect(serializeDocument(parsedDocument(text))).toBe(await readV7(v6Name(name)));
     }
     for (const name of V1) {
       expect(serializeDocument(parsedDocument(await read(p5, name)))).toBe(
-        await read(m4, `${name}.v6`),
+        await readV7(`${name}.v6`),
       );
     }
     // parseDocument still scans at MAX_DEPTH, not MAX_DEPTH + 1, and does not accept an envelope.

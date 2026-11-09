@@ -3,8 +3,8 @@ import path from 'node:path';
 import {
   serializeDocument,
   validateDocument,
-  type DocumentV6,
-  type NodeV6,
+  type DocumentV7,
+  type NodeV7,
 } from '@vector-studio/model';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -19,6 +19,7 @@ import {
 import { applyEdit } from '../../packages/editor-core/src/edits.js';
 import { internalsOf } from '../../packages/editor-core/src/editor.js';
 import { ExpansionCache } from '../../packages/editor-core/src/expansion.js';
+import { v7Fragment } from '../support/schema-v7.js';
 
 // MVP M7-U5 (M7 contract, section 6): clipboard fragment version 2 with carried sources, the
 // parse order, paste linking (M7-Q9 (a)), paste and duplication of sources (M7-Q10 (a)), the
@@ -72,6 +73,8 @@ function base(id: string, parent: string, frame: Frame) {
     constraints: START,
     opacity: 1,
     visible: true,
+    // Schema v7 (E41-S1): every node has its effects, written last.
+    effects: [],
   };
 }
 const rect = (id: string, parent: string, frame: Frame, fill = BLUE) => ({
@@ -100,7 +103,7 @@ const instance = (id: string, parent: string, frame: Frame, symbol: string) => (
  */
 function small(): Json {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     id: 'd',
     pages: [{ id: 'p', name: 'P', children: ['F', 'I', 'X'] }],
     nodes: {
@@ -113,7 +116,7 @@ function small(): Json {
   };
 }
 const emptyDocument = (): Json => ({
-  schemaVersion: 6,
+  schemaVersion: 7,
   id: 'e',
   pages: [{ id: 'q', name: 'Q', children: [] }],
   nodes: {},
@@ -189,18 +192,19 @@ type FragmentBody = {
 const marked = (body: unknown) => MARKER + JSON.stringify(body);
 
 /** The literal text of `copy { ids: ['I'] }` on `small()`. */
-const I_FRAGMENT =
+const I_FRAGMENT = v7Fragment(
   MARKER +
-  '{"fragmentVersion":2,"schemaVersion":6,"roots":["I"],"nodes":{' +
-  '"I":{"id":"I","name":"I","parent":"","frame":{"x":100,"y":0,"width":80,"height":40},' +
-  `"rotation":0,${TAIL},"type":"instance","symbol":"S","textOverrides":{}}},` +
-  '"sources":["S"],"sourceNodes":{' +
-  '"S":{"id":"S","name":"S","parent":"","frame":{"x":10,"y":10,"width":40,"height":20},' +
-  `"rotation":0,${TAIL},"type":"symbol","children":["r"],"fill":${JSON.stringify(RED)},` +
-  '"stroke":null},' +
-  '"r":{"id":"r","name":"r","parent":"S","frame":{"x":5,"y":5,"width":10,"height":10},' +
-  `"rotation":0,${TAIL},"type":"rectangle","cornerRadii":[0,0,0,0],` +
-  `"fill":${JSON.stringify(BLUE)},"stroke":null}}}`;
+    '{"fragmentVersion":2,"schemaVersion":6,"roots":["I"],"nodes":{' +
+    '"I":{"id":"I","name":"I","parent":"","frame":{"x":100,"y":0,"width":80,"height":40},' +
+    `"rotation":0,${TAIL},"type":"instance","symbol":"S","textOverrides":{}}},` +
+    '"sources":["S"],"sourceNodes":{' +
+    '"S":{"id":"S","name":"S","parent":"","frame":{"x":10,"y":10,"width":40,"height":20},' +
+    `"rotation":0,${TAIL},"type":"symbol","children":["r"],"fill":${JSON.stringify(RED)},` +
+    '"stroke":null},' +
+    '"r":{"id":"r","name":"r","parent":"S","frame":{"x":5,"y":5,"width":10,"height":10},' +
+    `"rotation":0,${TAIL},"type":"rectangle","cornerRadii":[0,0,0,0],` +
+    `"fill":${JSON.stringify(BLUE)},"stroke":null}}}`,
+);
 
 /** `I` pasted detached as `id` with the expansion copy `child` (scale 2): section 5.2. */
 const detachedI = (id: string, child: string, parent: string, frame = f(100, 0, 80, 40)) => ({
@@ -559,6 +563,8 @@ describe('fragment parse order (M7 contract, section 6)', () => {
       roots: ['X'],
       nodes: { X: rect('X', '', f(0, 0, 1, 1)) },
     };
+    // Below v7 a node has no `effects` (E41-S1).
+    delete (v1.nodes.X as { effects?: unknown }).effects;
     expect(ok(target, { type: 'paste', text: marked(v1) })).toEqual(['n1']);
   });
 });
@@ -638,7 +644,7 @@ describe('paste of an instance alone (M7-Q9 (a))', () => {
     expect(oneStep(target, { type: 'paste', text: fragment })).toEqual(['n1', 'n3']);
     expect(drawn()).toBe(3);
     expect(documentOf(target)).toEqual({
-      schemaVersion: 6,
+      schemaVersion: 7,
       id: 'e',
       pages: [{ id: 'q', name: 'Q', children: ['n1', 'n3'] }],
       nodes: {
@@ -937,13 +943,13 @@ describe('expansion validity and caps through paste (M7-X3, section 4.1)', () =>
     };
     let drawn = 0;
     const custom = {
-      check: (node: NodeV6) =>
+      check: (node: NodeV7) =>
         node.type === 'custom' && node.frame.width > 50
           ? { code: 'document.invalid-custom-data' as const, path: '/data' }
           : null,
       defaults: () => ({ data: {} }),
     };
-    const document = JSON.parse(JSON.stringify(emptyDocument())) as DocumentV6;
+    const document = JSON.parse(JSON.stringify(emptyDocument())) as DocumentV7;
     const context = { ids: () => `n${++drawn}`, activePage: 'q', custom };
     expect(applyEdit(document, { type: 'paste', text: marked(body) }, context)).toEqual({
       ok: false,
@@ -971,7 +977,7 @@ describe('expansion validity and caps through paste (M7-X3, section 4.1)', () =>
       for (const id of ids) nodes[id] = instance(id, page, f(0, 0, 10, 10), 's');
       return { id: page, name: page, children: k === 0 ? ['s', ...ids] : ids };
     });
-    return { schemaVersion: 6, id: 'cap', pages, nodes };
+    return { schemaVersion: 7, id: 'cap', pages, nodes };
   }
 
   it('a paste over the page cap is editor.expansion-limit at its fragment path', () => {
@@ -1006,7 +1012,7 @@ describe('expansion validity and caps through paste (M7-X3, section 4.1)', () =>
     roots.forEach((id, k) => (nodes[id] = instance(id, '', frameOf(k), 's')));
     return marked({
       fragmentVersion: 2,
-      schemaVersion: 6,
+      schemaVersion: 7,
       roots,
       nodes,
       sources: ['s'],
@@ -1065,7 +1071,7 @@ describe('expansion validity and caps through paste (M7-X3, section 4.1)', () =>
 describe('rule (1) review follow-ups (B1, S1, S2)', () => {
   /** Page `p` holding source `node-3` (with `c`) and its instance `I`. */
   const reused = (): Json => ({
-    schemaVersion: 6,
+    schemaVersion: 7,
     id: 'd',
     pages: [{ id: 'p', name: 'P', children: ['node-3', 'I'] }],
     nodes: {

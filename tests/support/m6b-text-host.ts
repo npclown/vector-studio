@@ -1,4 +1,4 @@
-import type { Color, DocumentV6, Frame, TextRun } from '@vector-studio/model';
+import type { Color, DocumentV7, Frame, TextRun } from '@vector-studio/model';
 import {
   createCounterIdSource,
   createEditor,
@@ -67,7 +67,7 @@ const run = (value: string, size = 10): TextRun => ({
  * Page `p1`: `t` "ab cd" at (10, 20) (size 10: a to z 5 wide, a space 2.5, Hangul 10 on the
  * fake port), `rot` "ab" rotated a quarter turn (π / 2) at (200, 300), and a rectangle `r` at (400, 400).
  */
-export function textHostDocument(): DocumentV6 {
+export function textHostDocument(): DocumentV7 {
   const nodes: Loose[] = [
     text('t', f(10, 20, 22.5, 12), [run('ab cd')]),
     text('rot', f(200, 300, 10, 12), [run('ab')], Math.PI / 2),
@@ -84,7 +84,7 @@ export function textHostDocument(): DocumentV6 {
     id: 'doc',
     pages: [{ id: 'p1', name: 'Page 1', children: nodes.map((node) => node.id) }],
     nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
-  } as unknown as DocumentV6;
+  } as unknown as DocumentV7;
 }
 
 type Listener = (event: Event) => void;
@@ -191,7 +191,7 @@ export type TextHost = ReturnType<typeof textHost>;
  * The host over `textHostDocument`, the fake port, a 600 × 400 viewport and the fake DOM;
  * `writer` stands in for `navigator.clipboard`.
  */
-export function textHost(document: DocumentV6 = textHostDocument(), writer?: ClipboardWriter) {
+export function textHost(document: DocumentV7 = textHostDocument(), writer?: ClipboardWriter) {
   const editor: Editor = createEditor({
     document,
     ids: createCounterIdSource('n'),

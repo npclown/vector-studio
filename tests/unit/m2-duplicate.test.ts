@@ -1,4 +1,4 @@
-import { serializeDocument, type DocumentV6, type Frame, type NodeV6 } from '@vector-studio/model';
+import { serializeDocument, type DocumentV7, type Frame, type NodeV7 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_FRAME_FILL,
@@ -216,7 +216,7 @@ const childrenOf = (target: Editor, owner: string): readonly string[] => {
 };
 
 /** The node's frame moved by the page vector `(dx, dy)` turned into its parent space. */
-function translated(document: DocumentV6, id: string, dx: number, dy: number): Frame {
+function translated(document: DocumentV7, id: string, dx: number, dy: number): Frame {
   const node = document.nodes[id]!;
   const chain = spaceOf(documentTree(document), node.parent).rotation;
   if (chain === 0) return { ...node.frame, x: node.frame.x + dx, y: node.frame.y + dy };
@@ -230,7 +230,7 @@ function translated(document: DocumentV6, id: string, dx: number, dy: number): F
 }
 
 /** A copy of `node` with ID `id` and, optionally, its parent and frame replaced. */
-function copyOf(node: NodeV6, id: string, changes: Partial<Record<string, unknown>> = {}) {
+function copyOf(node: NodeV7, id: string, changes: Partial<Record<string, unknown>> = {}) {
   return { ...node, id, ...changes };
 }
 
@@ -500,7 +500,7 @@ describe('M2-A08 duplicateNodes', () => {
 });
 
 /** The page point of a node's local point. */
-function pagePoint(document: DocumentV6, id: string, x: number, y: number): PagePoint {
+function pagePoint(document: DocumentV7, id: string, x: number, y: number): PagePoint {
   const node = document.nodes[id]!;
   const { matrix } = spaceOf(documentTree(document), node.parent);
   const local = apply(localTransform(node.frame, node.rotation), x, y);

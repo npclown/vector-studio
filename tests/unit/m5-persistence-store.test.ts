@@ -13,6 +13,7 @@ import {
 } from '@vector-studio/persistence-idb';
 import { IDBDatabase, IDBFactory, IDBObjectStore } from 'fake-indexeddb';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { v7Text } from '../support/schema-v7.js';
 
 // MVP M5-U3 (M5 contract, section 4.2): the IndexedDB store against fake-indexeddb (M5-Q4 (a)),
 // always through the injected factory (M5-A04). Each test uses its own in-memory factory.
@@ -21,11 +22,13 @@ const root = path.resolve(import.meta.dirname, '../..');
 const m5 = path.join(root, 'tests/fixtures/m5-persistence');
 // Since M4-U1 the canonical envelope text holds schema v6: the committed v2 envelope fixtures read
 // as their v6 migrations, which differ in the document's version and the M4-M1 stroke keys (M7
-// contract, section 2.1; M6a contract, sections 2.1 and 9; M4 contract, section 2.1).
+// contract, section 2.1; M6a contract, sections 2.1 and 9; M4 contract, section 2.1). Since
+// E41-U4 it holds v7, which adds `effects: []` to every node (E41 contract, section 3).
 const m4 = path.join(root, 'tests/fixtures/m4-appearance/migrated');
 
 async function text(name: string): Promise<string> {
-  if (/^[a-z-]+\.envelope$/.test(name)) return readFile(path.join(m4, `${name}.v6.json`), 'utf8');
+  if (/^[a-z-]+\.envelope$/.test(name))
+    return v7Text(await readFile(path.join(m4, `${name}.v6.json`), 'utf8'));
   return readFile(path.join(m5, `${name}.json`), 'utf8');
 }
 

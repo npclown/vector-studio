@@ -1,4 +1,4 @@
-import type { Gradient, NodeV6 } from '@vector-studio/model';
+import type { Gradient, NodeV7 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   createCounterIdSource,
@@ -44,7 +44,7 @@ function drag(target: Editor, from: readonly [number, number], ...via: [number, 
   pointer(target, 'pointerup', last[0], last[1]);
 }
 
-function node(target: Editor, id: string): NodeV6 {
+function node(target: Editor, id: string): NodeV7 {
   return target.query({ type: 'node', id })!;
 }
 

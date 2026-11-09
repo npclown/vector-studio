@@ -1,4 +1,4 @@
-import { serializeDocument, type DocumentV6, type Frame } from '@vector-studio/model';
+import { serializeDocument, type DocumentV7, type Frame } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_FRAME_FILL,
@@ -251,7 +251,7 @@ function expectOneStep(target: Editor, before: string, steps = 1) {
 }
 
 /** The page point of a node-local point through the node's chain `C`. */
-function pagePoint(document: DocumentV6, id: string, x: number, y: number): PagePoint {
+function pagePoint(document: DocumentV7, id: string, x: number, y: number): PagePoint {
   const node = document.nodes[id]!;
   const space = spaceOf(documentTree(document), node.parent);
   return apply(multiply(space.matrix, localTransform(node.frame, node.rotation)), x, y);

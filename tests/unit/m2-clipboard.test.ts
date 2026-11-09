@@ -1,4 +1,4 @@
-import { serializeDocument, type DocumentV6, type Frame, type NodeV6 } from '@vector-studio/model';
+import { serializeDocument, type DocumentV7, type Frame, type NodeV7 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_FRAME_FILL,
@@ -34,6 +34,7 @@ import {
   type KeyLike,
   type ListenerTarget,
 } from '../../packages/react/src/canvas-input.js';
+import { v7Fragment } from '../support/schema-v7.js';
 
 // MVP M2-U6, M2-A10 (M2 contract, section 6; IDs per section 4.3, S8; codes per section 4.4):
 // `copy`, `cut` and `paste` and the `clipboard` query, driven through `input` with host bindings
@@ -255,12 +256,12 @@ const childrenOf = (target: Editor, owner: string): readonly string[] => {
 };
 
 /** A copy of `node` with ID `id` and, optionally, other fields replaced. */
-function copyOf(node: NodeV6, id: string, changes: Partial<Record<string, unknown>> = {}) {
+function copyOf(node: NodeV7, id: string, changes: Partial<Record<string, unknown>> = {}) {
   return { ...node, id, ...changes };
 }
 
 /** A node's frame and rotation in page space, as `copy` converts a root. */
-function pagePlacement(document: DocumentV6, id: string) {
+function pagePlacement(document: DocumentV7, id: string) {
   const node = document.nodes[id]!;
   const tree = documentTree(document);
   if (tree.page(node.parent) !== undefined) return { frame: node.frame, rotation: node.rotation };
@@ -270,7 +271,7 @@ function pagePlacement(document: DocumentV6, id: string) {
 
 /** A page placement mapped into the space of container `owner`, as `paste` maps a root. */
 function placedIn(
-  document: DocumentV6,
+  document: DocumentV7,
   owner: string,
   placement: Readonly<{ frame: Frame; rotation: number }>,
 ) {
@@ -279,7 +280,7 @@ function placedIn(
 }
 
 /** The page corners of a node's rotated frame. */
-function pageCorners(document: DocumentV6, id: string): PagePoint[] {
+function pageCorners(document: DocumentV7, id: string): PagePoint[] {
   const node = document.nodes[id]!;
   const { matrix } = spaceOf(documentTree(document), node.parent);
   const local = localTransform(node.frame, node.rotation);
@@ -331,22 +332,23 @@ const BYTES = doc(
 /**
  * The fragment of `k`, `a` and `z` of BYTES, written out by hand: fragment version 2 (M7
  * contract, section 6), which carries no source here, at schema v6, the ellipse's v2 stroke
- * migrated (M4 contract, section 7, M4-M1).
+ * migrated (M4 contract, section 7, M4-M1), then upgraded to v7 (E41-S1).
  */
-const BYTES_FRAGMENT =
+const BYTES_FRAGMENT = v7Fragment(
   MARKER +
-  '{"fragmentVersion":2,"schemaVersion":6,"roots":["z","a","k"],"nodes":{' +
-  '"a":{"id":"a","name":"a","parent":"","frame":{"x":105,"y":55,"width":10,"height":10},' +
-  `"rotation":0,${TAIL},"type":"rectangle","cornerRadii":[0,0,0,0],"fill":${BLACK},` +
-  '"stroke":null},' +
-  '"k":{"id":"k","name":"k","parent":"","frame":{"x":0,"y":100,"width":10,"height":10},' +
-  `"rotation":0,${TAIL},"type":"group","children":["kc"]},` +
-  '"kc":{"id":"kc","name":"kc","parent":"k","frame":{"x":0,"y":0,"width":10,"height":10},' +
-  `"rotation":0,${TAIL},"type":"ellipse","fill":null,"stroke":{"color":${BLACK},"width":2,` +
-  '"cap":"butt","join":"round","miterLimit":4,"dash":null}},' +
-  '"z":{"id":"z","name":"z","parent":"","frame":{"x":30,"y":20,"width":20,"height":10},' +
-  `"rotation":0,${TAIL},"type":"rectangle","cornerRadii":[0,0,0,0],"fill":${BLACK},` +
-  '"stroke":null}},"sources":[],"sourceNodes":{}}';
+    '{"fragmentVersion":2,"schemaVersion":6,"roots":["z","a","k"],"nodes":{' +
+    '"a":{"id":"a","name":"a","parent":"","frame":{"x":105,"y":55,"width":10,"height":10},' +
+    `"rotation":0,${TAIL},"type":"rectangle","cornerRadii":[0,0,0,0],"fill":${BLACK},` +
+    '"stroke":null},' +
+    '"k":{"id":"k","name":"k","parent":"","frame":{"x":0,"y":100,"width":10,"height":10},' +
+    `"rotation":0,${TAIL},"type":"group","children":["kc"]},` +
+    '"kc":{"id":"kc","name":"kc","parent":"k","frame":{"x":0,"y":0,"width":10,"height":10},' +
+    `"rotation":0,${TAIL},"type":"ellipse","fill":null,"stroke":{"color":${BLACK},"width":2,` +
+    '"cap":"butt","join":"round","miterLimit":4,"dash":null}},' +
+    '"z":{"id":"z","name":"z","parent":"","frame":{"x":30,"y":20,"width":20,"height":10},' +
+    `"rotation":0,${TAIL},"type":"rectangle","cornerRadii":[0,0,0,0],"fill":${BLACK},` +
+    '"stroke":null}},"sources":[],"sourceNodes":{}}',
+);
 
 describe('M2-A10 copy', () => {
   it('writes the byte-exact fragment: roots in paint order, page-space roots, sorted nodes', () => {
@@ -375,7 +377,7 @@ describe('M2-A10 copy', () => {
     ok(target, { type: 'copy', ids: ['fc', 'gb'] });
     const body = JSON.parse(clipboard(target)!.slice(MARKER.length)) as {
       roots: string[];
-      nodes: Record<string, NodeV6>;
+      nodes: Record<string, NodeV7>;
     };
     // gb (inside g) paints before fc (inside fr).
     expect(body.roots).toEqual(['gb', 'fc']);
@@ -1064,12 +1066,14 @@ describe('M2-A10 copy and cut details', () => {
     );
     ok(target, { type: 'copy', ids: ['rc'] });
     expect(clipboard(target)).toBe(
-      MARKER +
-        '{"fragmentVersion":2,"schemaVersion":6,"roots":["rc"],"nodes":{' +
-        '"rc":{"id":"rc","name":"rc","parent":"","frame":{"x":40,"y":40,"width":20,"height":20},' +
-        `"rotation":0.75,${TAIL},"type":"custom","customType":"ext.tally",` +
-        '"data":{"alpha":{"a":1,"b":2},"level":1,"zeta":1},"fill":null,"stroke":null}},' +
-        '"sources":[],"sourceNodes":{}}',
+      v7Fragment(
+        MARKER +
+          '{"fragmentVersion":2,"schemaVersion":6,"roots":["rc"],"nodes":{' +
+          '"rc":{"id":"rc","name":"rc","parent":"","frame":{"x":40,"y":40,"width":20,"height":20},' +
+          `"rotation":0.75,${TAIL},"type":"custom","customType":"ext.tally",` +
+          '"data":{"alpha":{"a":1,"b":2},"level":1,"zeta":1},"fill":null,"stroke":null}},' +
+          '"sources":[],"sourceNodes":{}}',
+      ),
     );
   });
 
@@ -1086,7 +1090,7 @@ describe('M2-A10 copy and cut details', () => {
   }
 
   const frameIn = (fragment: string | null, id: string) =>
-    (JSON.parse(fragment!.slice(MARKER.length)) as { nodes: Record<string, NodeV6> }).nodes[id]!
+    (JSON.parse(fragment!.slice(MARKER.length)) as { nodes: Record<string, NodeV7> }).nodes[id]!
       .frame;
 
   it('copy during a move drag copies the live position and leaves the drag running', () => {

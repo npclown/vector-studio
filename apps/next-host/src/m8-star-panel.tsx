@@ -5,7 +5,7 @@ import {
   useSelection,
   type Command,
   type CommandResult,
-  type NodeV6,
+  type NodeV7,
   type PanelContribution,
   type StarCreateArgs,
   type UiExtension,
@@ -31,7 +31,7 @@ export type StarData = Readonly<{ points: number; innerRatio: number }>;
 export type StarField = 'points' | 'innerRatio';
 
 /** The data of a node that is an `ext.star` star, else null. */
-export function starData(node: NodeV6 | null): StarData | null {
+export function starData(node: NodeV7 | null): StarData | null {
   if (node === null || node.type !== 'custom' || node.customType !== 'ext.star') return null;
   const data = node.data;
   if (typeof data !== 'object' || data === null || Array.isArray(data)) return null;

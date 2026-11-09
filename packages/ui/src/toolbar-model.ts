@@ -3,7 +3,7 @@ import type {
   CommandResult,
   ExtensionSummary,
   HistoryState,
-  NodeV6,
+  NodeV7,
   PathEditOverlay,
   ToolId,
   ToolName,
@@ -75,7 +75,7 @@ export type EditActionInput = Readonly<{
   selection: readonly string[];
   history: HistoryState;
   /** The first selected node, for ungroup's released children. */
-  first: NodeV6 | null;
+  first: NodeV7 | null;
   /** The `pathOverlay` query result. */
   pathOverlay: PathEditOverlay | null;
 }>;

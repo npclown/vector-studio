@@ -2,7 +2,7 @@ import path from 'node:path';
 import {
   MAX_TEXT_LENGTH,
   type Color,
-  type DocumentV6,
+  type DocumentV7,
   type Frame,
   type PersistenceEnvelope,
   type TextRun,
@@ -87,7 +87,7 @@ function text(id: string, frame: Frame, runs: TextRun[]): Loose {
  * Page `p1`: `t` "ab cd" at (10, 20), `h` "안녕" at (100, 20), a rectangle `r`, an empty frame
  * `fr` at (300, 300) and a path `pa`; page `p2` is empty. `extra` nodes join `p1`.
  */
-function fixture(extra: Loose[] = []): DocumentV6 {
+function fixture(extra: Loose[] = []): DocumentV7 {
   const nodes: Loose[] = [
     text('t', f(10, 20, 22.5, 12), [run('ab cd')]),
     text('h', f(100, 20, 20, 12), [run('안녕')]),
@@ -126,7 +126,7 @@ function fixture(extra: Loose[] = []): DocumentV6 {
       { id: 'p2', name: 'Page 2', children: [] },
     ],
     nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
-  } as unknown as DocumentV6;
+  } as unknown as DocumentV7;
 }
 
 function editor(options: { port?: null; extra?: Loose[] } = {}): Editor {
@@ -924,7 +924,7 @@ describe('M6b-A09 a first composition on a pending node (appendix A case 9)', ()
 
 describe('M6b-A09 autosave and the E26-A09 oracle', () => {
   it('updates write nothing to autosave; the commit writes once', async () => {
-    const writes: DocumentV6[] = [];
+    const writes: DocumentV7[] = [];
     const store: DocumentStore = {
       read: () => Promise.resolve({ ok: true, envelope: null }),
       write: (envelope) => {
@@ -975,8 +975,8 @@ describe('M6b-A09 autosave and the E26-A09 oracle', () => {
   } as const;
 
   type Entry = {
-    before: DocumentV6;
-    after: DocumentV6;
+    before: DocumentV7;
+    after: DocumentV7;
     touched: readonly string[];
     projected?: readonly string[];
     caret: unknown;

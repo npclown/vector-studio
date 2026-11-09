@@ -9,7 +9,7 @@
 // Both projectors share the handling of a unit's own rejection (exclusion, mask group removal),
 // so this differential cannot see a fault there; the M1 projector tests check it.
 import type { RenderNodeSnapshot, RenderSceneSnapshot } from '@vector-studio/contracts';
-import type { DocumentV6 } from '@vector-studio/model';
+import type { DocumentV7 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import { createCounterIdSource, createEditor } from '../../packages/editor-core/src/index.js';
 import {
@@ -75,7 +75,7 @@ function node(id: string, parent: string, type: string, extra: Fields = {}): Fie
  * and sometimes a chain of 32 nested frames or of 32 nested half-opaque groups, each at its
  * depth limit, so that one more clip or opacity on the chain is a scene rule violation.
  */
-function generate(rng: Rng): DocumentV6 {
+function generate(rng: Rng): DocumentV7 {
   const nodes: Fields[] = [];
   // v2 groups are opaque; the chain's groups get their opacity in v6, after the load.
   const halves: string[] = [];
