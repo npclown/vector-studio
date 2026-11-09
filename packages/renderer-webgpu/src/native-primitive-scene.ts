@@ -650,6 +650,11 @@ type LayerEffectFrame = Readonly<{
   plan: EffectPassPlan;
   /** The first pass's record index. */
   recordBase: number;
+  /**
+   * True when the root's passes do not fit the frame's shared scratch textures; it then gets
+   * scratch textures of its own, so one wide and one tall root never share a texture of both.
+   */
+  ownScratch: boolean;
 }>;
 
 /** E25 U3: a frame's layer resources, released with the frame's transients. */
@@ -2719,31 +2724,47 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     let scratchWidth = 0;
     let scratchHeight = 0;
     const maximum = safeLimit(this.#device.limits.maxTextureDimension2D, 0);
-    const effects = layers.map((layer): LayerEffectFrame | null => {
-      if (layer.effect === undefined) return null;
-      validateEffectRecord(layer.effect);
-      if (this.#effect === null || this.#effectContentForTesting) return null;
-      const parent = layer.parent === -1 ? null : layers[layer.parent]!.bound;
-      const result = intersectRects(
-        intersectRects(layer.effect.output, { x: 0, y: 0, ...target }),
-        parent,
-      );
-      if (result === null) {
-        return Object.freeze({
-          result: null,
-          plan: Object.freeze({ passes: [], scratch: { width: 0, height: 0 } }),
-          recordBase: effectRecords,
-        });
+    const effects = layers.map(
+      (layer): { -readonly [K in keyof LayerEffectFrame]: LayerEffectFrame[K] } | null => {
+        if (layer.effect === undefined) return null;
+        validateEffectRecord(layer.effect);
+        if (this.#effect === null || this.#effectContentForTesting) return null;
+        const parent = layer.parent === -1 ? null : layers[layer.parent]!.bound;
+        const result = intersectRects(
+          intersectRects(layer.effect.output, { x: 0, y: 0, ...target }),
+          parent,
+        );
+        if (result === null) {
+          return {
+            result: null,
+            plan: Object.freeze({ passes: [], scratch: { width: 0, height: 0 } }),
+            recordBase: effectRecords,
+            ownScratch: false,
+          };
+        }
+        const plan = planEffectPasses(layer.bound, result, layer.effect);
+        // Section 5.4: an effect texture past the device limit draws the root without effects.
+        // This drop is silent (no notice): the packet's own budget already admitted the root.
+        if (plan.scratch.width > maximum || plan.scratch.height > maximum) return null;
+        const recordBase = effectRecords;
+        effectRecords += plan.passes.length;
+        return { result, plan, recordBase, ownScratch: false };
+      },
+    );
+    // The shared scratch is the largest root's by area; a root that does not fit it gets its own.
+    for (const effect of effects) {
+      const area = (effect?.plan.scratch.width ?? 0) * (effect?.plan.scratch.height ?? 0);
+      if (area > scratchWidth * scratchHeight) {
+        scratchWidth = effect!.plan.scratch.width;
+        scratchHeight = effect!.plan.scratch.height;
       }
-      const plan = planEffectPasses(layer.bound, result, layer.effect);
-      // Section 5.4: an effect texture past the device limit draws the root without effects.
-      if (plan.scratch.width > maximum || plan.scratch.height > maximum) return null;
-      scratchWidth = Math.max(scratchWidth, plan.scratch.width);
-      scratchHeight = Math.max(scratchHeight, plan.scratch.height);
-      const recordBase = effectRecords;
-      effectRecords += plan.passes.length;
-      return Object.freeze({ result, plan, recordBase });
-    });
+    }
+    for (const effect of effects) {
+      if (effect === null) continue;
+      effect.ownScratch =
+        effect.plan.scratch.width > scratchWidth || effect.plan.scratch.height > scratchHeight;
+      Object.freeze(effect);
+    }
     const records = new Uint8Array(effectRecords * stride);
     passRecords.forEach((bytes, index) => records.set(bytes, index * stride));
     layers.forEach((layer, index) => {
@@ -3008,11 +3029,24 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       // E41 U5: `L` is complete; build `R` before any later pass composites it.
       const effect = layers.effects[index];
       if (effect == null || effect.result === null) return;
+      const own = effect.ownScratch
+        ? ([0, 1] as const).map((slot) =>
+            texture(
+              `effect-scratch-${index}-${slot}`,
+              effect.plan.scratch.width,
+              effect.plan.scratch.height,
+              this.#format,
+              1,
+              4,
+              TEXTURE_BINDING_USAGE,
+            ),
+          )
+        : null;
       const surfaces: Record<EffectSurface, GPUTexture | null> = {
         content: textures[index]!,
         result: results[index]!,
-        scratch0: scratch?.[0] ?? null,
-        scratch1: scratch?.[1] ?? null,
+        scratch0: (own ?? scratch)?.[0] ?? null,
+        scratch1: (own ?? scratch)?.[1] ?? null,
       };
       effect.plan.passes.forEach((planned, offset) => {
         const pass = encoder.beginRenderPass({

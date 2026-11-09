@@ -250,6 +250,11 @@ export type EffectPassPlan = Readonly<{
 type Region = Readonly<{ x0: number; y0: number; x1: number; y1: number }>;
 
 const NO_COLOR = Object.freeze([0, 0, 0, 0] as const);
+/**
+ * σ below this many device pixels blurs nothing measurable and is treated as 0: a tiny σ would
+ * underflow `2σ²` in binary32 and give NaN weights.
+ */
+export const EFFECT_SIGMA_EPSILON_PX = 1e-3;
 const NO_POINT: Point = Object.freeze([0, 0] as const);
 
 /**
@@ -296,7 +301,7 @@ export function planEffectPasses(
     sigmaPx: number,
     offset: Point,
   ): Readonly<{ surface: EffectSurface; region: Region; scale: number }> | null => {
-    if (!(sigmaPx > 0)) return null;
+    if (!(sigmaPx >= EFFECT_SIGMA_EPSILON_PX)) return null;
     const levels = blurLevels(sigmaPx);
     const scale = 2 ** levels;
     const sigma = sigmaPx / scale;
@@ -345,6 +350,16 @@ export function planEffectPasses(
   };
   for (const shadow of effect.shadows) {
     const offset: Point = [shadow.dx, shadow.dy];
+    // A shadow whose blurred content cannot reach `R` adds nothing: no passes.
+    const reach = shadow.sigmaPx >= EFFECT_SIGMA_EPSILON_PX ? Math.ceil(3 * shadow.sigmaPx) + 2 : 2;
+    if (
+      content.x + shadow.dx - reach >= result.x + result.width ||
+      content.y + shadow.dy - reach >= result.y + result.height ||
+      content.x + content.width + shadow.dx + reach <= result.x ||
+      content.y + content.height + shadow.dy + reach <= result.y
+    ) {
+      continue;
+    }
     const blurred = blur(contentSurface, shadow.sigmaPx, offset) ?? {
       ...contentSurface,
       scale: 1,
@@ -359,7 +374,7 @@ export function planEffectPasses(
     });
   }
   push({ ...passOf('merge', contentSurface, 'result', resultSurface.region), contentScale });
-  if (effect.blurSigmaPx !== null && effect.blurSigmaPx > 0) {
+  if (effect.blurSigmaPx !== null && effect.blurSigmaPx >= EFFECT_SIGMA_EPSILON_PX) {
     const sigmaPx = effect.blurSigmaPx;
     const levels = blurLevels(sigmaPx);
     if (levels === 0) {

@@ -37,16 +37,26 @@ const shadow = (offsetX: number, offsetY: number, sigma: number): SceneEffect =>
 function box(
   id: string,
   x: number,
-  extra: Partial<{ effects: readonly SceneEffect[]; opacity: number }> = {},
+  extra: Partial<{
+    effects: readonly SceneEffect[];
+    opacity: number;
+    size: readonly [number, number];
+    y: number;
+  }> = {},
 ): RenderNodeSnapshot {
   return {
     id,
     parentId: null,
-    transform: [1, 0, 0, 1, x, 40],
+    transform: [1, 0, 0, 1, x, extra.y ?? 40],
     visible: true,
     opacity: extra.opacity ?? 1,
     kind: 'primitive',
-    geometry: { kind: 'rectangle', width: 20, height: 20, cornerRadii: [0, 0, 0, 0] },
+    geometry: {
+      kind: 'rectangle',
+      width: extra.size?.[0] ?? 20,
+      height: extra.size?.[1] ?? 20,
+      cornerRadii: [0, 0, 0, 0],
+    },
     style: { fill: red, stroke: null },
     ...(extra.effects === undefined ? {} : { effects: extra.effects }),
   };
@@ -198,6 +208,29 @@ describe('E41 U5 effect passes in a frame', () => {
     expect([...live]).toEqual([]);
     expect(scene.effectPasses).toBe(1);
     creation.dispose();
+  });
+
+  it('gives a root that does not fit the shared scratch its own (a wide and a tall root)', async () => {
+    const fixture = nativeFixture();
+    const { scene, target } = await nativeScene(fixture, withEffects);
+    const packet = prepare(
+      [
+        box('wide', 20, { effects: [shadow(0, 2, 2)], size: [560, 10], y: 20 }),
+        box('tall', 300, { effects: [shadow(2, 0, 2)], size: [10, 250], y: 80 }),
+      ],
+      target,
+    );
+    expect(packet.layers!.layers.filter((layer) => layer.effect !== undefined)).toHaveLength(2);
+    submitted(scene.submitPrimitivePacket(packet));
+    const scratch = fixture.textures
+      .filter((texture) => texture.label.includes('effect-scratch'))
+      .map(({ label, width, height }) => [label.slice(frame.length + 1), width, height]);
+    expect(scratch).toHaveLength(4);
+    // No scratch texture is both as wide as the wide root and as tall as the tall one.
+    for (const [, width, height] of scratch) {
+      expect((width as number) > 300 && (height as number) > 200).toBe(false);
+    }
+    expect(scene.effectPasses).toBe(2);
   });
 
   it('composites a leaf root at its content opacity, scaled back in the passes', async () => {

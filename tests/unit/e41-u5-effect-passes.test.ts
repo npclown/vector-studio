@@ -390,6 +390,21 @@ describe('E41-U5 effect pass plan against section 5.1', () => {
     expect(blurs.at(-1)!.sigma).toBeCloseTo(100 / 16);
   });
 
+  it('treats a tiny σ as 0 and skips a shadow that cannot reach R', () => {
+    const tiny = planEffectPasses(
+      content,
+      content,
+      record({ shadows: [{ color: black, dx: 1, dy: 1, sigmaPx: 1e-30 }], blurSigmaPx: 1e-30 }),
+    );
+    expect(tiny.passes.map((pass) => pass.kind)).toEqual(['tint', 'merge']);
+    const far = planEffectPasses(
+      content,
+      content,
+      record({ shadows: [{ color: black, dx: 500, dy: 0, sigmaPx: 4 }] }),
+    );
+    expect(far.passes.map((pass) => pass.kind)).toEqual(['merge']);
+  });
+
   it('packs records as the module reads them', () => {
     expect(EFFECT_SHADER).toContain('struct EffectPass');
     const plan = planEffectPasses(
