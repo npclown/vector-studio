@@ -87,6 +87,7 @@ import {
 } from './text-atlas.js';
 import { planEffectLayers, type EffectLayer } from './effect-layers.js';
 import {
+  E41_LAYER_REACH_MAX,
   cullTarget,
   extendEffectReach,
   type EffectBudgetNotice,
@@ -1329,11 +1330,26 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       while (scope !== null && states.get(scope) === 'dissolved') scope = scope.parent;
       return scope;
     };
-    // Until a backend draws the effect passes (U5), an effect root composites as an E25 layer
-    // of its content: its packet bound is its source bound inside the target and its drawn
-    // parent's bound (E25-K5's clamps); an empty one draws nothing (section 5.3).
+    // An effect root's packet bound is its source bound inside its drawn parent's bound. A
+    // backend that draws layers past the target (U5b, `offTargetEffectLayers`) takes the
+    // bounds of effect roots and of the layers inside them unclamped (E41-K2, K2c); otherwise
+    // each bound is also clamped to the target (E25-K5), as U4b's packet was. An empty bound
+    // draws nothing (section 5.3).
     const bounds = new Map<LayerScope, DeviceRect>();
     const targetRect: DeviceRect = { x: 0, y: 0, width: target.width, height: target.height };
+    const offTarget = target.offTargetEffectLayers === true;
+    const reachRect: DeviceRect = {
+      x: -E41_LAYER_REACH_MAX,
+      y: -E41_LAYER_REACH_MAX,
+      width: target.width + 2 * E41_LAYER_REACH_MAX,
+      height: target.height + 2 * E41_LAYER_REACH_MAX,
+    };
+    const inEffect = (scope: LayerScope): boolean => {
+      for (let next: LayerScope | null = scope; next !== null; next = next.parent) {
+        if (plan.effects.has(next)) return true;
+      }
+      return false;
+    };
     for (const scope of scopes) {
       if (states.get(scope) !== 'drawn') continue;
       const parent = resolve(scope.parent);
@@ -1341,7 +1357,12 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
         states.set(scope, 'dropped');
         continue;
       }
-      let bound = intersectRects(plan.bounds.get(scope)!, targetRect);
+      // Past the target, a bound stops at E41_LAYER_REACH_MAX (content beyond it casts nothing).
+      const bound0 = plan.bounds.get(scope)!;
+      let bound: DeviceRect | null =
+        offTarget && inEffect(scope)
+          ? intersectRects(bound0, reachRect)
+          : intersectRects(bound0, targetRect);
       if (bound !== null && parent !== null) bound = intersectRects(bound, bounds.get(parent)!);
       if (bound === null) {
         states.set(scope, 'dropped');

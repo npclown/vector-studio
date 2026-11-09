@@ -334,6 +334,20 @@ describe('E41-U5 effect pass plan against section 5.1', () => {
       { x: 21, y: 33, width: 19, height: 15 },
       { shadows: [{ color: black, dx: -1.75, dy: 2.5, sigmaPx: 23 }], blurSigmaPx: 22 },
     ],
+    // U5b: L and R past the target's top-left corner (negative pixels), at every level.
+    [
+      'past the target, one level',
+      { x: -61, y: -53, width: 27, height: 19 },
+      {
+        shadows: [{ color: black, dx: 3.25, dy: -2.5, sigmaPx: 6 }],
+        blurSigmaPx: 2,
+      },
+    ],
+    [
+      'past the target, two levels',
+      { x: -45, y: -37, width: 23, height: 21 },
+      { shadows: [{ color: black, dx: -5.5, dy: 1.75, sigmaPx: 23 }], blurSigmaPx: 13 },
+    ],
   ];
   it.each(inside)('%s, with R inside L', (_, result, partial) => {
     const effect = record({ source: wide, output: result, ...partial });

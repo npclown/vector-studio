@@ -28,6 +28,7 @@ import {
   E25_LAYER_TILE_SIZE,
   E28_ATLAS_PAGES_MAX,
   E28_ATLAS_PAGE_SIZE,
+  E41_LAYER_REACH_MAX,
   E41_SIGMA_PX_MAX,
   maskTileSet,
 } from '@vector-studio/renderer-core';
@@ -136,7 +137,27 @@ import {
   type EffectPassPlan,
   type EffectSurface,
 } from './effect-pipeline.js';
-import { PipelineCache, type PipelineCacheSnapshot } from './pipeline-cache.js';
+import {
+  PipelineCache,
+  type PipelineCacheKey,
+  type PipelineCacheSnapshot,
+} from './pipeline-cache.js';
+import {
+  LAYER_COMPOSITE_SHIFTED_SHADER,
+  MESH_FILL_CLIP_SHIFTED_SHADER,
+  MESH_FILL_PAINT_CLIP_SHIFTED_SHADER,
+  MESH_FILL_PAINT_SHIFTED_SHADER,
+  MESH_FILL_SHIFTED_SHADER,
+  PRIMITIVE_ANALYTIC_CLIP_SHIFTED_SHADER,
+  PRIMITIVE_ANALYTIC_PAINT_CLIP_SHIFTED_SHADER,
+  PRIMITIVE_ANALYTIC_PAINT_SHIFTED_SHADER,
+  PRIMITIVE_ANALYTIC_SHIFTED_SHADER,
+  SHIFTED_LAYER_VARIANT_SUFFIX,
+  TEXT_CLIP_SHIFTED_SHADER,
+  TEXT_SHIFTED_SHADER,
+  shiftedCompositeKey,
+  shiftedLayerVariantKey,
+} from './shifted-layer-pipeline.js';
 import { PRIMITIVE_ANALYTIC_SHADER } from './primitive-analytic-shader.js';
 import {
   PRIMITIVE_FRAME_SIZE,
@@ -388,7 +409,50 @@ interface TextPipelineState {
 interface EffectPipelineState {
   readonly bindGroupLayout: GPUBindGroupLayout;
   readonly pipelines: ReadonlyMap<EffectPassKind, GPURenderPipeline>;
+  /** E41 U5b: the shifted layer variants every layer pass in or of an effect root uses. */
+  readonly shifted: ShiftedLayerPipelines;
 }
+
+/**
+ * E41 U5b: the pipelines a layer tile pass draws with. E25's set maps the tile through a
+ * target-sized viewport (the base analytic and stencil pipelines, with group 0 only, draw there
+ * too); the shifted set maps the tile through its vertex stages (shifted-layer-pipeline.ts), so
+ * every pipeline in it, the plain analytic and stencil ones included, has groups 0 to 3.
+ */
+type LayerDrawPipelines = Readonly<
+  Pick<
+    LayerPipelineState,
+    | 'analyticClip'
+    | 'analyticPaint'
+    | 'analyticPaintClip'
+    | 'mesh'
+    | 'meshJoint'
+    | 'meshClip'
+    | 'meshJointClip'
+    | 'meshPaint'
+    | 'meshJointPaint'
+    | 'meshPaintClip'
+    | 'meshJointPaintClip'
+    | 'meshCover'
+    | 'meshCoverClip'
+    | 'meshCoverPaint'
+    | 'meshCoverPaintClip'
+    | 'composite'
+  > & {
+    analytic: GPURenderPipeline;
+    /** Null without the mesh path. */
+    stencil: MeshStencilPipelines | null;
+    text: GPURenderPipeline | null;
+    textClip: GPURenderPipeline | null;
+    /**
+     * Whether the plain analytic and stencil pipelines have groups 1 to 3 (the shifted set):
+     * the empty groups are then bound before them.
+     */
+    fullLayouts: boolean;
+  }
+>;
+
+type ShiftedLayerPipelines = LayerDrawPipelines & Readonly<{ modules: number; count: number }>;
 
 /** E28 U3: an atlas page; a new texture is a new incarnation. */
 interface TextPage {
@@ -624,6 +688,8 @@ type ValidatedLayers = Readonly<{
   slots: ReadonlyMap<number, readonly OrderSlot[]>;
   /** Per layer, the mesh draws drawn (none when the mesh path is unavailable). */
   meshDraws: readonly (readonly MeshFillDraw[])[];
+  /** E41 U5b: per layer, whether its passes use the shifted variants (in or of an effect root). */
+  shifted: readonly boolean[];
   tileWidth: number;
   tileHeight: number;
   tiles: readonly (readonly LayerTile[])[];
@@ -1058,7 +1124,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       paintModules +
       layerModules +
       textVariants +
-      (effect === null ? 0 : 1);
+      (effect === null ? 0 : 1 + effect.shifted.modules);
     this.pipelinesCreated =
       // E39-R8: with the mesh path, four stencil pass pipelines per target (two plain, two
       // joint) and seven covers per mesh variant (two rules, five joint covers; plain, clip,
@@ -1071,7 +1137,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         : (1 + (paint.mesh === null ? 0 : 9)) * (paint.analyticClip === null ? 1 : 2)) +
       (layer === null ? 0 : 1 + analyticLayerModules + 9 * meshLayerModules) +
       textVariants +
-      (effect === null ? 0 : EFFECT_PASS_KINDS.length);
+      (effect === null ? 0 : EFFECT_PASS_KINDS.length + effect.shifted.count);
     this.#device = device;
     this.#context = context;
     this.#format = format;
@@ -2624,8 +2690,22 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     }
     const target = this.#target!;
     const count = layers.length;
+    // E41 U5b: an effect root and every layer inside one draw through the shifted variants when
+    // the effect pipeline exists, so their bounds may reach past the target (E41-K2), up to the
+    // device's texture limit; other layers stay inside the target (E25-K5).
+    const maximum = safeLimit(this.#device.limits.maxTextureDimension2D, 0);
+    const shifted: boolean[] = new Array<boolean>(count).fill(false);
+    for (let index = count - 1; index >= 0; index -= 1) {
+      const layer = layers[index]!;
+      const parent = layer.parent;
+      shifted[index] =
+        this.#effect !== null &&
+        (layer.effect !== undefined ||
+          (Number.isSafeInteger(parent) && parent > index && parent < count && shifted[parent]!));
+    }
     layers.forEach((layer, index) => {
       const bound = layer.bound;
+      const free = shifted[index]!;
       if (
         typeof layer.nodeId !== 'string' ||
         typeof layer.opacity !== 'number' ||
@@ -2633,12 +2713,18 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         typeof bound !== 'object' ||
         bound === null ||
         ![bound.x, bound.y].every(
-          (value) => Number.isSafeInteger(value) && value >= 0 && value % 2 === 0,
+          (value) => Number.isSafeInteger(value) && (free || value >= 0) && value % 2 === 0,
         ) ||
         !isPositiveSafeInteger(bound.width) ||
         !isPositiveSafeInteger(bound.height) ||
-        bound.x + bound.width > target.width ||
-        bound.y + bound.height > target.height ||
+        (free
+          ? bound.width > maximum ||
+            bound.height > maximum ||
+            bound.x < -E41_LAYER_REACH_MAX ||
+            bound.y < -E41_LAYER_REACH_MAX ||
+            bound.x + bound.width > target.width + E41_LAYER_REACH_MAX ||
+            bound.y + bound.height > target.height + E41_LAYER_REACH_MAX
+          : bound.x + bound.width > target.width || bound.y + bound.height > target.height) ||
         !Number.isSafeInteger(layer.parent) ||
         !(layer.parent === -1 || (layer.parent > index && layer.parent < count))
       ) {
@@ -2695,7 +2781,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     const passRecords: Uint8Array[] = [
       packLayerPassRecord({ x: 0, y: 0 }, { width: target.width, height: target.height }),
     ];
-    const tiles = layers.map((layer) => {
+    const tiles = layers.map((layer, index) => {
       const list: LayerTile[] = [];
       for (let y = 0; y < layer.bound.height; y += tileHeight) {
         for (let x = 0; x < layer.bound.width; x += tileWidth) {
@@ -2709,9 +2795,12 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
             }),
           );
           passRecords.push(
+            // E41 U5b: a shifted pass maps the tile itself; E25's maps the target.
             packLayerPassRecord(
               { x: layer.bound.x + x, y: layer.bound.y + y },
-              { width: target.width, height: target.height },
+              shifted[index]
+                ? { width: tileWidth, height: tileHeight }
+                : { width: target.width, height: target.height },
             ),
           );
         }
@@ -2721,16 +2810,18 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     const compositeRecordBase = passRecords.length;
     // E41 U5: each effect root's passes, recorded after the composite records.
     let effectRecords = compositeRecordBase + count;
-    const maximum = safeLimit(this.#device.limits.maxTextureDimension2D, 0);
     const effects = layers.map(
       (layer): { -readonly [K in keyof LayerEffectFrame]: LayerEffectFrame[K] } | null => {
         if (layer.effect === undefined) return null;
         validateEffectRecord(layer.effect);
         if (this.#effect === null || this.#effectContentForTesting) return null;
-        const parent = layer.parent === -1 ? null : layers[layer.parent]!.bound;
+        // `R` inside its parent's bound (which reaches past the target when it is shifted), or
+        // inside the target for a root composited in the main pass.
         const result = intersectRects(
-          intersectRects(layer.effect.output, { x: 0, y: 0, ...target }),
-          parent,
+          layer.effect.output,
+          layer.parent === -1
+            ? { x: 0, y: 0, width: target.width, height: target.height }
+            : layers[layer.parent]!.bound,
         );
         if (result === null) {
           return {
@@ -2803,6 +2894,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       layers,
       slots,
       meshDraws,
+      shifted: Object.freeze(shifted),
       tileWidth,
       tileHeight,
       tiles: Object.freeze(tiles),
@@ -2989,6 +3081,15 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       }
       return group;
     };
+    // E41 U5b: E25's draw set; layers in or of an effect root draw with the shifted one.
+    const e25: LayerDrawPipelines = Object.freeze({
+      ...pipelines,
+      analytic: this.#pipeline,
+      stencil: this.#mesh?.stencil ?? null,
+      text: this.#text?.layer ?? null,
+      textClip: this.#text?.clipLayer ?? null,
+      fullLayouts: false,
+    });
     const colorView = color.createView();
     const resolveView = resolve?.createView();
     const stencilView = stencil?.createView();
@@ -3017,15 +3118,20 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
                 },
               }),
         });
-        pass.setViewport(
-          -(layer.bound.x + tile.x),
-          -(layer.bound.y + tile.y),
-          target.width,
-          target.height,
-          0,
-          1,
-        );
-        this.#encodeLayerPassDraws(pass, frame, layers, index, tile.record * layers.stride, {
+        const shiftedPass = layers.shifted[index]!;
+        if (shiftedPass) pass.setViewport(0, 0, tileWidth, tileHeight, 0, 1);
+        else {
+          pass.setViewport(
+            -(layer.bound.x + tile.x),
+            -(layer.bound.y + tile.y),
+            target.width,
+            target.height,
+            0,
+            1,
+          );
+        }
+        const set = shiftedPass ? this.#effect!.shifted : e25;
+        this.#encodeLayerPassDraws(pass, frame, layers, index, tile.record * layers.stride, set, {
           arena,
           meshArena,
           clip,
@@ -3086,6 +3192,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     layers: NonNullable<ValidatedLayers>,
     index: number,
     passOffset: number,
+    set: LayerDrawPipelines,
     env: Readonly<{
       arena: ArenaState;
       meshArena: MeshArenaState | null;
@@ -3097,6 +3204,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   ): void {
     const pipelines = this.#layer!;
     const draws = layers.layers[index]!.draws;
+    const stencilPipelines = set.stencil;
     const meshDraws = layers.meshDraws[index]!;
     const slots = layers.slots.get(index) ?? [];
     const { arena, meshArena, clip, paint, textPart } = env;
@@ -3153,7 +3261,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         if (textPart === null) return;
         const draw = textPart.draws[slot.text]!;
         const state = draw.clipState ?? 0;
-        const variant = state === 0 ? this.#text!.layer : this.#text!.clipLayer;
+        const variant = state === 0 ? set.text : set.textClip;
         if (variant === null || (state !== 0 && clip === null)) return;
         usePipeline(variant);
         pass.setBindGroup(0, this.#textBindGroup(draw.page));
@@ -3164,8 +3272,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         return;
       }
       if (slot.layer === null) return;
-      this.#encodeComposite(pass, frame, slot.layer, passOffset);
-      pipeline = pipelines.composite;
+      this.#encodeComposite(pass, frame, slot.layer, passOffset, set.composite);
+      pipeline = set.composite;
       group0 = null;
       group1 = 0;
       group2 = 'empty';
@@ -3213,20 +3321,25 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         if (jointStroke !== null) {
           const covers = painted
             ? state === 0
-              ? pipelines.meshCoverPaint
-              : pipelines.meshCoverPaintClip
+              ? set.meshCoverPaint
+              : set.meshCoverPaintClip
             : state === 0
-              ? pipelines.meshCover
-              : pipelines.meshCoverClip;
-          if (covers === null) continue;
-          // encodeMeshJoint sets each step's pipeline; group 0 may be set before it.
+              ? set.meshCover
+              : set.meshCoverClip;
+          if (covers === null || stencilPipelines === null) continue;
+          // encodeMeshJoint sets each step's pipeline; group 0 may be set before it, and the
+          // stencil passes of the shifted set take the empty groups (their covers bind theirs).
           bind0('mesh');
+          if (set.fullLayouts) {
+            bind1(0);
+            bind2('empty');
+          }
           encodeMeshJoint(
             pass,
             draw,
             jointStroke,
             meshCoverRule(draw),
-            (kind) => this.#mesh!.stencil[kind],
+            (kind) => stencilPipelines[kind],
             (cover) => covers[cover],
             () => {
               bind1(state);
@@ -3241,15 +3354,19 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           // E39-R7: R1 and R2 with the layer variant's cover.
           const covers = painted
             ? state === 0
-              ? pipelines.meshCoverPaint
-              : pipelines.meshCoverPaintClip
+              ? set.meshCoverPaint
+              : set.meshCoverPaintClip
             : state === 0
-              ? pipelines.meshCover
-              : pipelines.meshCoverClip;
-          if (covers === null) continue;
+              ? set.meshCover
+              : set.meshCoverClip;
+          if (covers === null || stencilPipelines === null) continue;
           const stencilTriangles = draw.triangleCount - 2;
-          usePipeline(this.#mesh!.stencil[coverage]);
+          usePipeline(stencilPipelines[coverage]);
           bind0('mesh');
+          if (set.fullLayouts) {
+            bind1(0);
+            bind2('empty');
+          }
           pass.setStencilReference(meshStencilPassReference(coverage));
           pass.draw(3 * stencilTriangles, 1, 3 * draw.firstTriangle, draw.instance);
           usePipeline(covers[meshCoverRule(draw)]);
@@ -3262,18 +3379,18 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         const variant = painted
           ? state === 0
             ? joint
-              ? pipelines.meshJointPaint
-              : pipelines.meshPaint
+              ? set.meshJointPaint
+              : set.meshPaint
             : joint
-              ? pipelines.meshJointPaintClip
-              : pipelines.meshPaintClip
+              ? set.meshJointPaintClip
+              : set.meshPaintClip
           : state === 0
             ? joint
-              ? pipelines.meshJoint
-              : pipelines.mesh
+              ? set.meshJoint
+              : set.mesh
             : joint
-              ? pipelines.meshJointClip
-              : pipelines.meshClip;
+              ? set.meshJointClip
+              : set.meshClip;
         if (variant === null) continue;
         usePipeline(variant);
         bind0('mesh');
@@ -3292,15 +3409,15 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       if (painted && paint === null) return;
       const variant = painted
         ? state === 0
-          ? pipelines.analyticPaint
-          : pipelines.analyticPaintClip
+          ? set.analyticPaint
+          : set.analyticPaintClip
         : state === 0
-          ? this.#pipeline
-          : pipelines.analyticClip;
+          ? set.analytic
+          : set.analyticClip;
       if (variant === null) return;
       usePipeline(variant);
       bind0('analytic');
-      if (variant !== this.#pipeline) {
+      if (variant !== set.analytic || set.fullLayouts) {
         bind1(state);
         bind2(painted ? 'analytic' : 'empty');
       }
@@ -3315,10 +3432,11 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     frame: LayerFrame,
     layer: number,
     passOffset: number,
+    composite: GPURenderPipeline = this.#layer!.composite,
   ): void {
     if (frame.skipped.has(layer)) return;
     const pipelines = this.#layer!;
-    pass.setPipeline(pipelines.composite);
+    pass.setPipeline(composite);
     pass.setBindGroup(0, frame.compositeGroups[layer]!);
     pass.setBindGroup(CLIP_BIND_GROUP_INDEX, pipelines.emptyBindGroup);
     pass.setBindGroup(PAINT_BIND_GROUP_INDEX, pipelines.emptyBindGroup);
@@ -5681,6 +5799,7 @@ export function createNativePrimitiveSceneCreation(
     let effect: EffectPipelineState | null = null;
     if (options.effectPipeline === true && layer !== null && !disposed) {
       const effectTracked: string[] = [];
+      const shiftedKeys: PipelineCacheKey[] = [];
       const trackEffect = (id: string, descriptor: ResourceDescriptor) => {
         track(id, descriptor);
         effectTracked.push(id);
@@ -5710,10 +5829,30 @@ export function createNativePrimitiveSceneCreation(
           trackEffect(`${prefix}/effect-${kind}-pipeline`, { category: 'render-pipeline' });
           pipelines.set(kind, created);
         }
-        effect = Object.freeze({ bindGroupLayout: effectBindGroupLayout, pipelines });
+        const shifted = await createShiftedLayerPipelines(
+          device,
+          pipelineCache,
+          format,
+          sampleCount,
+          stencil,
+          prefix,
+          trackEffect,
+          shiftedKeys,
+          {
+            analytic: bindGroupLayout,
+            mesh: mesh?.bindGroupLayout ?? null,
+            clip: clip?.bindGroupLayout ?? null,
+            paint: paint?.bindGroupLayout ?? null,
+            text: text?.bindGroupLayout ?? null,
+          },
+          layer,
+          text,
+        );
+        effect = Object.freeze({ bindGroupLayout: effectBindGroupLayout, pipelines, shifted });
       } catch {
         // The E22-K5 rule: no effect pipeline this attempt cached outlives the failure.
         for (const kind of EFFECT_PASS_KINDS) pipelineCache.evict(effectPipelineKey(format, kind));
+        for (const key of shiftedKeys) pipelineCache.evict(key);
         for (const id of effectTracked) {
           tracked.delete(id);
           try {
@@ -5818,6 +5957,261 @@ const MESH_COVER_NAMES: readonly string[] = Object.freeze([
   'evenodd',
   ...MESH_JOINT_COVERS,
 ]);
+
+/**
+ * E41 U5b: the shifted layer variants (shifted-layer-pipeline.ts). A variant exists exactly when
+ * E25's layer variant does, plus the plain analytic one and, with the mesh path, the stencil
+ * pass pipelines over the plain mesh module. Each pipeline's key goes to `keys` before it is
+ * created, so a failure can evict every one.
+ */
+async function createShiftedLayerPipelines(
+  device: GPUDevice,
+  pipelineCache: PipelineCache<GPURenderPipeline>,
+  format: PrimitiveTargetFormat,
+  sampleCount: 1 | 4,
+  stencil: boolean,
+  prefix: string,
+  track: (id: string, descriptor: ResourceDescriptor) => void,
+  keys: PipelineCacheKey[],
+  layouts: Readonly<{
+    analytic: GPUBindGroupLayout;
+    mesh: GPUBindGroupLayout | null;
+    clip: GPUBindGroupLayout | null;
+    paint: GPUBindGroupLayout | null;
+    text: GPUBindGroupLayout | null;
+  }>,
+  layer: LayerPipelineState,
+  text: TextPipelineState | null,
+): Promise<ShiftedLayerPipelines> {
+  const empty = layer.emptyLayout;
+  let modules = 0;
+  let count = 0;
+  const module = (name: string, code: string) => {
+    const created = device.createShaderModule({ label: `${prefix}/${name}`, code });
+    track(`${prefix}/${name}`, { category: 'shader-module' });
+    modules += 1;
+    return created;
+  };
+  const pipelineLayout = (name: string, groups: GPUBindGroupLayout[]) => {
+    const created = device.createPipelineLayout({
+      label: `${prefix}/${name}`,
+      bindGroupLayouts: [...groups, layer.bindGroupLayout],
+    });
+    track(`${prefix}/${name}`, { category: 'pipeline-layout' });
+    return created;
+  };
+  const pipeline = async (
+    name: string,
+    key: PipelineCacheKey,
+    descriptor: () => GPURenderPipelineDescriptor,
+  ) => {
+    keys.push(key);
+    const created = await pipelineCache.getOrCreate(key, () =>
+      device.createRenderPipelineAsync(descriptor()),
+    );
+    track(`${prefix}/${name}`, { category: 'render-pipeline' });
+    count += 1;
+    return created;
+  };
+  const suffix = (kind: LayerVariantBase) =>
+    `${kind === 'plain' ? '' : kind === 'clip' ? '+clip-v0' : kind === 'paint' ? '+paint-v0' : '+paint-v0+clip-v0'}${LAYER_VARIANT_SUFFIX}${SHIFTED_LAYER_VARIANT_SUFFIX}`;
+  const baseKey = (key: PipelineCacheKey, kind: LayerVariantBase) =>
+    kind === 'plain'
+      ? key
+      : kind === 'clip'
+        ? clipVariantKey(key)
+        : kind === 'paint'
+          ? paintVariantKey(key)
+          : paintClipVariantKey(key);
+
+  const compositeLayout = pipelineLayout('shifted-composite-pipeline-layout', [
+    layer.compositeBindGroupLayout,
+    empty,
+    empty,
+  ]);
+  const compositeModule = module('shifted-composite-shader', LAYER_COMPOSITE_SHIFTED_SHADER);
+  const composite = await pipeline(
+    'shifted-composite-pipeline',
+    shiftedCompositeKey(layerCompositePipelineKey(format, sampleCount, stencil)),
+    () => ({
+      ...createLayerCompositePipelineDescriptor(
+        compositeModule,
+        compositeLayout,
+        format,
+        sampleCount,
+        stencil,
+      ),
+      label: `vector-studio/e25-layer-composite-${stencil ? 'stencil-' : ''}${sampleCount}x${SHIFTED_LAYER_VARIANT_SUFFIX}`,
+    }),
+  );
+
+  const analyticKey = primitivePipelineKey(format, sampleCount, stencil);
+  const analyticVariant = async (
+    kind: LayerVariantBase,
+    code: string,
+    groups: GPUBindGroupLayout[],
+  ) => {
+    const shader = module(`shifted-${kind}-shader`, code);
+    const layout = pipelineLayout(`shifted-${kind}-pipeline-layout`, groups);
+    return pipeline(
+      `shifted-${kind}-pipeline`,
+      shiftedLayerVariantKey(baseKey(analyticKey, kind)),
+      () =>
+        variantDescriptor(
+          createPrimitivePipelineDescriptor(shader, layout, format, sampleCount, stencil),
+          suffix(kind),
+        ),
+    );
+  };
+  const { analytic: analyticLayout, mesh: meshLayout, clip, paint } = layouts;
+  const analytic = await analyticVariant('plain', PRIMITIVE_ANALYTIC_SHIFTED_SHADER, [
+    analyticLayout,
+    empty,
+    empty,
+  ]);
+  const analyticClip =
+    layer.analyticClip === null
+      ? null
+      : await analyticVariant('clip', PRIMITIVE_ANALYTIC_CLIP_SHIFTED_SHADER, [
+          analyticLayout,
+          clip!,
+          empty,
+        ]);
+  const analyticPaint =
+    layer.analyticPaint === null
+      ? null
+      : await analyticVariant('paint', PRIMITIVE_ANALYTIC_PAINT_SHIFTED_SHADER, [
+          analyticLayout,
+          empty,
+          paint!,
+        ]);
+  const analyticPaintClip =
+    layer.analyticPaintClip === null
+      ? null
+      : await analyticVariant('paint-clip', PRIMITIVE_ANALYTIC_PAINT_CLIP_SHIFTED_SHADER, [
+          analyticLayout,
+          clip!,
+          paint!,
+        ]);
+
+  const meshVariants = async (
+    kind: LayerVariantBase,
+    code: string,
+    groups: GPUBindGroupLayout[],
+  ) => {
+    const shader = module(`shifted-mesh-${kind}-shader`, code);
+    const layout = pipelineLayout(`shifted-mesh-${kind}-pipeline-layout`, groups);
+    const variant = (meshKind: MeshPipelineKind) =>
+      pipeline(
+        `shifted-mesh-${meshKind}-${kind}-pipeline`,
+        shiftedLayerVariantKey(baseKey(meshPipelineKey(format, sampleCount, meshKind), kind)),
+        () =>
+          variantDescriptor(
+            createMeshPipelineDescriptor(shader, layout, format, sampleCount, meshKind),
+            suffix(kind),
+          ),
+      );
+    const fill = await variant('fill');
+    const joint = await variant('joint');
+    const cover = await createMeshCoverPipelines(variant);
+    return { fill, joint, cover, shader, layout };
+  };
+  const meshPlain =
+    layer.mesh === null || meshLayout === null
+      ? null
+      : await meshVariants('plain', MESH_FILL_SHIFTED_SHADER, [meshLayout, empty, empty]);
+  const meshClip =
+    layer.meshClip === null
+      ? null
+      : await meshVariants('clip', MESH_FILL_CLIP_SHIFTED_SHADER, [meshLayout!, clip!, empty]);
+  const meshPaint =
+    layer.meshPaint === null
+      ? null
+      : await meshVariants('paint', MESH_FILL_PAINT_SHIFTED_SHADER, [meshLayout!, empty, paint!]);
+  const meshPaintClip =
+    layer.meshPaintClip === null
+      ? null
+      : await meshVariants('paint-clip', MESH_FILL_PAINT_CLIP_SHIFTED_SHADER, [
+          meshLayout!,
+          clip!,
+          paint!,
+        ]);
+  // E39-R1: the stencil passes over the plain mesh module, with its full layout.
+  let meshStencil: MeshStencilPipelines | null = null;
+  if (meshPlain !== null) {
+    const created: Partial<Record<MeshStencilKind, GPURenderPipeline>> = {};
+    for (const kind of MESH_STENCIL_KINDS) {
+      created[kind] = await pipeline(
+        `shifted-mesh-stencil-${kind}-pipeline`,
+        shiftedLayerVariantKey(meshStencilPipelineKey(format, sampleCount, kind)),
+        () =>
+          variantDescriptor(
+            createMeshStencilPipelineDescriptor(
+              meshPlain.shader,
+              meshPlain.layout,
+              format,
+              sampleCount,
+              kind,
+            ),
+            `${LAYER_VARIANT_SUFFIX}${SHIFTED_LAYER_VARIANT_SUFFIX}`,
+          ),
+      );
+    }
+    meshStencil = Object.freeze(created as Record<MeshStencilKind, GPURenderPipeline>);
+  }
+
+  const textVariant = async (variant: 'layer' | 'clip-layer') => {
+    const clipped = variant === 'clip-layer';
+    const shader = module(
+      `shifted-text${clipped ? '-clip' : ''}-shader`,
+      clipped ? TEXT_CLIP_SHIFTED_SHADER : TEXT_SHIFTED_SHADER,
+    );
+    const layout = pipelineLayout(`shifted-text${clipped ? '-clip' : ''}-pipeline-layout`, [
+      layouts.text!,
+      clipped ? clip! : empty,
+      empty,
+    ]);
+    return pipeline(
+      `shifted-text${clipped ? '-clip' : ''}-pipeline`,
+      shiftedLayerVariantKey(
+        textPipelineKey(format, sampleCount, stencil, clipped ? 'clip' : 'plain'),
+      ),
+      () =>
+        variantDescriptor(
+          createTextPipelineDescriptor(shader, layout, format, sampleCount, stencil, variant),
+          SHIFTED_LAYER_VARIANT_SUFFIX,
+        ),
+    );
+  };
+  const textPlain = text?.layer == null ? null : await textVariant('layer');
+  const textClip = text?.clipLayer == null ? null : await textVariant('clip-layer');
+
+  return Object.freeze({
+    composite,
+    analytic,
+    analyticClip,
+    analyticPaint,
+    analyticPaintClip,
+    mesh: meshPlain?.fill ?? null,
+    meshJoint: meshPlain?.joint ?? null,
+    meshClip: meshClip?.fill ?? null,
+    meshJointClip: meshClip?.joint ?? null,
+    meshPaint: meshPaint?.fill ?? null,
+    meshJointPaint: meshPaint?.joint ?? null,
+    meshPaintClip: meshPaintClip?.fill ?? null,
+    meshJointPaintClip: meshPaintClip?.joint ?? null,
+    meshCover: meshPlain?.cover ?? null,
+    meshCoverClip: meshClip?.cover ?? null,
+    meshCoverPaint: meshPaint?.cover ?? null,
+    meshCoverPaintClip: meshPaintClip?.cover ?? null,
+    stencil: meshStencil,
+    text: textPlain,
+    textClip,
+    fullLayouts: true,
+    modules,
+    count,
+  });
+}
 
 /** E39-R1: the stencil pass pipelines at one target format, cached by their keys. */
 async function createMeshStencilPipelines(

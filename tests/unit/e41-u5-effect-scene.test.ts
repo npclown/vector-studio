@@ -13,6 +13,13 @@ import {
   EFFECT_SHADER,
   planEffectPasses,
 } from '../../packages/renderer-webgpu/src/effect-pipeline.js';
+import {
+  LAYER_COMPOSITE_SHIFTED_SHADER,
+  MESH_FILL_SHIFTED_SHADER,
+  PRIMITIVE_ANALYTIC_CLIP_SHIFTED_SHADER,
+  PRIMITIVE_ANALYTIC_SHIFTED_SHADER,
+  TEXT_CLIP_SHIFTED_SHADER,
+} from '../../packages/renderer-webgpu/src/shifted-layer-pipeline.js';
 import { nativeFixture, nativeScene, submitted } from '../support/p4-native-fixture.js';
 
 // E41 contract (docs/plans/d9-e41-boolean-effects-contract.md), unit U5: the effect pipelines'
@@ -74,7 +81,7 @@ function prepare(nodes: readonly RenderNodeSnapshot[], target: PrimitiveTarget):
     identity,
     revision: 1,
     nodes,
-    rootOrder: nodes.map((node) => node.id),
+    rootOrder: nodes.filter((node) => node.parentId === null).map((node) => node.id),
   });
   expect(result.status).toBe('applied');
   return new PrimitiveSceneSource(mirror).prepare(target) as PrimitivePacket;
@@ -98,7 +105,7 @@ const outline = (calls: readonly (readonly unknown[])[]) =>
     .map((call) => (call[0] === 'beginRenderPass' ? call.slice(0, 3) : call));
 
 describe('E41 U5 effect pipeline creation', () => {
-  it('creates one module and five pipelines with the layer pipeline', async () => {
+  it('creates the effect module, five pipelines and the shifted layer variants', async () => {
     const plain = nativeFixture();
     const without = await nativeScene(plain, layered);
     const fixture = nativeFixture();
@@ -109,10 +116,69 @@ describe('E41 U5 effect pipeline creation', () => {
     expect(fixture.pipelineLabels.filter((label) => label.includes('e41-effect'))).toEqual(
       EFFECT_PASS_KINDS.map((kind) => `vector-studio/e41-effect-${kind}`),
     );
-    expect(scene.shaderModulesCreated).toBe(without.scene.shaderModulesCreated + 1);
-    expect(scene.pipelinesCreated).toBe(without.scene.pipelinesCreated + 5);
+    // U5b: the shifted composite, plain analytic and clip analytic variants (no mesh, paint
+    // or text path in this generation).
+    const shifted = [
+      LAYER_COMPOSITE_SHIFTED_SHADER,
+      PRIMITIVE_ANALYTIC_SHIFTED_SHADER,
+      PRIMITIVE_ANALYTIC_CLIP_SHIFTED_SHADER,
+    ];
+    for (const code of shifted) {
+      expect(fixture.modules.filter((module) => module === code)).toHaveLength(1);
+    }
+    expect(fixture.pipelineLabels.filter((label) => label.endsWith('+shift-v0'))).toEqual([
+      'vector-studio/e25-layer-composite-4x+shift-v0',
+      'vector-studio/p1-analytic-primitive-4x+layer-v0+shift-v0',
+      'vector-studio/p1-analytic-primitive-4x+clip-v0+layer-v0+shift-v0',
+    ]);
+    expect(scene.shaderModulesCreated).toBe(without.scene.shaderModulesCreated + 1 + 3);
+    expect(scene.pipelinesCreated).toBe(without.scene.pipelinesCreated + 5 + 3);
     creation.dispose();
     without.creation.dispose();
+    expect(accounting.snapshot().live).toBe(0);
+  });
+
+  it('creates a shifted variant for each layer variant, with the mesh stencil passes', async () => {
+    const all = {
+      meshPipeline: true,
+      clipPipeline: true,
+      paintPipeline: true,
+      layerPipeline: true,
+      textPipeline: true,
+    } as const;
+    const without = await nativeScene(nativeFixture(), all);
+    const fixture = nativeFixture();
+    const { scene, creation, accounting } = await nativeScene(fixture, {
+      ...all,
+      effectPipeline: true,
+    });
+    expect(scene.effectPipelineAvailable).toBe(true);
+    // Composite, four analytic, four mesh and two text modules; per mesh module a fill, a
+    // joint and seven covers, and four stencil passes over the plain one.
+    expect(scene.shaderModulesCreated).toBe(without.scene.shaderModulesCreated + 1 + 11);
+    expect(scene.pipelinesCreated).toBe(without.scene.pipelinesCreated + 5 + 1 + 4 + 36 + 4 + 2);
+    const labels = fixture.pipelineLabels.filter((label) => label.endsWith('+shift-v0'));
+    expect(labels).toHaveLength(47);
+    expect(new Set(labels).size).toBe(47);
+    expect(fixture.modules).toContain(MESH_FILL_SHIFTED_SHADER);
+    expect(fixture.modules).toContain(TEXT_CLIP_SHIFTED_SHADER);
+    creation.dispose();
+    without.creation.dispose();
+    expect(accounting.snapshot().live).toBe(0);
+  });
+
+  it('a failed shifted variant leaves the effects unavailable and evicts what it cached', async () => {
+    const all = { meshPipeline: true, clipPipeline: true, layerPipeline: true } as const;
+    const baseline = await nativeScene(nativeFixture(), all);
+    const fixture = nativeFixture({ failPipeline: 'p3-mesh-joint-4x+clip-v0+layer-v0+shift-v0' });
+    const { scene, accounting, creation } = await nativeScene(fixture, {
+      ...all,
+      effectPipeline: true,
+    });
+    expect(scene.effectPipelineAvailable).toBe(false);
+    expect(scene.layerPipelineAvailable).toBe(true);
+    expect(accounting.snapshot().live).toBe(baseline.accounting.snapshot().live);
+    creation.dispose();
     expect(accounting.snapshot().live).toBe(0);
   });
 
@@ -300,6 +366,141 @@ describe('E41 U5 effect passes in a frame', () => {
     expect(calls.some((call) => String(call[1]).includes('effect-pass'))).toBe(false);
     expect(calls.some((call) => call[1] === 'vector-studio/e25-layer-composite-1x')).toBe(false);
     expect(scene.effectPasses).toBe(0);
+  });
+
+  it('draws a root past the target through the shifted variants (U5b)', async () => {
+    const fixture = nativeFixture();
+    const { scene, target } = await nativeScene(fixture, withEffects);
+    // The caster's left half is off the target; its shadow falls on it.
+    const nodes = [box('b', -60, { effects: [shadow(80, 0, 2)], size: [100, 60] })];
+    const clamped = prepare(nodes, target).layers!.layers[0]!;
+    expect(clamped.bound.x).toBe(0);
+    const packet = prepare(nodes, { ...target, offTargetEffectLayers: true });
+    const layer = packet.layers!.layers[0]!;
+    expect(layer.bound.x).toBeLessThan(-50);
+    expect(Math.abs(layer.bound.x % 2)).toBe(0);
+    expect(layer.bound.width).toBeGreaterThan(clamped.bound.width);
+    const writes = vi.spyOn(fixture.device.queue, 'writeBuffer');
+    fixture.calls.length = 0;
+    submitted(scene.submitPrimitivePacket(packet));
+    const calls = outline(fixture.calls);
+    const layerPass = calls.findIndex(
+      (call) => call[0] === 'beginRenderPass' && call[1] === 'vector-studio/layer-pass/0',
+    );
+    const copy = calls.findIndex((call) => call[0] === 'copyTextureToTexture');
+    const tile = fixture.textures.find((texture) => texture.label === `${frame}/tile-color`)!;
+    expect(tile.width).toBe(layer.bound.width);
+    // The viewport is the tile's own; the analytic draw takes the shifted plain variant.
+    expect(calls.slice(layerPass + 1, copy)).toEqual([
+      ['setViewport', 0, 0, tile.width, tile.height, 0, 1],
+      ['setPipeline', 'vector-studio/p1-analytic-primitive-4x+layer-v0+shift-v0'],
+    ]);
+    // Its pass record: the tile's origin in target pixels, and the tile's size.
+    const records = writes.mock.calls.find(([buffer]) =>
+      (buffer as unknown as { label: string }).label.endsWith('/records'),
+    )![2] as Uint8Array;
+    const view = new DataView(records.buffer, records.byteOffset, records.byteLength);
+    expect([0, 4, 8, 12].map((offset) => view.getFloat32(256 + offset, true))).toEqual([
+      layer.bound.x,
+      layer.bound.y,
+      tile.width,
+      tile.height,
+    ]);
+    // R stays inside the target for a root composited in the main pass, drawn by E25's
+    // composite there.
+    const result = fixture.textures.find(
+      (texture) => texture.label === `${frame}/effect-result-0`,
+    )!;
+    expect(result.width).toBeLessThanOrEqual(target.width);
+    const main = calls.findIndex(
+      (call) => call[0] === 'beginRenderPass' && call[1] === 'vector-studio/primitive-pass',
+    );
+    expect(calls.slice(main)).toContainEqual([
+      'setPipeline',
+      'vector-studio/e25-layer-composite-4x',
+    ]);
+    expect(scene.effectPasses).toBe(1);
+  });
+
+  it('composites a layer inside a root, and a root inside a root, with the shifted set', async () => {
+    const fixture = nativeFixture();
+    const { scene, target } = await nativeScene(fixture, withEffects);
+    const group = (
+      id: string,
+      parentId: string | null,
+      children: readonly string[],
+      extra: Partial<{ effects: readonly SceneEffect[]; opacity: number }>,
+    ): RenderNodeSnapshot => ({
+      id,
+      parentId,
+      transform: [1, 0, 0, 1, 0, 0],
+      visible: true,
+      opacity: extra.opacity ?? 1,
+      kind: 'container',
+      clip: null,
+      children,
+      ...(extra.effects === undefined ? {} : { effects: extra.effects }),
+    });
+    const nodes: RenderNodeSnapshot[] = [
+      group('card', null, ['a', 'inner', 'leaf'], { effects: [shadow(70, 0, 2)] }),
+      { ...box('a', -50, { size: [60, 40] }), parentId: 'card' },
+      group('inner', 'card', ['b'], { opacity: 0.5 }),
+      { ...box('b', -40, { size: [30, 30] }), parentId: 'inner' },
+      { ...box('leaf', -30, { size: [20, 20], effects: [shadow(6, 0, 1)] }), parentId: 'card' },
+    ];
+    const packet = prepare(nodes, { ...target, offTargetEffectLayers: true });
+    const layers = packet.layers!.layers;
+    const index = (id: string) => layers.findIndex((layer) => layer.nodeId === id);
+    const card = layers[index('card')]!;
+    const leaf = layers[index('leaf')]!;
+    expect(layers[index('inner')]!.bound.x).toBeLessThan(0);
+    expect(leaf.bound.x).toBeLessThan(0);
+    fixture.calls.length = 0;
+    submitted(scene.submitPrimitivePacket(packet));
+    const calls = outline(fixture.calls);
+    // The card's tile pass composites its children with the shifted composite.
+    const cardPass = calls.findIndex(
+      (call) =>
+        call[0] === 'beginRenderPass' && call[1] === `vector-studio/layer-pass/${index('card')}`,
+    );
+    const end = calls.findIndex((call, at) => at > cardPass && call[0] === 'copyTextureToTexture');
+    const inCard = calls.slice(cardPass, end).filter((call) => call[0] === 'setPipeline');
+    expect(
+      inCard.filter((call) => call[1] === 'vector-studio/e25-layer-composite-4x+shift-v0'),
+    ).toHaveLength(2);
+    expect(inCard.map((call) => call[1])).not.toContain('vector-studio/e25-layer-composite-4x');
+    // The nested root's R stays inside the card's bound, past the target.
+    const result = fixture.textures.find(
+      (texture) => texture.label === `${frame}/effect-result-${index('leaf')}`,
+    )!;
+    expect(result.width).toBeLessThanOrEqual(card.bound.width);
+    expect(scene.effectPasses).toBe(2);
+  });
+
+  it('refuses a layer past the target that is not in an effect root', async () => {
+    const fixture = nativeFixture();
+    const { scene, target } = await nativeScene(fixture, withEffects);
+    const packet = prepare([box('b', -60, { effects: [shadow(80, 0, 2)], size: [100, 60] })], {
+      ...target,
+      offTargetEffectLayers: true,
+    });
+    const layer = packet.layers!.layers[0]!;
+    const plain = { ...layer };
+    delete plain.effect;
+    const bad = {
+      ...packet,
+      layers: { ...packet.layers!, layers: [plain] },
+    } as PrimitivePacket;
+    expect(scene.submitPrimitivePacket(bad)).toEqual({
+      status: 'failed',
+      reason: 'invalid-packet',
+    });
+    // Without the effect pipeline, an effect root past the target is refused too.
+    const without = await nativeScene(nativeFixture(), layered);
+    expect(without.scene.submitPrimitivePacket(packet)).toEqual({
+      status: 'failed',
+      reason: 'invalid-packet',
+    });
   });
 
   it('refuses an invalid effect record', async () => {
