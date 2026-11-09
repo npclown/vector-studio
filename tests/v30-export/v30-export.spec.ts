@@ -4,8 +4,8 @@ import { expect, test, type Download, type Page } from '@playwright/test';
 // V-30 export contract (docs/plans/viz-v30-export-contract.md), V30-A04 and V30-A05: the
 // studio's Export section on the next-host page (`?test=1&layout=studio`), with real clicks.
 // Each export is caught as a download; a PNG is decoded in the page and probed, an SVG read as
-// text. Runs in the M8 next-host config (headed Chrome and Edge, or the headless smoke projects
-// with M8_NEXT_HOST_CHROMIUM: the export paints with Canvas 2D, so it needs no WebGPU).
+// text. Runs in playwright.v30-export.config.ts (headed Chrome and Edge, or the headless smoke
+// project with M8_NEXT_HOST_CHROMIUM; the export paints with Canvas 2D and needs no WebGPU).
 
 type Hook = Readonly<{ editor: Editor }>;
 type Rgba = readonly [number, number, number, number];

@@ -59,8 +59,8 @@ Numbers are written with at most 4 decimals. Text stays live text: the file name
 | V30-A01 | `exportScene` follows S2 (ids filtering, nesting, hidden, order, page transform, null cases) and S3 (only container, path and text; primitives as outlines) | unit `tests/unit/v30-export.test.ts` |
 | V30-A02 | Bounds follow S4 for a rotated node, a stroked rectangle, a frame child and a page export | unit |
 | V30-A03 | `exportSvg` writes S5's mapping: transforms, opacity, rect clip, mask clip-rule, strokes with dash, solid and gradient paints with spread, text tspans, escaping of `<`, `&` and quotes; the output parses as XML | unit (string checks, an XML parse) |
-| V30-A04 | `exportPng` at 1x and 2x gives the S4 pixel size and paints a red rectangle, a gradient, a clipped frame child and text where the scene says (pixel probes) | `tests/m8-next-host/v30-export.spec.ts` in the M8 next-host config (headed, or the headless smoke projects: Canvas 2D needs no WebGPU) |
-| V30-A05 | `ExportPanel` names its target, disables the scale for SVG and the button on an empty page, shows `Nothing to export` for hidden targets, and downloads a file with the S1 name | unit (`export-model` names) + `tests/m8-next-host/v30-export.spec.ts` |
+| V30-A04 | `exportPng` at 1x and 2x gives the S4 pixel size and paints a red rectangle, a gradient, a clipped frame child and text where the scene says (pixel probes) | `tests/v30-export/v30-export.spec.ts`, `pnpm test:v30-export` (headed Chrome and Edge, or the headless smoke project: Canvas 2D needs no WebGPU) |
+| V30-A05 | `ExportPanel` names its target, disables the scale for SVG and the button on an empty page, shows `Nothing to export` for hidden targets, and downloads a file with the S1 name | unit (`export-model` names) + `tests/v30-export/v30-export.spec.ts` |
 | V30-A06 | New exports carry TSDoc, enter the M8 export lists and `docs/host-api.md` | `m8-u2-react-api`, `m8-u3-ui-api` tests; review |
 
 ## 6. Known limits (disclosed)
@@ -70,6 +70,7 @@ Numbers are written with at most 4 decimals. Text stays live text: the file name
 - SVG text depends on the viewer's fonts; no outline-text option yet.
 - Bounds take a text node's frame (as `visualBounds` does), so lines of a `fixed` text box that overflow its frame are cut off in the export.
 - Each isolated-opacity layer and each gradient paint uses a scratch canvas the size of the whole image, so a large export with many gradients or nested translucent groups is memory heavy; a failed allocation shows `Export failed`.
+- Effects (drop shadow, layer blur) arrive with schema v7 and are not exported yet. The SVG writer emits per-node `<defs>` (gradients, clips), so the effect filters of the Boolean and effects contract (#547, section 5.7) fit the same place; the Canvas 2D painter would add them as layer filters. A follow-up when effects land.
 - Export per artboard in one click (all artboards as separate files), JPEG, PDF and export settings stored in the document are not in V-30.
 
 ## 7. Questions (adopted as recommended, 2026-11-09)
