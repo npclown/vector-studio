@@ -234,15 +234,16 @@ describe('P5-A02 marquee selection', () => {
     expect(fields.filter((field) => field === 'overlay')).toHaveLength(3);
   });
 
-  it('can select a path through its control points (accepted in P5)', () => {
+  it('no longer selects a path through its control points alone (V-26)', () => {
     const target = editor();
-    const [id] = ok(target, {
+    ok(target, {
       type: 'createPath',
       verbs: ['move', 'cubic'],
       points: [0, 0, 0, 100, 100, 100, 100, 0],
     });
+    // The curve peaks at y = 75; the handles reach y = 100 (accepted in P5, fixed in V-26).
     drag(target, [40, 120], [60, 95]);
-    expect(selection(target)).toEqual([id]);
+    expect(selection(target)).toEqual([]);
   });
 });
 

@@ -11,7 +11,16 @@ import { ExpansionCache } from './expansion.js';
 import { DEFAULT_PATH_STROKE } from './edits.js';
 import { deepFreeze } from './freeze.js';
 import { adoptionOwner, dropAdoption } from './adopt.js';
-import { IDENTITY, apply, invertRigid, relocate, rotate, type Matrix } from './geometry.js';
+import {
+  IDENTITY,
+  apply,
+  invertRigid,
+  localTransform,
+  multiply,
+  relocate,
+  rotate,
+  type Matrix,
+} from './geometry.js';
 import {
   HANDLES,
   activeHandles,
@@ -53,6 +62,7 @@ import {
   type SnapSet,
   type ValueIndex,
 } from './snap.js';
+import { hasInnerContentBox } from './content-box.js';
 import { childrenOf, documentTree, isAncestor, isContainer, spaceOf } from './tree.js';
 import type {
   InputEvent,
@@ -701,6 +711,17 @@ export function createPathTool(options: DrawOptions = {}): Tool {
 const CORNERS: readonly Handle[] = [HANDLES[0], HANDLES[2], HANDLES[4], HANDLES[6]];
 
 /**
+ * The page-space centre of a node's frame: the point a one-node rotation turns about (M2
+ * section 4.1). For a path it can differ from the handle-box centre, which is its curve's (V-26).
+ */
+function frameCentre(document: DocumentV6, id: string): PagePoint {
+  const node = document.nodes[id]!;
+  const space = spaceOf(documentTree(document), node.parent);
+  const m = multiply(space.matrix, localTransform(node.frame, node.rotation));
+  return apply(m, node.frame.width / 2, node.frame.height / 2);
+}
+
+/**
  * A node's page rotation `turn` (its parent chain's rotation `chain` plus its own, not
  * normalized), its stored frame and rotation, as the rotate gesture records them at press.
  */
@@ -1290,7 +1311,11 @@ export function createSelectTool(
           kind: 'rotate',
           start: event.point,
           ids: selection,
-          pivot: handleCentre(handles),
+          // One path whose curve box is inside its frame turns about the frame centre (V-26).
+          pivot:
+            selection.length === 1 && hasInnerContentBox(document.nodes[selection[0]!]!)
+              ? frameCentre(document, selection[0]!)
+              : handleCentre(handles),
           single: selection.length === 1 ? singleOf(document, selection[0]!) : null,
           moved: false,
           candidates: lazySnapSet(context, selection),
@@ -1410,11 +1435,16 @@ export function createSelectTool(
       const sx = axis(handle[0], 0, box.width, delta.x).scale;
       const sy = axis(handle[1], 0, box.height, delta.y).scale;
       const node = context.query({ type: 'node', id: handles.id })!;
+      const before = current.frames.get(handles.id)!;
+      // The opposite handle as a fraction of the frame: the handle box can be a path's curve box
+      // inside the frame (V-26).
+      const fraction = (offset: number, size: number, frameSize: number) =>
+        frameSize === 0 ? 0 : (offset + size) / frameSize;
       const frame = resizeInOwnAxes(
-        current.frames.get(handles.id)!,
+        before,
         node.rotation,
-        1 - handle[0],
-        1 - handle[1],
+        fraction(box.x, (1 - handle[0]) * box.width, before.width),
+        fraction(box.y, (1 - handle[1]) * box.height, before.height),
         sx,
         sy,
       );

@@ -30,7 +30,8 @@ import {
 } from './expansion.js';
 import { deepFreeze } from './freeze.js';
 import { remappedOverrides } from './instance-text.js';
-import { boundsOfPoints, corners, IDENTITY, relocate } from './geometry.js';
+import { contentCorners } from './content-box.js';
+import { boundsOfPoints, IDENTITY, relocate } from './geometry.js';
 import {
   childrenOf,
   documentTree,
@@ -849,8 +850,8 @@ export function paste(
   let dy = 0;
   if (at !== undefined) {
     const points = fragment.roots.flatMap((id) => {
-      const node = fragment.nodes[id]!;
-      return corners(node.frame, node.rotation);
+      // The content box: a path's curve, not its handles (V-26).
+      return contentCorners(fragment.nodes[id]!);
     });
     const bounds = boundsOfPoints(points)!;
     dx = at.x - (bounds.x + bounds.width / 2);

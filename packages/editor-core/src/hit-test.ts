@@ -2,12 +2,12 @@ import type { DocumentV6, Frame, NodeV6, PathData } from '@vector-studio/model';
 import {
   apply,
   boundsOfPoints,
-  corners,
   invertRigid,
   localTransform,
   rotate,
   rotatedBounds,
 } from './geometry.js';
+import { contentBounds, contentCorners, hasInnerContentBox } from './content-box.js';
 import { ExpansionCache, type Expansion } from './expansion.js';
 import { clampedRadii } from './projector.js';
 import {
@@ -618,11 +618,14 @@ export function marqueeHits(
     if (node === undefined || !node.visible) return false;
     // A page child with rotation 0 uses the frame itself, bit-identical with P5; a scope's
     // child is in its parent's space, so it uses its page-space bounds.
+    // A path uses the box of its curve (V-26), which is inside its frame.
     const frame =
       scope === null
-        ? node.rotation === 0
-          ? node.frame
-          : rotatedBounds(node)
+        ? hasInnerContentBox(node)
+          ? contentBounds(node)
+          : node.rotation === 0
+            ? node.frame
+            : rotatedBounds(node)
         : boundsOf(document, [id])!;
     return isFrameLike(node) ? contains(box, frame) : intersects(frame, box);
   });
@@ -630,7 +633,8 @@ export function marqueeHits(
 
 /**
  * The page-aligned bounds of the rotated frames of `ids` in page space, at any depth (M1
- * contract, section 6), or null when there are none.
+ * contract, section 6), or null when there are none. A path counts its curve's box, not the
+ * handles in its frame (V-26, `contentCorners`).
  */
 export function boundsOf(document: DocumentV6, ids: readonly string[]): Frame | null {
   const tree = documentTree(document);
@@ -639,7 +643,7 @@ export function boundsOf(document: DocumentV6, ids: readonly string[]): Frame | 
     const node = tree.node(id);
     if (node === undefined) continue;
     const { matrix } = spaceOf(tree, node.parent);
-    for (const corner of corners(node.frame, node.rotation)) {
+    for (const corner of contentCorners(node)) {
       points.push(apply(matrix, corner.x, corner.y));
     }
   }
