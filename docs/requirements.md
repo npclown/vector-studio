@@ -53,7 +53,9 @@ Images are deferred.
 - Butt, round, and square caps
 - Miter, round, and bevel joins
 
-Boolean operations, stroke outlining, and path simplification are deferred.
+- Boolean operations (union, subtract, intersect, exclude) on filled shapes, replacing the inputs with one path ([E41](plans/d9-e41-boolean-effects-contract.md))
+
+Non-destructive boolean groups, stroke outlining, and path simplification are deferred.
 
 ## Text
 
@@ -92,7 +94,9 @@ A mask group uses its first path as the mask for its remaining children.
 - Opacity
 - Independent rectangle corner radii
 
-Multiple fills, shadows, blur, and blend modes are deferred.
+- Drop shadows and layer blur ([E41](plans/d9-e41-boolean-effects-contract.md))
+
+Multiple fills, inner shadows, background blur, and blend modes are deferred.
 
 ## Editing behavior
 
@@ -147,7 +151,7 @@ Untrusted plugins, sandbox execution, a marketplace, import, raster editing, ani
 Future considerations (recorded 2026-11-04 at the user's request; no work is scheduled). Today's extension surface ([host API guide](host-api.md#extensions)) covers path-shaped custom node types that use the node's own fill and stroke, commands, tools, key bindings and UI panels; import or export (deferred above) could later be built as extension commands on the public commands and queries. These need engine or core changes first, because the scene contract or the extension boundary has no place for them:
 
 - New paint types beyond solid, linear and radial (for example patterns, image fills, conic or mesh gradients).
-- Effects and filters (for example blur, shadow, blend modes).
+- Effects and filters beyond E41's drop shadow and layer blur (for example blend modes).
 - Non-path content such as raster image nodes, and any renderer-side extension (custom shaders, direct renderer access).
 
 A plugin contract is planned when the first concrete need for one of these appears. It would cover a renderer-side extension port for registering paints and effects, extension versioning and compatibility rules, and, only if untrusted plugins are wanted, runtime installation and a sandbox, which stay deferred until then.

@@ -123,9 +123,10 @@ describe('V-25 slice 10: the context menu items', () => {
       expect(items.get('context-duplicate')!.shortcut).toBe(`${mod}+D`);
       expect(items.get('context-group')!.shortcut).toBe(`${mod}+G`);
       expect(items.get('context-forward')!.shortcut).toBe(`${mod}+]`);
-      expect(items.get('context-front')!.shortcut).toBe(`${mod}+Shift+}`);
-      // The first delete chord in the keymap's order, as the toolbar's tooltip shows it.
-      expect(items.get('context-delete')!.shortcut).toBe('⌫');
+      expect(items.get('context-front')!.shortcut).toBe(`${mod}+Shift+]`);
+      expect(items.get('context-zoom-selection')!.shortcut).toBe('Shift+2');
+      // Del off a Mac, ⌫ on one (the toolbar's tooltip shows the same).
+      expect(items.get('context-delete')!.shortcut).toBe(platform === 'mac' ? '⌫' : 'Del');
       expect(items.get('context-visibility')!.shortcut).toBeNull();
     }
   });
