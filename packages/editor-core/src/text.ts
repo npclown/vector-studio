@@ -1,5 +1,5 @@
 import type { TextLayoutPort, TextLayoutRequest, TextLayoutResult } from '@vector-studio/contracts';
-import type { Frame, TextNode, TextRun } from '@vector-studio/model';
+import type { Frame, TextNodeV7, TextRun } from '@vector-studio/model';
 import { deepFreeze } from './freeze.js';
 import { rotate } from './geometry.js';
 import { probeNow, type RelayoutSplit } from './text-probe.js';
@@ -13,7 +13,7 @@ import { probeNow, type RelayoutSplit } from './text-probe.js';
  * Lays out a text node through the editor's cache; absent when the editor has no port, so every
  * edit that needs a layout fails with `editor.no-text-layout` (section 5, M6a-Q8).
  */
-export type TextLayouter = (node: TextNode) => TextLayoutResult;
+export type TextLayouter = (node: TextNodeV7) => TextLayoutResult;
 
 /** The LRU size of the request-keyed cache, per generation (section 5). */
 export const TEXT_LAYOUT_CACHE_SIZE = 10_000;
@@ -25,7 +25,7 @@ export const MIN_AUTHORED_TEXT_SIZE = 0.5;
  * The request of a node (section 5): its runs without colour, `width` null for `autoWidth`, else
  * the stored frame width, and its alignment, letter spacing and line height.
  */
-export function layoutRequest(node: TextNode): TextLayoutRequest {
+export function layoutRequest(node: TextNodeV7): TextLayoutRequest {
   return {
     runs: node.runs.map((run) => ({ text: run.text, family: run.family, size: run.size })),
     width: node.sizing === 'autoWidth' ? null : node.frame.width,
@@ -107,7 +107,7 @@ function affected(result: TextLayoutResult, changed: ReadonlySet<string>): boole
  * `changedSince` returns, or all of them); a kept result keeps its older generation.
  */
 export class TextLayoutCache {
-  private readonly keys = new WeakMap<TextNode, string>();
+  private readonly keys = new WeakMap<TextNodeV7, string>();
   private results = new Map<string, TextLayoutResult>();
   /** The generation the cache last synced to (kept results may be older). */
   private generation: number;
@@ -173,7 +173,7 @@ export class TextLayoutCache {
    * dropped or stored again since the generation changed after the last `takeDropped`, or is
    * not held. Null from `takeDropped` means all.
    */
-  takeDropped(): ((node: TextNode) => boolean) | null {
+  takeDropped(): ((node: TextNodeV7) => boolean) | null {
     const dropped = this.dropped;
     this.dropped = new Set();
     this.changedSinceTake = false;
@@ -196,7 +196,7 @@ export class TextLayoutCache {
     return true;
   }
 
-  layout(node: TextNode): TextLayoutResult {
+  layout(node: TextNodeV7): TextLayoutResult {
     let key = this.keys.get(node);
     if (key === undefined) {
       key = JSON.stringify(layoutRequest(node));
@@ -276,7 +276,7 @@ function frozenCopy(result: TextLayoutResult): TextLayoutResult {
 }
 
 /** Whether a mode takes any dimension from the layout (section 6.2). */
-export function isAuto(node: TextNode): boolean {
+export function isAuto(node: TextNodeV7): boolean {
   return node.sizing !== 'fixed';
 }
 
@@ -290,7 +290,7 @@ const ANCHOR = { left: 0, center: 0.5, right: 1 } as const;
 export function anchoredFrame(
   frame: Frame,
   rotation: number,
-  align: TextNode['align'],
+  align: TextNodeV7['align'],
   width: number,
   height: number,
 ): Frame {
@@ -310,7 +310,7 @@ export function anchoredFrame(
  * The frame of an auto node refit to `layout` (section 6.2): `autoWidth` takes the layout's
  * width and height, `autoHeight` its height with the stored width; `fixed` keeps its frame.
  */
-export function refitFrame(node: TextNode, layout: TextLayoutResult): Frame {
+export function refitFrame(node: TextNodeV7, layout: TextLayoutResult): Frame {
   if (node.sizing === 'fixed') return node.frame;
   const width = node.sizing === 'autoWidth' ? layout.width : node.frame.width;
   return anchoredFrame(node.frame, node.rotation, node.align, width, layout.height);
@@ -323,9 +323,9 @@ export function refitFrame(node: TextNode, layout: TextLayoutResult): Frame {
  * the mode. `refit` tells whether the node needs a refit.
  */
 export function frameRule(
-  before: TextNode,
+  before: TextNodeV7,
   frame: Frame,
-): Readonly<{ sizing: TextNode['sizing']; refit: boolean }> {
+): Readonly<{ sizing: TextNodeV7['sizing']; refit: boolean }> {
   if (before.sizing === 'fixed') return { sizing: 'fixed', refit: false };
   if (frame.height !== before.frame.height) return { sizing: 'fixed', refit: false };
   if (frame.width !== before.frame.width) return { sizing: 'autoHeight', refit: true };

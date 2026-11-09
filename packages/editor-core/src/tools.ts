@@ -2,9 +2,9 @@ import {
   normalizeRotation,
   type Color,
   type Stroke,
-  type DocumentV6,
+  type DocumentV7,
   type Frame,
-  type PathNodeV6,
+  type PathNodeV7,
 } from '@vector-studio/model';
 import type { Tool, ToolContext } from './editor.js';
 import { ExpansionCache } from './expansion.js';
@@ -187,7 +187,7 @@ export type DrawOptions = Readonly<{
   returnToSelect?: boolean;
   adoptIntoFrames?: boolean;
   /** V-25 slice 8: the stroke colour of a new line or path whose first point is `point`. */
-  strokeColor?: (document: DocumentV6, page: string, point: PagePoint) => Color | null;
+  strokeColor?: (document: DocumentV7, page: string, point: PagePoint) => Color | null;
 }>;
 
 const unitChannel = (value: unknown) =>
@@ -714,7 +714,7 @@ const CORNERS: readonly Handle[] = [HANDLES[0], HANDLES[2], HANDLES[4], HANDLES[
  * The page-space centre of a node's frame: the point a one-node rotation turns about (M2
  * section 4.1). For a path it can differ from the handle-box centre, which is its curve's (V-26).
  */
-function frameCentre(document: DocumentV6, id: string): PagePoint {
+function frameCentre(document: DocumentV7, id: string): PagePoint {
   const node = document.nodes[id]!;
   const space = spaceOf(documentTree(document), node.parent);
   const m = multiply(space.matrix, localTransform(node.frame, node.rotation));
@@ -725,7 +725,7 @@ function frameCentre(document: DocumentV6, id: string): PagePoint {
  * A node's page rotation `turn` (its parent chain's rotation `chain` plus its own, not
  * normalized), its stored frame and rotation, as the rotate gesture records them at press.
  */
-function singleOf(document: DocumentV6, id: string) {
+function singleOf(document: DocumentV7, id: string) {
   const node = document.nodes[id]!;
   const chain = spaceOf(documentTree(document), node.parent).rotation;
   return { turn: chain + node.rotation, chain, frame: node.frame, rotation: node.rotation };
@@ -736,7 +736,7 @@ function singleOf(document: DocumentV6, id: string) {
  * handles where the tool picks them, also for nested and rotated nodes.
  */
 export function selectionHandles(
-  document: DocumentV6,
+  document: DocumentV7,
   page: string,
   selection: readonly string[],
 ): SelectionHandles | null {
@@ -1220,7 +1220,7 @@ export function createSelectTool(
       // Alt pulls mirrored handles on the `out` side, or `in` at the end of an open subpath;
       // an anchor without segments does nothing.
       const { ref } = target;
-      const model = readAnchorModel((document.nodes[id] as PathNodeV6).path)[ref.subpath]!;
+      const model = readAnchorModel((document.nodes[id] as PathNodeV7).path)[ref.subpath]!;
       const side =
         outSegment(model, ref.anchor) !== null
           ? 'out'
@@ -1800,7 +1800,7 @@ export function createSelectTool(
   }
 
   /** Whether `container` is an ancestor of every node of `ids` (V-27). */
-  function containsAll(document: DocumentV6, container: string, ids: readonly string[]): boolean {
+  function containsAll(document: DocumentV7, container: string, ids: readonly string[]): boolean {
     const tree = documentTree(document);
     return ids.every((id) => isAncestor(tree, container, id));
   }
@@ -1975,7 +1975,7 @@ export function createSelectTool(
   ): void {
     const edit = context.query({ type: 'pathEdit' })!;
     const document = context.query({ type: 'document' });
-    const node = document.nodes[edit.id] as PathNodeV6;
+    const node = document.nodes[edit.id] as PathNodeV7;
     const { subpath, segment } = target;
     const t = segmentParameter(document, node, subpath, segment, point, zoomOf(context));
     if (!(t > 0 && t < 1)) return;

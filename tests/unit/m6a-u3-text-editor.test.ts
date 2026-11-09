@@ -3,9 +3,9 @@ import {
   serializeDocument,
   validateDocument,
   type Color,
-  type DocumentV6,
+  type DocumentV7,
   type Frame,
-  type TextNode,
+  type TextNodeV7,
   type TextRun,
 } from '@vector-studio/model';
 import { readFileSync } from 'node:fs';
@@ -32,6 +32,7 @@ import { snapSet } from '../../packages/editor-core/src/snap.js';
 import { TEXT_LAYOUT_CACHE_SIZE, TextLayoutCache } from '../../packages/editor-core/src/text.js';
 import { createFakeTextLayout, fakeLayout } from '../support/fake-text-layout.js';
 import { RecordingRenderer } from '../support/p5-recording-renderer.js';
+import { v7Fragment, v7Text, withoutEffects } from '../support/schema-v7.js';
 
 // MVP M6a-U3 (docs/plans/mvp-m6a-text-model-contract.md, sections 5 to 8): the `textLayout`
 // option, cache, query and session event; the section 6.1 commands and codes; auto sizing and
@@ -70,9 +71,9 @@ function text(
   parent: string,
   frame: Frame,
   runs: readonly TextRun[],
-  props: Partial<Pick<TextNode, 'sizing' | 'align' | 'letterSpacing' | 'lineHeight'>> & {
+  props: Partial<Pick<TextNodeV7, 'sizing' | 'align' | 'letterSpacing' | 'lineHeight'>> & {
     rotation?: number;
-    constraints?: TextNode['constraints'];
+    constraints?: TextNodeV7['constraints'];
   } = {},
 ): Loose {
   return {
@@ -108,13 +109,13 @@ function container(
   return { ...base(id, parent, frame), type, children, ...extra };
 }
 
-function doc(nodes: Loose[], children: string[]): DocumentV6 {
+function doc(nodes: Loose[], children: string[]): DocumentV7 {
   return {
     schemaVersion: 6,
     id: 'doc',
     pages: [{ id: 'p1', name: 'Page 1', children }],
     nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
-  } as unknown as DocumentV6;
+  } as unknown as DocumentV7;
 }
 
 /** An ID source that counts its calls. */
@@ -131,7 +132,7 @@ function counted(prefix = 'n'): IdSource & { calls: number } {
 }
 
 function editor(
-  document?: DocumentV6,
+  document?: DocumentV7,
   port: TextLayoutPort | null = createFakeTextLayout(),
   ids: IdSource = createCounterIdSource('n'),
 ): Editor {
@@ -145,7 +146,7 @@ function editor(
 }
 
 const serialized = (target: Editor) => serializeDocument(target.query({ type: 'document' }));
-const nodeOf = (target: Editor, id: string) => target.query({ type: 'node', id }) as TextNode;
+const nodeOf = (target: Editor, id: string) => target.query({ type: 'node', id }) as TextNodeV7;
 
 /** Runs `command`; the editor's document stays a valid v4 document either way. */
 function run_(target: Editor, command: Command): CommandResult {
@@ -216,11 +217,12 @@ describe('M6a-A06: createText', () => {
       align: 'left',
       letterSpacing: 0,
       lineHeight: 1.2,
+      effects: [],
     });
   });
 
   it('keeps the anchor (x + a·width, y) of the given frame for each align', () => {
-    const at = (align: TextNode['align']) => {
+    const at = (align: TextNodeV7['align']) => {
       const target = editor();
       run_(target, create({ align }));
       return nodeOf(target, 'n1').frame;
@@ -523,7 +525,7 @@ describe('M6a-A06: failure codes in the section 6.1 order', () => {
 describe('M6a-A07: the growth anchor (section 6.2)', () => {
   it('keeps the top anchor of a rotated node on the page', () => {
     const rotation = Math.PI / 6;
-    const at = (align: TextNode['align']) => {
+    const at = (align: TextNodeV7['align']) => {
       const target = editor(
         doc([text('t1', 'p1', f(100, 50, 10, 12), [run('ab')], { rotation, align })], ['t1']),
       );
@@ -592,7 +594,7 @@ describe('M6a-A07: setFrames (section 6.3, first row)', () => {
 });
 
 describe('M6a-A07: group resize (section 6.3)', () => {
-  const grouped = (sizing: TextNode['sizing'] = 'autoWidth', size = 10) =>
+  const grouped = (sizing: TextNodeV7['sizing'] = 'autoWidth', size = 10) =>
     doc(
       [
         container('group', 'g1', 'p1', f(0, 0, 10 * (size / 10), 12 * (size / 10)), ['t1']),
@@ -647,7 +649,7 @@ describe('M6a-A07: group resize (section 6.3)', () => {
 });
 
 describe('M6a-A07: frame children (section 6.3)', () => {
-  const framed = (constraints: TextNode['constraints']) =>
+  const framed = (constraints: TextNodeV7['constraints']) =>
     doc(
       [
         container('frame', 'f1', 'p1', f(0, 0, 100, 100), ['t1']),
@@ -790,7 +792,7 @@ describe('M6a-A07: map handles (section 6.3, M6a-Q18 (a))', () => {
 describe('M6a-A08: without a port', () => {
   it('loads, round-trips and accepts the commands that need no layout', () => {
     const target = createEditor({ document: JSON.parse(TEXT_FIXTURE) as unknown });
-    expect(serialized(target)).toBe(TEXT_FIXTURE_V6);
+    expect(serialized(target)).toBe(v7Text(TEXT_FIXTURE_V6));
     expect(target.query({ type: 'textLayout', id: 't1' })).toBeNull();
     step(target, { type: 'nudgeNodes', ids: ['t1', 't2'], dx: 1, dy: 2 });
     step(target, {
@@ -895,7 +897,7 @@ describe('M6a-A09: the cache, the query and the generation', () => {
     const port = createFakeTextLayout();
     const cache = new TextLayoutCache(port);
     const node = (k: number) =>
-      text(`t${k}`, 'p1', f(0, 0, 0, 0), [run(`${k}`)]) as unknown as TextNode;
+      text(`t${k}`, 'p1', f(0, 0, 0, 0), [run(`${k}`)]) as unknown as TextNodeV7;
     const first = node(0);
     cache.layout(first);
     for (let k = 1; k < TEXT_LAYOUT_CACHE_SIZE; k += 1) cache.layout(node(k));
@@ -1034,8 +1036,10 @@ describe('M6a-A03: fragments with text (section 8)', () => {
     );
     run_(target, { type: 'copy', ids: ['t1'] });
     expect(target.query({ type: 'clipboard' })).toBe(
-      MARKER +
-        '{"fragmentVersion":2,"schemaVersion":6,"roots":["t1"],"nodes":{"t1":{"id":"t1","name":"t1","parent":"","frame":{"x":1,"y":2,"width":0,"height":0},"rotation":0,"constraints":{"horizontal":"start","vertical":"start"},"opacity":1,"visible":true,"type":"text","runs":[{"text":"ab","family":"Test","size":10,"color":{"r":0,"g":0,"b":0,"a":1}},{"text":"가","family":"Test","size":20,"color":{"r":1,"g":0,"b":0,"a":1}}],"sizing":"autoWidth","align":"center","letterSpacing":0,"lineHeight":1.2}},"sources":[],"sourceNodes":{}}',
+      v7Fragment(
+        MARKER +
+          '{"fragmentVersion":2,"schemaVersion":6,"roots":["t1"],"nodes":{"t1":{"id":"t1","name":"t1","parent":"","frame":{"x":1,"y":2,"width":0,"height":0},"rotation":0,"constraints":{"horizontal":"start","vertical":"start"},"opacity":1,"visible":true,"type":"text","runs":[{"text":"ab","family":"Test","size":10,"color":{"r":0,"g":0,"b":0,"a":1}},{"text":"가","family":"Test","size":20,"color":{"r":1,"g":0,"b":0,"a":1}}],"sizing":"autoWidth","align":"center","letterSpacing":0,"lineHeight":1.2}},"sources":[],"sourceNodes":{}}',
+      ),
     );
     const pasted = step(target, { type: 'paste' });
     const id = pasted.ok ? pasted.ids[0]! : '';
@@ -1049,19 +1053,25 @@ describe('M6a-A03: fragments with text (section 8)', () => {
   it('fails a text node in an older fragment at its type and pastes older pairs without text', () => {
     const target = editor(simple());
     run_(target, { type: 'copy', ids: ['t1'] });
-    const body = JSON.parse(target.query({ type: 'clipboard' })!.slice(MARKER.length)) as Record<
-      string,
-      unknown
-    >;
+    // Below v7 a node has no `effects` key (E41-S1).
+    const body = withoutEffects(
+      JSON.parse(target.query({ type: 'clipboard' })!.slice(MARKER.length)) as Record<
+        string,
+        unknown
+      >,
+    );
     fails(
       target,
       { type: 'paste', text: MARKER + JSON.stringify({ ...body, schemaVersion: 3 }) },
       { ok: false, code: 'document.invalid-field', path: '/nodes/t1/type' },
     );
     run_(target, { type: 'copy', ids: ['r1'] });
-    const rectBody = JSON.parse(
-      target.query({ type: 'clipboard' })!.slice(MARKER.length),
-    ) as Record<string, unknown>;
+    const rectBody = withoutEffects(
+      JSON.parse(target.query({ type: 'clipboard' })!.slice(MARKER.length)) as Record<
+        string,
+        unknown
+      >,
+    );
     step(target, {
       type: 'paste',
       text: MARKER + JSON.stringify({ ...rectBody, schemaVersion: 3 }),
@@ -1227,7 +1237,7 @@ describe('M6a-A07 (review S4): text in a group that is a frame child', () => {
 
 describe('M6a-A06, A07, A10 (review S6): rotation, rotated groups, counting and throwing ports', () => {
   it('createText with a rotation keeps the top anchor of the given frame for each align', () => {
-    const at = (align: TextNode['align']) => {
+    const at = (align: TextNodeV7['align']) => {
       const target = editor();
       run_(target, create({ align, rotation: Math.PI / 6 }));
       return nodeOf(target, 'n1').frame;

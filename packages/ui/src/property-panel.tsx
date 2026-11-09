@@ -6,10 +6,10 @@ import {
   useSelection,
   type Command,
   type Constraints,
-  type DocumentV6,
-  type NodeV6,
+  type DocumentV7,
+  type NodeV7,
   type TextEditState,
-  type TextNode,
+  type TextNodeV7,
 } from '@vector-studio/react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { colorHex, parseNumber, type Common } from './appearance-model.js';
@@ -99,7 +99,7 @@ function TransformSection({
   target,
   run,
 }: {
-  nodes: readonly NodeV6[];
+  nodes: readonly NodeV7[];
   target: TransformTarget | null;
   run: Run;
 }) {
@@ -140,7 +140,7 @@ function TransformSection({
   );
 }
 
-function LayerSection({ nodes, run }: { nodes: readonly NodeV6[]; run: Run }) {
+function LayerSection({ nodes, run }: { nodes: readonly NodeV7[]; run: Run }) {
   const only = nodes.length === 1 ? nodes[0]! : null;
   const name = commonOf(nodes, (node) => node.name);
   const visible = commonOf(nodes, (node) => node.visible);
@@ -178,7 +178,7 @@ function LayerSection({ nodes, run }: { nodes: readonly NodeV6[]; run: Run }) {
   );
 }
 
-function LineSection({ nodes, run }: { nodes: readonly NodeV6[]; run: Run }) {
+function LineSection({ nodes, run }: { nodes: readonly NodeV7[]; run: Run }) {
   const lines = lineNodes(nodes);
   const only = nodes.length === 1 ? lines[0] : undefined;
   return (
@@ -209,7 +209,7 @@ function ConstraintSection({
   run,
 }: {
   /** The selected nodes whose constraints take effect. */
-  nodes: readonly NodeV6[];
+  nodes: readonly NodeV7[];
   /** One node is selected, and it is this node. */
   editable: boolean;
   run: Run;
@@ -244,7 +244,7 @@ function TextSection({
   run,
   exitTextEdit,
 }: {
-  texts: readonly TextNode[];
+  texts: readonly TextNodeV7[];
   /** One node is selected, and it is this text node. */
   editable: boolean;
   textEdit: TextEditState | null;
@@ -394,7 +394,7 @@ function SymbolSection({
   selection,
   runAction,
 }: {
-  document: DocumentV6;
+  document: DocumentV7;
   selection: readonly string[];
   runAction: (action: PropertyAction) => void;
 }) {

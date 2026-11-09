@@ -5,6 +5,7 @@ import type {
   RenderNodeSnapshot,
   RendererSceneSynchronization,
   SceneApplyResult,
+  SceneEffect,
   SceneIdentity,
   SceneRejectionReason,
   ScenePathGeometry,
@@ -15,14 +16,15 @@ import type {
   TextLayoutResult,
 } from '@vector-studio/contracts';
 import type {
-  DocumentV6,
+  DocumentV7,
+  Effect,
   Frame,
-  LineNodeV6,
-  NodeV6,
+  LineNodeV7,
+  NodeV7,
   Paint,
   PathData,
   Stroke,
-  TextNode,
+  TextNodeV7,
 } from '@vector-studio/model';
 import { ExpansionCache, type Expansion, type ExpansionResult } from './expansion.js';
 import { localTransform } from './geometry.js';
@@ -51,7 +53,7 @@ import type { DiagnosticEvent } from './types.js';
 // projector reports `editor.text-unavailable` once per page (M6c-P3).
 
 /** Frame-local path geometry for a custom node (its extension's `toScene`), or null. */
-export type CustomProjection = (node: NodeV6) => PathData | null;
+export type CustomProjection = (node: NodeV7) => PathData | null;
 
 /** Synthetic scene IDs of a frame (M1 contract, section 5); document IDs never hold U+0000. */
 export function frameContentId(frameId: string): string {
@@ -332,7 +334,7 @@ function halfDisc(outline: Outline, e: Vec, u: Vec, s: Vec, h: number): void {
  * or a dash and no head) keeps the line's stroke; fill mode is one filled outline in the stroke
  * paint, with the literal vertex lists, the shaft dashed in editor-core when the stroke is.
  */
-export function lineContent(node: LineNodeV6): PathContent {
+export function lineContent(node: LineNodeV7): PathContent {
   const { width: fw, height: fh } = node.frame;
   const [x0, y0, x1, y1] = node.points;
   const p0 = { x: x0 * fw, y: y0 * fh };
@@ -506,7 +508,7 @@ type TextContent = Pick<
  * with the same run index on one line, in text order, with the run's font list, size and colour
  * (copied as fills are). Every cluster is emitted, whitespace included; an empty node has none.
  */
-export function textContent(node: TextNode, layout: TextLayoutResult): TextContent {
+export function textContent(node: TextNodeV7, layout: TextLayoutResult): TextContent {
   const text = nodeText(node.runs);
   const runs: SceneTextRun[] = [];
   let current: { run: number; line: number; clusters: SceneTextRun['clusters'][number][] } | null =
@@ -533,15 +535,53 @@ export function textContent(node: TextNode, layout: TextLayoutResult): TextConte
 }
 
 /**
+ * E41-S5: the scene effects of a node's `effects`, its visible entries in list order with
+ * `σ = radius / 2` (E41-S4), in node-local units, which are the node's scene-local units.
+ */
+export function sceneEffects(effects: readonly Effect[]): readonly SceneEffect[] {
+  const out: SceneEffect[] = [];
+  for (const effect of effects) {
+    if (!effect.visible) continue;
+    out.push(
+      effect.kind === 'dropShadow'
+        ? {
+            kind: 'dropShadow',
+            color: effect.color,
+            offsetX: effect.offsetX,
+            offsetY: effect.offsetY,
+            sigma: effect.radius / 2,
+          }
+        : { kind: 'layerBlur', sigma: effect.radius / 2 },
+    );
+  }
+  return out;
+}
+
+/**
+ * The `effects` field of a snapshot (E41-S5, S6): present only when the projector emits
+ * effects and the node has a visible one, so a scene without effects is the same value as
+ * before E41.
+ */
+function effectField(
+  effects: readonly Effect[],
+  emit: boolean,
+): { effects?: readonly SceneEffect[] } {
+  if (!emit) return {};
+  const scene = sceneEffects(effects);
+  return scene.length === 0 ? {} : { effects: scene };
+}
+
+/**
  * One leaf node's scene snapshot under the scene parent `parentId`, or null when it cannot be
  * projected (an unowned custom type, a text node without `layout`, or a container: containers
  * project through `projectPage`). A throwing `layout` propagates (M6c-P2).
  */
 export function projectNode(
-  node: NodeV6,
+  node: NodeV7,
   custom: CustomProjection,
   parentId: string | null = null,
   layout?: TextLayouter,
+  effects = false,
 ): RenderNodeSnapshot | null {
   const base = {
     id: node.id,
@@ -550,6 +590,7 @@ export function projectNode(
     transform: localTransform(node.frame, node.rotation),
     visible: node.visible,
     opacity: node.opacity,
+    ...effectField(node.effects, effects),
   };
   const { width, height } = node.frame;
   switch (node.type) {
@@ -636,6 +677,8 @@ type FrameUnit = Readonly<{
   opacity: number;
   fill: Paint | null;
   stroke: Stroke | null;
+  /** E41-S5: the unit's effects, on its outer container; an instance's per E41-S10. */
+  effects: readonly Effect[];
 }>;
 
 /**
@@ -647,6 +690,7 @@ function frameSnapshots(
   node: FrameUnit,
   parentId: string | null,
   children: readonly string[],
+  effects: boolean,
 ): RenderNodeSnapshot[] {
   const { width, height } = node.frame;
   const content = frameContentId(node.id);
@@ -691,6 +735,7 @@ function frameSnapshots(
       transform: localTransform(node.frame, node.rotation),
       visible: node.visible,
       opacity: node.opacity,
+      ...effectField(node.effects, effects),
       kind: 'container',
       children: border === null ? [content] : [content, border.id],
       clip: null,
@@ -732,10 +777,12 @@ export type PageProjection = Readonly<{
 
 /** A node's last snapshots, reused while the node, its scene parent and its children hold. */
 type MemoEntry = Readonly<{
-  node: NodeV6;
+  node: NodeV7;
   parentId: string | null;
   children: readonly string[] | null;
   snapshots: readonly RenderNodeSnapshot[];
+  /** Whether the node was projected as a mask source, without effects (E41-S5). */
+  masked?: true;
   /**
    * For an instance: the expansion result and source node the snapshots were built from, and
    * the entries of its expanded nodes keyed by source node ID.
@@ -743,7 +790,7 @@ type MemoEntry = Readonly<{
   instance?: Readonly<{
     /** Null after a layout generation change: the entry is rebuilt, its expanded entries kept. */
     result: ExpansionResult | null;
-    source: NodeV6;
+    source: NodeV7;
     expanded: ReadonlyMap<string, MemoEntry>;
     /** The expanded text left out for want of a layouter (M6c-P3), as scene IDs. */
     textless: readonly string[];
@@ -768,14 +815,30 @@ export type ProjectionScope = Readonly<{
   kept: Set<string>;
 }>;
 
+/** Whether `entry` was built from `node` under `parentId`, as a mask source exactly when `masked`. */
+function holds(
+  entry: MemoEntry | undefined,
+  node: NodeV7,
+  parentId: string | null,
+  masked: boolean,
+): entry is MemoEntry {
+  return (
+    entry !== undefined &&
+    entry.node === node &&
+    entry.parentId === parentId &&
+    (entry.masked === true) === masked
+  );
+}
+
 /** The snapshots of `entry` when its node, scene parent and projected children still hold. */
 function reusedFrom(
   entry: MemoEntry | undefined,
-  node: NodeV6,
+  node: NodeV7,
   parentId: string | null,
   children: readonly string[] | null,
+  masked: boolean,
 ): readonly RenderNodeSnapshot[] | null {
-  if (entry === undefined || entry.node !== node || entry.parentId !== parentId) return null;
+  if (!holds(entry, node, parentId, masked)) return null;
   if (entry.children === null || children === null) {
     return entry.children === children ? entry.snapshots : null;
   }
@@ -785,9 +848,10 @@ function reusedFrom(
 /** The container snapshot of a group or mask group under the scene ID `id`. */
 function groupSnapshot(
   id: string,
-  node: NodeV6,
+  node: NodeV7,
   parentId: string | null,
   children: readonly string[],
+  effects: boolean,
 ): RenderNodeSnapshot {
   return {
     id,
@@ -795,6 +859,7 @@ function groupSnapshot(
     transform: localTransform(node.frame, node.rotation),
     visible: node.visible,
     opacity: node.opacity,
+    ...effectField(node.effects, effects),
     kind: 'container',
     children,
     clip: node.type === 'maskGroup' ? { kind: 'mask' } : null,
@@ -819,12 +884,15 @@ function projectExpanded(
   out: RenderNodeSnapshot[],
   layout: TextLayouter | undefined,
   textless: string[],
+  effects: boolean,
 ): string[] {
-  const walk = (ids: readonly string[], parentId: string): string[] => {
+  const walk = (ids: readonly string[], parentId: string, maskSource?: string): string[] => {
     const projected: string[] = [];
     for (const id of ids) {
       const node = expansion.nodes.get(id);
       if (node === undefined) continue;
+      // E41-S5: a mask source's effects are not projected; it draws only coverage.
+      const emit = effects && id !== maskSource;
       const scene = expandedId(instance, id);
       const old = previous?.get(id);
       const at = out.length;
@@ -835,22 +903,26 @@ function projectExpanded(
           const source = node.children[0];
           if (source === undefined || !expansion.nodes.has(source)) continue;
         }
-        children = walk(node.children, node.type === 'frame' ? frameContentId(scene) : scene);
+        children = walk(
+          node.children,
+          node.type === 'frame' ? frameContentId(scene) : scene,
+          node.type === 'maskGroup' ? node.children[0] : undefined,
+        );
         const sceneChildren = children.map((child) => expandedId(instance, child));
         snapshots =
-          reusedFrom(old, node, parentId, children) ??
+          reusedFrom(old, node, parentId, children, id === maskSource) ??
           keepEqual(
             node.type === 'frame'
-              ? frameSnapshots({ ...node, id: scene }, parentId, sceneChildren)
-              : [groupSnapshot(scene, node, parentId, sceneChildren)],
+              ? frameSnapshots({ ...node, id: scene }, parentId, sceneChildren, emit)
+              : [groupSnapshot(scene, node, parentId, sceneChildren, emit)],
             old?.snapshots,
           );
       } else {
-        const reuse = reusedFrom(old, node, parentId, null);
+        const reuse = reusedFrom(old, node, parentId, null, id === maskSource);
         if (reuse !== null) {
           snapshots = reuse;
         } else {
-          const snapshot = projectNode(node, custom, parentId, layout);
+          const snapshot = projectNode(node, custom, parentId, layout, emit);
           if (snapshot === null) {
             if (node.type === 'text') textless.push(scene);
             continue;
@@ -858,7 +930,13 @@ function projectExpanded(
           snapshots = keepEqual([{ ...snapshot, id: scene }], old?.snapshots);
         }
       }
-      next.set(id, { node, parentId, children, snapshots });
+      next.set(id, {
+        node,
+        parentId,
+        children,
+        snapshots,
+        ...(id === maskSource ? { masked: true as const } : {}),
+      });
       out.splice(at, 0, ...snapshots);
       projected.push(id);
     }
@@ -879,7 +957,7 @@ function projectExpanded(
  * out and listed in `textless`.
  */
 export function projectPage(
-  document: DocumentV6,
+  document: DocumentV7,
   pageId: string,
   custom: CustomProjection,
   omit: ReadonlySet<string> = new Set(),
@@ -887,6 +965,7 @@ export function projectPage(
   expansions: ExpansionCache = new ExpansionCache(),
   scope?: ProjectionScope,
   layout?: TextLayouter,
+  effects = false,
 ): PageProjection {
   const built = new Map<string, RenderNodeSnapshot>();
   const order: string[] = [];
@@ -897,8 +976,9 @@ export function projectPage(
 
   /** The snapshots of instance `node` and its expansion, or null when it is invalid. */
   const instanceUnit = (
-    node: Extract<NodeV6, { type: 'instance' }>,
+    node: Extract<NodeV7, { type: 'instance' }>,
     parentId: string | null,
+    masked: boolean,
   ): MemoEntry | null => {
     const result = expansions.expand(document, node.id);
     const source = Object.hasOwn(document.nodes, node.symbol)
@@ -909,13 +989,12 @@ export function projectPage(
     const held = entry?.instance;
     if (
       held !== undefined &&
-      entry!.node === node &&
-      entry!.parentId === parentId &&
+      holds(entry, node, parentId, masked) &&
       held.result === result &&
       held.source === source
     ) {
       textless.push(...held.textless);
-      return entry!;
+      return entry;
     }
     const content: RenderNodeSnapshot[] = [];
     const expanded = new Map<string, MemoEntry>();
@@ -929,6 +1008,7 @@ export function projectPage(
       content,
       layout,
       missing,
+      effects,
     );
     textless.push(...missing);
     // The instance's own frame nodes: its placement, the source's fill and stroke.
@@ -943,9 +1023,12 @@ export function projectPage(
           opacity: node.opacity * source.opacity,
           fill: source.fill,
           stroke: source.stroke,
+          // E41-S10: the instance's own effects when it has any, else its source's.
+          effects: node.effects.length > 0 ? node.effects : source.effects,
         },
         parentId,
         roots,
+        effects && !masked,
       ),
       entry?.snapshots.slice(0, 4),
     );
@@ -959,14 +1042,16 @@ export function projectPage(
   };
 
   /** Projects `ids` under the scene parent `parentId`; returns the projected document IDs. */
-  const walk = (ids: readonly string[], parentId: string | null): string[] => {
+  const walk = (ids: readonly string[], parentId: string | null, maskSource?: string): string[] => {
     const out: string[] = [];
     for (const id of ids) {
       if (omit.has(id) || !Object.hasOwn(document.nodes, id)) continue;
       const node = document.nodes[id]!;
+      // E41-S5: a mask source's effects are not projected; it draws only coverage.
+      const emit = effects && id !== maskSource;
       if (scope !== undefined && !scope.path.has(id)) {
         const held = memo?.get(id);
-        if (held?.node === node && held.parentId === parentId && scope.held(id)) {
+        if (holds(held, node, parentId, id === maskSource) && scope.held(id)) {
           scope.kept.add(id);
           out.push(id);
           continue;
@@ -986,15 +1071,19 @@ export function projectPage(
         }
         units.push(id);
         const frameLike = node.type === 'frame' || node.type === 'symbol';
-        const children = walk(node.children, frameLike ? frameContentId(id) : id);
+        const children = walk(
+          node.children,
+          frameLike ? frameContentId(id) : id,
+          node.type === 'maskGroup' ? node.children[0] : undefined,
+        );
         const snapshots =
-          reusedFrom(memo?.get(id), node, parentId, children) ??
+          reusedFrom(memo?.get(id), node, parentId, children, id === maskSource) ??
           (frameLike
-            ? keepEqual(frameSnapshots(node, parentId, children), memo?.get(id)?.snapshots)
-            : [groupSnapshot(id, node, parentId, children)]);
+            ? keepEqual(frameSnapshots(node, parentId, children, emit), memo?.get(id)?.snapshots)
+            : [groupSnapshot(id, node, parentId, children, emit)]);
         entry = { node, parentId, children, snapshots };
       } else if (node.type === 'instance') {
-        const unit = instanceUnit(node, parentId);
+        const unit = instanceUnit(node, parentId, id === maskSource);
         if (unit === null) {
           invalid.push(id);
           continue;
@@ -1003,8 +1092,8 @@ export function projectPage(
         entry = unit;
       } else {
         const snapshot =
-          reusedFrom(memo?.get(id), node, parentId, null)?.[0] ??
-          projectNode(node, custom, parentId, layout);
+          reusedFrom(memo?.get(id), node, parentId, null, id === maskSource)?.[0] ??
+          projectNode(node, custom, parentId, layout, emit);
         if (snapshot === null) {
           if (node.type === 'text') textless.push(id);
           continue;
@@ -1012,6 +1101,7 @@ export function projectPage(
         units.push(id);
         entry = { node, parentId, children: null, snapshots: [snapshot] };
       }
+      if (id === maskSource && entry.masked !== true) entry = { ...entry, masked: true };
       if (scope !== undefined && !scope.replaced.has(id)) scope.replaced.set(id, memo?.get(id));
       memo?.set(id, entry);
       const sceneIds = entry.snapshots.map((snapshot) => snapshot.id);
@@ -1063,6 +1153,15 @@ function sameClip(a: ContainerSnapshot['clip'], b: ContainerSnapshot['clip']): b
   return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
 
+function sameEffects(
+  a: readonly SceneEffect[] | undefined,
+  b: readonly SceneEffect[] | undefined,
+): boolean {
+  if (a === b) return true;
+  if (a === undefined || b === undefined) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 /** Whether the renderer holds `held` as `next`: leaves by identity, containers by value. */
 function sameSnapshot(held: RenderNodeSnapshot, next: RenderNodeSnapshot): boolean {
   if (held === next) return true;
@@ -1074,7 +1173,8 @@ function sameSnapshot(held: RenderNodeSnapshot, next: RenderNodeSnapshot): boole
     held.opacity === next.opacity &&
     held.transform.every((value, index) => value === next.transform[index]) &&
     sameStrings(held.children, next.children) &&
-    sameClip(held.clip, next.clip)
+    sameClip(held.clip, next.clip) &&
+    sameEffects(held.effects, next.effects)
   );
 }
 
@@ -1127,11 +1227,15 @@ export class SceneProjector {
   private readonly layout: TextLayouter | undefined;
   /** Whether `editor.text-unavailable` was raised for the current page (M6c-P3). */
   private textReported = false;
+  /** E41-S6: whether snapshots carry node effects; fixed for the projector's life. */
+  private readonly effects: boolean;
 
   /**
    * `expansions` is the editor's one expansion cache, shared with its checks and hit testing
    * (M7 contract, M7-X4); by default the projector has its own. `layout` is the editor's text
-   * layout cache; without it text projects nothing (M6c contract, M6c-P2 and P3).
+   * layout cache; without it text projects nothing (M6c contract, M6c-P2 and P3). With
+   * `effects`, snapshots carry node effects (E41 contract, E41-S5 and S6); off by default, so
+   * that a renderer on `effects: 'none'` never meets them.
    */
   constructor(
     renderer: RendererSceneSynchronization,
@@ -1139,12 +1243,14 @@ export class SceneProjector {
     report: (event: DiagnosticEvent) => void,
     expansions: ExpansionCache = new ExpansionCache(),
     layout?: TextLayouter,
+    effects = false,
   ) {
     this.renderer = renderer;
     this.custom = custom;
     this.report = report;
     this.expansions = expansions;
     this.layout = layout;
+    this.effects = effects;
   }
 
   get active(): boolean {
@@ -1157,14 +1263,14 @@ export class SceneProjector {
    * `editor.text-unavailable` again (M6c-P3). The excluded subtrees that `touched` reaches (the
    * change that caused it) are projected again.
    */
-  replace(document: DocumentV6, page: string, touched: readonly string[] = []): void {
+  replace(document: DocumentV7, page: string, touched: readonly string[] = []): void {
     this.textReported = false;
     this.sendSnapshot(document, page, touched);
   }
 
   /** The full snapshot of `replace`, also after `resync-required` and a bookkeeping retry. */
   private sendSnapshot(
-    document: DocumentV6,
+    document: DocumentV7,
     page: string,
     touched: readonly string[] = [],
     retried = false,
@@ -1216,7 +1322,7 @@ export class SceneProjector {
    * the new generation on their page switch. Returns false when no entry was affected, and then
    * sends nothing.
    */
-  relayout(document: DocumentV6, stale: ((node: TextNode) => boolean) | null = null): boolean {
+  relayout(document: DocumentV7, stale: ((node: TextNodeV7) => boolean) | null = null): boolean {
     if (this.disposed) return false;
     const holdsText = new Map<string, boolean>();
     const hasText = (id: string): boolean => {
@@ -1232,7 +1338,7 @@ export class SceneProjector {
       holdsText.set(id, found);
       return found;
     };
-    const affects = (node: NodeV6): boolean =>
+    const affects = (node: NodeV7): boolean =>
       node.type === 'text' && (stale === null || stale(node));
     let changed = false;
     for (const [id, entry] of this.memo) {
@@ -1257,7 +1363,7 @@ export class SceneProjector {
   }
 
   /** Sends one change set for a document change on `page` that touched `touched`. */
-  change(document: DocumentV6, page: string, touched: readonly string[]): void {
+  change(document: DocumentV7, page: string, touched: readonly string[]): void {
     if (this.disposed) return;
     const excluded = this.excluded.size;
     const retry = this.release(document, touched);
@@ -1314,7 +1420,7 @@ export class SceneProjector {
    * only unit's own.
    */
   private isolate(
-    document: DocumentV6,
+    document: DocumentV7,
     projection: PageProjection,
     only: Readonly<{ id: string; result: Rejection }> | null,
   ): void {
@@ -1371,7 +1477,7 @@ export class SceneProjector {
   }
 
   /** Retries the released subtrees from their roots, in batched sets. */
-  private retry(document: DocumentV6, roots: ReadonlySet<string>): void {
+  private retry(document: DocumentV7, roots: ReadonlySet<string>): void {
     if (roots.size > 0) this.addUnits(document, this.project(document), roots);
   }
 
@@ -1383,7 +1489,7 @@ export class SceneProjector {
    * Rejections are reported once per reason; any other failure ends in a full snapshot.
    */
   private addUnits(
-    document: DocumentV6,
+    document: DocumentV7,
     projection: PageProjection,
     roots: ReadonlySet<string> | null,
   ): void {
@@ -1440,7 +1546,7 @@ export class SceneProjector {
    * or whose scene parent is neither held nor sent with it, is dead itself.
    */
   private liveUnits(
-    document: DocumentV6,
+    document: DocumentV7,
     projection: PageProjection,
     segment: readonly string[],
     dead: Set<string>,
@@ -1550,7 +1656,7 @@ export class SceneProjector {
   }
 
   /** The root to leave out for a rejected node: its mask group when it is a mask source. */
-  private excludedRoot(document: DocumentV6, id: string): string {
+  private excludedRoot(document: DocumentV7, id: string): string {
     const node = Object.hasOwn(document.nodes, id) ? document.nodes[id]! : undefined;
     const parent =
       node !== undefined && Object.hasOwn(document.nodes, node.parent)
@@ -1560,7 +1666,7 @@ export class SceneProjector {
   }
 
   /** The document parent chain of `id`, itself first (bounded by the tree depth). */
-  private chain(document: DocumentV6, id: string): string[] {
+  private chain(document: DocumentV7, id: string): string[] {
     const ids: string[] = [];
     let cursor: string | undefined = id;
     for (let guard = 0; cursor !== undefined && guard < PARENT_WALK_LIMIT; guard += 1) {
@@ -1575,7 +1681,7 @@ export class SceneProjector {
    * with every excluded root inside them, and returns the outermost roots the document still
    * has; those are retried whole.
    */
-  private release(document: DocumentV6, touched: readonly string[]): Set<string> {
+  private release(document: DocumentV7, touched: readonly string[]): Set<string> {
     const roots = new Set<string>();
     if (this.excluded.size === 0) return roots;
     for (const id of [...touched, ...this.instancesOfSources(document, touched)]) {
@@ -1599,7 +1705,7 @@ export class SceneProjector {
    * symbol to instances is one O(n) scan of the node map, made only when a touched node is in a
    * source.
    */
-  private instancesOfSources(document: DocumentV6, touched: readonly string[]): string[] {
+  private instancesOfSources(document: DocumentV7, touched: readonly string[]): string[] {
     const symbols = new Set<string>();
     for (const id of touched) {
       for (const entry of this.chain(document, id)) {
@@ -1621,7 +1727,7 @@ export class SceneProjector {
    * Forgets the renderer's state and sends a full snapshot, once per call chain: a renderer
    * that keeps failing is retried at the next document change, never in a loop.
    */
-  private resync(document: DocumentV6): void {
+  private resync(document: DocumentV7): void {
     this.identity = null;
     this.base = null;
     this.scoped = false;
@@ -1697,7 +1803,7 @@ export class SceneProjector {
    * walk stays the test oracle (`checkScopedProjectionForTesting`).
    */
   private scopedSync(
-    document: DocumentV6,
+    document: DocumentV7,
     touched: readonly string[],
   ): (SceneApplyResult & { changes: Changes }) | null {
     // Not scoped until the set is accepted, also when a custom projection or the renderer throws
@@ -1742,6 +1848,7 @@ export class SceneProjector {
       this.expansions,
       scope,
       this.layout,
+      this.effects,
     );
     this.noteTextless(projection.textless);
 
@@ -1819,7 +1926,7 @@ export class SceneProjector {
    * and the same invalid instances as the scoped one.
    */
   private checkScoped(
-    document: DocumentV6,
+    document: DocumentV7,
     memo: ProjectionMemo,
     changes: Changes | null,
     met: ReadonlySet<string>,
@@ -1833,6 +1940,7 @@ export class SceneProjector {
       this.expansions,
       undefined,
       this.layout,
+      this.effects,
     );
     const expected = this.differences(oracle, this.goneFrom(oracle));
     const expectedMet = [...oracle.invalid].sort();
@@ -1886,7 +1994,7 @@ export class SceneProjector {
   }
 
   /** Reports a rejection of `ids` and leaves their subtrees out until a change touches them. */
-  private exclude(document: DocumentV6, result: Rejection, ids: readonly string[]): void {
+  private exclude(document: DocumentV7, result: Rejection, ids: readonly string[]): void {
     this.scoped = false;
     this.reportRejection(result.reason, ids);
     ids.forEach((id) => this.excluded.add(this.excludedRoot(document, id)));
@@ -1908,7 +2016,7 @@ export class SceneProjector {
    * for an invalid expansion (M7-X3) are reported once, as a rejected scene value, until they
    * project again.
    */
-  private project(document: DocumentV6, skip: ReadonlySet<string> = new Set()): PageProjection {
+  private project(document: DocumentV7, skip: ReadonlySet<string> = new Set()): PageProjection {
     const omit = skip.size === 0 ? this.excluded : new Set([...this.excluded, ...skip]);
     const projection = projectPage(
       document,
@@ -1919,6 +2027,7 @@ export class SceneProjector {
       this.expansions,
       undefined,
       this.layout,
+      this.effects,
     );
     this.noteInvalid(new Set(projection.invalid), omit);
     this.noteTextless(projection.textless);

@@ -5,8 +5,8 @@ import {
   validateAnyDocument,
   validateDocument,
   validateFragmentTree,
-  validateNode,
-  type DocumentV6,
+  validateNode as validateNodeV7,
+  type DocumentV7,
   type PathData,
   type Stroke,
 } from '@vector-studio/model';
@@ -23,6 +23,7 @@ import {
   type StyleProps,
 } from '../../packages/editor-core/src/index.js';
 import { deepestHit } from '../../packages/editor-core/src/hit-test.js';
+import { v7Value } from '../support/schema-v7.js';
 import { projectPage } from '../../packages/editor-core/src/projector.js';
 import {
   documentIsolationViolation,
@@ -75,13 +76,19 @@ const instance = (id: string, parent: string, source: string, extra: Loose = {})
   base(id, parent, { type: 'instance', symbol: source, textOverrides: {}, ...extra });
 
 /** A v6 document; `pages` maps each page ID to its children. */
-function doc(pages: Record<string, string[]>, nodes: Loose[], version = 6): Json {
-  return {
+/** validateNode on a v6-shaped node: `effects: []` is appended, as v6 to v7 migration does. */
+const validateNode = (node: Loose, options?: Parameters<typeof validateNodeV7>[1]) =>
+  validateNodeV7('effects' in node ? node : { ...node, effects: [] }, options);
+
+/** A document at `version`; at v7 every node gains `effects: []` (E41-S1). */
+function doc(pages: Record<string, string[]>, nodes: Loose[], version = 7): Json {
+  const value = {
     schemaVersion: version,
     id: 'd',
     pages: Object.entries(pages).map(([id, children]) => ({ id, name: id, children })),
     nodes: Object.fromEntries(nodes.map((node) => [node.id as string, node])),
   };
+  return version === 7 ? v7Value(value) : value;
 }
 
 /**
@@ -105,7 +112,7 @@ function chain(
   return nodes;
 }
 
-function parsed(value: Json): DocumentV6 {
+function parsed(value: Json): DocumentV7 {
   const result = validateDocument(value);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -165,7 +172,7 @@ const unitTriangle: PathData = {
   fillRule: 'nonzero',
 };
 const custom = () => unitTriangle;
-const project = (document: DocumentV6, page: string) => projectPage(document, page, custom).nodes;
+const project = (document: DocumentV7, page: string) => projectPage(document, page, custom).nodes;
 const containerOf = (nodes: ReadonlyMap<string, RenderNodeSnapshot>, id: string) =>
   nodes.get(id) as Extract<RenderNodeSnapshot, { kind: 'container' }>;
 
@@ -217,6 +224,7 @@ describe('M4-A08 the opacity lift (M4-L1, M4-M2, M4-S5)', () => {
         const value = containers(1);
         value.schemaVersion = version;
         for (const node of Object.values(value.nodes)) {
+          delete node.effects;
           if (version < 5) delete node.textOverrides;
           if (node.type === 'rectangle' || node.type === 'path') node.stroke = null;
         }
@@ -288,14 +296,16 @@ describe('M4-A08 the opacity lift (M4-L1, M4-M2, M4-S5)', () => {
       }),
     });
     expect(setup.target.query({ type: 'node', id: pasted! })).toMatchObject({ opacity: 0.5 });
-    // The model's fragment tree rule at v6 accepts it too.
+    // The model's fragment tree rule at v7 accepts it too.
     expect(
-      validateFragmentTree({
-        schemaVersion: 6,
-        id: 'h',
-        pages: [{ id: 'hp', name: '', children: ['g'] }],
-        nodes: { g: { ...nodes.g, parent: 'hp' }, k: nodes.k },
-      }).ok,
+      validateFragmentTree(
+        v7Value({
+          schemaVersion: 6,
+          id: 'h',
+          pages: [{ id: 'hp', name: '', children: ['g'] }],
+          nodes: { g: { ...nodes.g, parent: 'hp' }, k: nodes.k },
+        }),
+      ).ok,
     ).toBe(true);
   });
 
@@ -395,7 +405,7 @@ describe('M4-A08 and M4-A10 effective opacity, instance × source (M4-P6, M4-Q15
 
   type Leaf = Extract<RenderNodeSnapshot, { kind: 'primitive' | 'path' }>;
   /** The drawn leaves of a page in projection order, with their geometry and style. */
-  const drawn = (document: DocumentV6, page: string) =>
+  const drawn = (document: DocumentV7, page: string) =>
     [...project(document, page).values()]
       .filter((node): node is Leaf => node.kind !== 'container')
       .map((node) => ({ kind: node.kind, geometry: node.geometry, style: node.style }));

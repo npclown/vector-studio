@@ -2,7 +2,7 @@ import type { RenderNodeSnapshot, TextLayoutPort } from '@vector-studio/contract
 import {
   parseDocument,
   type Color,
-  type DocumentV6,
+  type DocumentV7,
   type Frame,
   type TextRun,
 } from '@vector-studio/model';
@@ -116,7 +116,7 @@ function rect(id: string, frame: Frame, parent = 'p1'): Loose {
 }
 
 /** Page `p1` holding `nodes` in order, and an empty page `p2`. */
-function doc(nodes: Loose[]): DocumentV6 {
+function doc(nodes: Loose[]): DocumentV7 {
   return {
     schemaVersion: 6,
     id: 'doc',
@@ -133,10 +133,10 @@ function doc(nodes: Loose[]): DocumentV6 {
       },
     ],
     nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
-  } as unknown as DocumentV6;
+  } as unknown as DocumentV7;
 }
 
-function symbols(): DocumentV6 {
+function symbols(): DocumentV7 {
   const result = parseDocument(TEXT_SYMBOLS);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -147,7 +147,7 @@ function layouter(port: FakeTextLayout = createFakeTextLayout()): TextLayouter {
   return (node) => cache.layout(node);
 }
 
-function project(document: DocumentV6, page = 'p1', layout: TextLayouter = layouter()) {
+function project(document: DocumentV7, page = 'p1', layout: TextLayouter = layouter()) {
   return projectPage(
     document,
     page,
@@ -542,7 +542,7 @@ describe('M6c-P2 expanded instance text (M7-T2, M7-T3)', () => {
 
 /** An editor on `document` with a recording renderer, its diagnostics and every event. */
 function attached(
-  document: DocumentV6,
+  document: DocumentV7,
   port: TextLayoutPort | null,
   features: Record<string, string> = FEATURES,
 ) {
@@ -808,7 +808,7 @@ describe('V21-A03: a scoped relayout equals a whole-page relayout after a metric
   });
 
   it('on text, case and quoting variants of the family, instances and overrides', () => {
-    const fixtures: [DocumentV6, string, string][] = [
+    const fixtures: [DocumentV7, string, string][] = [
       [
         doc([
           text('a', f(0, 0, 40, 10), [runOf('ab', 'Test')]),

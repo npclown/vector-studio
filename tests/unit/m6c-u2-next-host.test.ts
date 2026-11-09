@@ -22,9 +22,10 @@ import {
 import {
   parseDocument,
   serializeDocument,
-  validateDocument,
-  type DocumentV6,
+  validateAnyDocument,
+  type DocumentV7,
 } from '../../packages/model/src/index.js';
+import { v7Text } from '../support/schema-v7.js';
 import type * as RouteModule from '../../apps/next-host/app/m6c-text-gpu.json/route.js';
 import type * as HostModule from '../../apps/next-host/src/m6a-text-host.js';
 import type * as ProbeModule from '../../apps/next-host/src/m6c-text-probe.js';
@@ -50,7 +51,7 @@ const GPU_TEXT = readFileSync(
   path.join(root, 'tests/fixtures/m6-text/gpu/text-gpu.v6.json'),
   'utf8',
 );
-const GPU = JSON.parse(GPU_TEXT) as DocumentV6;
+const GPU = JSON.parse(GPU_TEXT) as DocumentV7;
 const M6A_TEXT = JSON.parse(
   readFileSync(path.join(root, 'tests/fixtures/m6-text/text.v4.json'), 'utf8'),
 ) as unknown;
@@ -185,11 +186,12 @@ describe('M6c-U2 ?fixture=text-gpu', () => {
   };
 
   it('is a valid v6 document of the agreement fixtures and the A05 scene', () => {
-    expect(validateDocument(GPU).ok).toBe(true);
+    expect(validateAnyDocument(GPU).ok).toBe(true);
     expect(GPU.schemaVersion).toBe(6);
-    // Written as the serializer writes it, so a load and save keep it byte for byte.
+    // Written as the serializer writes it, so a load and save keep it byte for byte, up to the
+    // `effects: []` v7 adds (E41-S1).
     const parsed = parseDocument(GPU_TEXT);
-    expect(parsed.ok && serializeDocument(parsed.document)).toBe(GPU_TEXT);
+    expect(parsed.ok && serializeDocument(parsed.document)).toBe(v7Text(GPU_TEXT));
     expect(GPU.pages.map((page) => [page.id, page.children])).toEqual([
       [
         'agreement',

@@ -5,12 +5,12 @@ import type {
   CommandResult,
   Constraint,
   Constraints,
-  DocumentV6,
+  DocumentV7,
   Frame,
-  NodeV6,
+  NodeV7,
   SelectionHandles,
   TextEditState,
-  TextNode,
+  TextNodeV7,
   TextRun,
 } from '@vector-studio/react';
 import {
@@ -31,9 +31,9 @@ import {
 // the panel refuses only text that cannot be one (`aria-invalid`, nothing sent).
 
 /** The selected nodes that exist in the document, in selection order. */
-export function selectedNodes(document: DocumentV6, selection: readonly string[]): NodeV6[] {
+export function selectedNodes(document: DocumentV7, selection: readonly string[]): NodeV7[] {
   return selection.flatMap((id) =>
-    Object.hasOwn(document.nodes, id) ? [document.nodes[id] as NodeV6] : [],
+    Object.hasOwn(document.nodes, id) ? [document.nodes[id] as NodeV7] : [],
   );
 }
 
@@ -71,7 +71,7 @@ export const TRANSFORM_FIELDS: readonly Readonly<{ key: TransformKey; label: str
   ]);
 
 /** A node's value of a transform field: the stored frame value, or the rotation in degrees. */
-export function transformValue(node: NodeV6, key: TransformKey): number {
+export function transformValue(node: NodeV7, key: TransformKey): number {
   return key === 'rotation' ? toDegrees(node.rotation) : node.frame[key];
 }
 
@@ -87,7 +87,7 @@ export function parseTransform(key: TransformKey, text: string): number | null {
  * M8-Q8 (a): one transform edit as one `setFrames` of the node's stored parent-local frame with
  * one value changed, or of its rotation (degrees in, radians written; the model normalizes it).
  */
-export function transformCommand(node: NodeV6, key: TransformKey, value: number): Command {
+export function transformCommand(node: NodeV7, key: TransformKey, value: number): Command {
   if (key === 'rotation') {
     return {
       type: 'setFrames',
@@ -107,8 +107,8 @@ export function transformCommand(node: NodeV6, key: TransformKey, value: number)
 
 /** The box the transform fields show and edit. */
 export type TransformTarget =
-  | Readonly<{ kind: 'one'; node: NodeV6; content: Frame; box: Frame }>
-  | Readonly<{ kind: 'many'; nodes: readonly NodeV6[]; box: Frame; scalable: boolean }>;
+  | Readonly<{ kind: 'one'; node: NodeV7; content: Frame; box: Frame }>
+  | Readonly<{ kind: 'many'; nodes: readonly NodeV7[]; box: Frame; scalable: boolean }>;
 
 /** The point at `(lx, ly)` of a node's own axes in its parent's space (`localTransform`). */
 function localPoint(frame: Frame, rotation: number, lx: number, ly: number) {
@@ -130,7 +130,7 @@ function localPoint(frame: Frame, rotation: number, lx: number, ly: number) {
  * select tool's P5 resize, one `setFrames`); other multi-selections show W and H read-only.
  */
 export function transformTarget(
-  nodes: readonly NodeV6[],
+  nodes: readonly NodeV7[],
   handles: SelectionHandles | null,
   page: string,
 ): TransformTarget | null {
@@ -281,14 +281,14 @@ export const CONSTRAINTS: readonly Constraint[] = Object.freeze([
 ]);
 
 /** The selected lines. */
-export const lineNodes = (nodes: readonly NodeV6[]): Extract<NodeV6, { type: 'line' }>[] =>
-  nodes.filter((node): node is Extract<NodeV6, { type: 'line' }> => node.type === 'line');
+export const lineNodes = (nodes: readonly NodeV7[]): Extract<NodeV7, { type: 'line' }>[] =>
+  nodes.filter((node): node is Extract<NodeV7, { type: 'line' }> => node.type === 'line');
 
 /**
  * The selected nodes whose constraints take effect: children of a frame or a symbol (the
  * model's `constraints` note; a symbol has a frame's fields, M7-S1).
  */
-export function constrainedNodes(document: DocumentV6, nodes: readonly NodeV6[]): NodeV6[] {
+export function constrainedNodes(document: DocumentV7, nodes: readonly NodeV7[]): NodeV7[] {
   return nodes.filter((node) => {
     const parent = Object.hasOwn(document.nodes, node.parent) ? document.nodes[node.parent] : null;
     return parent?.type === 'frame' || parent?.type === 'symbol';
@@ -296,26 +296,26 @@ export function constrainedNodes(document: DocumentV6, nodes: readonly NodeV6[])
 }
 
 /** A name edit as one `setNodeProps` (the model checks the name). */
-export function nameCommand(node: NodeV6, name: string): Command {
+export function nameCommand(node: NodeV7, name: string): Command {
   return { type: 'setNodeProps', id: node.id, props: { name } };
 }
 
 /** The visibility checkbox's toggle as one `setNodeProps` of the opposite of `visible`. */
-export function visibleCommand(node: NodeV6): Command {
+export function visibleCommand(node: NodeV7): Command {
   return { type: 'setNodeProps', id: node.id, props: { visible: !node.visible } };
 }
 
 /** A line end arrow edit as one `setNodeProps` of `startArrow` or `endArrow`. */
-export function arrowCommand(line: NodeV6, key: 'startArrow' | 'endArrow', arrow: Arrow): Command {
+export function arrowCommand(line: NodeV7, key: 'startArrow' | 'endArrow', arrow: Arrow): Command {
   return { type: 'setNodeProps', id: line.id, props: { [key]: arrow } };
 }
 
 /** The node IDs a field reads, as one key: a draft resets when it changes. */
-export const fieldIdentity = (nodes: readonly NodeV6[]) => JSON.stringify(nodes.map((n) => n.id));
+export const fieldIdentity = (nodes: readonly NodeV7[]) => JSON.stringify(nodes.map((n) => n.id));
 
 /** One constraint edit: the node's constraints with one axis changed, one `setNodeProps`. */
 export function constraintsCommand(
-  node: NodeV6,
+  node: NodeV7,
   axis: keyof Constraints,
   value: Constraint,
 ): Command {
@@ -329,20 +329,24 @@ export function constraintsCommand(
 // M8-R4 text.
 
 /** The selected text nodes. */
-export const textNodes = (nodes: readonly NodeV6[]) =>
-  nodes.filter((node): node is TextNode => node.type === 'text');
+export const textNodes = (nodes: readonly NodeV7[]) =>
+  nodes.filter((node): node is TextNodeV7 => node.type === 'text');
 
 /** A text node's length in UTF-16 code units, the offsets `setTextStyle` takes. */
-export const textLength = (node: TextNode) =>
+export const textLength = (node: TextNodeV7) =>
   node.runs.reduce((length, run) => length + run.text.length, 0);
 
 /** The text sizing modes, alignments and the model's ranges of the two text numbers. */
-export const TEXT_SIZINGS: readonly TextNode['sizing'][] = Object.freeze([
+export const TEXT_SIZINGS: readonly TextNodeV7['sizing'][] = Object.freeze([
   'autoWidth',
   'autoHeight',
   'fixed',
 ]);
-export const TEXT_ALIGNS: readonly TextNode['align'][] = Object.freeze(['left', 'center', 'right']);
+export const TEXT_ALIGNS: readonly TextNodeV7['align'][] = Object.freeze([
+  'left',
+  'center',
+  'right',
+]);
 /** `letterSpacing` in em, `[-1, 10]`, and `lineHeight` as a multiple, `[0.1, 10]` (M6a-S1). */
 export const LETTER_SPACING_RANGE = Object.freeze([-1, 10] as const);
 export const LINE_HEIGHT_RANGE = Object.freeze([0.1, 10] as const);
@@ -367,7 +371,7 @@ export function parseFamily(text: string): string | null {
  * disabled), else the node's whole text `[0, length)`.
  */
 export function textRange(
-  node: TextNode,
+  node: TextNodeV7,
   textEdit: TextEditState | null,
 ): Readonly<{ start: number; end: number }> | null {
   if (textEdit !== null && textEdit.id === node.id) {
@@ -384,7 +388,7 @@ export function textRange(
  * The runs `[start, end)` covers: each run overlapping it, or for an empty range the run holding
  * `start` (an empty node's one run).
  */
-export function runsIn(node: TextNode, start: number, end: number): readonly TextRun[] {
+export function runsIn(node: TextNodeV7, start: number, end: number): readonly TextRun[] {
   const found: TextRun[] = [];
   let at = 0;
   for (const run of node.runs) {
@@ -409,7 +413,10 @@ export type RunStyle = Readonly<{
  * the runs each node's `textRange` covers, or of the caret's run for a collapsed caret, where
  * the fields are disabled but still show it (M8-Q9 (a)).
  */
-export function textRunStyle(texts: readonly TextNode[], textEdit: TextEditState | null): RunStyle {
+export function textRunStyle(
+  texts: readonly TextNodeV7[],
+  textEdit: TextEditState | null,
+): RunStyle {
   const runs = texts.flatMap((node) => {
     const range = textRange(node, textEdit) ?? { start: textEdit!.focus, end: textEdit!.focus };
     return runsIn(node, range.start, range.end);
@@ -423,7 +430,7 @@ export function textRunStyle(texts: readonly TextNode[], textEdit: TextEditState
 
 /** One run style edit over `range` as one `setTextStyle`. */
 export function textStyleCommand(
-  node: TextNode,
+  node: TextNodeV7,
   range: Readonly<{ start: number; end: number }>,
   style: Readonly<Partial<Pick<TextRun, 'family' | 'size' | 'color'>>>,
 ): Command {
@@ -432,11 +439,11 @@ export function textStyleCommand(
 
 /** The text props `setTextProps` sets. */
 export type TextProps = Readonly<
-  Partial<Pick<TextNode, 'sizing' | 'align' | 'letterSpacing' | 'lineHeight'>>
+  Partial<Pick<TextNodeV7, 'sizing' | 'align' | 'letterSpacing' | 'lineHeight'>>
 >;
 
 /** One text prop edit as one `setTextProps`. */
-export function textPropsCommand(node: TextNode, props: TextProps): Command {
+export function textPropsCommand(node: TextNodeV7, props: TextProps): Command {
   return { type: 'setTextProps', id: node.id, ...props };
 }
 
@@ -471,7 +478,7 @@ export type SymbolSection =
  * override, in the override keys' order. Null for no, several or other selected nodes.
  */
 export function symbolSection(
-  document: DocumentV6,
+  document: DocumentV7,
   selection: readonly string[],
 ): SymbolSection | null {
   if (selection.length !== 1) return null;

@@ -3,7 +3,7 @@ import {
   isValidRunText,
   MAX_TEXT_LENGTH,
   type Color,
-  type DocumentV6,
+  type DocumentV7,
   type Frame,
   type TextRun,
 } from '@vector-studio/model';
@@ -69,7 +69,7 @@ function text(id: string, frame: Frame, runs: TextRun[]): Loose {
  * Page `p1`: `t` "ab cd" at (10, 20); `m` "abcd" LF "ab" LF "abcd" (lines from 0, 5 and 8);
  * `s` two runs, "ab" at size 10 and "cd" red at size 20; `c` a lone U+0301; `r` a rectangle.
  */
-function fixture(extra: Loose[] = []): DocumentV6 {
+function fixture(extra: Loose[] = []): DocumentV7 {
   const nodes: Loose[] = [
     text('t', f(10, 20, 22.5, 12), [run('ab cd')]),
     text('m', f(100, 20, 20, 36), [run('abcd\nab\nabcd')]),
@@ -96,7 +96,7 @@ function fixture(extra: Loose[] = []): DocumentV6 {
     id: 'doc',
     pages: [{ id: 'p1', name: 'Page 1', children: nodes.map((node) => node.id) }],
     nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
-  } as unknown as DocumentV6;
+  } as unknown as DocumentV7;
 }
 
 function editor(

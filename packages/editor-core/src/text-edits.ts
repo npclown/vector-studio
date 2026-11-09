@@ -1,4 +1,4 @@
-import { validateNode, type DocumentV6, type TextNode } from '@vector-studio/model';
+import { validateNode, type DocumentV7, type TextNodeV7 } from '@vector-studio/model';
 import { Draft, fail, type Failure } from './draft.js';
 import { nodeOf, success, uniqueIds, type EditContext, type EditResult } from './edit-support.js';
 import {
@@ -20,14 +20,14 @@ import type { DocumentCommand } from './types.js';
 // the authored size floor, then `editor.no-text-layout`; the structural rules follow in
 // `success`. A node in an auto mode is refit with the growth anchor by `Draft.finish`.
 
-type Finish = (draft: Draft) => DocumentV6 | Failure;
+type Finish = (draft: Draft) => DocumentV7 | Failure;
 type TextCommand<T extends DocumentCommand['type']> = Extract<DocumentCommand, { type: T }>;
 
 const STYLE_KEYS: readonly string[] = ['family', 'size', 'color'];
 const PROP_KEYS = ['sizing', 'align', 'letterSpacing', 'lineHeight'] as const;
 
 /** `id` names a text node: `editor.unknown-node`, then `editor.not-a-text-node` at `path`. */
-function textNodeOf(document: DocumentV6, id: string, path: string): TextNode | Failure {
+function textNodeOf(document: DocumentV7, id: string, path: string): TextNodeV7 | Failure {
   const node = nodeOf(document, id);
   if (node === undefined) return fail('editor.unknown-node');
   if (node.type !== 'text') return fail('editor.not-a-text-node', path);
@@ -38,7 +38,7 @@ function textNodeOf(document: DocumentV6, id: string, path: string): TextNode | 
  * The offsets of a range: integers with `0 ≤ start ≤ end ≤ length`, neither between the two
  * halves of a surrogate pair (M6a-Q17 (a)); `editor.invalid-text-range` at `/start` or `/end`.
  */
-function rangeFailure(node: TextNode, start: number, end: number): Failure | null {
+function rangeFailure(node: TextNodeV7, start: number, end: number): Failure | null {
   const text = nodeText(node.runs);
   if (!Number.isInteger(start) || start < 0 || start > text.length || splitsPair(text, start)) {
     return fail('editor.invalid-text-range', '/start');
@@ -50,16 +50,16 @@ function rangeFailure(node: TextNode, start: number, end: number): Failure | nul
 }
 
 /** The model's rules on the edited node, at its paths, as `setNodeProps` reports them. */
-function validated(candidate: TextNode): TextNode | Failure {
+function validated(candidate: TextNodeV7): TextNodeV7 | Failure {
   const result = validateNode(candidate);
   if (!result.ok) return fail(result.code, nodePath(candidate.id, result.path));
-  return result.node as TextNode;
+  return result.node as TextNodeV7;
 }
 
 /** Commits the edited node, marked for the refit when it is in an auto mode. */
 function written(
-  document: DocumentV6,
-  node: TextNode,
+  document: DocumentV7,
+  node: TextNodeV7,
   context: EditContext,
   finish: Finish,
 ): EditResult {
@@ -76,7 +76,7 @@ function isFailure(value: object): value is Failure {
 
 /** `setText` (section 6.1). */
 export function setText(
-  document: DocumentV6,
+  document: DocumentV7,
   command: TextCommand<'setText'>,
   context: EditContext,
   finish: Finish,
@@ -97,7 +97,7 @@ export function setText(
 
 /** `setTextStyle` (section 6.1). */
 export function setTextStyle(
-  document: DocumentV6,
+  document: DocumentV7,
   command: TextCommand<'setTextStyle'>,
   context: EditContext,
   finish: Finish,
@@ -139,7 +139,7 @@ export function setTextStyle(
 
 /** `setTextProps` (section 6.1): at least one prop; `autoWidth` takes its width from the layout. */
 export function setTextProps(
-  document: DocumentV6,
+  document: DocumentV7,
   command: TextCommand<'setTextProps'>,
   context: EditContext,
   finish: Finish,
@@ -163,7 +163,7 @@ export function setTextProps(
  * with no change the document itself is returned, which the editor records as no step.
  */
 export function refitText(
-  document: DocumentV6,
+  document: DocumentV7,
   command: TextCommand<'refitText'>,
   context: EditContext,
   finish: Finish,
@@ -178,7 +178,7 @@ export function refitText(
     ids = listed;
   }
   if (ids.some((id) => nodeOf(document, id) === undefined)) return fail('editor.unknown-node');
-  const nodes: TextNode[] = [];
+  const nodes: TextNodeV7[] = [];
   for (const [k, id] of ids.entries()) {
     const node = textNodeOf(document, id, `/ids/${k}`);
     if (isFailure(node)) return node;

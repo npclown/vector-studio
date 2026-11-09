@@ -8,10 +8,11 @@ import {
   serializeDocument,
   validateAnyDocument,
   validateNode,
-  type DocumentV6,
+  type DocumentV7,
   type ParseResult,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
+import { v7Text } from '../support/schema-v7.js';
 // @ts-expect-error The repository's executable boundary policy is JavaScript tooling.
 import { boundaries, evaluatePackageBoundaries } from '../../tooling/boundary-policy.mjs';
 
@@ -31,11 +32,12 @@ async function fixture(name: string): Promise<string> {
 
 // Since M4-U1 a v1 document migrates through v2 to v5 to the committed v6 fixture (M7 contract,
 // section 2.1; M6a contract, sections 2.1 and 9; M4 contract, section 2.1).
+/** The committed v6 migration, at v7 (E41-S1: `effects: []` on every node). */
 async function migratedFixture(name: string): Promise<string> {
-  return readFile(path.join(migrated, `${name}.v6.json`), 'utf8');
+  return v7Text(await readFile(path.join(migrated, `${name}.v6.json`), 'utf8'));
 }
 
-function parsed(text: string): DocumentV6 {
+function parsed(text: string): DocumentV7 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -129,7 +131,7 @@ function edited(...edits: readonly Edit[]): Record<string, unknown> {
 
 describe('P5-A06 JSON round trip', () => {
   it.each(VALID)(
-    'serialize(parse(t)) is the committed v6 fixture and parse(serialize(d)) deep-equals d for %s',
+    'serialize(parse(t)) is the committed v6 fixture at v7 and parse(serialize(d)) deep-equals d for %s',
     async (name) => {
       const text = await fixture(name);
       const document = parsed(text);
@@ -197,6 +199,7 @@ describe('P5-A06 JSON round trip', () => {
       'path',
       'fill',
       'stroke',
+      'effects',
     ]);
     expect(text.endsWith('}\n')).toBe(true);
   });
@@ -535,6 +538,7 @@ describe('validateNode', () => {
       rotation: 0,
       constraints: { horizontal: 'start', vertical: 'start' },
       cornerRadii: [0, 0, 0, 0],
+      effects: [],
     };
     const result = validateNode(node);
     expect(result.ok && result.node).toEqual(node);
@@ -570,9 +574,9 @@ describe('P5-A08 no session state in the document', () => {
     const text = serializeDocument(parsed(await fixture(name)));
     const found = [...keys(JSON.parse(text), new Set())];
     expect(found.filter((key) => FORBIDDEN.test(key))).toEqual([]);
-    // `dash` since M4-U1 (M4-M1: every migrated stroke has `dash: null`).
+    // `dash` since M4-U1 (M4-M1: every migrated stroke has `dash: null`), `effects` since E41-U4.
     const schema = new Set(
-      'schemaVersion id pages nodes name children parent frame x y width height rotation constraints horizontal vertical opacity visible type cornerRadii fill stroke color r g b a cap join miterLimit dash path verbs points fillRule customType data'.split(
+      'schemaVersion id pages nodes name children parent frame x y width height rotation constraints horizontal vertical opacity visible type cornerRadii fill stroke color r g b a cap join miterLimit dash path verbs points fillRule customType data effects'.split(
         ' ',
       ),
     );

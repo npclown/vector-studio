@@ -11,11 +11,12 @@ import {
   type EditorSnapshot,
   type SelectionHandles,
 } from '../../packages/editor-core/src/index.js';
-import { validateDocument, type DocumentV6 } from '../../packages/model/src/index.js';
+import { validateAnyDocument, type DocumentV7 } from '../../packages/model/src/index.js';
 import type * as RouteModule from '../../apps/next-host/app/m6b-text-edit.json/route.js';
 import type * as HostModule from '../../apps/next-host/src/m6a-text-host.js';
 import type * as EditModule from '../../apps/next-host/src/m6b-text-edit.js';
 import { createFakeTextLayout } from '../support/fake-text-layout.js';
+import { v7Value } from '../support/schema-v7.js';
 
 // MVP M6b-U9 (M6b contract, sections 4.5, 6 and M6b-A12, A13): the next-host page's text edit
 // chrome in Node: the committed `?fixture=text-edit` document and its route, the caret,
@@ -29,7 +30,7 @@ const FIXTURE_TEXT = readFileSync(
   path.join(root, 'tests/fixtures/m6-text/edit-host.v6.json'),
   'utf8',
 );
-const FIXTURE = JSON.parse(FIXTURE_TEXT) as DocumentV6;
+const FIXTURE = JSON.parse(FIXTURE_TEXT) as DocumentV7;
 const PAGE_SOURCE = readFileSync(path.join(appDir, 'app/page.tsx'), 'utf8');
 const UI_TOOLBAR_SOURCE = readFileSync(path.join(root, 'packages/ui/src/toolbar-model.ts'), 'utf8');
 
@@ -72,7 +73,7 @@ afterEach(() => {
 
 describe('M6b-U9 text-edit fixture', () => {
   it('is a valid v6 document of three text nodes in the test font', () => {
-    expect(validateDocument(FIXTURE).ok).toBe(true);
+    expect(validateAnyDocument(FIXTURE).ok).toBe(true);
     expect(FIXTURE.schemaVersion).toBe(6);
     expect(FIXTURE.pages.map((page) => page.children)).toEqual([['t', 'w', 'r']]);
     const texts = Object.fromEntries(
@@ -94,7 +95,7 @@ describe('M6b-U9 text-edit fixture', () => {
     }
     expect(FIXTURE.nodes.r!.rotation).toBe(0.4);
     // Loading keeps it byte for byte.
-    expect(loaded().query({ type: 'document' })).toEqual(FIXTURE);
+    expect(loaded().query({ type: 'document' })).toEqual(v7Value(FIXTURE));
   });
 
   it('serves the fixture byte for byte at /m6b-text-edit.json', async () => {

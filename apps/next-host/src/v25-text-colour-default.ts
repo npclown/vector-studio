@@ -1,5 +1,5 @@
 import type { PagePoint, TextStyle } from '@vector-studio/editor-core';
-import type { Color, DocumentV6, NodeV6, Paint } from '@vector-studio/model';
+import type { Color, DocumentV7, NodeV7, Paint } from '@vector-studio/model';
 import { nodePageCorners } from './m2-geometry';
 
 // V-25 slice 7 (readable default text colour): in the studio layout a text tool press picks the
@@ -33,7 +33,7 @@ function paintColor(paint: Paint): Color {
 }
 
 /** The point in the node's own box units (0..width × 0..height), from its page corners. */
-function localPoint(document: DocumentV6, node: NodeV6, point: PagePoint): PagePoint | null {
+function localPoint(document: DocumentV7, node: NodeV7, point: PagePoint): PagePoint | null {
   const corners = nodePageCorners(document, node.id);
   if (corners === null) return null;
   const [o, x, , y] = corners;
@@ -52,7 +52,7 @@ function localPoint(document: DocumentV6, node: NodeV6, point: PagePoint): PageP
   };
 }
 
-function inside(document: DocumentV6, node: NodeV6, point: PagePoint): boolean {
+function inside(document: DocumentV7, node: NodeV7, point: PagePoint): boolean {
   const local = localPoint(document, node, point);
   if (local === null) return false;
   const { width, height } = node.frame;
@@ -65,7 +65,7 @@ function inside(document: DocumentV6, node: NodeV6, point: PagePoint): boolean {
 }
 
 /** A node's fill colour when mostly opaque (its and its ancestors' opacity included), else null. */
-function opaqueFill(node: NodeV6, inherited: number): Color | null {
+function opaqueFill(node: NodeV7, inherited: number): Color | null {
   if (!('fill' in node) || node.fill === null) return null;
   const color = paintColor(node.fill);
   return color.a * node.opacity * inherited >= 0.5 ? color : null;
@@ -73,7 +73,7 @@ function opaqueFill(node: NodeV6, inherited: number): Color | null {
 
 /** The frontmost backdrop fill under `point` among `ids` (back to front), or null. */
 function backdropIn(
-  document: DocumentV6,
+  document: DocumentV7,
   ids: readonly string[],
   point: PagePoint,
   inherited: number,
@@ -98,7 +98,7 @@ function backdropIn(
 }
 
 /** The colour under the page point `point` of page `page`: a backdrop fill or the canvas. */
-export function backdropColor(document: DocumentV6, page: string, point: PagePoint): Color {
+export function backdropColor(document: DocumentV7, page: string, point: PagePoint): Color {
   const children = document.pages.find((p) => p.id === page)?.children ?? [];
   return backdropIn(document, children, point, 1) ?? CANVAS_BACKDROP;
 }
@@ -117,7 +117,7 @@ const same = (a: Color, b: Color) => a.r === b.r && a.g === b.g && a.b === b.b &
  * null when nothing changes (already that colour, or a colour other than the two automatic ones).
  */
 export function readableTextStyle(
-  document: DocumentV6,
+  document: DocumentV7,
   page: string,
   point: PagePoint,
   style: TextStyle,
@@ -140,7 +140,7 @@ export function canvasTextStyle(style: TextStyle): TextStyle | null {
  * The caret colour for a caret at the page point `point` (slice 7): white over a dark backdrop,
  * black over a light one, so the caret shows on the black canvas.
  */
-export function caretColour(document: DocumentV6, page: string, point: PagePoint): string {
+export function caretColour(document: DocumentV7, page: string, point: PagePoint): string {
   return luminance(backdropColor(document, page, point)) < 0.179 ? '#ffffff' : '#000000';
 }
 
@@ -149,6 +149,6 @@ export function caretColour(document: DocumentV6, page: string, point: PagePoint
  * a dark backdrop, black over a light one, so a pen path drawn on the black canvas shows (the
  * editor's default stroke is black).
  */
-export function readableStrokeColor(document: DocumentV6, page: string, point: PagePoint): Color {
+export function readableStrokeColor(document: DocumentV7, page: string, point: PagePoint): Color {
   return luminance(backdropColor(document, page, point)) < 0.179 ? WHITE : BLACK;
 }

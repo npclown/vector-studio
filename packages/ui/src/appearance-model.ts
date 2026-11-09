@@ -4,7 +4,7 @@ import type {
   CornerRadii,
   Gradient,
   GradientSpread,
-  NodeV6,
+  NodeV7,
   Paint,
   Stroke,
   StrokePatch,
@@ -36,7 +36,7 @@ export const PANEL_MAX_DASH_ENTRIES = 16;
 /** Section 8: the radial preset, centred and filling the unit box. */
 export const RADIAL_TRANSFORM: Gradient['transform'] = [0.5, 0, 0, 0.5, 0.5, 0.5];
 
-const FILL_TYPES: ReadonlySet<NodeV6['type']> = new Set([
+const FILL_TYPES: ReadonlySet<NodeV7['type']> = new Set([
   'rectangle',
   'ellipse',
   'path',
@@ -44,10 +44,10 @@ const FILL_TYPES: ReadonlySet<NodeV6['type']> = new Set([
   'frame',
   'symbol',
 ]);
-const STROKE_TYPES: ReadonlySet<NodeV6['type']> = new Set([...FILL_TYPES, 'line']);
+const STROKE_TYPES: ReadonlySet<NodeV7['type']> = new Set([...FILL_TYPES, 'line']);
 
 /** The `setStyle` keys a node type takes (editor-core's `PROPS`). */
-export function styleKeys(type: NodeV6['type']): readonly (keyof StyleProps)[] {
+export function styleKeys(type: NodeV7['type']): readonly (keyof StyleProps)[] {
   const keys: (keyof StyleProps)[] = [];
   if (FILL_TYPES.has(type)) keys.push('fill');
   if (STROKE_TYPES.has(type)) keys.push('stroke');
@@ -61,9 +61,9 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
 /** The common value of `read` over the nodes that take `key`. */
 export function common<T>(
-  nodes: readonly NodeV6[],
+  nodes: readonly NodeV7[],
   key: keyof StyleProps,
-  read: (node: NodeV6) => T,
+  read: (node: NodeV7) => T,
 ): Common<T> {
   let found: { value: T } | null = null;
   for (const node of nodes) {
@@ -76,11 +76,11 @@ export function common<T>(
 }
 
 /** A node's fill paint, or null (none, or a type without fill). */
-export const fillOf = (node: NodeV6): Paint | null =>
+export const fillOf = (node: NodeV7): Paint | null =>
   'fill' in node && FILL_TYPES.has(node.type) ? node.fill : null;
 
 /** A node's stroke, or null. */
-export const strokeOf = (node: NodeV6): Stroke | null =>
+export const strokeOf = (node: NodeV7): Stroke | null =>
   'stroke' in node && STROKE_TYPES.has(node.type) ? node.stroke : null;
 
 export const isGradient = (paint: Paint | null): paint is Gradient =>
@@ -318,7 +318,7 @@ export function styleCommand(ids: readonly string[], style: StyleProps): Command
 }
 
 /** The ids of the selected nodes that take `key`. */
-export function idsTaking(nodes: readonly NodeV6[], key: keyof StyleProps): string[] {
+export function idsTaking(nodes: readonly NodeV7[], key: keyof StyleProps): string[] {
   return nodes.filter((node) => styleKeys(node.type).includes(key)).map((node) => node.id);
 }
 

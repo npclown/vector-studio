@@ -1,4 +1,4 @@
-import type { DocumentV6, Frame } from '@vector-studio/model';
+import type { DocumentV7, Frame } from '@vector-studio/model';
 import { apply, localTransform, multiply, type Matrix } from './geometry.js';
 import { contentBox } from './content-box.js';
 import { boundsOf } from './hit-test.js';
@@ -41,7 +41,7 @@ export type HandleBox =
 
 /** The handle box of `selection` on `page` (section 4.4), or null for an empty selection. */
 export function handleBoxOf(
-  document: DocumentV6,
+  document: DocumentV7,
   page: string,
   selection: readonly string[],
 ): HandleBox | null {

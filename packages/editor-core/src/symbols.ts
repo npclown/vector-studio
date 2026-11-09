@@ -1,4 +1,4 @@
-import type { DocumentV6, InstanceNodeV5, NodeV6, SymbolNodeV6 } from '@vector-studio/model';
+import type { DocumentV7, InstanceNodeV7, NodeV7, SymbolNodeV7 } from '@vector-studio/model';
 import { Draft, fail, type Failure } from './draft.js';
 import {
   drawIds,
@@ -29,7 +29,7 @@ type Plan = Readonly<{
 }>;
 
 function plan(
-  document: DocumentV6,
+  document: DocumentV7,
   instances: readonly string[],
   cache: ExpansionCache,
 ): Plan | Failure {
@@ -47,11 +47,11 @@ function plan(
 }
 
 /** Turns each planned instance into its detached frame in `draft`, the copies taking `ids`. */
-function detach(draft: Draft, document: DocumentV6, planned: Plan, ids: readonly string[]): void {
+function detach(draft: Draft, document: DocumentV7, planned: Plan, ids: readonly string[]): void {
   let next = 0;
   planned.instances.forEach((id, i) => {
-    const instance = document.nodes[id] as InstanceNodeV5;
-    const source = document.nodes[instance.symbol] as SymbolNodeV6;
+    const instance = document.nodes[id] as InstanceNodeV7;
+    const source = document.nodes[instance.symbol] as SymbolNodeV7;
     const { children, nodes } = planned.expansions[i]!;
     const copyOf = new Map<string, string>();
     for (const key of nodes.keys()) copyOf.set(key, ids[next++]!);
@@ -63,7 +63,7 @@ function detach(draft: Draft, document: DocumentV6, planned: Plan, ids: readonly
         parent: node.parent === source.id ? id : copyOf.get(node.parent)!,
       };
       if (isContainer(node)) copy.children = node.children.map((child) => copyOf.get(child)!);
-      draft.set(copy as NodeV6);
+      draft.set(copy as NodeV7);
     }
     draft.set({
       id,
@@ -80,6 +80,8 @@ function detach(draft: Draft, document: DocumentV6, planned: Plan, ids: readonly
       children: children.map((child) => copyOf.get(child)!),
       fill: source.fill,
       stroke: source.stroke,
+      // The effects the instance draws with (E41-S10): its own, or else its source's.
+      effects: instance.effects.length > 0 ? instance.effects : source.effects,
     });
   });
 }
@@ -92,7 +94,7 @@ function detach(draft: Draft, document: DocumentV6, planned: Plan, ids: readonly
  * is built with placeholder IDs, and only then are IDs drawn (`editor.duplicate-id` last).
  */
 export function withDetach(
-  document: DocumentV6,
+  document: DocumentV7,
   instances: readonly string[],
   ids: IdSource,
   cache: ExpansionCache,
@@ -125,7 +127,7 @@ export function withDetach(
  * document (section 5.4): every instance outside `removed`, on any page, of a `symbol` inside it,
  * in `pages` order then page-tree pre-order. An instance removed too is deleted, not detached.
  */
-export function orphanedInstances(document: DocumentV6, removed: ReadonlySet<string>): string[] {
+export function orphanedInstances(document: DocumentV7, removed: ReadonlySet<string>): string[] {
   const sources = new Set<string>();
   for (const id of removed) {
     if (nodeOf(document, id)?.type === 'symbol') sources.add(id);
@@ -133,7 +135,7 @@ export function orphanedInstances(document: DocumentV6, removed: ReadonlySet<str
   if (sources.size === 0) return [];
   return pageInstances(document)
     .flat()
-    .filter((id) => !removed.has(id) && sources.has((document.nodes[id] as InstanceNodeV5).symbol));
+    .filter((id) => !removed.has(id) && sources.has((document.nodes[id] as InstanceNodeV7).symbol));
 }
 
 /**
@@ -142,11 +144,11 @@ export function orphanedInstances(document: DocumentV6, removed: ReadonlySet<str
  * the detached document, then `editor.duplicate-id`. Returns empty `ids`.
  */
 export function detachInstances(
-  document: DocumentV6,
+  document: DocumentV7,
   command: Extract<DocumentCommand, { type: 'detachInstances' }>,
   context: EditContext,
   cache: ExpansionCache,
-  finish: (draft: Draft) => DocumentV6 | Failure,
+  finish: (draft: Draft) => DocumentV7 | Failure,
 ): EditResult {
   const ids = uniqueIds(command.ids);
   if (ids === null || ids.length === 0) return fail('editor.invalid-command', '/ids');

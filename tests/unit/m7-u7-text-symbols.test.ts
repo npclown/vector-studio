@@ -11,10 +11,10 @@ import {
   validateFragmentTree,
   validateNode,
   type DocumentV4,
-  type DocumentV6,
-  type InstanceNodeV5,
-  type NodeV6,
-  type TextNode,
+  type DocumentV7,
+  type InstanceNodeV7,
+  type NodeV7,
+  type TextNodeV7,
   type TextRun,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
@@ -32,6 +32,7 @@ import {
   type Expansion,
 } from '../../packages/editor-core/src/expansion.js';
 import { createFakeTextLayout } from '../support/fake-text-layout.js';
+import { v7Text, v7Value, withoutEffects } from '../support/schema-v7.js';
 
 // MVP M7-U7 (M6a contract, section 9, M7-T1 to M7-T3; criterion M7-A12): text inside symbols, its
 // expansion under the instance scale, the instance text overrides with their schema v5 field,
@@ -50,7 +51,9 @@ const root = path.resolve(import.meta.dirname, '../..');
 const fixtures = path.join(root, 'tests/fixtures');
 const read = (file: string) => readFileSync(path.join(fixtures, file), 'utf8');
 const TEXT_SYMBOLS_V5 = read('m7-symbols/text-symbols.v5.json');
-const TEXT_SYMBOLS = read('m4-appearance/migrated/text-symbols.v6.json');
+const TEXT_SYMBOLS_V6 = read('m4-appearance/migrated/text-symbols.v6.json');
+/** What the model writes since E41-U4: the v6 text with `effects: []` on every node (E41-S1). */
+const TEXT_SYMBOLS = v7Text(TEXT_SYMBOLS_V6);
 const black = { r: 0, g: 0, b: 0, a: 1 };
 const red = { r: 1, g: 0, b: 0, a: 1 };
 const blue = { r: 0, g: 0, b: 1, a: 1 };
@@ -62,7 +65,7 @@ const run = (text: string, size = 10, color = black, family = 'Test'): TextRun =
   color,
 });
 
-function parsed(text: string): DocumentV6 {
+function parsed(text: string): DocumentV7 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -95,7 +98,7 @@ const documentOf = (target: Editor) => target.query({ type: 'document' });
 const text = (target: Editor) => serializeDocument(documentOf(target));
 const nodeOf = (target: Editor, id: string) => documentOf(target).nodes[id]!;
 const overridesOf = (target: Editor, id: string) =>
-  (nodeOf(target, id) as InstanceNodeV5).textOverrides;
+  (nodeOf(target, id) as InstanceNodeV7).textOverrides;
 
 function execute(target: Editor, command: Command): CommandResult {
   const result = target.execute(command);
@@ -145,18 +148,18 @@ function oneStep(target: Editor, command: Command): string {
   return after;
 }
 
-function expanded(document: DocumentV6, id: string): Expansion {
+function expanded(document: DocumentV7, id: string): Expansion {
   const result = expandInstance(document, id);
   if (result === null || !result.ok) throw new Error(`no expansion of ${id}`);
   return result.expansion;
 }
-const expandedText = (document: DocumentV6, instance: string, node: string) =>
-  expanded(document, instance).nodes.get(node) as TextNode;
+const expandedText = (document: DocumentV7, instance: string, node: string) =>
+  expanded(document, instance).nodes.get(node) as TextNodeV7;
 
 describe('M7-T3 schema v5: the instance override field (M6a contract, section 9)', () => {
   it('round-trips the text-symbols fixture byte for byte, also through the envelope', () => {
     // The v5 fixture reads as its v6 migration, the version changed only (M4 section 2.1).
-    expect(TEXT_SYMBOLS).toBe(
+    expect(TEXT_SYMBOLS_V6).toBe(
       TEXT_SYMBOLS_V5.replace('"schemaVersion": 5,', '"schemaVersion": 6,'),
     );
     expect(serializeDocument(parsed(TEXT_SYMBOLS_V5))).toBe(TEXT_SYMBOLS);
@@ -174,7 +177,12 @@ describe('M7-T3 schema v5: the instance override field (M6a contract, section 9)
 
   it('writes textOverrides after symbol, keys in code unit order, each value exactly { runs }', () => {
     const raw = JSON.parse(TEXT_SYMBOLS) as Json;
-    expect(Object.keys(raw.nodes.i4!).slice(-3)).toEqual(['type', 'symbol', 'textOverrides']);
+    expect(Object.keys(raw.nodes.i4!).slice(-4)).toEqual([
+      'type',
+      'symbol',
+      'textOverrides',
+      'effects',
+    ]);
     expect(Object.keys(raw.nodes.i4!.textOverrides!)).toEqual(['t1', 't2']);
     expect(raw.nodes.i3!.textOverrides).toEqual({});
     const override = raw.nodes.i4!.textOverrides!.t1 as { runs: Record<string, object>[] };
@@ -184,7 +192,7 @@ describe('M7-T3 schema v5: the instance override field (M6a contract, section 9)
     }
     // An in-memory value in another key order, keys unsorted, serializes to the same text.
     const value = parsed(TEXT_SYMBOLS);
-    const i4 = value.nodes.i4 as InstanceNodeV5;
+    const i4 = value.nodes.i4 as InstanceNodeV7;
     const { textOverrides, symbol, ...rest } = i4;
     const shuffled = {
       ...value,
@@ -196,7 +204,7 @@ describe('M7-T3 schema v5: the instance override field (M6a contract, section 9)
           symbol,
         },
       },
-    } as DocumentV6;
+    } as DocumentV7;
     expect(serializeDocument(shuffled)).toBe(TEXT_SYMBOLS);
     // A read sorts the keys too.
     const reversed = json();
@@ -204,7 +212,7 @@ describe('M7-T3 schema v5: the instance override field (M6a contract, section 9)
     reversed.nodes.i4!.textOverrides = { t2: t.t2, t1: t.t1 };
     const sorted = validateDocument(reversed);
     expect(
-      sorted.ok && Object.keys((sorted.document.nodes.i4 as InstanceNodeV5).textOverrides),
+      sorted.ok && Object.keys((sorted.document.nodes.i4 as InstanceNodeV7).textOverrides),
     ).toEqual(['t1', 't2']);
   });
 
@@ -219,7 +227,7 @@ describe('M7-T3 schema v5: the instance override field (M6a contract, section 9)
         `"textOverrides":{"__proto__":{"runs":[${JSON.stringify(run('o'))}]}}`,
       );
     const document = parsed(source);
-    const overrides = (document.nodes.i3 as InstanceNodeV5).textOverrides;
+    const overrides = (document.nodes.i3 as InstanceNodeV7).textOverrides;
     expect(Object.hasOwn(overrides, '__proto__')).toBe(true);
     expect(Object.getPrototypeOf(overrides)).toBe(Object.prototype);
     expect(expandedText(document, 'i3', '__proto__').runs[0]!.text).toBe('o');
@@ -263,9 +271,10 @@ describe('M7-T3 schema v5: the instance override field (M6a contract, section 9)
         JSON.stringify({ envelopeVersion: 1, lastOpenPageId: 'page-1', document: value }),
       );
       expect(envelope).toEqual({ ok: false, code, path: `/document${at}` });
-      // The v5 fixtures hold no stroke, so at v6 they differ in the version only (M4-M1).
+      // The v5 fixtures hold no stroke, so at v7 they differ in the version and the empty effects
+      // only (M4-M1, E41-S1).
       if (value.schemaVersion === 5) {
-        expect(validateDocument({ ...value, schemaVersion: 6 })).toEqual(expected);
+        expect(validateDocument(v7Value(value))).toEqual(expected);
       }
       // The editor refuses it on load.
       expect(() => createEditor({ document: value })).toThrow(`${code} at ${at}`);
@@ -316,7 +325,7 @@ describe('M7-T3 schema v5: the instance override field (M6a contract, section 9)
     value.nodes.i1!.textOverrides!.nope = { runs: [run('a')] };
     expect(validateFragmentTree(value).ok).toBe(true);
     const node = validateNode(value.nodes.i1);
-    expect(node.ok && (node.node as InstanceNodeV5).textOverrides.nope).toEqual({
+    expect(node.ok && (node.node as InstanceNodeV7).textOverrides.nope).toEqual({
       runs: [run('a')],
     });
     expect(validateNode({ ...value.nodes.i1, textOverrides: { t1: { runs: [] } } })).toEqual({
@@ -356,7 +365,7 @@ describe('M7-T3 migration v4 to v5 (M7-Q11 (a))', () => {
   })();
   const v5Of = (file: string) =>
     `m7-symbols/migrated/${path.basename(file).replace(/\.v4\.json$/, '')}.v5.json`;
-  /** What the model now writes for it, through `migrateV5toV6` (M4 contract, section 2.1). */
+  /** Its v6 migration (M4 contract, section 2.1); the model now writes it at v7 (E41-S1). */
   const v6Of = (file: string) =>
     `m4-appearance/migrated/${path.basename(file).replace(/\.v4\.json$/, '')}.v6.json`;
 
@@ -371,7 +380,7 @@ describe('M7-T3 migration v4 to v5 (M7-Q11 (a))', () => {
   it.each(v4Fixtures)('migrates %s byte for byte to its committed v5 text', (file) => {
     const v4 = read(file);
     const v5 = read(v5Of(file));
-    const v6 = read(v6Of(file));
+    const v6 = v7Text(read(v6Of(file)));
     if (file.includes('.envelope.')) {
       const result = parseEnvelope(v4);
       expect(result.ok && serializeEnvelope(result.envelope)).toBe(v6);
@@ -380,7 +389,7 @@ describe('M7-T3 migration v4 to v5 (M7-Q11 (a))', () => {
       expect(serializeDocument(parsed(v4))).toBe(v6);
       expect(parsed(v5)).toEqual(parsed(v4));
       const migrated = migrateV4toV5(JSON.parse(v4) as DocumentV4);
-      // The model writes v6 only, so the v5 result is compared as a value.
+      // The model writes v7 only, so the v5 result is compared as a value.
       expect(migrated.ok && migrated.document).toEqual(JSON.parse(v5));
     }
     // Only the version changes and every instance gains an empty override map.
@@ -406,7 +415,7 @@ describe('M7-T3 migration v4 to v5 (M7-Q11 (a))', () => {
     }
   });
 
-  it('rejects textOverrides on a v4 instance, also through migrateV4toV5, and accepts no v7', () => {
+  it('rejects textOverrides on a v4 instance, also through migrateV4toV5, and accepts no v8', () => {
     const value = JSON.parse(read('m7-symbols/malformed/override-in-v4.json')) as DocumentV4;
     const at = { ok: false, code: 'document.invalid-field', path: '/nodes/i1/textOverrides' };
     expect(migrateV4toV5(value)).toEqual(at);
@@ -415,7 +424,7 @@ describe('M7-T3 migration v4 to v5 (M7-Q11 (a))', () => {
       code: 'document.unsupported-version',
       path: '/schemaVersion',
     });
-    expect(parseDocument(JSON.stringify({ ...json(), schemaVersion: 7 }))).toEqual({
+    expect(parseDocument(JSON.stringify({ ...json(), schemaVersion: 8 }))).toEqual({
       ok: false,
       code: 'document.unsupported-version',
       path: '/schemaVersion',
@@ -424,13 +433,13 @@ describe('M7-T3 migration v4 to v5 (M7-Q11 (a))', () => {
 
   it('loads a v4 document with text in a symbol (M7-T1), migrated', () => {
     const { target } = counted(JSON.parse(read('m6-text/text-in-symbol.v4.json')));
-    expect(text(target)).toBe(read('m4-appearance/migrated/text-in-symbol.v6.json'));
+    expect(text(target)).toBe(v7Text(read('m4-appearance/migrated/text-in-symbol.v6.json')));
   });
 });
 
 describe('M7-T2 expansion of text under the instance scale', () => {
   const document = parsed(TEXT_SYMBOLS);
-  const source = (id: string) => document.nodes[id] as TextNode;
+  const source = (id: string) => document.nodes[id] as TextNodeV7;
 
   it('at scale 1 copies the source objects, an overridden node taking the override runs only', () => {
     const { nodes } = expanded(document, 'i1');
@@ -529,7 +538,7 @@ describe('M7-A12 overrides and propagation', () => {
       letterSpacing: 0.5,
     });
     let document = documentOf(target);
-    const t1 = document.nodes.t1 as TextNode;
+    const t1 = document.nodes.t1 as TextNodeV7;
     for (const instance of ['i1', 'i3']) {
       expect(expandedText(document, instance, 't1')).toMatchObject({
         align: 'center',
@@ -559,7 +568,7 @@ describe('M7-A12 overrides and propagation', () => {
     oneStep(target, { type: 'setText', id: 't1', start: 2, end: 2, text: 'c' });
     oneStep(target, { type: 'setTextStyle', id: 't1', start: 0, end: 1, style: { color: blue } });
     const document = documentOf(target);
-    expect((document.nodes.t1 as TextNode).runs).toEqual([run('a', 10, blue), run('bc')]);
+    expect((document.nodes.t1 as TextNodeV7).runs).toEqual([run('a', 10, blue), run('bc')]);
     expect(expandedText(document, 'i1', 't1').runs).toEqual([run('xy', 10, red)]);
     expect(expandedText(document, 'i4', 't1').runs).toEqual([run('q', 8), run('r', 8, blue)]);
     expect(expandedText(document, 'i2', 't1').runs).toEqual([run('a', 20, blue), run('bc', 20)]);
@@ -770,9 +779,9 @@ describe('M7-T3 detach copies the override runs', () => {
     oneStep(target, { type: 'detachInstances', ids: ['i1', 'i2'] });
     const document = documentOf(target);
     // IDs in pages order, each expansion in the source's pre-order: t1, g1, t2, r1.
-    expect((document.nodes.n1 as TextNode).runs).toEqual([run('xy', 10, red)]);
-    expect((document.nodes.n3 as TextNode).runs).toEqual([run('cd'), run('가', 20, red)]);
-    expect((document.nodes.n5 as TextNode).runs).toEqual([run('ab', 20)]);
+    expect((document.nodes.n1 as TextNodeV7).runs).toEqual([run('xy', 10, red)]);
+    expect((document.nodes.n3 as TextNodeV7).runs).toEqual([run('cd'), run('가', 20, red)]);
+    expect((document.nodes.n5 as TextNodeV7).runs).toEqual([run('ab', 20)]);
     expect(document.nodes.n7).toMatchObject({ type: 'text', runs: [run('zz', 24)] });
   });
 });
@@ -780,13 +789,13 @@ describe('M7-T3 detach copies the override runs', () => {
 describe('M7-T3 the M7-X4 cache with overrides', () => {
   it('recomputes only the source child whose override changed, and reuses the rest', () => {
     const { target } = counted();
-    const after = (command: Command): DocumentV6 => {
+    const after = (command: Command): DocumentV7 => {
       ok(target, command);
       return documentOf(target);
     };
     const cache = new ExpansionCache();
     const nodesOf = (result: ReturnType<ExpansionCache['expand']>) =>
-      result?.ok ? result.expansion.nodes : new Map<string, NodeV6>();
+      result?.ok ? result.expansion.nodes : new Map<string, NodeV7>();
     // s1 has two direct children, t1 and g1 (holding t2 and r1): one subtree each. i2 is at
     // scale 2, so every copy is a new object and reuse shows as object identity.
     const first = cache.expand(documentOf(target), 'i2');
@@ -800,7 +809,7 @@ describe('M7-T3 the M7-X4 cache with overrides', () => {
     for (const id of ['g1', 't2', 'r1']) {
       expect(nodesOf(second).get(id)).toBe(nodesOf(first).get(id));
     }
-    expect((nodesOf(second).get('t1') as TextNode).runs).toEqual([run('one', 20)]);
+    expect((nodesOf(second).get('t1') as TextNodeV7).runs).toEqual([run('one', 20)]);
     // A new override of t2 (inside g1, through the text-to-child map) recomputes g1 only.
     const third = cache.expand(
       after({ type: 'setInstanceText', id: 'i2', node: 't2', runs: [run('new')] }),
@@ -809,7 +818,7 @@ describe('M7-T3 the M7-X4 cache with overrides', () => {
     expect(cache.computed).toBe(4);
     expect(nodesOf(third).get('t1')).toBe(nodesOf(second).get('t1'));
     expect(nodesOf(third).get('r1')).not.toBe(nodesOf(second).get('r1'));
-    expect((nodesOf(third).get('t2') as TextNode).runs).toEqual([run('new', 20)]);
+    expect((nodesOf(third).get('t2') as TextNodeV7).runs).toEqual([run('new', 20)]);
     // A change of the instance that keeps its scale and override objects reuses both subtrees.
     const renamed = cache.expand(
       after({ type: 'setNodeProps', id: 'i2', props: { name: 'renamed' } }),
@@ -827,7 +836,7 @@ describe('M7-T3 the M7-X4 cache with overrides', () => {
     // Clearing both overrides recomputes both subtrees.
     const cleared = cache.expand(after({ type: 'clearInstanceText', id: 'i2' }), 'i2');
     expect(cache.computed).toBe(6);
-    expect((nodesOf(cleared).get('t1') as TextNode).runs).toEqual([run('ab', 20)]);
+    expect((nodesOf(cleared).get('t1') as TextNodeV7).runs).toEqual([run('ab', 20)]);
   });
 
   it('a detach after setInstanceText copies the new runs, scaled with the instance', () => {
@@ -839,8 +848,8 @@ describe('M7-T3 the M7-X4 cache with overrides', () => {
     oneStep(target, { type: 'detachInstances', ids: ['i1', 'i3'] });
     const document = documentOf(target);
     // IDs in pages order (i1, then i3), each expansion in the source's pre-order: t1, g1, t2, r1.
-    expect((document.nodes.n1 as TextNode).runs).toEqual([run('fresh')]);
-    expect((document.nodes.n7 as TextNode).runs).toEqual(expected);
+    expect((document.nodes.n1 as TextNodeV7).runs).toEqual([run('fresh')]);
+    expect((document.nodes.n7 as TextNodeV7).runs).toEqual(expected);
   });
 });
 
@@ -860,10 +869,10 @@ describe('M7-T3 paste and duplicate', () => {
   };
   const marked = (body: Body) => MARKER + JSON.stringify(body);
 
-  it('writes the overrides into the fragment at schema v6 (since M4-U1)', () => {
+  it('writes the overrides into the fragment at schema v7 (since E41-U4)', () => {
     const { target } = counted();
     const body = copied(target, ['i1']);
-    expect(body.schemaVersion).toBe(6);
+    expect(body.schemaVersion).toBe(7);
     expect(body.nodes.i1!.textOverrides).toEqual({ t1: { runs: [run('xy', 10, red)] } });
     expect(body.sources).toEqual(['s1']);
   });
@@ -878,7 +887,7 @@ describe('M7-T3 paste and duplicate', () => {
     expect(overridesOf(target, 'n6')).toEqual({ n2: { runs: [run('xy', 10, red)] } });
     const duplicated = ok(target, { type: 'duplicateNodes', ids: ['s1', 'i2'] });
     const i2Copy = duplicated.find((id) => nodeOf(target, id).type === 'instance')!;
-    const s1Copy = (nodeOf(target, i2Copy) as InstanceNodeV5).symbol;
+    const s1Copy = (nodeOf(target, i2Copy) as InstanceNodeV7).symbol;
     expect(duplicated).toContain(s1Copy);
     const g1Copy = (documentOf(target).nodes[s1Copy] as unknown as { children: string[] })
       .children[1]!;
@@ -898,7 +907,7 @@ describe('M7-T3 paste and duplicate', () => {
     expect(overridesOf(target, 'n6')).toEqual({ n2: { runs: [run('xy', 10, red)] } });
     oneStep(target, { type: 'duplicateNodes', ids: ['s1', 'i2'] });
     const instances = Object.values(documentOf(target).nodes).filter(
-      (node): node is InstanceNodeV5 =>
+      (node): node is InstanceNodeV7 =>
         node.type === 'instance' && !['i1', 'i2', 'i3', 'i4', 'i5', 'n6'].includes(node.id),
     );
     expect(instances.length).toBe(1);
@@ -940,7 +949,7 @@ describe('M7-T3 paste and duplicate', () => {
     const document = documentOf(hosted);
     expect(document.nodes[frame!]!.type).toBe('frame');
     const copy = (document.nodes[frame!] as unknown as { children: string[] }).children[0]!;
-    expect((document.nodes[copy] as TextNode).runs).toEqual([run('xy', 10, red)]);
+    expect((document.nodes[copy] as TextNodeV7).runs).toEqual([run('xy', 10, red)]);
   });
 
   it('applies the overrides when pasted detached', () => {
@@ -956,7 +965,7 @@ describe('M7-T3 paste and duplicate', () => {
     const document = documentOf(foreign);
     expect(document.nodes[frame!]!.type).toBe('frame');
     const copy = (document.nodes[frame!] as unknown as { children: string[] }).children[0]!;
-    expect((document.nodes[copy] as TextNode).runs).toEqual([run('xy', 10, red)]);
+    expect((document.nodes[copy] as TextNodeV7).runs).toEqual([run('xy', 10, red)]);
   });
 
   it('rejects a fragment key that names no text node of the copied or carried source', () => {
@@ -989,7 +998,8 @@ describe('M7-T3 paste and duplicate', () => {
 
   it('reads an instance of fragment version 2 at schema v3 and v4 with empty overrides', () => {
     const setup = counted();
-    const body = copied(setup.target, ['i3']);
+    // Below v7 a node has no `effects` (E41-S1).
+    const body = withoutEffects(copied(setup.target, ['i3']));
     delete body.nodes.i3!.textOverrides;
     // At v4 the carried source holds text; the instance links to s1 by the own clipboard.
     const [linked] = ok(setup.target, {
@@ -1064,7 +1074,7 @@ describe('M7-T1 text in sources through the commands', () => {
     const document = parsed(TEXT_SYMBOLS);
     expect(expandedText(document, 'i4', 't2').runs).toEqual([run('')]);
     expect(expandedText(document, 'i5', 't3').runs).toEqual([run('gh\nij')]);
-    const node: NodeV6 = document.nodes.i5!;
+    const node: NodeV7 = document.nodes.i5!;
     expect(node.type).toBe('instance');
   });
 });

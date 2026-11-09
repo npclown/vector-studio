@@ -4,6 +4,9 @@ export {
   isValidId,
   isValidRunText,
   MAX_DASH_ENTRIES,
+  MAX_EFFECT_OFFSET,
+  MAX_EFFECT_RADIUS,
+  MAX_EFFECTS,
   MAX_GRADIENT_STOPS,
   MAX_TEXT_LENGTH,
   MAX_TREE_DEPTH,
@@ -12,6 +15,7 @@ export {
   migrateV3toV4,
   migrateV4toV5,
   migrateV5toV6,
+  migrateV6toV7,
   normalizeRotation,
   parseDocument,
   validateAnyDocument,
@@ -28,6 +32,7 @@ export {
   type ParseResultV3,
   type ParseResultV4,
   type ParseResultV5,
+  type ParseResultV6,
   type ValidateNodeOptions,
 } from './parse.js';
 export {

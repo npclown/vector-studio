@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { RenderChangeSet } from '@vector-studio/contracts';
-import { validateDocument, type DocumentV6 } from '@vector-studio/model';
+import { validateDocument, type DocumentV7 } from '@vector-studio/model';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createEditor,
@@ -29,6 +29,7 @@ import {
 } from '../../packages/editor-core/src/projector.js';
 import { boxOfFrame, snapSet } from '../../packages/editor-core/src/snap.js';
 import { RecordingRenderer } from '../support/p5-recording-renderer.js';
+import { v7Text, v7Value } from '../support/schema-v7.js';
 
 // MVP M7-U3 (M7 contract, section 4): instances project as frame units holding their expansion
 // with the scene IDs of section 4.1, one unit for isolation, released after a source change, with
@@ -39,15 +40,17 @@ import { RecordingRenderer } from '../support/p5-recording-renderer.js';
 const root = path.resolve(import.meta.dirname, '../..');
 // Since M4-U1 the model returns schema v6, so each M7 fixture is read as its committed v6
 // migration under tests/fixtures/m4-appearance/migrated (M6a contract, section 9; M4 contract,
-// section 2.1).
+// section 2.1), and since E41-U4 as v7, with `effects: []` on every node (E41-S1).
 const fixture = (name: string) =>
-  readFileSync(
-    path.join(
-      root,
-      'tests/fixtures/m4-appearance/migrated',
-      `${path.basename(name).replace(/(\.v3)?\.json$/, '')}.v6.json`,
+  v7Text(
+    readFileSync(
+      path.join(
+        root,
+        'tests/fixtures/m4-appearance/migrated',
+        `${path.basename(name).replace(/(\.v3)?\.json$/, '')}.v6.json`,
+      ),
+      'utf8',
     ),
-    'utf8',
   );
 const SYMBOLS = fixture('symbols.v3.json');
 const START = { horizontal: 'start', vertical: 'start' } as const;
@@ -71,11 +74,11 @@ type Json = {
   nodes: Record<string, JsonNode>;
 };
 
-/** The symbols fixture after `edit`, read by the model. */
-function symbols(edit: (value: Json) => void = () => {}): DocumentV6 {
+/** The symbols fixture after `edit`, read by the model; nodes the edit adds gain `effects: []`. */
+function symbols(edit: (value: Json) => void = () => {}): DocumentV7 {
   const value = JSON.parse(SYMBOLS) as Json;
   edit(value);
-  const result = validateDocument(value);
+  const result = validateDocument(v7Value(value));
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
 }
@@ -105,26 +108,28 @@ const rect = (id: string, parent: string, frame: JsonNode['frame'], fill = red) 
  * rectangle `a` at (80, 40, 40, 20), which sticks out of the source's clip, and instance `I` of
  * it at (200, 0) with size `size`.
  */
-function clipped(size = 100, sourceStroke: unknown = null, rotation = 0): DocumentV6 {
-  const result = validateDocument({
-    schemaVersion: 6,
-    id: 'doc',
-    pages: [{ id: 'p', name: 'Page 1', children: ['S', 'I'] }],
-    nodes: {
-      S: base('S', 'p', 'symbol', {
-        frame: { x: 0, y: 0, width: 100, height: 100 },
-        children: ['a'],
-        fill: null,
-        stroke: sourceStroke,
-      }),
-      a: rect('a', 'S', { x: 80, y: 40, width: 40, height: 20 }),
-      I: base('I', 'p', 'instance', {
-        frame: { x: 200, y: 0, width: size, height: size },
-        rotation,
-        symbol: 'S',
-      }),
-    },
-  });
+function clipped(size = 100, sourceStroke: unknown = null, rotation = 0): DocumentV7 {
+  const result = validateDocument(
+    v7Value({
+      schemaVersion: 6,
+      id: 'doc',
+      pages: [{ id: 'p', name: 'Page 1', children: ['S', 'I'] }],
+      nodes: {
+        S: base('S', 'p', 'symbol', {
+          frame: { x: 0, y: 0, width: 100, height: 100 },
+          children: ['a'],
+          fill: null,
+          stroke: sourceStroke,
+        }),
+        a: rect('a', 'S', { x: 80, y: 40, width: 40, height: 20 }),
+        I: base('I', 'p', 'instance', {
+          frame: { x: 200, y: 0, width: size, height: size },
+          rotation,
+          symbol: 'S',
+        }),
+      },
+    }),
+  );
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
 }
@@ -141,44 +146,46 @@ const starGeometry = (node: { type: string; customType?: string; data?: unknown;
  * triangle `mp` masking a red square `mr`, both 50 × 50) and a star `c` at (60, 60, 40, 40);
  * instance `I` of it at (200, 0), 200 × 200 (scale 2).
  */
-function masked(): DocumentV6 {
+function masked(): DocumentV7 {
   const square = { x: 0, y: 0, width: 50, height: 50 };
-  const result = validateDocument({
-    schemaVersion: 6,
-    id: 'doc',
-    pages: [{ id: 'p', name: 'Page 1', children: ['S', 'I'] }],
-    nodes: {
-      S: base('S', 'p', 'symbol', {
-        frame: { x: 0, y: 0, width: 100, height: 100 },
-        children: ['M', 'c'],
-        fill: null,
-        stroke: null,
-      }),
-      M: base('M', 'S', 'maskGroup', { frame: square, children: ['mp', 'mr'] }),
-      mp: base('mp', 'M', 'path', {
-        frame: square,
-        path: {
-          verbs: ['move', 'line', 'line', 'close'],
-          points: [0, 0, 1, 0, 0, 1],
-          fillRule: 'nonzero',
-        },
-        fill: null,
-        stroke: null,
-      }),
-      mr: rect('mr', 'M', square),
-      c: base('c', 'S', 'custom', {
-        frame: { x: 60, y: 60, width: 40, height: 40 },
-        customType: 'ext.star',
-        data: { innerRatio: 0.5, points: 5 },
-        fill: red,
-        stroke: null,
-      }),
-      I: base('I', 'p', 'instance', {
-        frame: { x: 200, y: 0, width: 200, height: 200 },
-        symbol: 'S',
-      }),
-    },
-  });
+  const result = validateDocument(
+    v7Value({
+      schemaVersion: 6,
+      id: 'doc',
+      pages: [{ id: 'p', name: 'Page 1', children: ['S', 'I'] }],
+      nodes: {
+        S: base('S', 'p', 'symbol', {
+          frame: { x: 0, y: 0, width: 100, height: 100 },
+          children: ['M', 'c'],
+          fill: null,
+          stroke: null,
+        }),
+        M: base('M', 'S', 'maskGroup', { frame: square, children: ['mp', 'mr'] }),
+        mp: base('mp', 'M', 'path', {
+          frame: square,
+          path: {
+            verbs: ['move', 'line', 'line', 'close'],
+            points: [0, 0, 1, 0, 0, 1],
+            fillRule: 'nonzero',
+          },
+          fill: null,
+          stroke: null,
+        }),
+        mr: rect('mr', 'M', square),
+        c: base('c', 'S', 'custom', {
+          frame: { x: 60, y: 60, width: 40, height: 40 },
+          customType: 'ext.star',
+          data: { innerRatio: 0.5, points: 5 },
+          fill: red,
+          stroke: null,
+        }),
+        I: base('I', 'p', 'instance', {
+          frame: { x: 200, y: 0, width: 200, height: 200 },
+          symbol: 'S',
+        }),
+      },
+    }),
+  );
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
 }

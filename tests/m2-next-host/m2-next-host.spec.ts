@@ -1,5 +1,5 @@
 import type { Command, Editor, EditorEvent } from '@vector-studio/editor-core';
-import type { DocumentV6, Frame } from '@vector-studio/model';
+import type { DocumentV7, Frame } from '@vector-studio/model';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
@@ -154,11 +154,11 @@ async function build(page: Page): Promise<Ids> {
   return ids as Ids;
 }
 
-async function readDocument(page: Page): Promise<DocumentV6> {
+async function readDocument(page: Page): Promise<DocumentV7> {
   const text = await page.evaluate(() =>
     JSON.stringify(window.__p5Host!.editor.query({ type: 'document' })),
   );
-  return JSON.parse(text) as DocumentV6;
+  return JSON.parse(text) as DocumentV7;
 }
 
 async function snapshotOf(page: Page) {

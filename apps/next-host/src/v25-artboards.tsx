@@ -1,4 +1,4 @@
-import type { Command, DocumentV6, EditorSnapshot, Frame } from '@vector-studio/editor-core';
+import type { Command, DocumentV7, EditorSnapshot, Frame } from '@vector-studio/editor-core';
 import {
   useActivePage,
   useEditorCommands,
@@ -21,7 +21,7 @@ import { nodePageCorners } from './m2-geometry';
 export type Artboard = Readonly<{ id: string; name: string; frame: Frame }>;
 
 /** The active page's artboards (its top-level frames), front first like the layer tree. */
-export function artboardsOf(document: DocumentV6, page: string): readonly Artboard[] {
+export function artboardsOf(document: DocumentV7, page: string): readonly Artboard[] {
   const children = document.pages.find((entry) => entry.id === page)?.children ?? [];
   const boards: Artboard[] = [];
   for (const id of [...children].reverse()) {

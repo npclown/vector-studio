@@ -1,5 +1,5 @@
 import type { Command, Editor, EditorEvent } from '@vector-studio/editor-core';
-import { serializeDocument, type DocumentV6, type NodeV6 } from '@vector-studio/model';
+import { serializeDocument, type DocumentV7, type NodeV7 } from '@vector-studio/model';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
@@ -82,14 +82,14 @@ async function ok(page: Page, command: Command): Promise<readonly string[]> {
   return result.ids;
 }
 
-async function readDocument(page: Page): Promise<DocumentV6> {
+async function readDocument(page: Page): Promise<DocumentV7> {
   const text = await page.evaluate(() =>
     JSON.stringify(window.__p5Host!.editor.query({ type: 'document' })),
   );
-  return JSON.parse(text) as DocumentV6;
+  return JSON.parse(text) as DocumentV7;
 }
 
-async function nodeOf(page: Page, id: string): Promise<NodeV6> {
+async function nodeOf(page: Page, id: string): Promise<NodeV7> {
   return (await readDocument(page)).nodes[id]!;
 }
 
@@ -115,7 +115,7 @@ async function step(
   page: Page,
   label: string,
   action: () => Promise<void>,
-  check: (document: DocumentV6) => void,
+  check: (document: DocumentV7) => void,
 ) {
   const before = await undoDepth(page);
   await action();
@@ -131,7 +131,7 @@ async function layerOrder(page: Page): Promise<string[]> {
     .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-testid') ?? ''));
 }
 
-const activeChildren = (document: DocumentV6, page: string) =>
+const activeChildren = (document: DocumentV7, page: string) =>
   document.pages.find((entry) => entry.id === page)!.children;
 
 const textbox = (scope: Locator, name: string) => scope.getByRole('textbox', { name, exact: true });
@@ -464,7 +464,7 @@ test('M8-A14: transform, line arrow, child constraint and an invalid field', asy
       await endArrow.selectOption('triangle');
     },
     (document) => {
-      const node = document.nodes[line!] as Extract<NodeV6, { type: 'line' }>;
+      const node = document.nodes[line!] as Extract<NodeV7, { type: 'line' }>;
       expect([node.startArrow, node.endArrow]).toEqual(['none', 'triangle']);
     },
   );
@@ -536,7 +536,7 @@ test('M8-A14: a text style over a text edit selection', async ({ page }) => {
       await size.press('Enter');
     },
     (document) => {
-      const node = document.nodes[t!] as Extract<NodeV6, { type: 'text' }>;
+      const node = document.nodes[t!] as Extract<NodeV7, { type: 'text' }>;
       expect(node.runs).toEqual([
         { text: 'H', family: 'sans-serif', size: 16, color: BLACK },
         { text: 'el', family: 'sans-serif', size: 24, color: BLACK },
@@ -591,7 +591,7 @@ test('M8-A14: Create instance, Reset text in its group and Detach instance', asy
       expect(added).toHaveLength(1);
       const node = document.nodes[added[0]!]!;
       expect(node.type).toBe('instance');
-      expect((node as Extract<NodeV6, { type: 'instance' }>).symbol).toBe(symbol);
+      expect((node as Extract<NodeV7, { type: 'instance' }>).symbol).toBe(symbol);
     },
   );
   const [instance] = await selection(page);
@@ -600,7 +600,7 @@ test('M8-A14: Create instance, Reset text in its group and Detach instance', asy
   await ok(page, { type: 'setInstanceText', id: instance!, node: body!, runs: [run('B2')] });
   const overrides = async () =>
     Object.keys(
-      ((await nodeOf(page, instance!)) as Extract<NodeV6, { type: 'instance' }>).textOverrides,
+      ((await nodeOf(page, instance!)) as Extract<NodeV7, { type: 'instance' }>).textOverrides,
     ).sort();
   expect(await overrides()).toEqual([title!, body!].sort());
 
@@ -615,7 +615,7 @@ test('M8-A14: Create instance, Reset text in its group and Detach instance', asy
     () => bodyGroup.getByRole('button', { name: 'Reset text', exact: true }).click(),
     (document) =>
       expect(
-        (document.nodes[instance!] as Extract<NodeV6, { type: 'instance' }>).textOverrides,
+        (document.nodes[instance!] as Extract<NodeV7, { type: 'instance' }>).textOverrides,
       ).toEqual({ [title!]: { runs: [run('T2')] } }),
   );
   await expect(resets).toHaveCount(1);
@@ -632,10 +632,10 @@ test('M8-A14: Create instance, Reset text in its group and Detach instance', asy
     (document) => {
       // M7: the instance becomes a frame holding a copy of the source's content, with the kept
       // override applied to its copy of `Title text`.
-      const node = document.nodes[instance!] as Extract<NodeV6, { type: 'frame' }>;
+      const node = document.nodes[instance!] as Extract<NodeV7, { type: 'frame' }>;
       expect(node.type).toBe('frame');
       const copies = node.children.map(
-        (id) => document.nodes[id] as Extract<NodeV6, { type: 'text' }>,
+        (id) => document.nodes[id] as Extract<NodeV7, { type: 'text' }>,
       );
       expect(
         copies.map((copy) => [copy.type, copy.name, copy.runs.map((r) => r.text).join('')]),
@@ -665,7 +665,7 @@ test('M8-A14: Create star and its points from the ext.star panel', async ({ page
     (document) => {
       const added = Object.keys(document.nodes).filter((id) => !before.includes(id));
       expect(added).toHaveLength(1);
-      const node = document.nodes[added[0]!]! as Extract<NodeV6, { type: 'custom' }>;
+      const node = document.nodes[added[0]!]! as Extract<NodeV7, { type: 'custom' }>;
       expect([node.type, node.customType, node.name, node.data]).toEqual([
         'custom',
         'ext.star',
@@ -686,7 +686,7 @@ test('M8-A14: Create star and its points from the ext.star panel', async ({ page
       await points.press('Enter');
     },
     (document) =>
-      expect((document.nodes[star!] as Extract<NodeV6, { type: 'custom' }>).data).toEqual({
+      expect((document.nodes[star!] as Extract<NodeV7, { type: 'custom' }>).data).toEqual({
         points: 8,
         innerRatio: 0.5,
       }),
@@ -699,7 +699,7 @@ test('M8-A14: Create star and its points from the ext.star panel', async ({ page
   await expect(points).toHaveAttribute('aria-invalid', 'true');
   expect(await undoDepth(page)).toBe(depth);
   expect((await nodeOf(page, star!)).type === 'custom').toBe(true);
-  expect(((await nodeOf(page, star!)) as Extract<NodeV6, { type: 'custom' }>).data).toEqual({
+  expect(((await nodeOf(page, star!)) as Extract<NodeV7, { type: 'custom' }>).data).toEqual({
     points: 8,
     innerRatio: 0.5,
   });

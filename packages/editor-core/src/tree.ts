@@ -1,12 +1,12 @@
 import {
   MAX_TREE_DEPTH,
-  type ContainerNodeV6,
-  type DocumentV6,
-  type FrameNodeV6,
-  type GroupNode,
-  type NodeV6,
+  type ContainerNodeV7,
+  type DocumentV7,
+  type FrameNodeV7,
+  type GroupNodeV7,
+  type NodeV7,
   type PageV2,
-  type SymbolNodeV6,
+  type SymbolNodeV7,
 } from '@vector-studio/model';
 import { IDENTITY, localTransform, multiply, type Matrix } from './geometry.js';
 
@@ -15,11 +15,11 @@ import { IDENTITY, localTransform, multiply, type Matrix } from './geometry.js';
 
 /** Read access to a document tree, shared by documents and the edit draft. */
 export interface TreeView {
-  node(id: string): NodeV6 | undefined;
+  node(id: string): NodeV7 | undefined;
   page(id: string): PageV2 | undefined;
 }
 
-export function documentTree(document: DocumentV6): TreeView {
+export function documentTree(document: DocumentV7): TreeView {
   return {
     node: (id) => (Object.hasOwn(document.nodes, id) ? document.nodes[id] : undefined),
     page: (id) => document.pages.find((page) => page.id === id),
@@ -30,7 +30,7 @@ export function documentTree(document: DocumentV6): TreeView {
  * A node with children: a group, mask group, frame or symbol. A symbol is a container as a frame
  * is (M7 contract, section 1.2).
  */
-export function isContainer(node: NodeV6 | undefined): node is ContainerNodeV6 {
+export function isContainer(node: NodeV7 | undefined): node is ContainerNodeV7 {
   return (
     node !== undefined &&
     (node.type === 'group' ||
@@ -44,18 +44,18 @@ export function isContainer(node: NodeV6 | undefined): node is ContainerNodeV6 {
  * A `frame` or a `symbol`: the containers the frame rules apply to (M7 contract, section 1.2):
  * constraints when resized, the mapping inside a resized group, the top-level artboard target.
  */
-export function isFrameLike(node: NodeV6 | undefined): node is FrameNodeV6 | SymbolNodeV6 {
+export function isFrameLike(node: NodeV7 | undefined): node is FrameNodeV7 | SymbolNodeV7 {
   return node?.type === 'frame' || node?.type === 'symbol';
 }
 
 /** A `group` or `maskGroup`: the containers that refit to their children. */
-export function isGroup(node: NodeV6 | undefined): node is GroupNode {
+export function isGroup(node: NodeV7 | undefined): node is GroupNodeV7 {
   return node !== undefined && (node.type === 'group' || node.type === 'maskGroup');
 }
 
 /** Container ancestors of `id`, innermost first. */
-export function ancestors(tree: TreeView, id: string): ContainerNodeV6[] {
-  const chain: ContainerNodeV6[] = [];
+export function ancestors(tree: TreeView, id: string): ContainerNodeV7[] {
+  const chain: ContainerNodeV7[] = [];
   let parent = tree.node(id)?.parent;
   for (let guard = 0; parent !== undefined && guard <= MAX_TREE_DEPTH + 1; guard += 1) {
     const node = tree.node(parent);
@@ -126,7 +126,7 @@ export function treeDepth(tree: TreeView, id: string): number {
  * Whether a container adds a clip level: a `frame`, a `maskGroup` (section 4.3) or a `symbol`,
  * which clips as a frame (M7 contract, section 1.2).
  */
-export function clipsChildren(node: NodeV6 | undefined): boolean {
+export function clipsChildren(node: NodeV7 | undefined): boolean {
   return node?.type === 'frame' || node?.type === 'maskGroup' || node?.type === 'symbol';
 }
 
@@ -265,7 +265,7 @@ export function treeDepthViolation(tree: TreeView, roots: readonly string[]): st
  * The first node of a document that breaks the clip-depth rule, in page and pre-order, an
  * instance whose expansion breaks it included (M7-S5).
  */
-export function documentClipViolation(document: DocumentV6): string | null {
+export function documentClipViolation(document: DocumentV7): string | null {
   const tree = documentTree(document);
   for (const page of document.pages) {
     const found = clipDepthViolation(tree, page.children);
@@ -286,7 +286,7 @@ const MAX_ISOLATED_UNIT_COUNT = 31;
  * A node's effective opacity (M4-P6, M4-Q15 (a)): an instance's opacity times its source's, any
  * other node's own opacity. An instance whose source is missing takes its own.
  */
-export function effectiveOpacity(tree: TreeView, node: NodeV6): number {
+export function effectiveOpacity(tree: TreeView, node: NodeV7): number {
   if (node.type !== 'instance') return node.opacity;
   const source = tree.node(node.symbol);
   return source?.type === 'symbol' ? node.opacity * source.opacity : node.opacity;
@@ -350,7 +350,7 @@ function isolationLevelsMemo(tree: TreeView): (source: string) => SourceIsolatio
  */
 export function isolationBreaks(
   tree: TreeView,
-  node: NodeV6,
+  node: NodeV7,
   count: number,
   levelsOf: (source: string) => SourceIsolationLevels = isolationLevelsMemo(tree),
 ): boolean {
@@ -397,7 +397,7 @@ function isolationViolators(
 }
 
 /** The first of `found` in `pages` order then page-tree pre-order, or null. */
-function firstInDocument(document: DocumentV6, found: ReadonlySet<string>): string | null {
+function firstInDocument(document: DocumentV7, found: ReadonlySet<string>): string | null {
   if (found.size === 0) return null;
   const tree = documentTree(document);
   for (const page of document.pages) {
@@ -413,7 +413,7 @@ function firstInDocument(document: DocumentV6, found: ReadonlySet<string>): stri
  * then page-tree pre-order, an instance standing for the nodes of its expansion; the load check
  * after the clip depth. Null when all fit.
  */
-export function documentIsolationViolation(document: DocumentV6): string | null {
+export function documentIsolationViolation(document: DocumentV7): string | null {
   const tree = documentTree(document);
   return firstInDocument(
     document,
@@ -433,8 +433,8 @@ export function documentIsolationViolation(document: DocumentV6): string | null 
  * in `pages` order then page-tree pre-order.
  */
 export function isolationViolation(
-  base: DocumentV6,
-  document: DocumentV6,
+  base: DocumentV7,
+  document: DocumentV7,
   touched: Iterable<string>,
 ): string | null {
   const tree = documentTree(document);
@@ -523,8 +523,8 @@ export function sourceHeight(tree: TreeView, source: string): number {
 export type SymbolChange = Readonly<{ roots: readonly string[]; instances: readonly string[] }>;
 
 export function symbolChange(
-  base: DocumentV6,
-  document: DocumentV6,
+  base: DocumentV7,
+  document: DocumentV7,
   touched: Iterable<string>,
 ): SymbolChange {
   const tree = documentTree(document);
@@ -570,7 +570,7 @@ export function symbolChange(
  * `text` node does not count (M6a contract, section 9, M7-T1).
  */
 export function nestedSymbolViolation(
-  document: DocumentV6,
+  document: DocumentV7,
   roots: readonly string[],
 ): string | null {
   const tree = documentTree(document);
@@ -604,7 +604,7 @@ export function nestedSymbolViolation(
  * The instances of each page of `document`, in `pages` order, each in page-tree pre-order (the
  * reporting order of the M7 contract, sections 3 and 4.1); empty lists when there is none.
  */
-export function pageInstances(document: DocumentV6): string[][] {
+export function pageInstances(document: DocumentV7): string[][] {
   const tree = documentTree(document);
   return document.pages.map((page) =>
     page.children.flatMap((root) =>

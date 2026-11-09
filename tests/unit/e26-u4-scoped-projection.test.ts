@@ -12,7 +12,7 @@
 // text inside the sources and layout generation changes on both ports, and after every step and
 // bump checks each held text leaf against a fresh projection with no memo.
 import type { RenderChangeSet } from '@vector-studio/contracts';
-import { validateDocument, type DocumentV6 } from '@vector-studio/model';
+import { validateDocument, type DocumentV7 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   createEditor,
@@ -32,6 +32,7 @@ import path from 'node:path';
 import { ExpansionCache } from '../../packages/editor-core/src/expansion.js';
 import { RecordingRenderer } from '../support/p5-recording-renderer.js';
 import { createFakeTextLayout, type FakeTextLayout } from '../support/fake-text-layout.js';
+import { v7Value } from '../support/schema-v7.js';
 import { TextLayoutCache } from '../../packages/editor-core/src/text.js';
 
 /** mulberry32. */
@@ -667,10 +668,11 @@ const SYMBOLS = JSON.parse(
 ) as Json;
 
 /** The symbols fixture after `edit`: page-2 holds g1 [i2, r2], f2 [i4], s2 and d1 [d1-r]. */
-function read(edit: (value: Json) => void = () => {}): DocumentV6 {
+function read(edit: (value: Json) => void = () => {}): DocumentV7 {
   const value = structuredClone(SYMBOLS);
   edit(value);
-  const result = validateDocument(value);
+  // The fixture and the edits are v6; v7 adds `effects: []` to every node (E41-S1).
+  const result = validateDocument(v7Value(value));
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
 }
@@ -680,10 +682,10 @@ function read(edit: (value: Json) => void = () => {}): DocumentV6 {
  * other node object, as a command's result does.
  */
 function derive(
-  document: DocumentV6,
+  document: DocumentV7,
   nodes: Record<string, Record<string, unknown> | null>,
   pages: Record<string, string[]> = {},
-): DocumentV6 {
+): DocumentV7 {
   const next: Record<string, unknown> = { ...document.nodes };
   for (const [id, node] of Object.entries(nodes)) {
     if (node === null) delete next[id];
@@ -695,7 +697,7 @@ function derive(
     pages: document.pages.map((page) =>
       Object.hasOwn(pages, page.id) ? { ...page, children: pages[page.id]! } : page,
     ),
-  } as DocumentV6;
+  } as DocumentV7;
 }
 
 /** A projector on a recording renderer and one held to the whole page, fed the same changes. */
@@ -861,7 +863,7 @@ describe('E26-U4 projector cases outside the editor', () => {
     const beside = derive(start, { r2: { visible: false } });
     // The frame f2 goes, i4 with it.
     const gone = derive(beside, { f2: null, i4: null }, { 'page-2': ['g1', 's2', 'd1'] });
-    const steps: [DocumentV6, string[]][] = [
+    const steps: [DocumentV7, string[]][] = [
       [beside, ['r2']],
       [gone, ['f2']],
     ];

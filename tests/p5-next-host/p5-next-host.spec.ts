@@ -5,7 +5,7 @@ import {
   type Editor,
   type EditorEvent,
 } from '@vector-studio/editor-core';
-import type { DocumentV6 } from '@vector-studio/model';
+import type { DocumentV7 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
 import { RecordingRenderer } from '../support/p5-recording-renderer.js';
 import { expectLayoutBudget } from '../support/m8-n3-budget.js';
@@ -52,11 +52,11 @@ const SCRIPT: readonly Command[] = [
   { type: 'setViewport', camera: { position: { x: -20, y: -10 }, zoom: 1.25 } },
 ];
 
-async function readDocument(page: Page): Promise<DocumentV6> {
+async function readDocument(page: Page): Promise<DocumentV7> {
   const text = await page.evaluate(() =>
     JSON.stringify(window.__p5Host!.editor.query({ type: 'document' })),
   );
-  return JSON.parse(text) as DocumentV6;
+  return JSON.parse(text) as DocumentV7;
 }
 
 async function open(page: Page) {

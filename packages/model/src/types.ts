@@ -1,7 +1,7 @@
 // Document schemas (P5 editor-slice plan, section 3; MVP M1 contract, section 2). The model imports
 // nothing, so these types mirror the matching `contracts` scene fields instead of importing them.
-// Schema v6 (MVP M4 contract, section 2) is the document the model returns and writes; the v1 to
-// v5 types describe the input of `migrateV1toV2` to `migrateV5toV6` only.
+// Schema v7 (E41 contract, section 3) is the document the model returns and writes; the v1 to
+// v6 types describe the input of `migrateV1toV2` to `migrateV6toV7` only.
 
 export type JsonValue =
   null | boolean | number | string | readonly JsonValue[] | { readonly [key: string]: JsonValue };
@@ -374,4 +374,60 @@ export type DocumentV6 = Readonly<{
   /** One or more pages. */
   pages: readonly PageV6[];
   nodes: Readonly<Record<string, NodeV6>>;
+}>;
+
+// Document schema v7 (E41 contract, section 3): v6 with `effects` on every node.
+
+/**
+ * A drop shadow (E41-S2): `offsetX`, `offsetY` and `radius` in node-local units (E41-S4), the
+ * Gaussian's `σ = radius / 2`; `color` straight alpha.
+ */
+export type DropShadowEffect = Readonly<{
+  kind: 'dropShadow';
+  visible: boolean;
+  color: Color;
+  offsetX: number;
+  offsetY: number;
+  radius: number;
+}>;
+
+/** A blur of the node's whole rendered layer (E41-S2), `σ = radius / 2`. */
+export type LayerBlurEffect = Readonly<{ kind: 'layerBlur'; visible: boolean; radius: number }>;
+
+export type Effect = DropShadowEffect | LayerBlurEffect;
+
+/** The field v7 adds to every node (E41-S1): at most 8 effects, at most one layer blur (E41-S3). */
+export type NodeEffects = Readonly<{ effects: readonly Effect[] }>;
+
+export type RectangleNodeV7 = RectangleNodeV6 & NodeEffects;
+export type EllipseNodeV7 = EllipseNodeV6 & NodeEffects;
+export type LineNodeV7 = LineNodeV6 & NodeEffects;
+export type PathNodeV7 = PathNodeV6 & NodeEffects;
+export type CustomNodeV7 = CustomNodeV6 & NodeEffects;
+export type TextNodeV7 = TextNode & NodeEffects;
+export type InstanceNodeV7 = InstanceNodeV5 & NodeEffects;
+export type GroupNodeV7 = GroupNode & NodeEffects;
+export type FrameNodeV7 = FrameNodeV6 & NodeEffects;
+export type SymbolNodeV7 = SymbolNodeV6 & NodeEffects;
+
+export type LeafNodeV7 =
+  | RectangleNodeV7
+  | EllipseNodeV7
+  | LineNodeV7
+  | PathNodeV7
+  | CustomNodeV7
+  | TextNodeV7
+  | InstanceNodeV7;
+export type ContainerNodeV7 = GroupNodeV7 | FrameNodeV7 | SymbolNodeV7;
+export type NodeV7 = LeafNodeV7 | ContainerNodeV7;
+export type NodeTypeV7 = NodeV7['type'];
+
+export type PageV7 = PageV6;
+
+export type DocumentV7 = Readonly<{
+  schemaVersion: 7;
+  id: string;
+  /** One or more pages. */
+  pages: readonly PageV7[];
+  nodes: Readonly<Record<string, NodeV7>>;
 }>;
