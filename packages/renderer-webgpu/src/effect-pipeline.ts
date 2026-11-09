@@ -350,7 +350,8 @@ export function planEffectPasses(
   };
   for (const shadow of effect.shadows) {
     const offset: Point = [shadow.dx, shadow.dy];
-    // A shadow whose blurred content cannot reach `R` adds nothing: no passes.
+    // A shadow farther from `R` than its blur reach plus 2 px is skipped (with downsampling the
+    // box and bilinear spread add under 0.03/255 beyond that).
     const reach = shadow.sigmaPx >= EFFECT_SIGMA_EPSILON_PX ? Math.ceil(3 * shadow.sigmaPx) + 2 : 2;
     if (
       content.x + shadow.dx - reach >= result.x + result.width ||

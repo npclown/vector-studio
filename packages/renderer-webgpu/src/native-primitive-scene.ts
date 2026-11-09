@@ -636,8 +636,8 @@ type ValidatedLayers = Readonly<{
   compositeRecordBase: number;
   /** E41 U5: per layer, its effect passes, or null for a layer composited as E25's. */
   effects: readonly (LayerEffectFrame | null)[];
-  /** E41 U5: the shared scratch textures' size; 0 × 0 without effect passes that use them. */
-  scratch: Readonly<{ width: number; height: number }>;
+  /** E41 U5: the scratch pairs' sizes, in slot order; empty without passes that use them. */
+  scratch: readonly Readonly<{ width: number; height: number }>[];
 }> | null;
 
 /**
@@ -651,10 +651,10 @@ type LayerEffectFrame = Readonly<{
   /** The first pass's record index. */
   recordBase: number;
   /**
-   * True when the root's passes do not fit the frame's shared scratch textures; it then gets
-   * scratch textures of its own, so one wide and one tall root never share a texture of both.
+   * The scratch pair the root's passes use (an index into `scratch`), or -1 without scratch.
+   * Roots run one after another, so a pair is shared by every root that fits it.
    */
-  ownScratch: boolean;
+  scratchSlot: number;
 }>;
 
 /** E25 U3: a frame's layer resources, released with the frame's transients. */
@@ -2721,8 +2721,6 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     const compositeRecordBase = passRecords.length;
     // E41 U5: each effect root's passes, recorded after the composite records.
     let effectRecords = compositeRecordBase + count;
-    let scratchWidth = 0;
-    let scratchHeight = 0;
     const maximum = safeLimit(this.#device.limits.maxTextureDimension2D, 0);
     const effects = layers.map(
       (layer): { -readonly [K in keyof LayerEffectFrame]: LayerEffectFrame[K] } | null => {
@@ -2739,7 +2737,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
             result: null,
             plan: Object.freeze({ passes: [], scratch: { width: 0, height: 0 } }),
             recordBase: effectRecords,
-            ownScratch: false,
+            scratchSlot: -1,
           };
         }
         const plan = planEffectPasses(layer.bound, result, layer.effect);
@@ -2748,23 +2746,39 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         if (plan.scratch.width > maximum || plan.scratch.height > maximum) return null;
         const recordBase = effectRecords;
         effectRecords += plan.passes.length;
-        return { result, plan, recordBase, ownScratch: false };
+        return { result, plan, recordBase, scratchSlot: -1 };
       },
     );
-    // The shared scratch is the largest root's by area; a root that does not fit it gets its own.
-    for (const effect of effects) {
-      const area = (effect?.plan.scratch.width ?? 0) * (effect?.plan.scratch.height ?? 0);
-      if (area > scratchWidth * scratchHeight) {
-        scratchWidth = effect!.plan.scratch.width;
-        scratchHeight = effect!.plan.scratch.height;
+    // Scratch pairs: largest roots first, each root takes the first pair that fits it, or that
+    // fits it when grown to both extents within twice the larger area; otherwise a new pair. So
+    // similar roots share one pair, and a wide and a tall root never make one of both extents.
+    const scratch: { width: number; height: number }[] = [];
+    const byArea = effects
+      .filter((effect) => effect !== null && effect.plan.scratch.width > 0)
+      .sort(
+        (a, b) =>
+          b!.plan.scratch.width * b!.plan.scratch.height -
+          a!.plan.scratch.width * a!.plan.scratch.height,
+      );
+    for (const effect of byArea) {
+      const { width, height } = effect!.plan.scratch;
+      let slot = scratch.findIndex((pair) => width <= pair.width && height <= pair.height);
+      if (slot === -1) {
+        slot = scratch.findIndex((pair) => {
+          const grown = Math.max(pair.width, width) * Math.max(pair.height, height);
+          return grown <= 2 * Math.max(pair.width * pair.height, width * height);
+        });
+        if (slot === -1) {
+          slot = scratch.length;
+          scratch.push({ width, height });
+        } else {
+          scratch[slot]!.width = Math.max(scratch[slot]!.width, width);
+          scratch[slot]!.height = Math.max(scratch[slot]!.height, height);
+        }
       }
+      effect!.scratchSlot = slot;
     }
-    for (const effect of effects) {
-      if (effect === null) continue;
-      effect.ownScratch =
-        effect.plan.scratch.width > scratchWidth || effect.plan.scratch.height > scratchHeight;
-      Object.freeze(effect);
-    }
+    for (const effect of effects) if (effect !== null) Object.freeze(effect);
     const records = new Uint8Array(effectRecords * stride);
     passRecords.forEach((bytes, index) => records.set(bytes, index * stride));
     layers.forEach((layer, index) => {
@@ -2796,7 +2810,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       stride,
       compositeRecordBase,
       effects: Object.freeze(effects),
-      scratch: Object.freeze({ width: scratchWidth, height: scratchHeight }),
+      scratch: Object.freeze(scratch.map((pair) => Object.freeze({ ...pair }))),
     });
   }
 
@@ -2918,20 +2932,19 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
             TEXTURE_BINDING_USAGE,
           ),
     );
-    const scratch =
-      layers.scratch.width === 0 || layers.scratch.height === 0
-        ? null
-        : ([0, 1] as const).map((index) =>
-            texture(
-              `effect-scratch-${index}`,
-              layers.scratch.width,
-              layers.scratch.height,
-              this.#format,
-              1,
-              4,
-              TEXTURE_BINDING_USAGE,
-            ),
-          );
+    const scratch = layers.scratch.map((pair, slot) =>
+      ([0, 1] as const).map((index) =>
+        texture(
+          `effect-scratch-${slot}-${index}`,
+          pair.width,
+          pair.height,
+          this.#format,
+          1,
+          4,
+          TEXTURE_BINDING_USAGE,
+        ),
+      ),
+    );
     const compositeGroups = textures.map((layerTexture, index) =>
       this.#device.createBindGroup({
         label: `${prefix}/composite-${index}`,
@@ -3029,24 +3042,12 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       // E41 U5: `L` is complete; build `R` before any later pass composites it.
       const effect = layers.effects[index];
       if (effect == null || effect.result === null) return;
-      const own = effect.ownScratch
-        ? ([0, 1] as const).map((slot) =>
-            texture(
-              `effect-scratch-${index}-${slot}`,
-              effect.plan.scratch.width,
-              effect.plan.scratch.height,
-              this.#format,
-              1,
-              4,
-              TEXTURE_BINDING_USAGE,
-            ),
-          )
-        : null;
+      const pair = scratch[effect.scratchSlot];
       const surfaces: Record<EffectSurface, GPUTexture | null> = {
         content: textures[index]!,
         result: results[index]!,
-        scratch0: (own ?? scratch)?.[0] ?? null,
-        scratch1: (own ?? scratch)?.[1] ?? null,
+        scratch0: pair?.[0] ?? null,
+        scratch1: pair?.[1] ?? null,
       };
       effect.plan.passes.forEach((planned, offset) => {
         const pass = encoder.beginRenderPass({

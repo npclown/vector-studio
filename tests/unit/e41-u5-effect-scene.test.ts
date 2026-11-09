@@ -172,7 +172,7 @@ describe('E41 U5 effect passes in a frame', () => {
           `vector-studio/effect-pass/0/${pass.kind}`,
           pass.target === 'result'
             ? `${frame}/effect-result-0`
-            : `${frame}/effect-${pass.target === 'scratch0' ? 'scratch-0' : 'scratch-1'}`,
+            : `${frame}/effect-${pass.target === 'scratch0' ? 'scratch-0-0' : 'scratch-0-1'}`,
         ],
         ['setViewport', 0, 0, pass.width, pass.height, 0, 1],
         ['setPipeline', `vector-studio/e41-effect-${pass.kind}`],
@@ -198,8 +198,8 @@ describe('E41 U5 effect passes in a frame', () => {
       results.map(({ label, width, height, sampleCount }) => [label, width, height, sampleCount]),
     ).toEqual([
       [`${frame}/effect-result-0`, effect.output.width, effect.output.height, 1],
-      [`${frame}/effect-scratch-0`, plan.scratch.width, plan.scratch.height, 1],
-      [`${frame}/effect-scratch-1`, plan.scratch.width, plan.scratch.height, 1],
+      [`${frame}/effect-scratch-0-0`, plan.scratch.width, plan.scratch.height, 1],
+      [`${frame}/effect-scratch-0-1`, plan.scratch.width, plan.scratch.height, 1],
     ]);
     // E41-A09 unit part: released after the submission.
     expect(fixture.destroyed.filter((label) => label.includes('effect-')).sort()).toEqual(
@@ -231,6 +231,24 @@ describe('E41 U5 effect passes in a frame', () => {
       expect((width as number) > 300 && (height as number) > 200).toBe(false);
     }
     expect(scene.effectPasses).toBe(2);
+  });
+
+  it('shares one scratch pair between similar roots', async () => {
+    const fixture = nativeFixture();
+    const { scene, target } = await nativeScene(fixture, withEffects);
+    const packet = prepare(
+      [
+        box('a', 20, { effects: [shadow(0, 2, 2)], size: [100, 90] }),
+        box('b', 200, { effects: [shadow(2, 0, 2)], size: [96, 100] }),
+        box('c', 400, { effects: [shadow(1, 1, 2)], size: [104, 86] }),
+      ],
+      target,
+    );
+    submitted(scene.submitPrimitivePacket(packet));
+    expect(
+      fixture.textures.filter((texture) => texture.label.includes('effect-scratch')).length,
+    ).toBe(2);
+    expect(scene.effectPasses).toBe(3);
   });
 
   it('composites a leaf root at its content opacity, scaled back in the passes', async () => {
