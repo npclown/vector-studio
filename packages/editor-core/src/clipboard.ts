@@ -851,7 +851,7 @@ export function paste(
   if (at !== undefined) {
     const points = fragment.roots.flatMap((id) => {
       // The content box: a path's curve, not its handles (V-26).
-      return contentCorners(fragment.nodes[id]!);
+      return contentCorners(fragment.nodes[id]!, (child) => fragment.nodes[child]);
     });
     const bounds = boundsOfPoints(points)!;
     dx = at.x - (bounds.x + bounds.width / 2);

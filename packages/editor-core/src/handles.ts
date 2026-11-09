@@ -60,7 +60,7 @@ export function handleBoxOf(
   return {
     mode: 'single',
     // In the node's own axes: its frame, or for a path the box of its curve (V-26).
-    box: contentBox(node),
+    box: contentBox(node, (child) => document.nodes[child]),
     id,
     matrix: multiply(space.matrix, localTransform(node.frame, node.rotation)),
     turn: space.rotation + node.rotation,

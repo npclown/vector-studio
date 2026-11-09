@@ -1313,7 +1313,8 @@ export function createSelectTool(
           ids: selection,
           // One path whose curve box is inside its frame turns about the frame centre (V-26).
           pivot:
-            selection.length === 1 && hasInnerContentBox(document.nodes[selection[0]!]!)
+            selection.length === 1 &&
+            hasInnerContentBox(document.nodes[selection[0]!]!, (id) => document.nodes[id])
               ? frameCentre(document, selection[0]!)
               : handleCentre(handles),
           single: selection.length === 1 ? singleOf(document, selection[0]!) : null,

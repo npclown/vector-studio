@@ -133,7 +133,7 @@ export function alignNodes(
     const node = document.nodes[id]!;
     // The exact path needs the box to be the frame: not for a path whose curve box is inside it.
     const exactPath = tree.page(node.parent) !== undefined && node.rotation === 0;
-    if (exactPath && !hasInnerContentBox(node)) {
+    if (exactPath && !hasInnerContentBox(node, (child) => document.nodes[child])) {
       const own = horizontal ? node.frame.width : node.frame.height;
       const exact = at === 0 ? low : at === 0.5 ? low + size / 2 - own / 2 : low + size - own;
       place(draft, node, horizontal ? { ...node.frame, x: exact } : { ...node.frame, y: exact });
@@ -187,7 +187,11 @@ export function distributeNodes(
   for (const entry of entries.slice(1, -1)) {
     const min = previous + gap;
     const node = document.nodes[entry.id]!;
-    if (tree.page(node.parent) !== undefined && node.rotation === 0 && !hasInnerContentBox(node)) {
+    if (
+      tree.page(node.parent) !== undefined &&
+      node.rotation === 0 &&
+      !hasInnerContentBox(node, (child) => document.nodes[child])
+    ) {
       // A page-root node with rotation 0 sets its min exactly, as align does (its box's min is
       // its own `x` or `y`).
       place(draft, node, horizontal ? { ...node.frame, x: min } : { ...node.frame, y: min });
