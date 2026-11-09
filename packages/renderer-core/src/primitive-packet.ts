@@ -210,8 +210,8 @@ export type LayerPacketPart = Readonly<{
     meshDraws: readonly MeshFillDraw[];
     /**
      * E41 contract, section 5.2: present on an effect root drawn with its effects. `bound` is
-     * then its source bound (where `L` is rendered); the effect passes (U5) build `R` in
-     * `output`. Until a backend draws effects, the layer composites as an E25 layer (5.3).
+     * then its source bound clamped to the target and its parent, so that until a backend draws
+     * the effect passes (U5) the layer composites as an E25 layer (5.3).
      */
     effect?: LayerEffectRecord;
   }>[];
@@ -240,6 +240,11 @@ export type LayerPacketPart = Readonly<{
 
 /** E41 contract, section 5.2: an effect root's passes, in device pixels (E41-S9, K2). */
 export type LayerEffectRecord = Readonly<{
+  /**
+   * K2's source bound, where `L` is rendered; unlike `bound`, which until U5 is this bound
+   * clamped as an E25 layer's, it may pass the target and its parent.
+   */
+  source: DeviceRect;
   /** K2's output bound: `R` and the composite quad. */
   output: DeviceRect;
   /** Drop shadows in list order, offsets and σ in device pixels, σ clamped (K4). */

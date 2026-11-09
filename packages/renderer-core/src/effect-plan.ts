@@ -216,8 +216,14 @@ export type BudgetLayer =
 export type EffectBudgetTree = Readonly<{
   rootId: string;
   layers: readonly BudgetLayer[];
-  /** The tree's E25 layers if its effects are dropped (isolated effect roots stay layers). */
-  withoutEffects: readonly Readonly<{ width: number; height: number }>[];
+  /**
+   * The E25 layer trees the tree splits into if its effects are dropped: isolated scopes stay
+   * layers, the others dissolve, so each top-level isolated scope roots one tree.
+   */
+  withoutEffects: readonly Readonly<{
+    rootId: string;
+    layers: readonly Readonly<{ width: number; height: number }>[];
+  }>[];
   /** The effect roots of the tree, for the notice. */
   effectRoots: readonly string[];
 }>;
@@ -242,8 +248,8 @@ export type TreeNotice = Readonly<{ nodeId: string; bytes: number; limit: number
  * - E25's tile set over the widest admitted layer or source bound.
  *
  * A tree with effects that does not fit, or holds a bound over `maxTextureDimension`, drops its
- * effects (one `effects` notice on its root) and is planned again as its E25 layers alone; a
- * tree that still does not fit is not drawn (one `layers` notice, as E25).
+ * effects (one `effects` notice on its root) and its E25 trees are planned again under E25's
+ * rule, each admitted whole or not drawn with one `layers` notice on its root (`plainAdmitted`).
  */
 export function planEffectBudget(
   trees: readonly EffectBudgetTree[],
@@ -253,10 +259,13 @@ export function planEffectBudget(
 ): Readonly<{
   admitted: ReadonlySet<string>;
   withEffects: ReadonlySet<string>;
+  /** The E25 trees admitted from trees that dropped their effects, by root. */
+  plainAdmitted: ReadonlySet<string>;
   effectNotices: readonly EffectBudgetNotice[];
   layerNotices: readonly TreeNotice[];
 }> {
   const admitted = new Set<string>();
+  const plainAdmitted = new Set<string>();
   const withEffects = new Set<string>();
   const effectNotices: EffectBudgetNotice[] = [];
   const layerNotices: TreeNotice[] = [];
@@ -302,26 +311,24 @@ export function planEffectBudget(
         Object.freeze({ nodeId: tree.rootId, bytes: total, limit, overTextureLimit: oversize }),
       );
     }
-    // E25's rule over the tree without its effects.
-    let plain = 0;
-    width = maxWidth;
-    height = maxHeight;
-    for (const layer of tree.withoutEffects) {
-      plain += layer.width * layer.height * 4;
-      width = Math.max(width, layer.width);
-      height = Math.max(height, layer.height);
-    }
-    const plainTotal =
-      tree.withoutEffects.length === 0
-        ? resident
-        : resident + plain + scratch(maxOutput) + layerTileBytes(width, height, sampleCount);
-    if (plainTotal > limit) {
-      layerNotices.push(Object.freeze({ nodeId: tree.rootId, bytes: plainTotal, limit }));
-      continue;
-    }
-    admitted.add(tree.rootId);
-    resident += plain;
-    if (tree.withoutEffects.length > 0) {
+    // E25's rule over each tree the tree splits into without its effects.
+    for (const sub of tree.withoutEffects) {
+      let plain = 0;
+      width = maxWidth;
+      height = maxHeight;
+      for (const layer of sub.layers) {
+        plain += layer.width * layer.height * 4;
+        width = Math.max(width, layer.width);
+        height = Math.max(height, layer.height);
+      }
+      const plainTotal =
+        resident + plain + scratch(maxOutput) + layerTileBytes(width, height, sampleCount);
+      if (plainTotal > limit) {
+        layerNotices.push(Object.freeze({ nodeId: sub.rootId, bytes: plainTotal, limit }));
+        continue;
+      }
+      plainAdmitted.add(sub.rootId);
+      resident += plain;
       maxWidth = width;
       maxHeight = height;
     }
@@ -329,6 +336,7 @@ export function planEffectBudget(
   return Object.freeze({
     admitted,
     withEffects,
+    plainAdmitted,
     effectNotices: Object.freeze(effectNotices),
     layerNotices: Object.freeze(layerNotices),
   });

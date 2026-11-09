@@ -186,6 +186,7 @@ const MASK_NOTICES_QUEUED = 4096;
 const MASK_NOTICES_PER_PACKET = 32;
 /** E25 contract, section 5: the queue limits of `render.layer-resource-limit`, as for masks. */
 const LAYER_NOTICES_QUEUED = 4096;
+const NO_EFFECT_STATISTICS = Object.freeze({ roots: 0, clampedSigmas: 0 });
 const LAYER_NOTICES_PER_PACKET = 32;
 const IDENTITY: SceneAffine = [1, 0, 0, 1, 0, 0];
 /** P1 contract (position error): the packet v1 budget, in physical pixels, on both measures. */
@@ -393,10 +394,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   #effectsOverBudget = new Set<string>();
   #effectNotices: EffectBudgetNotice[] = [];
   #effectNoticesDropped = 0;
-  #effectStatistics: Readonly<{ roots: number; clampedSigmas: number }> = Object.freeze({
-    roots: 0,
-    clampedSigmas: 0,
-  });
+  #effectStatistics: Readonly<{ roots: number; clampedSigmas: number }> = NO_EFFECT_STATISTICS;
   /** E41-K2 and section 5.4: the device's `maxTextureDimension2D`. */
   readonly #maxTextureDimension: number;
   /** @internal Tests only (E25-A05): every visible container with opacity 1 is a layer too. */
@@ -557,6 +555,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     } else {
       if (this.#layersOverBudget.size > 0) this.#layersOverBudget = new Set();
       if (this.#effectsOverBudget.size > 0) this.#effectsOverBudget = new Set();
+      this.#effectStatistics = NO_EFFECT_STATISTICS;
     }
     // P4 contract, U4: mask levels are planned over the drawn content in paint order; content
     // under an undrawable level (empty bound, a source covering nothing, over the budget) is
@@ -1294,6 +1293,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       );
     const indices = new Map(order.map((scope, index) => [scope, index] as const));
     this.#queueEffectNotices([]);
+    this.#effectStatistics = NO_EFFECT_STATISTICS;
     return {
       order,
       bounds,
@@ -1316,17 +1316,39 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     const plan = planEffectLayers(scopes, content, view, target, this.#maxTextureDimension);
     this.#queueLayerNotices(plan.layerNotices);
     this.#queueEffectNotices(plan.effectNotices);
-    this.#effectStatistics = Object.freeze({
-      roots: plan.effects.size,
-      clampedSigmas: plan.clampedSigmas,
-    });
+    const states = new Map(plan.states);
     const resolve = (layer: LayerScope | null | undefined): LayerScope | null => {
       let scope = layer ?? null;
-      while (scope !== null && plan.states.get(scope) === 'dissolved') scope = scope.parent;
+      while (scope !== null && states.get(scope) === 'dissolved') scope = scope.parent;
       return scope;
     };
+    // Until a backend draws the effect passes (U5), an effect root composites as an E25 layer
+    // of its content: its packet bound is its source bound inside the target and its drawn
+    // parent's bound (E25-K5's clamps); an empty one draws nothing (section 5.3).
+    const bounds = new Map<LayerScope, DeviceRect>();
+    const targetRect: DeviceRect = { x: 0, y: 0, width: target.width, height: target.height };
+    for (const scope of scopes) {
+      if (states.get(scope) !== 'drawn') continue;
+      const parent = resolve(scope.parent);
+      if (parent !== null && states.get(parent) !== 'drawn') {
+        states.set(scope, 'dropped');
+        continue;
+      }
+      let bound = intersectRects(plan.bounds.get(scope)!, targetRect);
+      if (bound !== null && parent !== null) bound = intersectRects(bound, bounds.get(parent)!);
+      if (bound === null) {
+        states.set(scope, 'dropped');
+        continue;
+      }
+      bounds.set(scope, bound);
+    }
+    const effects = new Map([...plan.effects].filter(([scope]) => states.get(scope) === 'drawn'));
+    this.#effectStatistics = Object.freeze({
+      roots: effects.size,
+      clampedSigmas: [...effects.values()].reduce((sum, e) => sum + e.effects.clamped, 0),
+    });
     const order = scopes
-      .filter((scope) => plan.states.get(scope) === 'drawn')
+      .filter((scope) => states.get(scope) === 'drawn')
       .sort(
         (left, right) =>
           left.end - right.end || right.start - left.start || right.depth - left.depth,
@@ -1334,8 +1356,8 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     const indices = new Map(order.map((scope, index) => [scope, index] as const));
     return {
       order,
-      bounds: plan.bounds,
-      effects: plan.effects,
+      bounds,
+      effects,
       contains: (layer) => {
         const scope = resolve(layer);
         return scope === null || indices.has(scope);
@@ -2536,7 +2558,8 @@ function derivePrimitives(
         end: sequence,
         ...(effects === null
           ? {}
-          : { effects, world, isolated, outerChain: item.chain, hasMask: false }),
+          : // E41-K2: the root's own mask is target-based too.
+            { effects, world, isolated, outerChain: item.chain, hasMask: isMask }),
       };
       layerScopes.push(layer);
     }
@@ -2784,7 +2807,7 @@ function patchDerivation(
     // Defensive: a valid set that moves a leaf also writes a container or the root order.
     if (before.parentId !== node.parentId) return null;
     // E41: a leaf effect root owns a layer scope, which only a full derivation rebuilds.
-    if (before.effects !== undefined || node.effects !== undefined) return null;
+    if ((before.effects?.length ?? 0) > 0 || (node.effects?.length ?? 0) > 0) return null;
     updates.push({ leaf, node });
   }
   if (updates.length === 0) return Object.freeze({ ...previous, serial: scene.changeSerial });
@@ -2987,6 +3010,7 @@ function effectRecordOf(effect: EffectLayer | undefined): { effect?: LayerEffect
   if (effect === undefined) return {};
   return {
     effect: Object.freeze({
+      source: effect.source,
       output: effect.output,
       shadows: effect.effects.shadows,
       blurSigmaPx: effect.effects.blurSigmaPx,

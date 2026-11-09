@@ -10,7 +10,9 @@ import { describe, expect, it } from 'vitest';
 import {
   E41_SIGMA_PX_MAX,
   blurLevels,
+  cullTarget,
   deviceEffects,
+  extendEffectReach,
   effectBounds,
   effectMargin,
   effectResourceLimitDiagnostic,
@@ -94,6 +96,23 @@ describe('E41-S9 device effects, K4 clamp and levels', () => {
   });
 });
 
+describe('E41-K3 reach', () => {
+  it('grows a leaf’s cull bound by the summed world reach, against the outer clip', () => {
+    const outer = extendEffectReach(null, [shadow(40, 0, 2)], IDENTITY, null);
+    expect(outer.margin).toBeCloseTo(46, 12);
+    const inner = extendEffectReach(outer, [blur(1)], [2, 0, 0, 2, 0, 0], null);
+    expect(inner.margin).toBeCloseTo(52, 12);
+    const bounds = { minX: -30, minY: 20, maxX: -20, maxY: 30 };
+    expect(cullTarget(bounds, null, outer).bounds).toEqual({
+      minX: -76,
+      minY: -26,
+      maxX: 26,
+      maxY: 76,
+    });
+    expect(cullTarget(bounds, null, undefined).bounds).toBe(bounds);
+  });
+});
+
 describe('E41-K2 bounds', () => {
   const view = { x: 0, y: 0, width: 640, height: 360 };
 
@@ -152,7 +171,7 @@ describe('E41 section 5.4 budget', () => {
         {
           rootId: 'a',
           layers: [effect(3840, 2160)],
-          withoutEffects: [{ width: 3840, height: 2160 }],
+          withoutEffects: [{ rootId: 'a', layers: [{ width: 3840, height: 2160 }] }],
           effectRoots: ['a'],
         },
       ],
@@ -160,7 +179,7 @@ describe('E41 section 5.4 budget', () => {
       8192,
     );
     expect(plan.withEffects.size).toBe(0);
-    expect([...plan.admitted]).toEqual(['a']);
+    expect([...plan.plainAdmitted]).toEqual(['a']);
     expect(plan.effectNotices).toHaveLength(1);
     expect(plan.effectNotices[0]).toMatchObject({ nodeId: 'a', overTextureLimit: false });
     expect(plan.layerNotices).toEqual([]);
@@ -173,14 +192,15 @@ describe('E41 section 5.4 budget', () => {
       64,
     );
     expect(over.withEffects.size).toBe(0);
-    expect(over.admitted.has('a')).toBe(true);
+    expect(over.admitted.size).toBe(0);
+    expect(over.layerNotices).toEqual([]);
     expect(over.effectNotices[0]!.overTextureLimit).toBe(true);
     const none = planEffectBudget(
       [
         {
           rootId: 'b',
           layers: [effect(8000, 8000)],
-          withoutEffects: [{ width: 8000, height: 8000 }],
+          withoutEffects: [{ rootId: 'b', layers: [{ width: 8000, height: 8000 }] }],
           effectRoots: ['b'],
         },
       ],
@@ -188,6 +208,7 @@ describe('E41 section 5.4 budget', () => {
       16384,
     );
     expect(none.admitted.size).toBe(0);
+    expect(none.plainAdmitted.size).toBe(0);
     expect(none.layerNotices.map((notice) => notice.nodeId)).toEqual(['b']);
   });
 
@@ -361,11 +382,78 @@ describe('E41 section 5.2 effect roots in the packet', () => {
     );
   });
 
-  it('draws an off-screen caster whose shadow reaches the target', () => {
-    const { source } = setup([box('b', null, -30, { effects: [shadow(40, 0, 2)] })]);
+  it('has no packet layer for an off-screen caster until U5 draws its shadow (5.3)', () => {
+    const { source } = setup([
+      box('a', null, 10),
+      box('b', null, -30, { effects: [shadow(40, 0, 2)] }),
+    ]);
+    const packet = source.prepare(target)!;
+    expect(packet.layers?.layers ?? []).toEqual([]);
+    expect(runs(packet.draws)).toEqual([[0, 1]]);
+  });
+
+  it('keeps every packet bound inside the target and its parent (E25 preflight)', () => {
+    const { source } = setup([
+      group('outer', null, ['b', 'c'], 0.5),
+      box('b', 'outer', 0.5, { effects: [shadow(4, 4, 2)] }),
+      box('c', 'outer', 630, { effects: [shadow(-4, 4, 2)] }),
+    ]);
+    const part = source.prepare(target)!.layers!;
+    for (const layer of part.layers) {
+      expect(layer.bound.x).toBeGreaterThanOrEqual(0);
+      expect(layer.bound.y).toBeGreaterThanOrEqual(0);
+      expect(layer.bound.x + layer.bound.width).toBeLessThanOrEqual(target.width);
+      expect(layer.bound.y + layer.bound.height).toBeLessThanOrEqual(target.height);
+      if (layer.parent !== -1) {
+        const parent = part.layers[layer.parent]!.bound;
+        expect(layer.bound.x).toBeGreaterThanOrEqual(parent.x);
+        expect(layer.bound.x + layer.bound.width).toBeLessThanOrEqual(parent.x + parent.width);
+      }
+    }
+    expect(part.layers.filter((layer) => layer.effect !== undefined)).toHaveLength(2);
+  });
+
+  it('casts a clipped root’s shadow outside its own clip', () => {
+    const { source } = setup([
+      group('card', null, ['a'], 1, {
+        effects: [shadow(50, 0, 0)],
+        clip: { kind: 'rect', x: 100, y: 20, width: 10, height: 10 },
+      }),
+      box('a', 'card', 90, { size: 40 }),
+    ]);
     const layer = source.prepare(target)!.layers!.layers[0]!;
-    expect(layer.bound.x).toBeLessThan(0);
-    expect(layer.effect!.output.x).toBe(0);
+    // The source is the clip ([99, 111] even); the output reaches the shadow at +50.
+    expect(layer.effect!.source).toEqual({ x: 98, y: 18, width: 14, height: 14 });
+    expect(layer.effect!.output.x + layer.effect!.output.width).toBeGreaterThanOrEqual(160);
+  });
+
+  it('clamps a mask group that is itself an effect root to the target', () => {
+    const { source } = setup([
+      group('m', null, ['s', 'c'], 1, { effects: [shadow(40, 0, 2)], clip: { kind: 'mask' } }),
+      box('s', 'm', -30),
+      box('c', 'm', -30),
+    ]);
+    const packet = source.prepare(target);
+    expect(packet?.layers?.layers.some((layer) => layer.nodeId === 'm') ?? false).toBe(false);
+  });
+
+  it('drops only the isolated subtree over budget when a tree drops its effects', () => {
+    const big: PrimitiveTarget = { ...target, width: 8000, height: 8000 };
+    const { source } = setup(
+      [
+        group('card', null, ['a', 'big'], 1, { effects: [shadow(2, 2, 1)] }),
+        box('a', 'card', 10),
+        group('big', 'card', ['b'], 0.5),
+        box('b', 'big', 0, { size: 8000 }),
+      ],
+      16384,
+    );
+    const packet = source.prepare(big)!;
+    // `a` still draws in the main pass; `big` is not drawn, with the notice on it.
+    expect(packet.draws.reduce((sum, draw) => sum + draw.count, 0)).toBe(1);
+    expect(packet.layers!.layers).toEqual([]);
+    expect(packet.layers!.notices.map((notice) => notice.nodeId)).toEqual(['big']);
+    expect(packet.layers!.effectNotices!.map((notice) => notice.nodeId)).toEqual(['card']);
   });
 
   it('clamps a root that holds a mask group to the target', () => {

@@ -148,7 +148,8 @@ function ownClipBounds(scope: LayerScope): readonly SceneBounds[] | null {
  * enclosing layer's own chain (E41-K2: `V` is intersected with them).
  */
 function chainBetween(scope: LayerScope): readonly SceneBounds[] {
-  const chain = scope.outerChain ?? scope.chain;
+  // A null `outerChain` is an unclipped ancestry, not an absent one.
+  const chain = scope.outerChain !== undefined ? scope.outerChain : scope.chain;
   if (chain === null) return [];
   const parentLength = scope.parent?.chain?.bounds.length ?? 0;
   return chain.bounds.slice(parentLength);
@@ -324,20 +325,32 @@ export function planEffectLayers(
     withEffects.set(scope, bounds.source);
   }
 
-  // The tree's plan without its effects: isolated scopes stay E25 layers.
+  // The tree's plan without its effects: isolated scopes stay E25 layers, each top-level one
+  // the root of its own E25 tree.
   const isolated = (scope: LayerScope) => scope.isolated !== false;
   const plain = plainBounds(scopes, isolated, content, camera, target);
+  const plainRootOf = (scope: LayerScope): LayerScope => {
+    let root = scope;
+    for (let parent = scope.parent; parent !== null; parent = parent.parent) {
+      if (isolated(parent)) root = parent;
+    }
+    return root;
+  };
 
   // Section 5.4: trees in paint order.
   const trees = new Map<
     LayerScope,
-    { layers: BudgetLayer[]; withoutEffects: DeviceRect[]; effectRoots: string[] }
+    {
+      layers: BudgetLayer[];
+      withoutEffects: Map<LayerScope, { width: number; height: number }[]>;
+      effectRoots: string[];
+    }
   >();
   const treeOf = (scope: LayerScope) => {
     const root = rootOf(scope);
     let tree = trees.get(root);
     if (tree === undefined) {
-      tree = { layers: [], withoutEffects: [], effectRoots: [] };
+      tree = { layers: [], withoutEffects: new Map(), effectRoots: [] };
       trees.set(root, tree);
     }
     return tree;
@@ -353,10 +366,21 @@ export function planEffectLayers(
     else if (bound !== undefined) {
       tree.layers.push({ kind: 'layer', width: bound.width, height: bound.height });
     }
-    if (plainBound !== undefined) tree.withoutEffects.push(plainBound);
+    if (plainBound !== undefined) {
+      const sub = plainRootOf(scope);
+      tree.withoutEffects.set(sub, [...(tree.withoutEffects.get(sub) ?? []), plainBound]);
+    }
   }
   const budget = planEffectBudget(
-    [...trees].map(([root, tree]) => ({ rootId: root.nodeId, ...tree })),
+    [...trees].map(([root, tree]) => ({
+      rootId: root.nodeId,
+      layers: tree.layers,
+      effectRoots: tree.effectRoots,
+      withoutEffects: [...tree.withoutEffects].map(([sub, layers]) => ({
+        rootId: sub.nodeId,
+        layers,
+      })),
+    })),
     target.sampleCount,
     maxTextureDimension,
   );
@@ -391,16 +415,15 @@ export function planEffectLayers(
       }
       continue;
     }
-    if (!budget.admitted.has(root)) {
-      states.set(scope, 'dropped');
-      continue;
-    }
+    // Admitted whole without effects (a tree with no effect root), or split into E25 trees.
     if (!isolated(scope)) {
       states.set(scope, 'dissolved');
       continue;
     }
+    const admittedPlain =
+      budget.admitted.has(root) || budget.plainAdmitted.has(plainRootOf(scope).nodeId);
     const bound = plain.get(scope);
-    if (bound === undefined) states.set(scope, 'dropped');
+    if (!admittedPlain || bound === undefined) states.set(scope, 'dropped');
     else {
       states.set(scope, 'drawn');
       bounds.set(scope, bound);
