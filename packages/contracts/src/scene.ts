@@ -114,12 +114,37 @@ export const SCENE_TEXT_MAX_RUNS = 16_384;
 export const SCENE_TEXT_MAX_CLUSTER_UNITS = 32;
 export const SCENE_TEXT_MAX_FONT_LIST = 512;
 export const SCENE_TEXT_MAX_LANG = 35;
+/**
+ * E41 contract (docs/plans/d9-e41-boolean-effects-contract.md), E41-S5: one visible effect of a
+ * node, in the node's scene-local units. `sigma` is the Gaussian standard deviation (the model's
+ * radius / 2, E41-S4); offsets and sigma map through the node's scene transform (E41-S9).
+ */
+export type SceneEffect =
+  | Readonly<{
+      kind: 'dropShadow';
+      color: SceneColor;
+      /** Finite. */
+      offsetX: number;
+      /** Finite. */
+      offsetY: number;
+      /** Finite, >= 0. */
+      sigma: number;
+    }>
+  | Readonly<{ kind: 'layerBlur'; /** Finite, >= 0. */ sigma: number }>;
+/** E41-S3 and S5: more effects than this, or more than one layer blur, is `invalid-value`. */
+export const SCENE_MAX_EFFECTS = 8;
 export type SceneNodeBase = Readonly<{
   id: string;
   parentId: string | null;
   transform: SceneAffine;
   visible: boolean;
   opacity: number;
+  /**
+   * E41-S5: the node's visible effects, in list order. Absent and `[]` both mean none; a non-empty
+   * list needs the renderer's `effects: 'v0'` (E41-S6), else it is `unsupported-feature`. A frame
+   * unit carries its effects on its outer container.
+   */
+  effects?: readonly SceneEffect[];
 }>;
 export type RenderNodeSnapshot = SceneNodeBase &
   (

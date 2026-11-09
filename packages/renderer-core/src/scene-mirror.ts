@@ -30,6 +30,7 @@ import {
   pathDataEquals,
   type ClipSupport,
   type DashSupport,
+  type EffectSupport,
   type GroupOpacitySupport,
   type PaintSupport,
   type PathNodeSupport,
@@ -84,6 +85,12 @@ export type RetainedSceneMirrorOptions = Readonly<{
   groupOpacity?: GroupOpacitySupport;
   /** E28 contract, E28-S3: whether text nodes are drawn; default 'unsupported'. */
   textNodes?: TextSupport;
+  /**
+   * E41 contract, E41-S6: whether node effects are accepted; default 'none', under which a
+   * node with non-empty `effects` is `unsupported-feature`. Tests only until E41 U4b: no
+   * renderer draws effects yet, so no service sets this option before then.
+   */
+  effects?: EffectSupport;
 }>;
 
 export type ScenePendingChangeState = Readonly<{
@@ -258,6 +265,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     const groupOpacity: GroupOpacitySupport =
       options.groupOpacity === 'supported' ? 'supported' : 'unsupported';
     const textNodes: TextSupport = options.textNodes === 'supported' ? 'supported' : 'unsupported';
+    const effects: EffectSupport = options.effects === 'v0' ? 'v0' : 'none';
     this.#pathNodes = Object.freeze({
       pathNodes,
       pathFills,
@@ -267,6 +275,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       dashes,
       groupOpacity,
       textNodes,
+      effects,
     });
   }
 

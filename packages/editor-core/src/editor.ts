@@ -170,6 +170,12 @@ export type EditorOptions = Readonly<{
    */
   returnToSelect?: boolean;
   /**
+   * E41 contract, E41-S6: when true, the scene the editor projects to an attached renderer
+   * carries node effects (drop shadows, layer blur), which needs a renderer on `effects: 'v0'`.
+   * Defaults to false: effects stay in the document and are not drawn.
+   */
+  projectEffects?: boolean;
+  /**
    * V-25 slice 4: when true, the drawing tools create a node in the innermost frame under the
    * press point (inside the scope when it holds the point), and a select-tool move that ends with
    * the pointer over a frame moves the dragged nodes into it, or out of their frame onto the
@@ -811,6 +817,8 @@ class EditorCore implements Editor {
    */
   readonly textLayouts: TextLayoutCache | null;
   private readonly layout: TextLayouter | undefined;
+  /** E41-S6: whether the projector emits node effects (`EditorOptions.projectEffects`). */
+  private readonly projectEffects: boolean;
 
   /**
    * The IDs of `returned` that a draw on `drawnOn` accepted: `drawIds` and `freshId` skip only
@@ -912,6 +920,7 @@ class EditorCore implements Editor {
     if (!result.ok) throw new Error(`createEditor: ${result.code} at ${result.path}`);
     this.document = deepFreeze(result.document);
     this.activePage = this.document.pages[0]!.id;
+    this.projectEffects = options.projectEffects === true;
     this.snapshot = this.buildSnapshot();
     this.tools.set(
       'select',
@@ -1687,6 +1696,7 @@ class EditorCore implements Editor {
       this.expansions,
       // The editor's layout cache (M6c-Q2 (a)); without a port text projects nothing (M6c-P3).
       this.layout,
+      this.projectEffects,
     );
     this.projector = projector;
     this.renderer = renderer;

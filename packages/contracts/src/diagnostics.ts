@@ -48,6 +48,13 @@ export const DIAGNOSTIC_CODES = Object.freeze({
    */
   LAYER_RESOURCE_LIMIT: 'render.layer-resource-limit',
   /**
+   * A tree's effect roots exceed the layer budget, so their effects are not drawn and their
+   * content draws without them; raised once per tree root on its transition into that state (E41
+   * contract, E41-S8 and section 5.4, docs/plans/d9-e41-boolean-effects-contract.md); reserved by
+   * unit U4, reported from unit U5.
+   */
+  EFFECT_RESOURCE_LIMIT: 'render.effect-resource-limit',
+  /**
    * The source draws text but the renderer could not create its text pipeline or atlas pages, so
    * text is not drawn (E28 contract, E28-D1, docs/plans/d9-e28-text-glyph-atlas-contract.md);
    * reserved by unit U1, reported from unit U3.

@@ -13,6 +13,7 @@ import {
   getTextLocalBounds,
   transformSceneBounds,
 } from './scene-numeric.js';
+import { exceedsIsolationDepth, isIsolating } from './scene-validation.js';
 import type { PathSupport, ValidatedChangesInput } from './scene-validation.js';
 
 // E26 contract, section 4.1: the verdict of a change set in work proportional to the change.
@@ -213,10 +214,8 @@ function shiftsSubtreeWorld(
   );
 }
 
-/** Whether a node isolates its children (E25-S2). */
-function isolates(node: RenderNodeSnapshot): boolean {
-  return node.kind === 'container' && node.visible && node.opacity > 0 && node.opacity < 1;
-}
+/** Whether a node isolates its children (E25-S2, E41-S7). */
+const isolates = isIsolating;
 
 function clips(node: RenderNodeSnapshot): boolean {
   return node.kind === 'container' && node.clip !== null;
@@ -476,7 +475,11 @@ export function candidateGraphReason(
   const visited = new Set<string>();
   for (const node of candidate.writtenNodes()) {
     const at = depthOf(node);
-    if (at.depth > SCENE_MAX_CLIP_DEPTH || at.isolation > SCENE_MAX_ISOLATION_DEPTH) {
+    if (
+      at.depth > SCENE_MAX_CLIP_DEPTH ||
+      at.isolation > SCENE_MAX_ISOLATION_DEPTH ||
+      exceedsIsolationDepth(node, at.isolation)
+    ) {
       return { unknown: false, reason: 'unsupported-feature' };
     }
     if (shiftsSubtreeDepth(candidate.residentNode(node.id), node)) {
@@ -491,6 +494,9 @@ export function candidateGraphReason(
     if (visited.has(id)) continue;
     visited.add(id);
     const node = candidate.get(id);
+    if (node !== undefined && exceedsIsolationDepth(node, isolation)) {
+      return { unknown: false, reason: 'unsupported-feature' };
+    }
     if (node === undefined || node.kind !== 'container') continue;
     const childDepth = node.clip === null ? depth : depth + 1;
     const childIsolation = isolates(node) ? isolation + 1 : isolation;

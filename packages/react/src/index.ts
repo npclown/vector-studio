@@ -156,6 +156,7 @@ export type {
   SceneClip,
   SceneColor,
   SceneDash,
+  SceneEffect,
   SceneFillRule,
   SceneGradient,
   SceneGradientSpread,

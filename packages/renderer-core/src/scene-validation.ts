@@ -9,6 +9,7 @@ import type {
   SceneClip,
   SceneColor,
   SceneDash,
+  SceneEffect,
   SceneGradient,
   SceneGradientStop,
   SceneIdentity,
@@ -24,6 +25,7 @@ import type {
 import {
   SCENE_MAX_CLIP_DEPTH,
   SCENE_MAX_DASH_ENTRIES,
+  SCENE_MAX_EFFECTS,
   SCENE_MAX_GRADIENT_STOPS,
   SCENE_MAX_ISOLATION_DEPTH,
   SCENE_TEXT_MAX_CLUSTER_UNITS,
@@ -62,6 +64,11 @@ export type GroupOpacitySupport = 'unsupported' | 'supported';
  * node is reported as `unsupported-feature`, after its shape check.
  */
 export type TextSupport = 'unsupported' | 'supported';
+/**
+ * E41 contract, E41-S6: whether the renderer draws node effects. Unless 'v0', a node with a
+ * non-empty `effects` is reported as `unsupported-feature`.
+ */
+export type EffectSupport = 'none' | 'v0';
 
 /**
  * The port-presence facts of a mirror (V3 section a; B2 stroke contract, section 5 and the
@@ -82,6 +89,8 @@ export type PathSupport = Readonly<{
   groupOpacity?: GroupOpacitySupport;
   /** E28-S3; absent means 'unsupported'. */
   textNodes?: TextSupport;
+  /** E41-S6; absent means 'none'. */
+  effects?: EffectSupport;
 }>;
 
 const NO_PATH_SUPPORT: PathSupport = Object.freeze({
@@ -237,8 +246,8 @@ export function validateCandidateGraph(
  * P4-S2: a mask source (`children[0]` of a mask container) must not be a container, and a path
  * source needs a fill port whatever its style. Clip depth: no node may have more than
  * SCENE_MAX_CLIP_DEPTH clipping proper ancestors. E25-S2: no node may have more than
- * SCENE_MAX_ISOLATION_DEPTH visible proper ancestors with 0 < opacity < 1. One walk from the
- * roots, O(n).
+ * SCENE_MAX_ISOLATION_DEPTH isolating proper ancestors (`isIsolating`, E41-S7), and a leaf
+ * effect root no more than one fewer. One walk from the roots, O(n).
  */
 function hasUnsupportedClipGraph(
   nodes: ReadonlyMap<string, RenderNodeSnapshot>,
@@ -255,6 +264,7 @@ function hasUnsupportedClipGraph(
     if (depth > SCENE_MAX_CLIP_DEPTH) return true;
     if (isolation > SCENE_MAX_ISOLATION_DEPTH) return true;
     const node = nodes.get(id);
+    if (node !== undefined && exceedsIsolationDepth(node, isolation)) return true;
     if (node === undefined || node.kind !== 'container') continue;
     if (node.clip !== null && node.clip.kind === 'mask' && node.children.length > 0) {
       const source = nodes.get(node.children[0]!);
@@ -265,13 +275,29 @@ function hasUnsupportedClipGraph(
       if (source.kind === 'path' && support.pathFills !== 'supported') return true;
     }
     const childDepth = node.clip === null ? depth : depth + 1;
-    const isolated = node.visible && node.opacity > 0 && node.opacity < 1;
-    const childIsolation = isolated ? isolation + 1 : isolation;
+    const childIsolation = isIsolating(node) ? isolation + 1 : isolation;
     for (const childId of node.children) {
       pending.push({ id: childId, depth: childDepth, isolation: childIsolation });
     }
   }
   return false;
+}
+
+/**
+ * E25-S2 with E41-S7: whether a node is an isolating node, a visible container with
+ * 0 < opacity < 1, or a visible effect root of any kind (non-empty `effects`, opacity > 0). A
+ * container counts toward its descendants' isolation depth; a leaf effect root draws one layer
+ * of its own, so it may have at most SCENE_MAX_ISOLATION_DEPTH - 1 isolating proper ancestors.
+ */
+export function isIsolating(node: RenderNodeSnapshot): boolean {
+  if (!node.visible || !(node.opacity > 0)) return false;
+  if (node.effects !== undefined && node.effects.length > 0) return true;
+  return node.kind === 'container' && node.opacity < 1;
+}
+
+/** Whether `node` at `isolation` isolating proper ancestors breaks the isolation depth bound. */
+export function exceedsIsolationDepth(node: RenderNodeSnapshot, isolation: number): boolean {
+  return node.kind !== 'container' && isIsolating(node) && isolation >= SCENE_MAX_ISOLATION_DEPTH;
 }
 
 function clipSupported(clip: SceneClip, support: ClipSupport): boolean {
@@ -320,9 +346,17 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
               'runs',
             ]
           : null;
-  if (fields === null || !hasExactFields(value, fields)) {
+  // E41-S5: `effects` is optional on every kind.
+  const withEffects = Object.hasOwn(value, 'effects');
+  if (fields === null || !hasExactFields(value, withEffects ? [...fields, 'effects'] : fields)) {
     return null;
   }
+  const effects = withEffects ? copyEffects(value.effects) : EMPTY_EFFECTS;
+  if (effects === null) return null;
+  // Absent and [] both mean none, and the copy leaves the field out, so a scene without effects
+  // is held exactly as before (E41-A06).
+  const effectFields = effects.length === 0 ? {} : { effects };
+  const effectsUnsupported = effects.length > 0 && pathNodes.effects !== 'v0';
 
   const id = copyId(value.id);
   const parentId = value.parentId === null ? null : copyId(value.parentId);
@@ -351,6 +385,7 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
       transform,
       visible,
       opacity,
+      ...effectFields,
       kind: 'container' as const,
       children,
       clip,
@@ -359,7 +394,8 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
       node,
       unsupported:
         (opacity !== 1 && pathNodes.groupOpacity !== 'supported') ||
-        !clipSupported(clip, pathNodes.clips),
+        !clipSupported(clip, pathNodes.clips) ||
+        effectsUnsupported,
     });
   }
 
@@ -380,12 +416,16 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
       transform,
       visible,
       opacity,
+      ...effectFields,
       kind: 'text' as const,
       generation,
       lang,
       runs,
     });
-    return Object.freeze({ node, unsupported: pathNodes.textNodes !== 'supported' });
+    return Object.freeze({
+      node,
+      unsupported: pathNodes.textNodes !== 'supported' || effectsUnsupported,
+    });
   }
 
   if (kind === 'path') {
@@ -402,6 +442,7 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
       transform,
       visible,
       opacity,
+      ...effectFields,
       kind: 'path' as const,
       geometry,
       style,
@@ -414,7 +455,8 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
       !dashSupported(style.stroke, pathNodes) ||
       pathNodes.pathNodes !== 'supported' ||
       (style.fill !== null && pathNodes.pathFills !== 'supported') ||
-      (style.stroke !== null && style.stroke.width > 0 && pathNodes.pathStrokes !== 'supported');
+      (style.stroke !== null && style.stroke.width > 0 && pathNodes.pathStrokes !== 'supported') ||
+      effectsUnsupported;
     return Object.freeze({ node, unsupported });
   }
 
@@ -429,6 +471,7 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
     transform,
     visible,
     opacity,
+    ...effectFields,
     kind: 'primitive' as const,
     geometry,
     style,
@@ -437,7 +480,8 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
     node,
     unsupported:
       (geometry.kind === 'line' && style.fill !== null) ||
-      !paintsSupported([style.fill, style.stroke?.color ?? null], pathNodes),
+      !paintsSupported([style.fill, style.stroke?.color ?? null], pathNodes) ||
+      effectsUnsupported,
   });
 }
 
@@ -778,6 +822,36 @@ function hasFiniteInverse([a, b, c, d, e, f]: SceneAffine): boolean {
   return inverse.every(Number.isFinite);
 }
 
+const EMPTY_EFFECTS: readonly SceneEffect[] = Object.freeze([]);
+
+/**
+ * E41-S5: at most SCENE_MAX_EFFECTS effects, at most one layer blur, each of exactly its kind's
+ * fields with finite offsets and a finite sigma >= 0; anything else is `invalid-value`.
+ */
+function copyEffects(value: unknown): readonly SceneEffect[] | null {
+  const effects = copyArray(value, copyEffect);
+  if (effects === null || effects.length > SCENE_MAX_EFFECTS) return null;
+  if (effects.filter((effect) => effect.kind === 'layerBlur').length > 1) return null;
+  return effects;
+}
+
+function copyEffect(value: unknown): SceneEffect | null {
+  if (!isRecord(value)) return null;
+  if (value.kind === 'layerBlur') {
+    if (!hasExactFields(value, ['kind', 'sigma'])) return null;
+    const sigma = copyNonnegativeNumber(value.sigma);
+    return sigma === null ? null : Object.freeze({ kind: 'layerBlur' as const, sigma });
+  }
+  if (value.kind !== 'dropShadow') return null;
+  if (!hasExactFields(value, ['kind', 'color', 'offsetX', 'offsetY', 'sigma'])) return null;
+  const color = copyColor(value.color);
+  const offsetX = copyFiniteNumber(value.offsetX);
+  const offsetY = copyFiniteNumber(value.offsetY);
+  const sigma = copyNonnegativeNumber(value.sigma);
+  if (color === null || offsetX === null || offsetY === null || sigma === null) return null;
+  return Object.freeze({ kind: 'dropShadow' as const, color, offsetX, offsetY, sigma });
+}
+
 function copyColor(value: unknown): SceneColor | null {
   if (!hasExactFields(value, ['r', 'g', 'b', 'a'])) return null;
   const record = value as Record<string, unknown>;
@@ -962,7 +1036,8 @@ export function nodeEquals(
     left.visible !== right.visible ||
     left.opacity !== right.opacity ||
     left.kind !== right.kind ||
-    !arraysEqual(left.transform, right.transform)
+    !arraysEqual(left.transform, right.transform) ||
+    !effectsEqual(left.effects, right.effects)
   )
     return false;
   if (left.kind === 'container' && right.kind === 'container') {
@@ -986,6 +1061,31 @@ export function nodeEquals(
   }
   if (left.kind !== 'primitive' || right.kind !== 'primitive') return false;
   return geometryEquals(left.geometry, right.geometry) && styleEquals(left.style, right.style);
+}
+
+/** E41-S5: absent and [] are equal; otherwise effect by effect, field by field (`===`). */
+export function effectsEqual(
+  left: readonly SceneEffect[] | undefined,
+  right: readonly SceneEffect[] | undefined,
+): boolean {
+  const a = left ?? EMPTY_EFFECTS;
+  const b = right ?? EMPTY_EFFECTS;
+  if (a.length !== b.length) return false;
+  return a.every((effect, index) => {
+    const other = b[index]!;
+    if (effect.kind === 'layerBlur' || other.kind === 'layerBlur') {
+      return effect.kind === other.kind && effect.sigma === other.sigma;
+    }
+    return (
+      effect.offsetX === other.offsetX &&
+      effect.offsetY === other.offsetY &&
+      effect.sigma === other.sigma &&
+      effect.color.r === other.color.r &&
+      effect.color.g === other.color.g &&
+      effect.color.b === other.color.b &&
+      effect.color.a === other.color.a
+    );
+  });
 }
 
 /** E28-S1: text run equality under the replay rule (`===`), cluster by cluster. */
