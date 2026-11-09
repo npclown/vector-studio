@@ -1,5 +1,7 @@
 import {
+  useActivePage,
   useEditorCommands,
+  useEditorQuery,
   useEditorSelector,
   useSelection,
   type Command,
@@ -45,9 +47,13 @@ import {
   textStyleCommand,
   pickedColorCommand,
   runColor,
-  transformCommand,
-  transformValue,
+  targetCommand,
+  targetEditable,
+  targetText,
+  transformTarget,
   type PropertyAction,
+  type TransformKey,
+  type TransformTarget,
 } from './property-model.js';
 import { countRender } from './render-probe.js';
 
@@ -55,9 +61,10 @@ import { countRender } from './render-probe.js';
 // appearance panel come the transform, layer (name and visibility), line, constraint, text and
 // symbol sections, each shown when a selected node has its fields. A field shows the common
 // value or "mixed"; it is editable for one selected node only and read-only (disabled) for
-// several. One committed edit is one command (one undo step); text that cannot be a value marks
+// several, except the transform fields (V-25 slice 9, below). One committed edit is one command (one undo step); text that cannot be a value marks
 // the field `aria-invalid` and sends nothing; a refused command also marks it and shows its code
-// (`property-refusal`). The section 7.3 buttons carry no test ID (M8-R5).
+// (`property-refusal`). The section 7.3 buttons carry no test ID (M8-R5). V-25 slice 9 amends
+// M8-R2: the transform fields show the selection box and edit several nodes too.
 
 /** Runs one command; false when the editor refused it (the panel shows its code). */
 type Run = (command: Command) => boolean;
@@ -75,26 +82,60 @@ const Section = ({ legend, children }: { legend: string; children: ReactNode }) 
 /** A common value of a select, or null when mixed or absent. */
 const choiceOf = <T,>(value: Common<T>): T | null => (value.state === 'one' ? value.value : null);
 
-function TransformSection({ nodes, run }: { nodes: readonly NodeV6[]; run: Run }) {
-  const only = nodes.length === 1 ? nodes[0]! : null;
+/** A field's input fills its grid cell. */
+const GRID_INPUT = { width: '100%', minWidth: 0, boxSizing: 'border-box' } as const;
+
+/** The short visible label before each transform field (the accessible name stays the label). */
+const TRANSFORM_PREFIX: Readonly<Record<TransformKey, string>> = {
+  x: 'X',
+  y: 'Y',
+  width: 'W',
+  height: 'H',
+  rotation: '°',
+};
+
+function TransformSection({
+  nodes,
+  target,
+  run,
+}: {
+  nodes: readonly NodeV6[];
+  target: TransformTarget | null;
+  run: Run;
+}) {
+  // V-25 slice 9: X and Y, W and H, then the rotation, in a two-column grid (Figma), each with a
+  // short visible label; values are the selection box's, editable for several nodes too.
   return (
     <Section legend="Transform">
-      <Row>
+      <div
+        data-testid="transform-grid"
+        style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, alignItems: 'center' }}
+      >
         {TRANSFORM_FIELDS.map(({ key, label }) => (
-          <TextField
-            identity={fieldIdentity(nodes)}
+          <label
             key={key}
-            label={label}
-            value={commonText(commonOf(nodes, (node) => transformValue(node, key)))}
-            disabled={only === null}
-            commit={(text) => {
-              const value = parseTransform(key, text);
-              if (value === null || only === null) return false;
-              return run(transformCommand(only, key, value));
-            }}
-          />
+            style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}
+            title={label === 'Rotation' ? 'Rotation (degrees)' : label}
+          >
+            <span aria-hidden="true" style={{ width: 12, opacity: 0.6, textAlign: 'center' }}>
+              {TRANSFORM_PREFIX[key]}
+            </span>
+            <TextField
+              identity={fieldIdentity(nodes)}
+              label={label}
+              value={target === null ? null : targetText(target, key)}
+              disabled={target === null || !targetEditable(target, key)}
+              inputStyle={GRID_INPUT}
+              commit={(text) => {
+                const value = parseTransform(key, text);
+                const command =
+                  value === null || target === null ? null : targetCommand(target, key, value);
+                return command !== null && run(command);
+              }}
+            />
+          </label>
         ))}
-      </Row>
+      </div>
     </Section>
   );
 }
@@ -387,7 +428,7 @@ function SymbolSection({
  * The transform, layer, line, constraint, text and symbol sections of the property panel
  * (MVP M8 contract, M8-R2 to M8-R5), without the appearance panel. Each section shows when a
  * selected node has its fields; a field is editable for one selected node and shows the common
- * value or "mixed", read-only, for several; one committed edit is one command; a refused command
+ * value or "mixed", read-only, for several (the transform fields, V-25 slice 9, edit several); one committed edit is one command; a refused command
  * shows its code (`property-refusal`).
  */
 export function PropertySections() {
@@ -395,6 +436,8 @@ export function PropertySections() {
   const selection = useSelection();
   const document = useEditorSelector((snapshot) => snapshot.document);
   const textEdit = useEditorSelector((snapshot) => snapshot.textEdit);
+  const handles = useEditorQuery({ type: 'handles' });
+  const page = useActivePage();
   // A refusal shows only while the selection it was made on stays selected.
   const [refusal, setRefusal] = useState({ selection: '', text: '' });
   const nodes = selectedNodes(document, selection);
@@ -418,7 +461,7 @@ export function PropertySections() {
   const texts = textNodes(nodes);
   return (
     <div style={{ fontSize: 13 }}>
-      <TransformSection nodes={nodes} run={run} />
+      <TransformSection nodes={nodes} target={transformTarget(nodes, handles, page)} run={run} />
       <LayerSection nodes={nodes} run={run} />
       {lineNodes(nodes).length > 0 && <LineSection nodes={nodes} run={run} />}
       {constrained.length > 0 && (

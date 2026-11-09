@@ -428,7 +428,10 @@ test('M8-A14: transform, line arrow, child constraint and an invalid field', asy
     expect(document.nodes[r!]!.frame).toEqual({ x: 50, y: 40, width: 180, height: 120 });
     expect(document.nodes[r!]!.rotation).toBe((30 * Math.PI) / 180);
   });
-  await expect(textbox(panel, 'X')).toHaveValue('50');
+  // V-25 slice 9: X and Y show the rotated box's top-left corner (Figma), the frame (50, 40)
+  // turned 30 degrees about its centre (140, 100).
+  await expect(textbox(panel, 'X')).toHaveValue('92.06');
+  await expect(textbox(panel, 'Y')).toHaveValue('3.04');
   await expect(textbox(panel, 'W')).toHaveValue('180');
   await expect(textbox(panel, 'Rotation')).toHaveValue('30');
 

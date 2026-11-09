@@ -8,6 +8,7 @@ import type {
   DocumentV6,
   Frame,
   NodeV6,
+  SelectionHandles,
   TextEditState,
   TextNode,
   TextRun,
@@ -95,6 +96,175 @@ export function transformCommand(node: NodeV6, key: TransformKey, value: number)
   }
   const frame: Frame = { ...node.frame, [key]: value };
   return { type: 'setFrames', frames: [{ id: node.id, frame }] };
+}
+
+// V-25 slice 9: X, Y, W and H of the selection box. The fields show the box the select tool's
+// handles sit on (the `handles` query), so they match the box on the canvas: for one node its
+// content box (V-26: a path's curve, not its Bézier handles), X and Y being the box's top-left
+// corner in the parent's space (turned with the node's rotation, as Figma shows a rotated
+// node), W and H in its own axes; for several nodes the page-aligned box around them all. Each
+// committed edit is one command, so one undo step.
+
+/** The box the transform fields show and edit. */
+export type TransformTarget =
+  | Readonly<{ kind: 'one'; node: NodeV6; content: Frame; box: Frame }>
+  | Readonly<{ kind: 'many'; nodes: readonly NodeV6[]; box: Frame; scalable: boolean }>;
+
+/** The point at `(lx, ly)` of a node's own axes in its parent's space (`localTransform`). */
+function localPoint(frame: Frame, rotation: number, lx: number, ly: number) {
+  if (rotation === 0) return { x: frame.x + lx, y: frame.y + ly };
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+  const dx = lx - frame.width / 2;
+  const dy = ly - frame.height / 2;
+  return {
+    x: frame.x + frame.width / 2 + dx * cos - dy * sin,
+    y: frame.y + frame.height / 2 + dx * sin + dy * cos,
+  };
+}
+
+/**
+ * The transform fields' box for the selected `nodes`, from the `handles` query (null in path and
+ * text edit mode, where one node's whole frame stands in), or null when nothing is selected.
+ * Several nodes scale through W and H only when each is a page-root node with rotation 0 (the
+ * select tool's P5 resize, one `setFrames`); other multi-selections show W and H read-only.
+ */
+export function transformTarget(
+  nodes: readonly NodeV6[],
+  handles: SelectionHandles | null,
+  page: string,
+): TransformTarget | null {
+  if (nodes.length === 0) return null;
+  if (nodes.length === 1) {
+    const node = nodes[0]!;
+    const content = handles?.content ?? {
+      x: 0,
+      y: 0,
+      width: node.frame.width,
+      height: node.frame.height,
+    };
+    const corner = localPoint(node.frame, node.rotation, content.x, content.y);
+    return {
+      kind: 'one',
+      node,
+      content,
+      box: { x: corner.x, y: corner.y, width: content.width, height: content.height },
+    };
+  }
+  if (handles === null) return null;
+  const [tl, tr, , bl] = handles.corners;
+  return {
+    kind: 'many',
+    nodes,
+    box: { x: tl.x, y: tl.y, width: tr.x - tl.x, height: bl.y - tl.y },
+    scalable: nodes.every((node) => node.parent === page && node.rotation === 0),
+  };
+}
+
+/** A box value as a field shows it: at most two decimals, as Figma shows them. */
+export const boxText = (value: number): string => {
+  const rounded = Number(value.toFixed(2));
+  return String(rounded === 0 ? 0 : rounded);
+};
+
+/** A transform field's shown text: the box value, or the common rotation (null when mixed). */
+export function targetText(target: TransformTarget, key: TransformKey): string | null {
+  if (key !== 'rotation') return boxText(target.box[key]);
+  const nodes = target.kind === 'one' ? [target.node] : target.nodes;
+  const rotation = commonOf(nodes, (node) => toDegrees(node.rotation));
+  return rotation.state === 'one' ? boxText(rotation.value) : null;
+}
+
+/**
+ * Whether a transform field takes input for the target: W and H of several nodes only when they
+ * scale (unrotated page-root nodes) and their box has a size on that axis.
+ */
+export const targetEditable = (target: TransformTarget, key: TransformKey): boolean =>
+  target.kind === 'one' ||
+  key === 'x' ||
+  key === 'y' ||
+  key === 'rotation' ||
+  (target.scalable && target.box[key] !== 0);
+
+/**
+ * One transform edit of the target as one command, or null when it cannot apply. X and Y move
+ * the box by the difference to its shown corner: one node by its stored frame (`setFrames`),
+ * several by a page vector (`nudgeNodes`). W and H scale the box about its left or top edge: one
+ * node in its own axes (the edge stays put in the parent's space, as the select tool's resize
+ * with the opposite handle), several page-root nodes each about the box's edge. A box of size 0
+ * on that axis only takes a size when the node's frame is that size too. The rotation sets each
+ * node's rotation in degrees (`setFrames`, about its frame's centre as M8-R2).
+ */
+export function targetCommand(
+  target: TransformTarget,
+  key: TransformKey,
+  value: number,
+): Command | null {
+  if (key === 'rotation') {
+    const nodes = target.kind === 'one' ? [target.node] : target.nodes;
+    return {
+      type: 'setFrames',
+      frames: nodes.map((node) => ({ id: node.id, frame: node.frame, rotation: toRadians(value) })),
+    };
+  }
+  const { box } = target;
+  if (key === 'x' || key === 'y') {
+    const d = value - box[key];
+    if (target.kind === 'many') {
+      return {
+        type: 'nudgeNodes',
+        ids: target.nodes.map((node) => node.id),
+        dx: key === 'x' ? d : 0,
+        dy: key === 'y' ? d : 0,
+      };
+    }
+    const { node } = target;
+    return {
+      type: 'setFrames',
+      frames: [{ id: node.id, frame: { ...node.frame, [key]: node.frame[key] + d } }],
+    };
+  }
+  const old = box[key];
+  if (target.kind === 'many') {
+    if (!target.scalable || old === 0) return null;
+    const s = value / old;
+    const origin = key === 'width' ? box.x : box.y;
+    const at = key === 'width' ? 'x' : 'y';
+    return {
+      type: 'setFrames',
+      frames: target.nodes.map((node) => ({
+        id: node.id,
+        frame: {
+          ...node.frame,
+          [at]: origin + (node.frame[at] - origin) * s,
+          [key]: node.frame[key] * s,
+        },
+      })),
+    };
+  }
+  const { node, content } = target;
+  const { frame, rotation } = node;
+  if (old === 0) {
+    if (frame[key] !== 0) return null;
+    return { type: 'setFrames', frames: [{ id: node.id, frame: { ...frame, [key]: value } }] };
+  }
+  const s = value / old;
+  const sx = key === 'width' ? s : 1;
+  const sy = key === 'height' ? s : 1;
+  const width = frame.width * sx;
+  const height = frame.height * sy;
+  // The content box's top-left corner stays in place in the parent's space.
+  const anchor = localPoint(frame, rotation, content.x, content.y);
+  const moved = localPoint({ ...frame, width, height }, rotation, content.x * sx, content.y * sy);
+  return {
+    type: 'setFrames',
+    frames: [
+      {
+        id: node.id,
+        frame: { x: frame.x + anchor.x - moved.x, y: frame.y + anchor.y - moved.y, width, height },
+      },
+    ],
+  };
 }
 
 // M8-R3 layer, line and constraints.
