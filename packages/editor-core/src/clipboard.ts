@@ -938,6 +938,8 @@ export function paste(
           children: (how.expansion?.children ?? []).map((child) => map.get(child)!),
           fill: how.source.fill,
           stroke: how.source.stroke,
+          // E41-S10: the effects the instance drew with, its own or else its source's.
+          effects: node.effects.length > 0 ? node.effects : how.source.effects,
         });
       }
       // A root's mapped placement and a detached frame are validated again; the rest is as the

@@ -829,6 +829,8 @@ const EMPTY_EFFECTS: readonly SceneEffect[] = Object.freeze([]);
  * fields with finite offsets and a finite sigma >= 0; anything else is `invalid-value`.
  */
 function copyEffects(value: unknown): readonly SceneEffect[] | null {
+  // The count first, so an oversized list is refused without copying it.
+  if (!Array.isArray(value) || value.length > SCENE_MAX_EFFECTS) return null;
   const effects = copyArray(value, copyEffect);
   if (effects === null || effects.length > SCENE_MAX_EFFECTS) return null;
   if (effects.filter((effect) => effect.kind === 'layerBlur').length > 1) return null;

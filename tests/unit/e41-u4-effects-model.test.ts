@@ -300,4 +300,21 @@ describe('E41-S10 an instance draws with its own effects, or else its source’s
     // The source keeps its own.
     expect(target.query({ type: 'node', id: 's1' })!.effects).toEqual(source);
   });
+
+  it.each([
+    ['the source’s when the instance has none', [], [SHADOW], [SHADOW]],
+    ['the instance’s when it has some', [BLUR], [SHADOW], [BLUR]],
+  ] as const)('a detached paste keeps %s', (_name, instance, source, expected) => {
+    const from = createEditor({ document: symbols([...instance], [...source]) });
+    expect(from.execute({ type: 'copy', ids: ['i1'] }).ok).toBe(true);
+    const text = from.query({ type: 'clipboard' })!;
+    // A document without the symbol: the instance pastes as a frame (M7 section 5.2).
+    const target = createEditor();
+    const pasted = target.execute({ type: 'paste', text });
+    expect(pasted.ok).toBe(true);
+    const page = target.query({ type: 'document' }).pages[0]!;
+    const node = target.query({ type: 'node', id: page.children[0]! })!;
+    expect(node.type).toBe('frame');
+    expect(node.effects).toEqual(expected);
+  });
 });

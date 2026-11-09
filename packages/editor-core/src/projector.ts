@@ -978,6 +978,7 @@ export function projectPage(
   const instanceUnit = (
     node: Extract<NodeV7, { type: 'instance' }>,
     parentId: string | null,
+    masked: boolean,
   ): MemoEntry | null => {
     const result = expansions.expand(document, node.id);
     const source = Object.hasOwn(document.nodes, node.symbol)
@@ -988,13 +989,12 @@ export function projectPage(
     const held = entry?.instance;
     if (
       held !== undefined &&
-      entry!.node === node &&
-      entry!.parentId === parentId &&
+      holds(entry, node, parentId, masked) &&
       held.result === result &&
       held.source === source
     ) {
       textless.push(...held.textless);
-      return entry!;
+      return entry;
     }
     const content: RenderNodeSnapshot[] = [];
     const expanded = new Map<string, MemoEntry>();
@@ -1028,7 +1028,7 @@ export function projectPage(
         },
         parentId,
         roots,
-        effects,
+        effects && !masked,
       ),
       entry?.snapshots.slice(0, 4),
     );
@@ -1083,7 +1083,7 @@ export function projectPage(
             : [groupSnapshot(id, node, parentId, children, emit)]);
         entry = { node, parentId, children, snapshots };
       } else if (node.type === 'instance') {
-        const unit = instanceUnit(node, parentId);
+        const unit = instanceUnit(node, parentId, id === maskSource);
         if (unit === null) {
           invalid.push(id);
           continue;
