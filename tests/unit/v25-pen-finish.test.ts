@@ -100,6 +100,19 @@ describe('V-25 pen finish by double-click', () => {
     expect(target.query({ type: 'history' }).undoDepth).toBe(1);
   });
 
+  it('with returnToSelect, a double-click on the first anchor closes, then enters path edit', () => {
+    // The first press closes and hands over to Select, so the second press and the double-click
+    // reach the select tool, which enters path edit mode on the new path (slice 3, accepted).
+    const target = editor({ returnToSelect: true });
+    click(target, { x: 0, y: 0 });
+    click(target, { x: 50, y: 0 });
+    click(target, { x: 50, y: 50 });
+    doubleClick(target, { x: 0, y: 0 });
+    expect(verbs(target)).toEqual(['move', 'line', 'line', 'line', 'close']);
+    expect(target.query({ type: 'tool' })).toBe('select');
+    expect(target.query({ type: 'pathEdit' })?.id).toBe(paths(target)[0]!.id);
+  });
+
   it('keeps a close on the first anchor closed', () => {
     const target = editor();
     click(target, { x: 0, y: 0 });
@@ -122,6 +135,21 @@ describe('V-25 pen finish by Escape', () => {
     expect(verbs(target)).toEqual(['move', 'line', 'line']);
     expect(target.query({ type: 'overlay' })).toBeNull();
     expect(target.query({ type: 'history' }).undoDepth).toBe(1);
+  });
+
+  it('during a drag includes the dragged anchor as a cubic', () => {
+    const target = editor();
+    click(target, { x: 0, y: 0 });
+    send(target, 'pointerdown', { x: 50, y: 0 });
+    target.execute({
+      type: 'input',
+      event: { kind: 'pointermove', point: { x: 60, y: 20 }, modifiers: none },
+    });
+    key(target, 'Escape');
+    expect(verbs(target)).toEqual(['move', 'cubic']);
+    expect(target.query({ type: 'overlay' })).toBeNull();
+    send(target, 'pointerup', { x: 60, y: 20 });
+    expect(paths(target)).toHaveLength(1);
   });
 
   it('drops a single anchor and creates nothing', () => {
