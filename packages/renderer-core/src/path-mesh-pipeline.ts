@@ -7,6 +7,7 @@ import {
   type CameraRange,
 } from './camera-range.js';
 import { meetsClipChain, type ClipChain } from './clip-resolution.js';
+import { cullTarget, type EffectReach } from './effect-plan.js';
 import {
   DIAGNOSTIC_CODES,
   PATH_VERB_CODES,
@@ -98,6 +99,8 @@ export type DerivedPath = Readonly<{
    * shape into the mask level; it never paints. `clip` is then the container's own chain.
    */
   maskSource?: true;
+  /** E41-K3: the reach of the effect roots above the path; culling tests its grown bounds. */
+  reach?: EffectReach;
 }>;
 
 export type PathMeshFailureScope = 'path' | 'batch' | 'renderer';
@@ -858,10 +861,11 @@ export class PathMeshPipeline {
         if (this.#channels[paint] === undefined || pathPaintKey(path, paint) === null) return false;
         const worldBounds = this.#worldBounds(path, revision, paint);
         if (worldBounds === null) return false;
-        const clip = path.clip ?? null;
+        const tested = cullTarget(worldBounds, path.clip ?? null, path.reach);
         const drawn =
-          meetsViewport(worldBounds, viewport) && meetsClipChain(worldBounds, clip, clipGuard);
-        cullItems.push({ bounds: worldBounds, clip, drawn });
+          meetsViewport(tested.bounds, viewport) &&
+          meetsClipChain(tested.bounds, tested.clip, clipGuard);
+        cullItems.push({ ...tested, drawn });
         return drawn;
       });
       if (drawable.length === 0) {

@@ -1,4 +1,9 @@
-import { DIAGNOSTIC_CODES, type DiagnosticInput } from '@vector-studio/contracts';
+import {
+  DIAGNOSTIC_CODES,
+  type DiagnosticInput,
+  type SceneAffine,
+  type SceneEffect,
+} from '@vector-studio/contracts';
 import type { ClipChain } from './clip-resolution.js';
 import type { SceneBounds } from './scene-numeric.js';
 
@@ -30,6 +35,27 @@ export type LayerScope = {
   readonly chain: ClipChain | null;
   readonly start: number;
   end: number;
+  /**
+   * E41 contract, section 5.2: an effect root's visible effects (non-empty), absent for an E25
+   * layer. An effect root is a layer root, leaf or container.
+   */
+  readonly effects?: readonly SceneEffect[];
+  /** E41-S9: an effect root's world transform. */
+  readonly world?: SceneAffine;
+  /**
+   * E41: whether the scope stays an isolated layer when its effects are dropped (an E25 layer,
+   * or an effect root with 0 < opacity < 1 container opacity). Absent means true.
+   */
+  readonly isolated?: boolean;
+  /**
+   * E41: a leaf root's own opacity, which its draws in `L` keep; the composite then builds `R`
+   * as if `L` were drawn at opacity 1 and scaled after (U5). Absent means 1.
+   */
+  readonly contentOpacity?: number;
+  /** E41-K2: the clip chain of the root's ancestors, without its own clip. */
+  readonly outerChain?: ClipChain | null;
+  /** E41-K2: whether the root's subtree holds a mask group (target clamp). */
+  hasMask?: boolean;
 };
 
 /** A device rectangle in whole target pixels. */
@@ -48,7 +74,9 @@ export type LayerTarget = Readonly<{
  * device space) and the nested layers' rectangles, widened by 1 px, intersected with the
  * container's clip chain bound (each level widened by 1 px for its coverage ramp), rounded out,
  * with x and y moved down to even values and the size rounded up to even, then clamped to the
- * target and to the parent layer's rectangle. Null when empty.
+ * target and to the parent layer's rectangle. Null when empty. E41-K2c: a layer inside an effect
+ * root is bounded by the enclosing source bound (`parent`) instead of the target
+ * (`clampToTarget` false).
  */
 export function layerBound(
   content: readonly SceneBounds[],
@@ -57,6 +85,7 @@ export function layerBound(
   camera: LayerCamera,
   target: LayerTarget,
   parent: DeviceRect | null,
+  clampToTarget = true,
 ): DeviceRect | null {
   if (chain?.empty === true) return null;
   const scale = camera.zoom * target.devicePixelRatio;
@@ -91,10 +120,12 @@ export function layerBound(
   const y = 2 * Math.floor(Math.floor(minY) / 2);
   let right = x + 2 * Math.ceil((Math.ceil(maxX) - x) / 2);
   let bottom = y + 2 * Math.ceil((Math.ceil(maxY) - y) / 2);
-  let left = Math.max(x, 0);
-  let top = Math.max(y, 0);
-  right = Math.min(right, target.width);
-  bottom = Math.min(bottom, target.height);
+  let left = clampToTarget ? Math.max(x, 0) : x;
+  let top = clampToTarget ? Math.max(y, 0) : y;
+  if (clampToTarget) {
+    right = Math.min(right, target.width);
+    bottom = Math.min(bottom, target.height);
+  }
   if (parent !== null) {
     left = Math.max(left, parent.x);
     top = Math.max(top, parent.y);

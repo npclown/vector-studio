@@ -87,8 +87,8 @@ export type RetainedSceneMirrorOptions = Readonly<{
   textNodes?: TextSupport;
   /**
    * E41 contract, E41-S6: whether node effects are accepted; default 'none', under which a
-   * node with non-empty `effects` is `unsupported-feature`. Tests only until E41 U4b: no
-   * renderer draws effects yet, so no service sets this option before then.
+   * node with non-empty `effects` is `unsupported-feature`. The service sets it from its
+   * `effects` option (U4b).
    */
   effects?: EffectSupport;
 }>;

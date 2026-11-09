@@ -1,5 +1,6 @@
-import type { SceneVersion } from '@vector-studio/contracts';
+import type { SceneColor, SceneVersion } from '@vector-studio/contracts';
 import type { ClipStateRecord, MaskBudgetNotice, MaskLevelRecord } from './clip-resolution.js';
+import type { EffectBudgetNotice } from './effect-plan.js';
 import type { DeviceRect, LayerResourceNotice } from './layer-plan.js';
 import type { GradientPaintRecord } from './paint-records.js';
 import type { PathMeshNotice } from './path-mesh-pipeline.js';
@@ -207,6 +208,12 @@ export type LayerPacketPart = Readonly<{
     parent: number;
     draws: readonly PrimitiveDraw[];
     meshDraws: readonly MeshFillDraw[];
+    /**
+     * E41 contract, section 5.2: present on an effect root drawn with its effects. `bound` is
+     * then its source bound (where `L` is rendered); the effect passes (U5) build `R` in
+     * `output`. Until a backend draws effects, the layer composites as an E25 layer (5.3).
+     */
+    effect?: LayerEffectRecord;
   }>[];
   /** One per layer, each in its target's paint order. */
   composites: readonly Readonly<{
@@ -224,6 +231,23 @@ export type LayerPacketPart = Readonly<{
   }>[];
   /** Layer trees newly over the budget, at most 32. Emitted as `render.layer-resource-limit`. */
   notices: readonly LayerResourceNotice[];
+  /**
+   * E41-S8: trees whose effects were newly dropped, at most 32. Emitted as
+   * `render.effect-resource-limit`. Absent when none is pending.
+   */
+  effectNotices?: readonly EffectBudgetNotice[];
+}>;
+
+/** E41 contract, section 5.2: an effect root's passes, in device pixels (E41-S9, K2). */
+export type LayerEffectRecord = Readonly<{
+  /** K2's output bound: `R` and the composite quad. */
+  output: DeviceRect;
+  /** Drop shadows in list order, offsets and σ in device pixels, σ clamped (K4). */
+  shadows: readonly Readonly<{ color: SceneColor; dx: number; dy: number; sigmaPx: number }>[];
+  /** The layer blur's σ in device pixels, or null. */
+  blurSigmaPx: number | null;
+  /** A leaf root's opacity, which its draws in `L` keep; 1 for a container root. */
+  contentOpacity: number;
 }>;
 /** E28 contract, section 4: a text draw, ordered against its target's draws as a composite. */
 export type TextDraw = Readonly<{
