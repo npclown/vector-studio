@@ -765,7 +765,12 @@ type SelectState =
       /** Each node's parent-chain rotation, to turn the page delta into its parent space. */
       turns: Map<string, number>;
       moved: boolean;
-      hit: string;
+      /**
+       * The target a click selects; null for a press on empty space inside the handle box
+       * (V-27), whose click acts as one on empty canvas: `leaves` then leaves the scope.
+       */
+      hit: string | null;
+      leaves: boolean;
       /** The moving nodes' page-aligned bounds before the gesture, and the snap candidates. */
       bounds: Box | null;
       candidates: () => SnapSet;
@@ -819,6 +824,13 @@ type SelectState =
       leaves: boolean;
       /** The selection before the press, where overlap cycling starts. */
       selection: readonly string[];
+      /** A press on empty space inside the handle box (V-27): a click acts as on empty canvas. */
+      inBox: boolean;
+      /**
+       * A press on a container of the whole selection (V-27): a drag keeps the session scope
+       * (snapping with it) and `leaves` applies only to a click.
+       */
+      container: boolean;
       /**
        * The copies' duplicated frames, parent-chain rotations and snap candidates; null before
        * the first movement.
@@ -1324,7 +1336,48 @@ export function createSelectTool(
       }
       return;
     }
-    if (hit === null || target === null) {
+    // V-27 (Figma): a drag from no node strictly inside the handle box moves the selection, and
+    // an Alt-drag duplicates it, instead of starting a marquee; the scope stays. A click there
+    // still acts as one on empty canvas (it clears the selection and may leave the scope), and
+    // Shift still starts an additive marquee. A press on an unselected container of the whole
+    // selection (an artboard's background, for example) drags the selection the same way, and
+    // a click there still selects that container.
+    const empty = hit === null || target === null;
+    const inBox =
+      handles !== null &&
+      selection.length > 0 &&
+      !event.modifiers.shift &&
+      insideHandles(handles, event.point);
+    const container =
+      inBox && !empty && !selection.includes(hit) && containsAll(document, hit, selection);
+    if (container && !event.modifiers.alt) {
+      beginMove(event, context, hit, leaves);
+      return;
+    }
+    if (empty && inBox) {
+      if (event.modifiers.alt) {
+        if (context.gesture.begin()) {
+          const bounds = boundsOf(document, selection);
+          state = {
+            kind: 'duplicate',
+            start: event.point,
+            moveSet: selection,
+            moved: false,
+            bounds: bounds === null ? null : boxOfFrame(bounds),
+            scope: context.query({ type: 'scope' }),
+            leaves,
+            selection,
+            inBox: true,
+            container: false,
+            copies: null,
+          };
+        }
+        return;
+      }
+      beginMove(event, context, null, leaves);
+      return;
+    }
+    if (empty) {
       // Empty canvas: the page's (leaving any scope), or the scope's own (keeping it).
       if (leaves) context.execute({ type: 'setScope', id: null });
       state = {
@@ -1339,7 +1392,7 @@ export function createSelectTool(
       // Alt-drag: the selection and scope changes wait for the first movement or the release
       // (sections 4.3 and 5).
       if (context.gesture.begin()) {
-        const moveSet = selection.includes(hit) ? selection : [hit];
+        const moveSet = selection.includes(hit) || container ? selection : [hit];
         const bounds = boundsOf(document, moveSet);
         state = {
           kind: 'duplicate',
@@ -1350,6 +1403,8 @@ export function createSelectTool(
           scope,
           leaves,
           selection,
+          inBox: false,
+          container,
           copies: null,
         };
       }
@@ -1364,6 +1419,16 @@ export function createSelectTool(
       return;
     }
     if (!selection.includes(hit)) context.execute({ type: 'setSelection', ids: [hit] });
+    beginMove(event, context, target, false);
+  }
+
+  /** Starts moving the current selection; `hit` is what a click without movement selects. */
+  function beginMove(
+    event: Pointer,
+    context: ToolContext,
+    hit: string | null,
+    leaves: boolean,
+  ): void {
     if (context.gesture.begin()) {
       const ids = context.query({ type: 'selection' });
       const current = context.query({ type: 'document' });
@@ -1375,7 +1440,8 @@ export function createSelectTool(
         frames: framesOf(context, ids),
         turns: new Map(ids.map((id) => [id, spaceOf(tree, tree.node(id)!.parent).rotation])),
         moved: false,
-        hit: target,
+        hit,
+        leaves,
         bounds: bounds === null ? null : boxOfFrame(bounds),
         candidates: lazySnapSet(context, ids),
       };
@@ -1632,7 +1698,11 @@ export function createSelectTool(
           // The copies move; the originals stay and are candidates. Every other box is as in
           // the pre-gesture document, since the copies are the only change. The scope owner is
           // the one the press resolved to.
-          candidates: lazySnapSet(context, ids, state.scope),
+          candidates: lazySnapSet(
+            context,
+            ids,
+            state.container ? context.query({ type: 'scope' }) : state.scope,
+          ),
         };
       }
       const { frames, turns, candidates } = state.copies;
@@ -1675,6 +1745,18 @@ export function createSelectTool(
     });
     context.gesture.update({ type: 'setFrames', frames });
     context.snap(overlay);
+  }
+
+  /** Whether `container` is an ancestor of every node of `ids` (V-27). */
+  function containsAll(document: DocumentV6, container: string, ids: readonly string[]): boolean {
+    const tree = documentTree(document);
+    return ids.every((id) => isAncestor(tree, container, id));
+  }
+
+  /** A click on empty canvas: leaves the scope when `leaves`, then clears the selection. */
+  function emptyClick(leaves: boolean, context: ToolContext): void {
+    if (leaves) context.execute({ type: 'setScope', id: null });
+    context.execute({ type: 'setSelection', ids: [] });
   }
 
   function pointerUp(event: Pointer, context: ToolContext): void {
@@ -1728,13 +1810,25 @@ export function createSelectTool(
       // An Alt-drag commits the duplicate and the move as one step.
       context.gesture.commit();
       if (leavesScope) context.execute({ type: 'setScope', id: null });
-      // A click without movement selects the target hit, even inside a larger selection.
+      // A click without movement selects the target hit, even inside a larger selection; on
+      // empty space inside the box (V-27) it acts as a click on empty canvas.
       if (current.kind === 'move' && !current.moved) {
-        context.execute({ type: 'setSelection', ids: [current.hit] });
+        if (current.hit === null) emptyClick(current.leaves, context);
+        else {
+          // A click on a container of the selection (V-27) applies its deferred scope change.
+          if (current.leaves) context.execute({ type: 'setScope', id: null });
+          context.execute({ type: 'setSelection', ids: [current.hit] });
+        }
       }
-      if (current.kind === 'duplicate') {
-        // The Alt press's deferred scope change, then an Alt-click cycles (section 5).
-        if (current.leaves) context.execute({ type: 'setScope', id: null });
+      if (current.kind === 'duplicate' && current.inBox) {
+        // A drag keeps the scope, which holds the selection; a click acts as on empty canvas.
+        if (!current.moved) emptyClick(current.leaves, context);
+      } else if (current.kind === 'duplicate') {
+        // The Alt press's deferred scope change, then an Alt-click cycles (section 5); a drag
+        // from a container of the selection keeps the scope (V-27).
+        if (current.leaves && !(current.container && current.moved)) {
+          context.execute({ type: 'setScope', id: null });
+        }
         if (!current.moved) cycle(current, context);
       }
       // A click on an anchor or segment selects only it (M3 contract, section 5).
