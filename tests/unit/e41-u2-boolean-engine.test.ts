@@ -3,9 +3,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  BOOLEAN_EPSILON,
   BOOLEAN_ETA,
   booleanOp,
-  signedArea,
   type BFillRule,
   type BPoint,
   type BSegment,
@@ -300,17 +300,66 @@ function distanceTo(s: BSegment, p: BPoint): number {
   return Math.sqrt(best);
 }
 
+/**
+ * Oracle-side area: Green's theorem, ½∮(x dy − y dx). The integrand is a polynomial of degree 5
+ * on a cubic, so 4-point Gauss-Legendre is exact (own derivative; independent of the engine).
+ */
+function areaOf(contour: readonly BSegment[]): number {
+  const o = contour[0]?.p0 ?? { x: 0, y: 0 };
+  const a = Math.sqrt(3 / 7 - (2 / 7) * Math.sqrt(6 / 5));
+  const c = Math.sqrt(3 / 7 + (2 / 7) * Math.sqrt(6 / 5));
+  const wa = (18 + Math.sqrt(30)) / 36;
+  const wc = (18 - Math.sqrt(30)) / 36;
+  const gauss: readonly [number, number][] = [
+    [-c, wc],
+    [-a, wa],
+    [a, wa],
+    [c, wc],
+  ];
+  let area = 0;
+  for (const s of contour) {
+    if (s.kind === 'line') {
+      area += ((s.p0.x - o.x) * (s.p1.y - o.y) - (s.p1.x - o.x) * (s.p0.y - o.y)) / 2;
+      continue;
+    }
+    for (const [x, w] of gauss) {
+      const t = (x + 1) / 2;
+      const u = 1 - t;
+      const p = pointOn(s, t);
+      const dx =
+        3 * (u * u * (s.c1.x - s.p0.x) + 2 * u * t * (s.c2.x - s.c1.x) + t * t * (s.p1.x - s.c2.x));
+      const dy =
+        3 * (u * u * (s.c1.y - s.p0.y) + 2 * u * t * (s.c2.y - s.c1.y) + t * t * (s.p1.y - s.c2.y));
+      area += ((w / 2) * ((p.x - o.x) * dy - (p.y - o.y) * dx)) / 2;
+    }
+  }
+  return area;
+}
+
+/** An input's segments with every open contour closed by a line (section 2.4 step 1). */
+function closedSegments(shape: BShape): BSegment[] {
+  return shape.contours.flatMap((c) => {
+    const first = c[0];
+    const last = c[c.length - 1];
+    if (first === undefined || last === undefined) return [];
+    return last.p1.x === first.p0.x && last.p1.y === first.p0.y
+      ? [...c]
+      : [...c, line(last.p1, first.p0)];
+  });
+}
+
 type Check = { mismatches: number; failure: string | null; contours: number; area: number };
 
 /** E41-A02 checks for one case; `grid` samples per side. */
-function check(op: BooleanOp, shapes: readonly BShape[], grid = 256): Check {
+function check(op: BooleanOp, shapes: readonly BShape[], grid = 256, onInput = true): Check {
   const result = booleanOp(op, shapes);
   const b = boundsOf(shapes);
   const eta = BOOLEAN_ETA * b.diag;
-  const inputs = shapes.map((s) => s.contours.flat());
+  const eps = BOOLEAN_EPSILON * b.diag;
+  const inputs = shapes.map(closedSegments);
   const allInput = inputs.flat();
   const resultSegs = result.ok ? result.contours.flat() : [];
-  // Closed contours with area above η D.
+  // Closed contours that enclose area (no zero-area back-and-forth contours).
   let area = 0;
   if (result.ok) {
     for (const contour of result.contours) {
@@ -320,12 +369,11 @@ function check(op: BooleanOp, shapes: readonly BShape[], grid = 256): Check {
         if (s.p1.x !== n.p0.x || s.p1.y !== n.p0.y)
           return { mismatches: 0, failure: 'open contour', contours: 0, area: 0 };
       }
-      // No contour narrower than about η: |area| above η × perimeter / 4.
-      const a = signedArea(contour);
+      const a = areaOf(contour);
       let perimeter = 0;
       for (const s of contour)
         perimeter += Math.sqrt((s.p1.x - s.p0.x) ** 2 + (s.p1.y - s.p0.y) ** 2);
-      if (Math.abs(a) <= (eta * perimeter) / 4) {
+      if (Math.abs(a) <= eps * perimeter) {
         return {
           mismatches: 0,
           failure: `sliver area ${a} perimeter ${perimeter}`,
@@ -336,7 +384,7 @@ function check(op: BooleanOp, shapes: readonly BShape[], grid = 256): Check {
       area += a;
     }
     // Every result piece lies on an input segment within η.
-    for (const s of resultSegs) {
+    for (const s of onInput ? resultSegs : []) {
       for (const t of [0.25, 0.5, 0.75]) {
         const p = pointOn(s, t);
         const d = Math.min(...allInput.map((q) => distanceTo(q, p)));
@@ -417,7 +465,7 @@ describe('E41-A02 fixtures B1 to B15', () => {
   it('B4 rectangles sharing an edge: union is one rectangle, no seam', () => {
     const r = expectCase('union', [rect(0, 0, 50, 40), rect(50, 0, 50, 40)]);
     expect(r.ok && r.contours.length).toBe(1);
-    expect(r.ok && Math.abs(signedArea(r.contours[0] as BSegment[]))).toBeCloseTo(4000, 6);
+    expect(r.ok && Math.abs(areaOf(r.contours[0] as BSegment[]))).toBeCloseTo(4000, 6);
   });
   it('B5 squares touching at a corner: two contours meeting at one vertex', () => {
     const r = expectCase('union', [rect(0, 0, 40, 40), rect(40, 40, 40, 40)]);
@@ -485,8 +533,8 @@ describe('E41-A02 fixtures B1 to B15', () => {
     const i = booleanOp('intersect', shapes);
     expect(!i.ok && i.code).toBe('empty');
     const s = expectCase('subtract', shapes);
-    expect(s.ok && Math.abs(signedArea(s.contours.flat()))).toBeCloseTo(
-      Math.abs(signedArea(shapes[0]!.contours[0]!)),
+    expect(s.ok && Math.abs(areaOf(s.contours.flat()))).toBeCloseTo(
+      Math.abs(areaOf(shapes[0]!.contours[0]!)),
       9,
     );
   });
@@ -502,6 +550,136 @@ describe('E41-A02 fixtures B1 to B15', () => {
   it('B15 rectangles crossing at 1 degree', () => {
     const shapes = [rect(0, 0, 100, 20), rotate(rect(0, 0, 100, 20), Math.PI / 180, 0, 20)];
     for (const op of OPS) expectCase(op, shapes);
+  });
+});
+
+describe('E41-A02 regressions', () => {
+  it('B12 rotated: tangent circles union to two contours at any angle', () => {
+    for (const angle of [0.123, 0.7, 1.3]) {
+      const shapes = [ellipse(0, 0, 1, 1), ellipse(2, 0, 1, 1)].map((sh) =>
+        rotate(sh, angle, 1, 0),
+      );
+      const u = expectCase('union', shapes);
+      expect(u.ok && u.contours.length, `angle ${angle}`).toBe(2);
+    }
+  });
+  it('an open subpath is closed implicitly', () => {
+    const open: BShape = {
+      contours: [
+        [
+          line({ x: 0, y: 0 }, { x: 60, y: 0 }),
+          cubic({ x: 60, y: 0 }, { x: 90, y: 20 }, { x: 90, y: 50 }, { x: 60, y: 70 }),
+          line({ x: 60, y: 70 }, { x: 0, y: 70 }),
+        ],
+      ],
+      fillRule: 'nonzero',
+    };
+    for (const op of OPS) expectCase(op, [open, rect(-20, 20, 50, 30)]);
+  });
+  it('small rotated rectangles across a long, slightly curved cubic', () => {
+    const band: BShape = {
+      contours: [
+        [
+          cubic({ x: 0, y: 0 }, { x: 333, y: 3 }, { x: 667, y: 3 }, { x: 1000, y: 0 }),
+          line({ x: 1000, y: 0 }, { x: 1000, y: 40 }),
+          line({ x: 1000, y: 40 }, { x: 0, y: 40 }),
+          line({ x: 0, y: 40 }, { x: 0, y: 0 }),
+        ],
+      ],
+      fillRule: 'nonzero',
+    };
+    for (const x of [37, 251, 498.5, 733, 960]) {
+      for (const angle of [0.3, 1.1, 2.2]) {
+        const small = rotate(rect(x - 3, -0.5, 6, 1), angle, x, 1.5);
+        for (const op of OPS) expectCase(op, [band, small]);
+      }
+    }
+  });
+  it('a 6 x 1 rectangle on a circle of radius 1000', () => {
+    const circle = ellipse(0, 0, 1000, 1000);
+    for (const angle of [0.2, 0.9, 2.5, 4.0]) {
+      const p = { x: 1000 * Math.cos(angle), y: 1000 * Math.sin(angle) };
+      const small = rotate(rect(p.x - 3, p.y - 0.5, 6, 1), angle + 0.4, p.x, p.y);
+      for (const op of OPS) expectCase(op, [circle, small]);
+    }
+  });
+  it('an ellipse and a copy shifted k η diagonally', () => {
+    const a = ellipse(50, 40, 40, 25);
+    const d = Math.sqrt(90 * 90 + 65 * 65);
+    for (const k of [0.5, 2, 3, 7, 20, 100, 1000]) {
+      const off = k * BOOLEAN_ETA * d;
+      const b = mapShape(a, (p) => ({ x: p.x + 0.6 * off, y: p.y + 0.8 * off }));
+      for (const op of OPS) expectCase(op, [a, b]);
+    }
+  });
+});
+
+/** Seed 11, case 621: an evenodd self-crossing blob minus its copy 2.4 η away (fail closed). */
+const CASE_11_621: readonly (readonly number[])[][] = [
+  [
+    [
+      67.48105312860085, 88.70948860897745, 77.79526506247969, 100.80928540249538,
+      14.124785652495767, 84.23220065905234, 30.467187542319834, 88.04838207415465,
+    ],
+    [
+      30.467187542319834, 88.04838207415465, 26.60212968444231, 109.03375030242626,
+      28.63390172041193, 36.82960707003011, 41.789718927678926, 51.661680683355875,
+    ],
+    [
+      41.789718927678926, 51.661680683355875, 53.5573302139526, 65.7338082629576, 72.96192313149407,
+      35.9713907986455, 72.49127536820508, 38.55264494308072,
+    ],
+    [
+      72.49127536820508, 38.55264494308072, 78.80602945714125, 43.47054407462619,
+      118.80388061440897, 76.37750091288899, 102.43745482102105, 69.3253764101067,
+    ],
+    [
+      102.43745482102105, 69.3253764101067, 82.72577994473679, 54.71314109471283, 52.114398017718,
+      105.71182245383385, 67.48105312860085, 88.70948860897745,
+    ],
+  ],
+  [
+    [
+      67.48106886901996, 88.70950488216593, 77.7952808028988, 100.80930167568386, 14.12480139291488,
+      84.23221693224082, 30.467203282738947, 88.04839834734312,
+    ],
+    [
+      30.467203282738947, 88.04839834734312, 26.602145424861423, 109.03376657561473,
+      28.633917460831043, 36.829623343218586, 41.78973466809804, 51.661696956544354,
+    ],
+    [
+      41.78973466809804, 51.661696956544354, 53.55734595437172, 65.73382453614607,
+      72.96193887191319, 35.97140707183398, 72.4912911086242, 38.5526612162692,
+    ],
+    [
+      72.4912911086242, 38.5526612162692, 78.80604519756037, 43.47056034781467, 118.80389635482808,
+      76.37751718607747, 102.43747056144016, 69.32539268329518,
+    ],
+    [
+      102.43747056144016, 69.32539268329518, 82.7257956851559, 54.71315736790131, 52.11441375813712,
+      105.71183872702233, 67.48106886901996, 88.70950488216593,
+    ],
+  ],
+];
+
+describe('E41-A02 recorded failures', () => {
+  it('seed 11 case 621 fails closed or is correct, never wrong', () => {
+    const shapes: BShape[] = CASE_11_621.map((contour) => ({
+      fillRule: 'evenodd',
+      contours: [
+        contour.map((n) =>
+          cubic(
+            { x: n[0] as number, y: n[1] as number },
+            { x: n[2] as number, y: n[3] as number },
+            { x: n[4] as number, y: n[5] as number },
+            { x: n[6] as number, y: n[7] as number },
+          ),
+        ),
+      ],
+    }));
+    const result = booleanOp('subtract', shapes);
+    if (!result.ok) expect(result.code).toBe('failed');
+    else expectCase('subtract', shapes);
   });
 });
 
@@ -583,11 +761,30 @@ describe('E41-A02 random corpus', () => {
     for (let k = 0; k < Number(process.env['E41_CASES'] ?? 1000); k++) {
       const n = 2 + (rand() < 0.25 ? 1 : 0);
       const shapes: BShape[] = [];
-      for (let i = 0; i < n; i++) shapes.push(randomShape(rand));
-      // Near-coincident copies within 10 η.
-      if (rand() < 0.1) {
-        const d = BOOLEAN_ETA * 150 * (2 + Math.floor(rand() * 8));
-        shapes[1] = mapShape(shapes[0] as BShape, (p) => ({ x: p.x + d, y: p.y }));
+      for (let i = 0; i < n; i++) {
+        const shape = randomShape(rand);
+        // Mixed scales: some inputs shrink to 2 % to 20 % about the middle of the frame.
+        if (rand() < 0.15) {
+          const f = 0.02 + rand() * 0.18;
+          const cx = rand() * 100;
+          const cy = rand() * 100;
+          shapes.push(mapShape(shape, (p) => ({ x: cx + (p.x - 50) * f, y: cy + (p.y - 50) * f })));
+        } else {
+          shapes.push(shape);
+        }
+      }
+      // Near-coincident copies within 10 η, in a random direction: below η, 1 to 4 η, 4 to 10 η.
+      if (rand() < 0.15) {
+        shapes[1] = shapes[0] as BShape;
+        const diag = boundsOf(shapes).diag;
+        const band = Math.floor(rand() * 3);
+        const k = band === 0 ? 0.05 + rand() * 0.9 : band === 1 ? 1 + rand() * 3 : 4 + rand() * 6;
+        const angle = rand() * 2 * Math.PI;
+        const d = k * BOOLEAN_ETA * diag;
+        shapes[1] = mapShape(shapes[0] as BShape, (p) => ({
+          x: p.x + d * Math.cos(angle),
+          y: p.y + d * Math.sin(angle),
+        }));
       }
       const op = OPS[Math.floor(rand() * 4)] as BooleanOp;
       if (process.env['E41_DUMP']?.split(',').includes(String(k))) {
@@ -646,7 +843,7 @@ function wavyRing(n: number, r0: number, amp: number, k: number, phase: number):
 }
 
 describe('E41-A04 boolean cost', () => {
-  it('two inputs of 512 cubic segments, about 1,000 crossings, median of 5 within 100 ms', () => {
+  it('two inputs of 512 cubic segments, 1,024 crossings, median of 5 within 100 ms', () => {
     const a = wavyRing(512, 100, 0.5, 256, 0);
     const b = wavyRing(512, 100, 1, 512, 0.3);
     const times: number[] = [];
@@ -659,6 +856,31 @@ describe('E41-A04 boolean cost', () => {
       expect(r.ok).toBe(true);
       if (r.ok) contours = r.contours.length;
     }
+    // The timed result is correct: grid membership against the oracle (the on-input check is
+    // left out here for time; the fixtures and the corpus cover it).
+    const c = check('union', [a, b], 128, false);
+    // 1,024 crossings: the union's boundary switches between the inputs at each one.
+    {
+      const res = booleanOp('union', [a, b]);
+      if (res.ok) {
+        const owner = (seg: BSegment) => {
+          const p = pointOn(seg, 0.5);
+          const th = Math.atan2(p.y, p.x);
+          const r = Math.hypot(p.x, p.y);
+          const ra = 100 + 0.5 * Math.sin(256 * th);
+          const rb = 100 + Math.sin(512 * th + 0.3);
+          return Math.abs(r - ra) < Math.abs(r - rb) ? 0 : 1;
+        };
+        const segs = res.contours[0] as BSegment[];
+        let switches = 0;
+        for (let i = 0; i < segs.length; i++)
+          if (owner(segs[i] as BSegment) !== owner(segs[(i + 1) % segs.length] as BSegment))
+            switches++;
+        expect(switches).toBe(1024);
+      }
+    }
+    expect(c.failure).toBeNull();
+    expect(c.mismatches).toBe(0);
     times.sort((x, y) => x - y);
     const median = times[2] as number;
     process.stderr.write(

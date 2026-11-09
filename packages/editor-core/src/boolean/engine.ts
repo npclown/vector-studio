@@ -11,6 +11,7 @@ import {
   splitCubic,
   closestParam,
   controlBox,
+  derivativeAt,
   distance,
   monotonePieces,
   pointAt,
@@ -62,7 +63,11 @@ function run(op: BooleanOp, shapes: readonly BShape[]): BooleanResult {
     for (const contour of shape.contours) {
       for (const s of contour) {
         count++;
-        box = box === null ? controlBox(s) : union(box, controlBox(s));
+        const b = controlBox(s);
+        if (![b.minX, b.minY, b.maxX, b.maxY].every(Number.isFinite)) {
+          return { ok: false, code: 'failed', detail: 'non-finite coordinate' };
+        }
+        box = box === null ? b : union(box, b);
       }
     }
   }
@@ -112,7 +117,11 @@ function run(op: BooleanOp, shapes: readonly BShape[]): BooleanResult {
       const b = segs[order[oj] as number] as Seg;
       if (b.box.minX > a.box.maxX + eta) break;
       if (!boxesOverlap(a.box, b.box, eta)) continue;
-      for (const hit of intersect(a.seg, b.seg, eps, eta)) {
+      const hits = intersect(a.seg, b.seg, eps, eta);
+      if (hits === null) {
+        return { ok: false, code: 'failed', detail: 'intersection budget exhausted' };
+      }
+      for (const hit of hits) {
         const p = pointAt(a.seg, hit.t);
         const q = pointAt(b.seg, hit.u);
         const v = vertices.add({ x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 });
@@ -143,7 +152,10 @@ function run(op: BooleanOp, shapes: readonly BShape[]): BooleanResult {
   // 3. Split into pieces with snapped end points.
   const pieces: Piece[] = [];
   for (const s of segs) {
-    const cuts = [...s.cuts].sort((x, y) => x.t - y.t || x.v - y.v);
+    // The end point cuts stay first and last, so that the pieces of consecutive segments meet
+    // at the same vertex even where an interior cut lands at t = 0 or 1 with another vertex.
+    const [first, last, ...inner] = s.cuts as [Cut, Cut, ...Cut[]];
+    const cuts = [first, ...inner.sort((x, y) => x.t - y.t || x.v - y.v), last];
     let prev = cuts[0] as Cut;
     for (let k = 1; k < cuts.length; k++) {
       const next = cuts[k] as Cut;
@@ -271,20 +283,7 @@ function run(op: BooleanOp, shapes: readonly BShape[]): BooleanResult {
       if (candidates.length === 0) {
         return { ok: false, code: 'failed', detail: `unpaired piece at vertex ${at}` };
       }
-      const back = tangentAt(current.seg, 1);
-      const base = Math.atan2(-back.y, -back.x);
-      let best = candidates[0] as Directed;
-      let bestDelta = Infinity;
-      for (const c of candidates) {
-        const t = tangentAt(c.seg, 0);
-        let delta = Math.atan2(t.y, t.x) - base;
-        while (delta <= 0) delta += 2 * Math.PI;
-        while (delta > 2 * Math.PI) delta -= 2 * Math.PI;
-        if (delta < bestDelta) {
-          bestDelta = delta;
-          best = c;
-        }
-      }
+      const best = nextClockwise(current.seg, candidates);
       if (best === start) break;
       best.used = true;
       contour.push(best.seg);
@@ -293,6 +292,74 @@ function run(op: BooleanOp, shapes: readonly BShape[]): BooleanResult {
     contours.push(contour);
   }
   return { ok: true, contours };
+}
+
+/**
+ * The outgoing piece next clockwise (y-down) from the reversed incoming direction. Directions
+ * within `TIE` of each other, or of the reversed incoming one, are ordered by the chords to the
+ * points at a common small distance `r` instead: the pieces do not cross, so those chords keep
+ * their order.
+ */
+function nextClockwise(incoming: BSegment, candidates: readonly Directed[]): Directed {
+  const back = tangentAt(incoming, 1);
+  const base = Math.atan2(-back.y, -back.x);
+  const turn = (angle: number) => {
+    let delta = angle - base;
+    while (delta <= 0) delta += 2 * Math.PI;
+    while (delta > 2 * Math.PI) delta -= 2 * Math.PI;
+    return delta;
+  };
+  const primary = candidates.map((c) => {
+    const t = tangentAt(c.seg, 0);
+    return turn(Math.atan2(t.y, t.x));
+  });
+  const ambiguous = primary.map(
+    (d, i) =>
+      d < TIE || d > 2 * Math.PI - TIE || primary.some((e, j) => j !== i && Math.abs(e - d) < TIE),
+  );
+  let index = 0;
+  if (ambiguous.some(Boolean)) {
+    const reversed = reverse(incoming);
+    let r = chordLength(reversed);
+    for (const c of candidates) r = Math.min(r, chordLength(c.seg));
+    r /= 2;
+    const anchor = reversed.p0;
+    const direction = (s: BSegment) => {
+      const p = pointAtDistance(s, r);
+      return Math.atan2(p.y - anchor.y, p.x - anchor.x);
+    };
+    const chordBase = direction(reversed);
+    const secondary = candidates.map((c) => {
+      let delta = direction(c.seg) - chordBase;
+      while (delta <= 0) delta += 2 * Math.PI;
+      while (delta > 2 * Math.PI) delta -= 2 * Math.PI;
+      return delta;
+    });
+    const key = (i: number) => (ambiguous[i] ? (secondary[i] as number) : (primary[i] as number));
+    for (let i = 1; i < candidates.length; i++) if (key(i) < key(index)) index = i;
+  } else {
+    for (let i = 1; i < candidates.length; i++)
+      if ((primary[i] as number) < (primary[index] as number)) index = i;
+  }
+  return candidates[index] as Directed;
+}
+
+const TIE = 1e-6;
+
+function chordLength(s: BSegment): number {
+  return distance(s.p0, s.p1);
+}
+
+/** The point of a monotone piece at distance `r` from its start (distance grows along it). */
+function pointAtDistance(s: BSegment, r: number): BPoint {
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    if (distance(s.p0, pointAt(s, mid)) < r) lo = mid;
+    else hi = mid;
+  }
+  return pointAt(s, (lo + hi) / 2);
 }
 
 function inside(w: number, rule: BFillRule): boolean {
@@ -378,15 +445,19 @@ function makePiece(
 
 type Hit = { t: number; u: number };
 
-/** Intersections of two segments, excluding coincident stretches (the vertex rule cuts those). */
-function intersect(a: BSegment, b: BSegment, eps: number, eta: number): Hit[] {
+/**
+ * Intersections of two segments, excluding coincident stretches (the vertex rule cuts those), or
+ * null when subdivision ran out of budget (the operation then fails closed).
+ */
+function intersect(a: BSegment, b: BSegment, eps: number, eta: number): Hit[] | null {
   if (a.kind === 'line' && b.kind === 'line') {
     const hit = chordHit(a, b);
     return hit === null ? [] : [hit];
   }
   const leaves: Hit[] = [];
-  const state = { budget: 20_000 };
+  const state = { budget: SUBDIVISION_BUDGET };
   subdivide(a, 0, 1, b, 0, 1, 0, eps, eta, leaves, state);
+  if (state.budget < 0) return null;
   if (leaves.length === 0) return [];
   // Merge leaves into runs and keep the closest point of each run.
   leaves.sort((x, y) => x.t - y.t);
@@ -435,6 +506,9 @@ function subdivide(
   const ba = controlBox(pa);
   const bb = controlBox(pb);
   if (!boxesOverlap(ba, bb, eps)) return;
+  // Fat lines: each piece lies in a strip along its own chord; near-parallel pieces a few η
+  // apart separate there long before their boxes do.
+  if (fatLineMisses(pa, pb, eps) || fatLineMisses(pb, pa, eps)) return;
   const sa = boxSize(ba);
   const sb = boxSize(bb);
   if ((sa <= eps && sb <= eps) || depth > 60) {
@@ -442,43 +516,60 @@ function subdivide(
     return;
   }
   // Coincident stretch (checked only at scales where a real crossing would separate the
-  // samples by more than η): the vertex rule handles its ends.
-  if (Math.max(sa, sb) > COINCIDENT_SCALE * eta && coincident(pa, pb, eta)) return;
+  // samples by more than η): the vertex rule handles its ends. A shallow crossing inside it
+  // (the samples change sides) is found by bisection on the side, since subdivision cannot
+  // separate curves that stay within ε of each other over a long stretch.
+  if (Math.max(sa, sb) > COINCIDENT_SCALE * eta) {
+    const near = coincident(pa, pb, eta, eps);
+    if (near !== null) {
+      for (const h of near) out.push({ t: t0 + (t1 - t0) * h.t, u: u0 + (u1 - u0) * h.u });
+      return;
+    }
+  }
   // Pieces that share an end point and lie in disjoint cones from it meet only there (that
   // vertex exists).
   if (separatedAtSharedEnd(pa, pb)) return;
   const fa = flatness(pa);
   const fb = flatness(pb);
-  // Flat pieces at a clear angle cross at most once: take the chord crossing as Newton's start.
-  if (fa.ratio <= 0.01 && fb.ratio <= 0.01 && fa.len > 0 && fb.len > 0) {
+  // Pieces whose controls project inside their chords lie in rectangles of half-width `dev`
+  // around the chords. Where the chords' lines cross at sine `sin`, a common point lies within
+  // (devA + devB) / sin of that crossing along each chord: outside that pad there is none.
+  if (fa.len > 0 && fb.len > 0 && fa.dev < Infinity && fb.dev < Infinity) {
     const rx = pa.p1.x - pa.p0.x;
     const ry = pa.p1.y - pa.p0.y;
-    const qx0 = pb.p1.x - pb.p0.x;
-    const qy0 = pb.p1.y - pb.p0.y;
-    const den = rx * qy0 - ry * qx0;
-    if (Math.abs(den) >= 0.1 * fa.len * fb.len) {
+    const sx = pb.p1.x - pb.p0.x;
+    const sy = pb.p1.y - pb.p0.y;
+    const den = rx * sy - ry * sx;
+    const sin = Math.abs(den) / (fa.len * fb.len);
+    if (sin > 1e-6) {
       const qx = pb.p0.x - pa.p0.x;
       const qy = pb.p0.y - pa.p0.y;
-      const tc = (qx * qy0 - qy * qx0) / den;
+      const tc = (qx * sy - qy * sx) / den;
       const uc = (qx * ry - qy * rx) / den;
-      const pad = 0.15;
-      if (tc < -pad || tc > 1 + pad || uc < -pad || uc > 1 + pad) return;
-      const start = {
-        t: t0 + (t1 - t0) * Math.min(1, Math.max(0, tc)),
-        u: u0 + (u1 - u0) * Math.min(1, Math.max(0, uc)),
-      };
-      const hit = newton(a, b, start);
-      const slackT = (t1 - t0) * 1e-9;
-      const slackU = (u1 - u0) * 1e-9;
-      if (
-        hit.t >= t0 - slackT &&
-        hit.t <= t1 + slackT &&
-        hit.u >= u0 - slackU &&
-        hit.u <= u1 + slackU &&
-        distance(pointAt(a, hit.t), pointAt(b, hit.u)) <= eps
-      ) {
-        out.push(hit);
-        return;
+      const reach = (fa.dev + fb.dev + eps) / sin;
+      const padT = reach / fa.len;
+      const padU = reach / fb.len;
+      if (tc < -padT || tc > 1 + padT || uc < -padU || uc > 1 + padU) return;
+      // Disjoint hodograph cones: the pieces cross at most once, so a Newton root inside the
+      // parameter box is the only one.
+      if (conesDisjoint(pa, pb)) {
+        const start = {
+          t: t0 + (t1 - t0) * Math.min(1, Math.max(0, tc)),
+          u: u0 + (u1 - u0) * Math.min(1, Math.max(0, uc)),
+        };
+        const hit = newton(a, b, start);
+        const slackT = (t1 - t0) * 1e-9;
+        const slackU = (u1 - u0) * 1e-9;
+        if (
+          hit.t >= t0 - slackT &&
+          hit.t <= t1 + slackT &&
+          hit.u >= u0 - slackU &&
+          hit.u <= u1 + slackU &&
+          distance(pointAt(a, hit.t), pointAt(b, hit.u)) <= eps
+        ) {
+          out.push(hit);
+          return;
+        }
       }
     }
   }
@@ -499,6 +590,30 @@ function subdivide(
     subdivide(a, t0, t1, b, u0, um, depth + 1, eps, eta, out, state, pa, l);
     subdivide(a, t0, t1, b, um, u1, depth + 1, eps, eta, out, state, pa, r);
   }
+}
+
+/** Whether `b`'s controls lie outside the strip around `a`'s chord that holds `a`. */
+function fatLineMisses(a: BSegment, b: BSegment, eps: number): boolean {
+  const dx = a.p1.x - a.p0.x;
+  const dy = a.p1.y - a.p0.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len === 0) return false;
+  const off = (p: BPoint) => ((p.x - a.p0.x) * dy - (p.y - a.p0.y) * dx) / len;
+  let lo = 0;
+  let hi = 0;
+  for (const p of controls(a)) {
+    const d = off(p);
+    lo = Math.min(lo, d);
+    hi = Math.max(hi, d);
+  }
+  let blo = Infinity;
+  let bhi = -Infinity;
+  for (const p of controls(b)) {
+    const d = off(p);
+    blo = Math.min(blo, d);
+    bhi = Math.max(bhi, d);
+  }
+  return blo > hi + eps || bhi < lo - eps;
 }
 
 function halves(s: BSegment): [BSegment, BSegment] {
@@ -574,6 +689,8 @@ function flatness(s: BSegment): { len: number; dev: number; ratio: number } {
 
 /** Pieces larger than this many η are checked for coincidence (section 2.4 step 2). */
 const COINCIDENT_SCALE = 4096;
+/** Box pairs one segment pair may visit before the operation fails closed. */
+const SUBDIVISION_BUDGET = 20_000;
 
 function chordHit(a: BSegment, b: BSegment): Hit | null {
   const rx = a.p1.x - a.p0.x;
@@ -589,24 +706,122 @@ function chordHit(a: BSegment, b: BSegment): Hit | null {
   return t < 0 || t > 1 || u < 0 || u > 1 ? null : { t, u };
 }
 
-function coincident(a: BSegment, b: BSegment, eta: number): boolean {
+/**
+ * Section 2.4 step 2: null unless five samples each way lie within η of the other piece. Then
+ * the pieces are coincident, and the result lists the crossings inside the stretch (local
+ * parameters): a change of side between consecutive samples, refined by bisection, or an end
+ * sample within ε of the other piece where the others are not.
+ */
+function coincident(a: BSegment, b: BSegment, eta: number, eps: number): Hit[] | null {
   // Cheap necessary condition: each midpoint lies in the other's box grown by η.
   const ma = pointAt(a, 0.5);
   const mb = pointAt(b, 0.5);
   const ba = controlBox(a);
   const bb = controlBox(b);
   if (ma.x < bb.minX - eta || ma.x > bb.maxX + eta || ma.y < bb.minY - eta || ma.y > bb.maxY + eta)
-    return false;
+    return null;
   if (mb.x < ba.minX - eta || mb.x > ba.maxX + eta || mb.y < ba.minY - eta || mb.y > ba.maxY + eta)
-    return false;
+    return null;
   // And the end points lie near the other piece's box too.
   for (const p of [a.p0, a.p1]) {
     if (p.x < bb.minX - eta || p.x > bb.maxX + eta || p.y < bb.minY - eta || p.y > bb.maxY + eta)
-      return false;
+      return null;
   }
-  for (const t of [0.25, 0.5, 0.75]) {
-    if (closestParam(b, pointAt(a, t)).d >= eta) return false;
-    if (closestParam(a, pointAt(b, t)).d >= eta) return false;
+  const sides: number[][] = [];
+  for (const [from, to] of [
+    [a, b],
+    [b, a],
+  ] as const) {
+    const row: number[] = [];
+    for (const t of COINCIDENT_SAMPLES) {
+      const side = sideOf(from, to, t, eps);
+      if (side === null) return null;
+      row.push(side);
+    }
+    sides.push(row);
+  }
+  const hits: Hit[] = [];
+  const row = sides[0] as number[];
+  for (let i = 1; i < row.length; i++) {
+    const s0 = row[i - 1] as number;
+    const s1 = row[i] as number;
+    if (s0 * s1 >= 0) continue;
+    let lo = COINCIDENT_SAMPLES[i - 1] as number;
+    let hi = COINCIDENT_SAMPLES[i] as number;
+    for (let k = 0; k < 60; k++) {
+      const mid = (lo + hi) / 2;
+      const side = sideOf(a, b, mid, eps) ?? 0;
+      if (side === 0) {
+        lo = hi = mid;
+        break;
+      }
+      if (side * s0 > 0) lo = mid;
+      else hi = mid;
+    }
+    const t = (lo + hi) / 2;
+    hits.push({ t, u: closestParam(b, pointAt(a, t)).t });
+  }
+  if (
+    hits.length === 0 &&
+    (sides[1] as number[]).some((x, i, all) => i > 0 && x * (all[i - 1] as number) < 0)
+  ) {
+    // Seen only from `b`'s side: the samples of `a` straddle the crossing too coarsely.
+    return [];
+  }
+  // A crossing or touch at an end of the stretch.
+  if (row.some((x) => x !== 0)) {
+    for (const i of [0, row.length - 1]) {
+      if (row[i] !== 0) continue;
+      const t = COINCIDENT_SAMPLES[i] as number;
+      hits.push({ t, u: closestParam(b, pointAt(a, t)).t });
+    }
+  }
+  return hits;
+}
+
+/** The side of `from(t)` relative to `to` (0 within ε), or null when it is η or more away. */
+function sideOf(from: BSegment, to: BSegment, t: number, eps: number): number | null {
+  const p = pointAt(from, t);
+  const hit = closestParam(to, p);
+  if (hit.d >= eps * (BOOLEAN_ETA / BOOLEAN_EPSILON)) return null;
+  if (hit.d <= eps) return 0;
+  const q = pointAt(to, hit.t);
+  const d = derivativeAt(to, hit.t);
+  return Math.sign(d.x * (p.y - q.y) - d.y * (p.x - q.x));
+}
+
+const COINCIDENT_SAMPLES = [0, 0.25, 0.5, 0.75, 1] as const;
+
+/**
+ * Whether every direction of `a`'s control polygon lies strictly on one side of every
+ * direction of `b`'s (in the same rotational sense): the hodographs' cones are then disjoint
+ * and the pieces cross at most once.
+ */
+function conesDisjoint(a: BSegment, b: BSegment): boolean {
+  const edges = (s: BSegment) => {
+    const c = controls(s);
+    const out: BPoint[] = [];
+    for (let i = 1; i < c.length; i++) {
+      const e = {
+        x: (c[i] as BPoint).x - (c[i - 1] as BPoint).x,
+        y: (c[i] as BPoint).y - (c[i - 1] as BPoint).y,
+      };
+      if (e.x !== 0 || e.y !== 0) out.push(e);
+    }
+    return out;
+  };
+  const ea = edges(a);
+  const eb = edges(b);
+  if (ea.length === 0 || eb.length === 0) return false;
+  let sign = 0;
+  for (const p of ea) {
+    for (const q of eb) {
+      const c = p.x * q.y - p.y * q.x;
+      const bound = 1e-9 * Math.sqrt((p.x * p.x + p.y * p.y) * (q.x * q.x + q.y * q.y));
+      const sc = c > bound ? 1 : c < -bound ? -1 : 0;
+      if (sc === 0 || (sign !== 0 && sc !== sign)) return false;
+      sign = sc;
+    }
   }
   return true;
 }
@@ -618,8 +833,8 @@ function newton(a: BSegment, b: BSegment, start: Hit): Hit {
     const q = pointAt(b, u);
     const fx = p.x - q.x;
     const fy = p.y - q.y;
-    const da = tangentRaw(a, t);
-    const db = tangentRaw(b, u);
+    const da = derivativeAt(a, t);
+    const db = derivativeAt(b, u);
     // [da, -db] [dt, du]^T = -f
     const det = da.x * -db.y - da.y * -db.x;
     if (Math.abs(det) < 1e-300) break;
@@ -633,17 +848,6 @@ function newton(a: BSegment, b: BSegment, start: Hit): Hit {
     if (Math.abs(dt) < 1e-16 && Math.abs(du) < 1e-16) break;
   }
   return { t, u };
-}
-
-function tangentRaw(s: BSegment, t: number): BPoint {
-  if (s.kind === 'line') return { x: s.p1.x - s.p0.x, y: s.p1.y - s.p0.y };
-  const u = 1 - t;
-  return {
-    x:
-      3 * u * u * (s.c1.x - s.p0.x) + 6 * u * t * (s.c2.x - s.c1.x) + 3 * t * t * (s.p1.x - s.c2.x),
-    y:
-      3 * u * u * (s.c1.y - s.p0.y) + 6 * u * t * (s.c2.y - s.c1.y) + 3 * t * t * (s.p1.y - s.c2.y),
-  };
 }
 
 /** Vertices clustered within η (grid hash over η-sized cells, relative to the inputs' corner). */

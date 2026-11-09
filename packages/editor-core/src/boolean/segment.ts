@@ -143,7 +143,7 @@ function secondDerivativeAt(s: BCubic, t: number): BPoint {
   };
 }
 
-export function clamp01(t: number): number {
+function clamp01(t: number): number {
   return t < 0 ? 0 : t > 1 ? 1 : t;
 }
 
@@ -267,17 +267,19 @@ function lineCrossing(a: BPoint, b: BPoint): number {
 export function signedArea(contour: readonly BSegment[]): number {
   const nodes = [0.5 - Math.sqrt(0.15), 0.5, 0.5 + Math.sqrt(0.15)];
   const weights = [5 / 18, 8 / 18, 5 / 18];
+  // Relative to a local origin, so that far-from-origin contours keep their precision.
+  const o = contour[0]?.p0 ?? { x: 0, y: 0 };
   let area = 0;
   for (const s of contour) {
     if (s.kind === 'line') {
-      area += (s.p0.x * s.p1.y - s.p1.x * s.p0.y) / 2;
+      area += ((s.p0.x - o.x) * (s.p1.y - o.y) - (s.p1.x - o.x) * (s.p0.y - o.y)) / 2;
       continue;
     }
     for (let i = 0; i < 3; i++) {
       const t = nodes[i] as number;
       const p = pointAt(s, t);
       const d = derivativeAt(s, t);
-      area += ((weights[i] as number) * (p.x * d.y - p.y * d.x)) / 2;
+      area += ((weights[i] as number) * ((p.x - o.x) * d.y - (p.y - o.y) * d.x)) / 2;
     }
   }
   return area;
