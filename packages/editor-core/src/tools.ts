@@ -575,7 +575,8 @@ export function createPathTool(options: DrawOptions = {}): Tool {
   let anchors: Anchor[] = [];
   let pressed: Anchor | null = null;
 
-  function finish(context: ToolContext, closed: boolean): void {
+  /** Creates the pending path; false when the create failed (the anchors are kept). */
+  function finish(context: ToolContext, closed: boolean): boolean {
     const verbs: ('move' | 'line' | 'cubic' | 'close')[] = ['move'];
     const points = [anchors[0]!.point.x, anchors[0]!.point.y];
     const segment = (from: Anchor, to: Anchor) => {
@@ -611,10 +612,11 @@ export function createPathTool(options: DrawOptions = {}): Tool {
     if (!result.ok && parent !== undefined) {
       result = context.execute({ type: 'createPath', verbs, points, ...style });
     }
-    if (!result.ok) return;
+    if (!result.ok) return false;
     anchors = [];
     pressed = null;
     selectCreated(context, result.ids, options);
+    return true;
   }
 
   return {
@@ -623,8 +625,13 @@ export function createPathTool(options: DrawOptions = {}): Tool {
         // Escape and Enter act on pending anchors only, so they are consumed only then (M2-I2).
         if (anchors.length === 0) return false;
         if (event.key === 'Escape') {
-          anchors = [];
-          pressed = null;
+          // V-25 slice 8 follow-up 4: Escape ends the path open, as Enter does (Figma); a single
+          // anchor makes no path and is dropped, and so are the anchors of a failed create, so
+          // Escape always leaves the tool empty.
+          if (anchors.length < 2 || !finish(context, false)) {
+            anchors = [];
+            pressed = null;
+          }
           return true;
         }
         if (event.key === 'Enter') {
@@ -640,11 +647,21 @@ export function createPathTool(options: DrawOptions = {}): Tool {
           finish(context, true);
           return true;
         }
-        // A second press on the last anchor (a double click) adds no anchor.
+        // A second press on the last anchor (a double click) adds no anchor; V-25 slice 8 follow-up 4: within
+        // PEN_DRAG_THRESHOLD CSS px, so a double click's hand jitter adds none either.
         const last = anchors[anchors.length - 1];
-        if (last !== undefined && distance(event.point, last.point) === 0) return false;
+        const near = PEN_DRAG_THRESHOLD / zoomOf(context);
+        if (last !== undefined && distance(event.point, last.point) < near) return false;
         pressed = { point: event.point, in: null, out: null };
         anchors.push(pressed);
+        return true;
+      }
+      if (event.kind === 'doubleclick') {
+        // V-25 slice 8 follow-up 4: a double-click ends the path open (Figma); its second press added no
+        // anchor (above). A single anchor makes no path and is dropped.
+        if (anchors.length === 0 || pressed !== null) return false;
+        if (anchors.length >= 2) finish(context, false);
+        else anchors = [];
         return true;
       }
       if (event.kind === 'pointermove' && pressed !== null) {
