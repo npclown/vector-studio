@@ -13,6 +13,7 @@ import type {
   TextNodeV7,
   TextRun,
 } from '@vector-studio/react';
+import { booleanNotice } from './boolean-model.js';
 import {
   numberText,
   parseHex,
@@ -525,9 +526,12 @@ export function runPropertyAction(
   return result;
 }
 
-/** A refused command's code and path as the panel shows it, or '' for a success. */
+/**
+ * A refused command's code and path as the panel shows it, or '' for a success; a refused boolean
+ * shows its notice (E41-U3b).
+ */
 export const refusalText = (result: CommandResult): string =>
-  result.ok ? '' : `${result.code} ${result.path ?? ''}`.trimEnd();
+  result.ok ? '' : (booleanNotice(result) ?? `${result.code} ${result.path ?? ''}`.trimEnd());
 
 /**
  * V-25 slice 5: the run colour a hex field, picker or swatch writes: `hex` with the shown run
