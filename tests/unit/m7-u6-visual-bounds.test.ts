@@ -195,6 +195,8 @@ describe('createSymbol wraps by visual bounds (M7 section 5.1)', () => {
       data: { points: 5, innerRatio: 0.5 },
       fill: null,
       stroke: stroke(10, 'butt', 'miter', 4),
+      // Schema v7 (E41-S1).
+      effects: [],
     } as unknown as NodeV7;
     const document = { nodes: { s: star } } as unknown as DocumentV7;
     // 10 / 2 · 4 = 20 on every side.

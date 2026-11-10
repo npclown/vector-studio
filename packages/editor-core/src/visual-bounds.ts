@@ -182,11 +182,36 @@ function ownBox(document: DocumentV7, node: NodeV7): Box {
 }
 
 /**
- * The visual bounds of `node` in its parent's space: its own visual box turned by its rotation
- * about its frame's centre. Contains `rotatedBounds(node)`.
+ * E41 contract, section 5.5: the reach of a node's visible effects past its box in local units,
+ * `1.5 × radius_blur + maxᵢ(1.5 × radiusᵢ + |offsetᵢ|)` with `|offset|` the larger of
+ * `|offsetX|` and `|offsetY|` (the box grows by the same amount on every side). An instance
+ * without effects of its own draws with its symbol's (E41-S10).
+ */
+function effectMargin(document: DocumentV7, node: NodeV7): number {
+  let effects = node.effects;
+  if (node.type === 'instance' && effects.length === 0) {
+    effects = document.nodes[node.symbol]?.effects ?? [];
+  }
+  let blur = 0;
+  let shadow = 0;
+  for (const effect of effects) {
+    if (!effect.visible) continue;
+    if (effect.kind === 'layerBlur') blur = 1.5 * effect.radius;
+    else {
+      const offset = Math.max(Math.abs(effect.offsetX), Math.abs(effect.offsetY));
+      shadow = Math.max(shadow, 1.5 * effect.radius + offset);
+    }
+  }
+  return blur + shadow;
+}
+
+/**
+ * The visual bounds of `node` in its parent's space: its own visual box, grown by its effects'
+ * reach (E41 section 5.5), turned by its rotation about its frame's centre. Contains
+ * `rotatedBounds(node)`.
  */
 export function visualBounds(document: DocumentV7, node: NodeV7): Frame {
-  const box = ownBox(document, node);
+  const box = grow(ownBox(document, node), effectMargin(document, node));
   if (node.rotation === 0) {
     return { x: box.minX, y: box.minY, width: box.maxX - box.minX, height: box.maxY - box.minY };
   }

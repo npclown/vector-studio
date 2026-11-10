@@ -343,6 +343,26 @@ export type DocumentCommand =
   | Readonly<{ type: 'setStyle'; ids: readonly string[]; style: StyleProps }>
   | Readonly<{ type: 'deleteNodes'; ids: readonly string[] }>
   | Readonly<{ type: 'groupNodes'; ids: readonly string[]; kind: 'group' | 'maskGroup' }>
+  /**
+   * E41 contract, section 6: appends the default effect of `kind` to each node (one step); past
+   * E41-S3's limits (8 effects, one layer blur) it refuses with `editor.effect-limit`.
+   */
+  | Readonly<{ type: 'addEffect'; ids: readonly string[]; kind: 'dropShadow' | 'layerBlur' }>
+  /** Patches the effect at `index` of each listed node that has one (a toggle sets `visible`). */
+  | Readonly<{
+      type: 'setEffect';
+      ids: readonly string[];
+      index: number;
+      patch: Readonly<{
+        visible?: boolean;
+        color?: Color;
+        offsetX?: number;
+        offsetY?: number;
+        radius?: number;
+      }>;
+    }>
+  /** Removes the effect at `index` of each listed node that has one. */
+  | Readonly<{ type: 'removeEffect'; ids: readonly string[]; index: number }>
   /** E41 contract, section 2: replaces sibling shapes by one path, the `op` of their areas. */
   | Readonly<{
       type: 'booleanNodes';
@@ -644,7 +664,9 @@ export type EditorErrorCode =
   | 'editor.boolean-unsupported'
   | 'editor.boolean-empty'
   | 'editor.boolean-too-large'
-  | 'editor.boolean-failed';
+  | 'editor.boolean-failed'
+  // E41 contract, section 6.
+  | 'editor.effect-limit';
 
 /**
  * `consumed` is present on `input` results only (M2-I3): whether navigation, the tool or a key
