@@ -5,6 +5,7 @@ import type {
   RenderCamera,
   RenderNodeSnapshot,
   RenderSceneSnapshot,
+  SceneClip,
   SceneColor,
   SceneEffect,
 } from '@vector-studio/contracts';
@@ -86,7 +87,7 @@ function container(
   id: string,
   children: readonly string[],
   effects: readonly SceneEffect[],
-  extra: Partial<{ parentId: string; opacity: number }> = {},
+  extra: Partial<{ parentId: string; opacity: number; clip: SceneClip | null }> = {},
 ): RenderNodeSnapshot {
   return {
     id,
@@ -95,7 +96,7 @@ function container(
     visible: true,
     opacity: extra.opacity ?? 1,
     kind: 'container',
-    clip: null,
+    clip: extra.clip ?? null,
     children,
     ...(effects.length === 0 ? {} : { effects }),
   };
@@ -113,6 +114,13 @@ type Fixture = Readonly<{
    * part past the target is on the capture too; zero for content inside the target.
    */
   shift: readonly [number, number];
+  /**
+   * U5c (E41-K2b): the root's ancestors' clip, a rect on whole pixels (so its coverage is 0 or
+   * 1) applied once to `R`; `contentNodes` is the scene whose content capture is the root's
+   * unclipped `L` (the same scene without that clip).
+   */
+  clip?: readonly [number, number, number, number];
+  contentNodes?: readonly RenderNodeSnapshot[];
 }>;
 
 function fixture(
@@ -181,7 +189,59 @@ const FIXTURES: readonly Fixture[] = [
     ],
     [0, 120],
   ),
+  // U5c (E41-K2b): roots under clips and masks; the shadow is built from the unclipped content
+  // and clipped once, at the composite.
+  clipped('F6 shadow past a clipping frame', [40, 150, 200, 100], (clip) => [
+    container('f6', ['f6r'], [], { clip }),
+    shape('f6r', 'f6', 'rectangle', [150, 120, 80, 70], RED, {
+      effects: [dropShadow(40, 20, 5)],
+    }),
+  ]),
+  clipped('F11 shadowed child of a mask group', [260, 40, 180, 140], (clip) =>
+    clip === null
+      ? [
+          shape('f11c', null, 'ellipse', [300, 70, 90, 70], TEAL, {
+            effects: [dropShadow(30, 25, 6)],
+          }),
+        ]
+      : [
+          container('f11', ['f11s', 'f11c'], [], { clip: { kind: 'mask' } }),
+          shape('f11s', 'f11', 'rectangle', [260, 40, 180, 140], WHITE),
+          shape('f11c', 'f11', 'ellipse', [300, 70, 90, 70], TEAL, {
+            effects: [dropShadow(30, 25, 6)],
+          }),
+        ],
+  ),
+  clipped('F12 mask group in a shadowed group in a clipping frame', [20, 20, 260, 130], (clip) => [
+    container('f12', ['f12g'], [], { clip }),
+    container('f12g', ['f12m'], [dropShadow(25, 30, 4)], { parentId: 'f12' }),
+    container('f12m', ['f12s', 'f12c'], [], { parentId: 'f12g', clip: { kind: 'mask' } }),
+    shape('f12s', 'f12m', 'rectangle', [60, 40, 150, 90], WHITE),
+    shape('f12c', 'f12m', 'ellipse', [100, 60, 180, 120], AMBER),
+  ]),
 ];
+
+/**
+ * A fixture whose root is under a rect clip (or a mask whose source is that rect): `build(clip)`
+ * gives the scene, `build(null)` the scene whose capture is the root's unclipped `L`.
+ */
+function clipped(
+  name: string,
+  [x, y, width, height]: readonly [number, number, number, number],
+  build: (clip: SceneClip | null) => RenderNodeSnapshot[],
+): Fixture {
+  const nodes = build({ kind: 'rect', x, y, width, height });
+  const root = nodes.find((node) => node.effects !== undefined)!;
+  return {
+    name,
+    nodes,
+    effects: root.effects!,
+    contentOpacity: root.kind === 'container' ? 1 : root.opacity,
+    shift: [0, 0],
+    clip: [x, y, width, height],
+    contentNodes: build(null),
+  };
+}
 
 function snapshot(nodes: readonly RenderNodeSnapshot[]): RenderSceneSnapshot {
   return {
@@ -258,6 +318,18 @@ function oracleEffect(fixture: Fixture): OracleEffect {
   return { shadows, blurSigmaPx, contentOpacity: fixture.contentOpacity };
 }
 
+/** Zeroes the image outside a rect on whole pixels (the image is at the target's origin). */
+function clipImage(
+  image: OracleImage,
+  [x, y, width, height]: readonly [number, number, number, number],
+) {
+  for (let row = 0; row < image.height; row += 1)
+    for (let column = 0; column < image.width; column += 1) {
+      if (column >= x && column < x + width && row >= y && row < y + height) continue;
+      image.data.fill(0, (row * image.width + column) * 4, (row * image.width + column) * 4 + 4);
+    }
+}
+
 /** The frame against `R₁ × scale` over the backdrop (0 black, 1 white). */
 function compare(actual: Uint8Array, expected: OracleImage, scale: number, backdrop: 0 | 1) {
   let worst = 0;
@@ -300,11 +372,14 @@ for (const samples of [1, 4] as const) {
       // L from a camera that moves it by `shift`, placed back at its own pixels.
       const [sx, sy] = fixture.shift;
       const camera: RenderCamera = { position: { x: -sx, y: -sy }, zoom: 1 };
-      const black = await render(contentPage, fixture.nodes, camera);
-      const white = await render(contentPage, [backdrop(width, height), ...fixture.nodes], camera);
+      const contentNodes = fixture.contentNodes ?? fixture.nodes;
+      const black = await render(contentPage, contentNodes, camera);
+      const white = await render(contentPage, [backdrop(width, height), ...contentNodes], camera);
       const l = { ...contentOf(black.rgba, white.rgba, width, height), x: -sx, y: -sy };
       const effect = oracleEffect(fixture);
       const expected = effectOracle(l, { x: 0, y: 0, width, height }, effect);
+      // U5c: the ancestors' clip, once, on R.
+      if (fixture.clip !== undefined) clipImage(expected, fixture.clip);
       const downsampled = [effect.blurSigmaPx ?? 0, ...effect.shadows.map((s) => s.sigmaPx)].some(
         (sigma) => oracleLevels(sigma) > 0,
       );

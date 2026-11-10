@@ -160,6 +160,13 @@ import {
 } from './shifted-layer-pipeline.js';
 import { PRIMITIVE_ANALYTIC_SHADER } from './primitive-analytic-shader.js';
 import {
+  EFFECT_COMPOSITE_CLIP_SHADER,
+  EFFECT_COMPOSITE_CLIP_SHIFTED_SHADER,
+  createEffectCompositeClipPipelineDescriptor,
+  effectCompositeClipKey,
+  effectCompositeClipShiftedKey,
+} from './effect-composite-pipeline.js';
+import {
   PRIMITIVE_FRAME_SIZE,
   PRIMITIVE_GEOMETRY_STRIDE,
   PRIMITIVE_ORDER_STRIDE,
@@ -411,6 +418,11 @@ interface EffectPipelineState {
   readonly pipelines: ReadonlyMap<EffectPassKind, GPURenderPipeline>;
   /** E41 U5b: the shifted layer variants every layer pass in or of an effect root uses. */
   readonly shifted: ShiftedLayerPipelines;
+  /**
+   * E41 U5c: the effect composite's clip variant for the main pass and E25 layer passes; null
+   * without the clip variants (a clipped composite is then not drawn, fail closed).
+   */
+  readonly compositeClip: GPURenderPipeline | null;
 }
 
 /**
@@ -444,6 +456,8 @@ type LayerDrawPipelines = Readonly<
     stencil: MeshStencilPipelines | null;
     text: GPURenderPipeline | null;
     textClip: GPURenderPipeline | null;
+    /** E41 U5c: the effect composite's clip variant for this set's passes, or null. */
+    compositeClip: GPURenderPipeline | null;
     /**
      * Whether the plain analytic and stencil pipelines have groups 1 to 3 (the shifted set):
      * the empty groups are then bound before them.
@@ -452,7 +466,13 @@ type LayerDrawPipelines = Readonly<
   }
 >;
 
-type ShiftedLayerPipelines = LayerDrawPipelines & Readonly<{ modules: number; count: number }>;
+type ShiftedLayerPipelines = LayerDrawPipelines &
+  Readonly<{
+    modules: number;
+    count: number;
+    /** E41 U5c: the effect composite's clip variant for the main pass and E25 passes. */
+    targetCompositeClip: GPURenderPipeline | null;
+  }>;
 
 /** E28 U3: an atlas page; a new texture is a new incarnation. */
 interface TextPage {
@@ -690,6 +710,8 @@ type ValidatedLayers = Readonly<{
   meshDraws: readonly (readonly MeshFillDraw[])[];
   /** E41 U5b: per layer, whether its passes use the shifted variants (in or of an effect root). */
   shifted: readonly boolean[];
+  /** E41-K2b: per layer, its composite's clip state (0: unclipped; only an effect root's). */
+  compositeStates: readonly number[];
   tileWidth: number;
   tileHeight: number;
   tiles: readonly (readonly LayerTile[])[];
@@ -727,6 +749,8 @@ type LayerEffectFrame = Readonly<{
 type LayerFrame = Readonly<{
   passGroup: GPUBindGroup;
   compositeGroups: readonly GPUBindGroup[];
+  /** E41-K2b: per layer, its composite's clip state (0: unclipped). */
+  compositeStates: readonly number[];
   textures: readonly GPUTexture[];
   /** E41 U5: layers without a composite (an effect root whose `R` is empty). */
   skipped: ReadonlySet<number>;
@@ -1344,7 +1368,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       // E28-K8: a text draw's clip state is checked as any draw's.
       clip = this.#preflightClip(
         packet,
-        [...analyticDraws, ...(text?.part.draws ?? [])],
+        // E41-K2b: an effect root's composite state too.
+        [...analyticDraws, ...(text?.part.draws ?? []), ...(packet.layers?.composites ?? [])],
         allMeshDraws,
         validated,
       );
@@ -1518,9 +1543,10 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           return;
         }
         if (slot.layer === null || layerFrame === null) return;
-        this.#encodeComposite(pass, layerFrame, slot.layer, 0);
+        const state = this.#encodeComposite(pass, layerFrame, slot.layer, 0, clip);
         bound = null;
-        clipBoundState = 0;
+        // -1 (nothing drawn) is no state, so the next clipped draw binds its group.
+        clipBoundState = state;
       };
       const drawMeshesAt = (position: number) => {
         let order = 0;
@@ -2743,6 +2769,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       }
     });
     const seen = new Set<number>();
+    const compositeStates = new Array<number>(count).fill(0);
     for (const composite of part.composites) {
       if (
         typeof composite !== 'object' ||
@@ -2753,11 +2780,14 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         seen.has(composite.layer) ||
         composite.target !== layers[composite.layer]!.parent ||
         !Number.isSafeInteger(composite.position) ||
-        composite.position < 0
+        composite.position < 0 ||
+        // E41-K2b: only an effect root's composite carries a clip state (checked as a draw's).
+        (composite.clipState !== undefined && layers[composite.layer]!.effect === undefined)
       ) {
         throw new Error('Invalid composite.');
       }
       seen.add(composite.layer);
+      compositeStates[composite.layer] = composite.clipState ?? 0;
     }
     if (seen.size !== count) throw new Error('A layer without its composite.');
     // Without the layer pipeline the layers' content is not drawn (fail closed), as E23's
@@ -2895,6 +2925,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       slots,
       meshDraws,
       shifted: Object.freeze(shifted),
+      compositeStates: Object.freeze(compositeStates),
       tileWidth,
       tileHeight,
       tiles: Object.freeze(tiles),
@@ -3061,7 +3092,13 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     layers.effects.forEach((effect, index) => {
       if (effect !== null && effect.result === null) skipped.add(index);
     });
-    const frame: LayerFrame = Object.freeze({ passGroup, compositeGroups, textures, skipped });
+    const frame: LayerFrame = Object.freeze({
+      passGroup,
+      compositeGroups,
+      compositeStates: layers.compositeStates,
+      textures,
+      skipped,
+    });
     const effectGroups = new Map<GPUTexture, GPUBindGroup>();
     const effectGroup = (source: GPUTexture) => {
       let group = effectGroups.get(source);
@@ -3088,6 +3125,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       stencil: this.#mesh?.stencil ?? null,
       text: this.#text?.layer ?? null,
       textClip: this.#text?.clipLayer ?? null,
+      compositeClip: this.#effect?.compositeClip ?? null,
       fullLayouts: false,
     });
     const colorView = color.createView();
@@ -3272,11 +3310,20 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         return;
       }
       if (slot.layer === null) return;
-      this.#encodeComposite(pass, frame, slot.layer, passOffset, set.composite);
-      pipeline = set.composite;
+      const state = this.#encodeComposite(
+        pass,
+        frame,
+        slot.layer,
+        passOffset,
+        clip,
+        set.composite,
+        set.compositeClip,
+      );
+      // Unknown after a composite: the next draw sets its pipeline and groups.
+      pipeline = null;
       group0 = null;
-      group1 = 0;
-      group2 = 'empty';
+      group1 = state;
+      group2 = state === -1 ? null : 'empty';
     };
     let nextMeshDraw = 0;
     // E39-R5, R7: the layer tile pass's own stencil sequence.
@@ -3426,22 +3473,37 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     drawMeshesAt(draws.length);
   }
 
-  /** E25 section 4, Composite pipeline: the child layer's quad, at the pass's record. */
+  /**
+   * E25 section 4, Composite pipeline: the child layer's quad, at the pass's record. E41-K2b: an
+   * effect root's composite with a clip state uses the effect composite's clip variant
+   * (`compositeClip`), with the state's clip group; without it the root is not drawn (fail
+   * closed, as a clipped draw without the clip variants). Returns the clip state bound at group 1.
+   */
   #encodeComposite(
     pass: GPURenderPassEncoder,
     frame: LayerFrame,
     layer: number,
     passOffset: number,
+    clip: ValidatedClip,
     composite: GPURenderPipeline = this.#layer!.composite,
-  ): void {
-    if (frame.skipped.has(layer)) return;
+    compositeClip: GPURenderPipeline | null = this.#effect?.compositeClip ?? null,
+  ): number {
+    if (frame.skipped.has(layer)) return -1;
+    const state = frame.compositeStates[layer] ?? 0;
+    if (state !== 0 && (compositeClip === null || clip === null)) return -1;
     const pipelines = this.#layer!;
-    pass.setPipeline(composite);
+    pass.setPipeline(state === 0 ? composite : compositeClip!);
     pass.setBindGroup(0, frame.compositeGroups[layer]!);
-    pass.setBindGroup(CLIP_BIND_GROUP_INDEX, pipelines.emptyBindGroup);
+    if (state === 0) pass.setBindGroup(CLIP_BIND_GROUP_INDEX, pipelines.emptyBindGroup);
+    else {
+      pass.setBindGroup(CLIP_BIND_GROUP_INDEX, this.#clipBindGroup(clip!, state), [
+        state * clip!.stride,
+      ]);
+    }
     pass.setBindGroup(PAINT_BIND_GROUP_INDEX, pipelines.emptyBindGroup);
     pass.setBindGroup(LAYER_BIND_GROUP_INDEX, frame.passGroup, [passOffset]);
     pass.draw(6);
+    return state;
   }
 
   /** Destroys the frame's transient attachments and releases their accounting entries. */
@@ -5848,7 +5910,12 @@ export function createNativePrimitiveSceneCreation(
           layer,
           text,
         );
-        effect = Object.freeze({ bindGroupLayout: effectBindGroupLayout, pipelines, shifted });
+        effect = Object.freeze({
+          bindGroupLayout: effectBindGroupLayout,
+          pipelines,
+          shifted,
+          compositeClip: shifted.targetCompositeClip,
+        });
       } catch {
         // The E22-K5 rule: no effect pipeline this attempt cached outlives the failure.
         for (const kind of EFFECT_PASS_KINDS) pipelineCache.evict(effectPipelineKey(format, kind));
@@ -6045,6 +6112,38 @@ async function createShiftedLayerPipelines(
     }),
   );
 
+  // E41 U5c: the effect composite's clip variants, for a pass of E25's (main or layer) and for
+  // a shifted pass (a root inside a root); only with the clip variants.
+  const compositeClipVariant = async (shifted: boolean) => {
+    const shader = module(
+      `effect-composite-clip${shifted ? '-shifted' : ''}-shader`,
+      shifted ? EFFECT_COMPOSITE_CLIP_SHIFTED_SHADER : EFFECT_COMPOSITE_CLIP_SHADER,
+    );
+    const layout = pipelineLayout(
+      `effect-composite-clip${shifted ? '-shifted' : ''}-pipeline-layout`,
+      [layer.compositeBindGroupLayout, layouts.clip!, empty],
+    );
+    return pipeline(
+      `effect-composite-clip${shifted ? '-shifted' : ''}-pipeline`,
+      (shifted ? effectCompositeClipShiftedKey : effectCompositeClipKey)(
+        format,
+        sampleCount,
+        stencil,
+      ),
+      () =>
+        createEffectCompositeClipPipelineDescriptor(
+          shader,
+          layout,
+          format,
+          sampleCount,
+          stencil,
+          shifted,
+        ),
+    );
+  };
+  const targetCompositeClip = layouts.clip === null ? null : await compositeClipVariant(false);
+  const compositeClip = layouts.clip === null ? null : await compositeClipVariant(true);
+
   const analyticKey = primitivePipelineKey(format, sampleCount, stencil);
   const analyticVariant = async (
     kind: LayerVariantBase,
@@ -6188,6 +6287,8 @@ async function createShiftedLayerPipelines(
 
   return Object.freeze({
     composite,
+    compositeClip,
+    targetCompositeClip,
     analytic,
     analyticClip,
     analyticPaint,

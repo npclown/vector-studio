@@ -14,6 +14,10 @@ import {
   planEffectPasses,
 } from '../../packages/renderer-webgpu/src/effect-pipeline.js';
 import {
+  EFFECT_COMPOSITE_CLIP_SHADER,
+  EFFECT_COMPOSITE_CLIP_SHIFTED_SHADER,
+} from '../../packages/renderer-webgpu/src/effect-composite-pipeline.js';
+import {
   LAYER_COMPOSITE_SHIFTED_SHADER,
   MESH_FILL_SHIFTED_SHADER,
   PRIMITIVE_ANALYTIC_CLIP_SHIFTED_SHADER,
@@ -113,9 +117,9 @@ describe('E41 U5 effect pipeline creation', () => {
     expect(scene.effectPipelineAvailable).toBe(true);
     expect(without.scene.effectPipelineAvailable).toBe(false);
     expect(fixture.modules.filter((code) => code === EFFECT_SHADER)).toHaveLength(1);
-    expect(fixture.pipelineLabels.filter((label) => label.includes('e41-effect'))).toEqual(
-      EFFECT_PASS_KINDS.map((kind) => `vector-studio/e41-effect-${kind}`),
-    );
+    expect(
+      fixture.pipelineLabels.filter((label) => /e41-effect-(?!composite)/.test(label)),
+    ).toEqual(EFFECT_PASS_KINDS.map((kind) => `vector-studio/e41-effect-${kind}`));
     // U5b: the shifted composite, plain analytic and clip analytic variants (no mesh, paint
     // or text path in this generation).
     const shifted = [
@@ -128,11 +132,17 @@ describe('E41 U5 effect pipeline creation', () => {
     }
     expect(fixture.pipelineLabels.filter((label) => label.endsWith('+shift-v0'))).toEqual([
       'vector-studio/e25-layer-composite-4x+shift-v0',
+      'vector-studio/e41-effect-composite-v0-clip-4x+shift-v0',
       'vector-studio/p1-analytic-primitive-4x+layer-v0+shift-v0',
       'vector-studio/p1-analytic-primitive-4x+clip-v0+layer-v0+shift-v0',
     ]);
-    expect(scene.shaderModulesCreated).toBe(without.scene.shaderModulesCreated + 1 + 3);
-    expect(scene.pipelinesCreated).toBe(without.scene.pipelinesCreated + 5 + 3);
+    // U5c: the effect composite's clip variant, for E25's passes and shifted ones.
+    for (const code of [EFFECT_COMPOSITE_CLIP_SHADER, EFFECT_COMPOSITE_CLIP_SHIFTED_SHADER]) {
+      expect(fixture.modules.filter((module) => module === code)).toHaveLength(1);
+    }
+    expect(fixture.pipelineLabels).toContain('vector-studio/e41-effect-composite-v0-clip-4x');
+    expect(scene.shaderModulesCreated).toBe(without.scene.shaderModulesCreated + 1 + 3 + 2);
+    expect(scene.pipelinesCreated).toBe(without.scene.pipelinesCreated + 5 + 3 + 2);
     creation.dispose();
     without.creation.dispose();
     expect(accounting.snapshot().live).toBe(0);
@@ -154,12 +164,15 @@ describe('E41 U5 effect pipeline creation', () => {
     });
     expect(scene.effectPipelineAvailable).toBe(true);
     // Composite, four analytic, four mesh and two text modules; per mesh module a fill, a
-    // joint and seven covers, and four stencil passes over the plain one.
-    expect(scene.shaderModulesCreated).toBe(without.scene.shaderModulesCreated + 1 + 11);
-    expect(scene.pipelinesCreated).toBe(without.scene.pipelinesCreated + 5 + 1 + 4 + 36 + 4 + 2);
+    // joint and seven covers, and four stencil passes over the plain one. U5c: the effect
+    // composite's clip variant and its shifted form.
+    expect(scene.shaderModulesCreated).toBe(without.scene.shaderModulesCreated + 1 + 11 + 2);
+    expect(scene.pipelinesCreated).toBe(
+      without.scene.pipelinesCreated + 5 + 1 + 4 + 36 + 4 + 2 + 2,
+    );
     const labels = fixture.pipelineLabels.filter((label) => label.endsWith('+shift-v0'));
-    expect(labels).toHaveLength(47);
-    expect(new Set(labels).size).toBe(47);
+    expect(labels).toHaveLength(48);
+    expect(new Set(labels).size).toBe(48);
     expect(fixture.modules).toContain(MESH_FILL_SHIFTED_SHADER);
     expect(fixture.modules).toContain(TEXT_CLIP_SHIFTED_SHADER);
     creation.dispose();
@@ -501,6 +514,92 @@ describe('E41 U5 effect passes in a frame', () => {
       status: 'failed',
       reason: 'invalid-packet',
     });
+  });
+
+  it('clips an effect root at its composite with the clip variant (U5c, E41-K2b)', async () => {
+    const fixture = nativeFixture();
+    const { scene, target } = await nativeScene(fixture, withEffects);
+    const container = (
+      id: string,
+      parentId: string | null,
+      children: readonly string[],
+      extra: Partial<{ effects: readonly SceneEffect[]; width: number }>,
+    ): RenderNodeSnapshot => ({
+      id,
+      parentId,
+      transform: [1, 0, 0, 1, 0, 0],
+      visible: true,
+      opacity: 1,
+      kind: 'container',
+      clip:
+        extra.width === undefined
+          ? null
+          : { kind: 'rect', x: 0, y: 0, width: extra.width, height: 200 },
+      children,
+      ...(extra.effects === undefined ? {} : { effects: extra.effects }),
+    });
+    const nodes: RenderNodeSnapshot[] = [
+      container('frame', null, ['outer'], { width: 300 }),
+      container('outer', 'frame', ['inner-frame'], { effects: [shadow(10, 0, 2)] }),
+      container('inner-frame', 'outer', ['card'], { width: 150 }),
+      { ...box('card', 100, { effects: [shadow(30, 0, 2)] }), parentId: 'inner-frame' },
+    ];
+    const packet = prepare(nodes, { ...target, offTargetEffectLayers: true });
+    const part = packet.layers!;
+    const outer = part.layers.findIndex((layer) => layer.nodeId === 'outer');
+    const card = part.layers.findIndex((layer) => layer.nodeId === 'card');
+    const compositeOf = (index: number) => part.composites.find((entry) => entry.layer === index)!;
+    expect(compositeOf(outer).clipState).toBeGreaterThan(0);
+    expect(compositeOf(card).clipState).toBeGreaterThan(0);
+    expect(compositeOf(card).clipState).not.toBe(compositeOf(outer).clipState);
+    // The card's draw is unclipped in its L: both frames apply at the composites.
+    expect(part.layers[card]!.draws.every((draw) => draw.clipState === undefined)).toBe(true);
+    fixture.calls.length = 0;
+    submitted(scene.submitPrimitivePacket(packet));
+    const calls = fixture.calls;
+    const at = (label: string) =>
+      calls.findIndex((call) => call[0] === 'setPipeline' && call[1] === label);
+    // The card composites into the outer root's shifted pass, the outer root into the main pass.
+    const shifted = at('vector-studio/e41-effect-composite-v0-clip-4x+shift-v0');
+    const main = at('vector-studio/e41-effect-composite-v0-clip-4x');
+    expect(shifted).toBeGreaterThan(0);
+    expect(main).toBeGreaterThan(shifted);
+    // The clip-state stride: 1056 bytes rounded up to the 256-byte offset alignment.
+    const stride = 1280;
+    const clipGroup = (from: number) =>
+      calls.slice(from).find((call) => call[0] === 'setBindGroup' && call[1] === 1)!;
+    expect(clipGroup(shifted)[3]).toBe(compositeOf(card).clipState! * stride);
+    expect(clipGroup(main)[3]).toBe(compositeOf(outer).clipState! * stride);
+    expect(scene.effectPasses).toBe(2);
+  });
+
+  it('refuses a clip state on an E25 layer’s composite', async () => {
+    const fixture = nativeFixture();
+    const { scene, target } = await nativeScene(fixture, withEffects);
+    const packet = prepare([box('b', 100, { effects: [shadow(4, 6, 2)] })], {
+      ...target,
+      offTargetEffectLayers: true,
+    });
+    const layer = packet.layers!.layers[0]!;
+    const plain = { ...layer };
+    delete plain.effect;
+    for (const [layers, clipState] of [
+      [[plain], 1],
+      [[layer], 7],
+    ] as const) {
+      const bad = {
+        ...packet,
+        layers: {
+          ...packet.layers!,
+          layers,
+          composites: [{ ...packet.layers!.composites[0]!, clipState }],
+        },
+      } as PrimitivePacket;
+      expect(scene.submitPrimitivePacket(bad)).toEqual({
+        status: 'failed',
+        reason: 'invalid-packet',
+      });
+    }
   });
 
   it('refuses an invalid effect record', async () => {

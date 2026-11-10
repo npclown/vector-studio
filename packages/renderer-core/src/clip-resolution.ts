@@ -30,6 +30,12 @@ export type ClipMaskLevel = Readonly<{
   containerId: string;
   world: SceneAffine;
   sourceId: string | null;
+  /**
+   * E41-K2b: the level's id in a chain rebased at an effect root, whose texture holds no level
+   * above the root, so it is planned apart from the container's own level. Absent otherwise:
+   * the id is `containerId`.
+   */
+  levelId?: string;
 }>;
 export type ClipLevel = ClipRectLevel | ClipMaskLevel;
 
@@ -95,6 +101,70 @@ export function extendClipChain(
     bounds: Object.freeze(bound === null ? [] : [...(parent?.bounds ?? []), bound]),
     empty: (parent?.empty ?? false) || bound === null,
   });
+}
+
+/** A mask level's id in the frame's mask plan and clip-state records. */
+export function maskLevelId(level: ClipMaskLevel): string {
+  return level.levelId ?? level.containerId;
+}
+
+/** E41-K2b: each chain's rebased forms, by root id, so a rebased chain keeps its object. */
+const REBASED = new WeakMap<ClipChain, Map<string, ClipChain | null>>();
+
+/**
+ * E41-K2b: `chain` rebased at the effect root `rootId`, whose ancestors' chain `outer` is a
+ * prefix of it: the levels of `outer` are dropped (they apply once, at the root's composite),
+ * and each mask level left takes a level id of its own, so its texture is planned without the
+ * levels above the root. Null when no level is left. The result is kept per chain and root, so
+ * the clip-state table and the mask plan see one object per rebased chain.
+ */
+export function rebaseClipChain(
+  chain: ClipChain | null,
+  outer: ClipChain | null,
+  rootId: string,
+): ClipChain | null {
+  if (chain === null) return null;
+  const dropped = outer?.levels.length ?? 0;
+  if (dropped === 0) return chain;
+  let byRoot = REBASED.get(chain);
+  if (byRoot === undefined) {
+    byRoot = new Map();
+    REBASED.set(chain, byRoot);
+  }
+  const kept = byRoot.get(rootId);
+  if (kept !== undefined) return kept;
+  const outerKey = outer!.key;
+  if (
+    chain.levels.length < dropped ||
+    !chain.key.startsWith(outerKey) ||
+    outer!.levels.some((level, index) => level !== chain.levels[index])
+  ) {
+    throw new Error(`Clip chain ${chain.key} does not extend the chain of root ${rootId}.`);
+  }
+  let rebased: ClipChain | null = null;
+  if (chain.levels.length > dropped) {
+    const root = `${rootId.length}:${rootId}`;
+    const levels = chain.levels.slice(dropped).map((level) =>
+      level.kind === 'rect'
+        ? level
+        : Object.freeze({
+            ...level,
+            // The root id is length-prefixed, so no two rebased levels share an id; the NUL
+            // keeps it apart from container ids in practice (a scene id holding exactly this
+            // form would share the level).
+            levelId: `e41\u0000${root};${level.containerId}`,
+          }),
+    );
+    rebased = Object.freeze({
+      // A chain key starts with a digit; a rebased key with `@`, so the two never meet.
+      key: `@${root}|${chain.key.slice(outerKey.length)}`,
+      levels: Object.freeze(levels),
+      bounds: Object.freeze(chain.empty ? [] : chain.bounds.slice(dropped)),
+      empty: chain.empty,
+    });
+  }
+  byRoot.set(rootId, rebased);
+  return rebased;
 }
 
 /** P4-K5: true when `bounds` meets every level's bound widened by `guard` world units. */
@@ -185,7 +255,7 @@ export class ClipStateTable {
       chainKey: chain.key,
       rects: rectRecords(chain.levels, innermostMask(chain.levels) + 1, chain.levels.length),
       masks: Object.freeze(
-        chain.levels.filter((level) => level.kind === 'mask').map((level) => level.containerId),
+        chain.levels.flatMap((level) => (level.kind === 'mask' ? [maskLevelId(level)] : [])),
       ),
     });
     if (this.#reuse) {
@@ -434,10 +504,11 @@ export class MaskPlan {
     let parentIndex = -1;
     for (const [index, level] of chain.levels.entries()) {
       if (level.kind !== 'mask') continue;
-      let record = this.#levels.get(level.containerId);
+      const id = maskLevelId(level);
+      let record = this.#levels.get(id);
       if (record === undefined) {
         record = this.#plan(chain, index, level, parent, parentIndex);
-        this.#levels.set(level.containerId, record);
+        this.#levels.set(id, record);
         if (record !== null) this.#order.push(record);
       }
       if (record === null) return false;
@@ -510,14 +581,15 @@ export class MaskPlan {
             target.height,
             target.sampleCount,
           ];
-    const reused = memo?.reuse(level.containerId, chain, index, parent, source, lanes) ?? null;
+    const id = maskLevelId(level);
+    const reused = memo?.reuse(id, chain, index, parent, source, lanes) ?? null;
     if (reused !== null) return reused;
     // E30-U3b: a level's rects and their JSON are a function of its chain alone, so they are
     // kept per chain; the key is the JSON of the same array, assembled from its parts.
     const { rects, rectsJson } = chainRects(chain, parentIndex + 1, index);
     const device = Object.freeze({ x: minX, y: minY, width, height });
     const record: MaskLevelRecord = Object.freeze({
-      id: level.containerId,
+      id,
       parent: parent?.id ?? null,
       rects,
       device,
@@ -531,7 +603,7 @@ export class MaskPlan {
         target.sampleCount,
       ]).slice(1, -1)}]`,
     });
-    memo?.keep(level.containerId, Object.freeze({ chain, index, parent, source, lanes, record }));
+    memo?.keep(id, Object.freeze({ chain, index, parent, source, lanes, record }));
     return record;
   }
 }
