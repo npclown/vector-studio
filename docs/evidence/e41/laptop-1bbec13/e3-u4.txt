@@ -1,0 +1,80 @@
+﻿E3-U4 GPU model check and E3-PC12 (A04 readback), laptop secondary record
+==========================================================================
+Status: SECONDARY record. The main PC is the official GPU evidence machine; this
+run was moved to the laptop because the main PC runs out of memory on it.
+
+Commit:   1bbec13 (detached checkout; this record is committed on claude/e41-u8-pc-records)
+Machine:  DESKTOP-O0IIPP6 (laptop), Windows 11 Pro 10.0.26200, 39.6 GB RAM
+GPUs:     NVIDIA GeForce RTX 4050 Laptop GPU (driver 546.17) + Intel iGPU
+WebGPU adapter used (both browsers): vendor=intel architecture=gen-12lp software=false
+          The default adapter request picked the Intel iGPU, not the RTX 4050.
+Node:     24.22.1, pnpm 11.1.2
+Steps:    pnpm install --frozen-lockfile; pnpm build (exit 0);
+          pnpm test:geometry (exit 0; Vitest 1227 passed, 6 skipped, 905 s)
+Command:  $env:NODE_OPTIONS='--max-old-space-size=12288'; $env:VS_GPU_TIER='3'
+          pnpm test:gpu -g "E3-U4 GPU model check" --workers=1 --project=<chrome|edge>
+          (one browser per invocation; Playwright started normally in both)
+Peak node: largest single node.exe working set, sampled every 5 s.
+
+Results
+-------
+chrome 156.0.8078.81: 1 passed, exit 0, wall 66.9 min (4018 s), peak node working set 9,351,434,240 B (~8.7 GiB), no OOM
+edge   157.0.4341.42: 1 passed, exit 0, wall 75.3 min (4524 s), peak node working set 9,355,284,480 B (~8.7 GiB), no OOM
+
+Both records (e3-u4-chrome.json, e3-u4-edge.json, schema e3-a04-gpu-check/v1) are identical in content apart from the browser block:
+  passed=true; cases=13364 (idsSha256 f220b37d...26ae5); draws=13076; points=14525631
+  maxVertexRatio=0.2496887635268359; maxFeatureRatio=0.36793414823002
+  crack: junctions=2699950 maxWidth=0.0035166927355176603 (C9/k20/T6/z64-d3/center/k0)
+  clip: draws=3374 unmeasurable=595 compared=53375187 excluded=344877 mismatches=0
+  failures=0; pageErrors=0; skippedKinds empty=216 rejected=72 (no error kind)
+  shaderSha256 1986fd23ccd14b745c039d11afc938fdeec009768c7d2f266f38ce5010df59ee
+  wasmSha256   1d7cd698a49e23100842defe75ca1a934842c57218b6cd109a2c9a8676fa2788
+
+---- chrome console log ----
+START 2026-11-10T20:29:50.8180554+09:00 project=chrome NODE_OPTIONS=--max-old-space-size=12288 VS_GPU_TIER=3
+$ playwright test --config playwright.gpu.config.ts "-g" "E3-U4 GPU model check" "--workers=1" "--project=chrome"
+[WebServer] (node:42284) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:37552) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+
+Running 1 test using 1 worker
+
+(node:38028) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/1] [chrome] › tests\gpu\e3-a04-readback.spec.ts:75:1 › E3-U4 GPU model check and E3-PC12
+  Slow test file: [chrome] › tests\gpu\e3-a04-readback.spec.ts (1.1h)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  1 passed (1.1h)
+
+headed timing: 1 tests, wall 66.9 min, 1 worker(s); D:\GIT\vector-studio\artifacts\headed-timing\2026-11-10T11-29-52-025Z-gpu.json
+    66.9 min  chrome       tests/gpu/e3-a04-readback.spec.ts
+END 2026-11-10T21:36:48.8095732+09:00 exit=0 duration_s=4018
+---- edge console log ----
+START 2026-11-10T21:52:14.0577164+09:00 project=edge NODE_OPTIONS=--max-old-space-size=12288 VS_GPU_TIER=3
+$ playwright test --config playwright.gpu.config.ts "-g" "E3-U4 GPU model check" "--workers=1" "--project=edge"
+[WebServer] (node:34672) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:13276) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+
+Running 1 test using 1 worker
+
+(node:4060) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/1] [edge] ??tests\gpu\e3-a04-readback.spec.ts:75:1 ??E3-U4 GPU model check and E3-PC12
+  Slow test file: [edge] ??tests\gpu\e3-a04-readback.spec.ts (1.3h)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  1 passed (1.3h)
+
+headed timing: 1 tests, wall 75.4 min, 1 worker(s); D:\GIT\vector-studio\artifacts\headed-timing\2026-11-10T12-52-15-539Z-gpu.json
+    75.3 min  edge         tests/gpu/e3-a04-readback.spec.ts
+END 2026-11-10T23:07:37.7498404+09:00 exit=0 duration_s=4524

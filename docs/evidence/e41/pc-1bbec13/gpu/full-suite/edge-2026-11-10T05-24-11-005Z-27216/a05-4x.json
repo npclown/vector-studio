@@ -1,0 +1,330 @@
+{
+  "adapter": {
+    "architecture": "turing",
+    "description": "",
+    "vendor": "nvidia"
+  },
+  "rows": [
+    {
+      "fixture": "leaf shadow",
+      "tolerance": 3,
+      "worstOverBlack": 0,
+      "worstOverWhite": 0.9803024668914588,
+      "worst": 0.9803024668914588,
+      "at": [
+        142,
+        101
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 152,
+        "expected": 151.01969753310854,
+        "alpha": 0.40776589202702523,
+        "lane": 0
+      },
+      "changed": 2396,
+      "effectPasses": 2
+    },
+    {
+      "fixture": "translucent leaf, two shadows, fractional offset",
+      "tolerance": 3,
+      "worstOverBlack": 1.4443707676738882,
+      "worstOverWhite": 1.944912597540025,
+      "worst": 1.944912597540025,
+      "at": [
+        209,
+        79
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 218,
+        "expected": 216.05508740245998,
+        "alpha": 0.1650728148401063,
+        "lane": 0
+      },
+      "changed": 3247,
+      "effectPasses": 6
+    },
+    {
+      "fixture": "container, shadow and layer blur",
+      "tolerance": 3,
+      "worstOverBlack": 1.0814168581664916,
+      "worstOverWhite": 1.3978217742454717,
+      "worst": 1.3978217742454717,
+      "at": [
+        376,
+        86
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 86,
+        "expected": 84.60217822575453,
+        "alpha": 0.7787150202355807,
+        "lane": 2
+      },
+      "changed": 7899,
+      "effectPasses": 10
+    },
+    {
+      "fixture": "downsampled shadow and blur",
+      "tolerance": 6,
+      "worstOverBlack": 1.2105319454365713,
+      "worstOverWhite": 1.9207806619926089,
+      "worst": 1.9207806619926089,
+      "at": [
+        197,
+        196
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 237,
+        "expected": 235.0792193380074,
+        "alpha": 0.1485527590041559,
+        "lane": 0
+      },
+      "changed": 19912,
+      "effectPasses": 14
+    },
+    {
+      "fixture": "sharp shadow",
+      "tolerance": 3,
+      "worstOverBlack": 0.6799999999999784,
+      "worstOverWhite": 0.8599999999999852,
+      "worst": 0.8599999999999852,
+      "at": [
+        373,
+        243
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 214,
+        "expected": 214.85999999999999,
+        "alpha": 0.17490196078431375,
+        "lane": 0
+      },
+      "changed": 569,
+      "effectPasses": 18
+    },
+    {
+      "fixture": "caster past the left edge",
+      "tolerance": 3,
+      "worstOverBlack": 0,
+      "worstOverWhite": 0.9803024668914588,
+      "worst": 0.9803024668914588,
+      "at": [
+        94,
+        249
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 152,
+        "expected": 151.01969753310854,
+        "alpha": 0.40776589202702523,
+        "lane": 0
+      },
+      "changed": 9238,
+      "effectPasses": 22
+    },
+    {
+      "fixture": "container past the top edge, nested isolated group, layer blur",
+      "tolerance": 3,
+      "worstOverBlack": 0.8883876683331877,
+      "worstOverWhite": 1.6927327223711472,
+      "worst": 1.6927327223711472,
+      "at": [
+        373,
+        12
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 232,
+        "expected": 230.30726727762885,
+        "alpha": 0.11832816963935544,
+        "lane": 1
+      },
+      "changed": 15286,
+      "effectPasses": 26
+    },
+    {
+      "fixture": "F6 shadow past a clipping frame",
+      "tolerance": 3,
+      "worstOverBlack": 0,
+      "worstOverWhite": 0.9369535934950477,
+      "worst": 0.9369535934950477,
+      "at": [
+        178,
+        206
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 255,
+        "expected": 254.06304640650495,
+        "alpha": 0.0036743278176276663,
+        "lane": 0
+      },
+      "changed": 4306,
+      "effectPasses": 30
+    },
+    {
+      "fixture": "F11 shadowed child of a mask group",
+      "tolerance": 3,
+      "worstOverBlack": 0,
+      "worstOverWhite": 0.8391628356127683,
+      "worst": 0.8391628356127683,
+      "at": [
+        418,
+        126
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 187,
+        "expected": 186.16083716438723,
+        "alpha": 0.2699575013161285,
+        "lane": 0
+      },
+      "changed": 4603,
+      "effectPasses": 34
+    },
+    {
+      "fixture": "F12 mask group in a shadowed group in a clipping frame",
+      "tolerance": 3,
+      "worstOverBlack": 0,
+      "worstOverWhite": 0.9090866515023208,
+      "worst": 0.9090866515023208,
+      "at": [
+        239,
+        99
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 243,
+        "expected": 242.09091334849768,
+        "alpha": 0.05062386922157774,
+        "lane": 0
+      },
+      "changed": 6038,
+      "effectPasses": 38
+    },
+    {
+      "fixture": "F2 shadow on a rectangle rotated 30 degrees",
+      "tolerance": 3,
+      "worstOverBlack": 0,
+      "worstOverWhite": 0.791280780813338,
+      "worst": 0.791280780813338,
+      "at": [
+        233,
+        181
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 222,
+        "expected": 221.20871921918666,
+        "alpha": 0.13251482659142488,
+        "lane": 0
+      },
+      "changed": 3832,
+      "effectPasses": 42
+    },
+    {
+      "fixture": "F7 shadow on text",
+      "tolerance": 3,
+      "worstOverBlack": 0,
+      "worstOverWhite": 1.1162508860149387,
+      "worst": 1.1162508860149387,
+      "at": [
+        289,
+        150
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 159,
+        "expected": 157.88374911398506,
+        "alpha": 0.510259807396137,
+        "lane": 1
+      },
+      "changed": 3434,
+      "effectPasses": 46
+    },
+    {
+      "fixture": "mesh path past the right edge in a shifted pass, shadow and blur",
+      "tolerance": 3,
+      "worstOverBlack": 0.9064080474221043,
+      "worstOverWhite": 1.4239571481006976,
+      "worst": 1.4239571481006976,
+      "at": [
+        471,
+        188
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 227,
+        "expected": 225.5760428518993,
+        "alpha": 0.23092337361908255,
+        "lane": 0
+      },
+      "changed": 15212,
+      "effectPasses": 50
+    },
+    {
+      "fixture": "joint draw, gradient and inner clip in a shifted pass",
+      "tolerance": 3,
+      "worstOverBlack": 0,
+      "worstOverWhite": 0.9491586645518169,
+      "worst": 0.9491586645518169,
+      "at": [
+        244,
+        224
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 183,
+        "expected": 182.05084133544818,
+        "alpha": 0.28607513201785023,
+        "lane": 0
+      },
+      "changed": 20241,
+      "effectPasses": 54
+    },
+    {
+      "fixture": "stencil-pass clip composite: shadowed mesh path beside a mesh path in a clipping frame",
+      "tolerance": 3,
+      "worstOverBlack": 0,
+      "worstOverWhite": 1.0032804084212046,
+      "worst": 1.0032804084212046,
+      "at": [
+        326,
+        185
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 194,
+        "expected": 192.9967195915788,
+        "alpha": 0.4941305114055734,
+        "lane": 0
+      },
+      "changed": 3012,
+      "effectPasses": 58
+    },
+    {
+      "fixture": "F9 zoom 8, radius 40 (sigma 160 px)",
+      "tolerance": 6,
+      "worstOverBlack": 0,
+      "worstOverWhite": 0.8131021290587057,
+      "worst": 0.8131021290587057,
+      "at": [
+        25,
+        23
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 253,
+        "expected": 252.1868978709413,
+        "alpha": 0.011031773055132102,
+        "lane": 0
+      },
+      "changed": 5185,
+      "effectPasses": 62
+    }
+  ],
+  "errors": []
+}

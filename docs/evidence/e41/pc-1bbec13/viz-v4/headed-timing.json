@@ -1,0 +1,24 @@
+{
+  "schema": "headed-timing-v1",
+  "config": "playwright.gpu.config.ts",
+  "startedUtc": "2026-11-10T07:54:43.234Z",
+  "status": "passed",
+  "workers": 1,
+  "wallMilliseconds": 6967704,
+  "tests": 24,
+  "testMilliseconds": 6962077,
+  "specs": [
+    {
+      "file": "tests/gpu/viz-v4-a08-corpus.spec.ts",
+      "project": "edge",
+      "tests": 12,
+      "milliseconds": 3660949
+    },
+    {
+      "file": "tests/gpu/viz-v4-a08-corpus.spec.ts",
+      "project": "chrome",
+      "tests": 12,
+      "milliseconds": 3301128
+    }
+  ]
+}

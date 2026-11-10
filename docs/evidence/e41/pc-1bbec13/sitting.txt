@@ -1,0 +1,119 @@
+E41 headed sitting on the main PC, commit 1bbec13a (E41-U7c, #563), clean tree (only untracked local folders: .claude/launch.json, artifacts/, docs/evidence/e3-a04-readback-2026-10-24/).
+Date: 2026-11-10, about 04:35 to 06:20 UTC. Mouse untouched during the E26 runs.
+
+Machine
+- OS: Microsoft Windows 11 Pro 10.0.26200 (build 26200)
+- GPU: NVIDIA GeForce GTX 1660 SUPER, driver 32.0.16.1088; WebGPU adapter nvidia/turing (device "", description "")
+- Display: 1920 x 1080 at 60 Hz
+- Chrome: 156.0.8078.81 (C:\Program Files\Google\Chrome\Application\chrome.exe)
+- Edge: 157.0.4341.42 (C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe)
+- Run JSONs record browser "chromium 156.0.8078.81"; the reduced userAgent string reads Chrome/151.0.7922.34.
+
+Steps, in order (PowerShell, repository root)
+
+1. Pull and build
+   git pull --ff-only origin main; pnpm install; pnpm build
+   PASS: build done with no TS errors (no clean of packages/react needed).
+
+2. A10 verdict, e41 cards (results in cards/)
+   $env:M8_N3_BASELINE='docs/evidence/m8-a14-2026-11-01/17a2b0a-main-pc-headed.json'
+   $env:E26_SCENARIOS='e41'; $env:E26_RESULTS_DIR='test-results/e41-u7c-cards'
+   pnpm test:e26 --project=chrome-dpr1 --project=chrome-dpr2
+   PASS: 20 passed (7.3 min). e41-cards-drag/v1 and e41-cards-view/v1, 5 repetitions each, 2 projects.
+   Every run: effectPasses 30000, framesSubmitted 600, except chrome-dpr2 drag r4 (29950 / 599).
+   One console error (404 for a resource) in view/v1 r1 of both projects; no other errors.
+
+3. A06 bench, part 1 (results in a06/, e26-mixed-* and e26-simple-*)
+   $env:E26_SCENARIOS='e26-mixed-,e26-simple-'; $env:E26_REPETITIONS='3'; $env:E26_RESULTS_DIR='test-results/e41-u7c-a06'
+   pnpm test:e26 --project=chrome-dpr1 --project=chrome-dpr2 --project=chrome-dpr1-v2 --project=chrome-dpr2-v2
+   PASS: 48 passed, 48 skipped (18.2 min). Skips are v1 scenarios in -v2 projects and v2 scenarios in v1 projects.
+   One console error (404) in the first mixed-view-edit run of each project; no other errors.
+
+4. Counters
+   Remove-Item Env:E26_*; pnpm test:gpu -g "A07|A08|A09"
+   PASS: 12 passed (3.4 min), all in the chrome project (playwright.gpu.config.ts default run). The grep matched:
+   - E23-A09 paint resources in accounting, after removal, device loss and disposal
+   - E25-A07 O9 layer budget on a 3840 x 2160 surface at 4x
+   - T9 generation 2 never draws generation 1 bitmaps (E28-A08)
+   - E28-A07 scenes without text are identical with text=none and text=atlas
+   - E28-A08 the canvas port: identity, empty, too-large, unavailable, bearings, two pages
+   - E41-A07 effect edits, pan and zoom cost no geometry; effectPasses per frame
+   - E41-A08 over the budget: one notice per transition, content drawn without effects
+   - E41-A09 effect textures in accounting, released, back to baseline
+   - P4 U5 invalidation, culling, batching and resources (P4-A06 to A08), 4x, DPR 1
+   - P4 U5 mask texture budget (P4-A08), 1x
+   - V-3 A07 integration page at DPR 1 and at DPR 2 (2 tests)
+   E41 reports: gpu/a07.json, a08.json, a09.json (run 2026-11-10T05-01-27-079Z-1108), failures [] in each.
+
+5. Full GPU suite
+   $env:M8_N3_BASELINE=<as above>; pnpm test:gpu:full   (node tooling/run-headed-tier.mjs --tier 3 --gpu-only, workers 4, run 2026-11-10T05-06-18-739Z-tier3)
+   FAIL overall (exit 1): 204 passed, 26 failed across two configs.
+   a) viz-v4 A08 corpus: 24 tests, 24 failed (0.3 min), chrome and edge x fringe-1x, fringe-4x, msaa-4x x DPR 1, 1.5, 2, 3.
+      First error: "the expected statuses were taken on another WASM" (tests/gpu/viz-v4-a08-corpus.spec.ts:80):
+      expected wasmSha256 58f26517603d0d599f187481c967832e3f6abea2eb53c738e5540b6200b4fd35,
+      received 1d7cd698a49e23100842defe75ca1a934842c57218b6cd109a2c9a8676fa2788
+      (local .tools/geometry-build kernel built 2026-11-08 05:58 local time).
+   b) playwright.gpu.config.ts: 206 tests, 204 passed, 2 failed (44.1 min).
+      [chrome] and [edge] tests/gpu/e3-a04-readback.spec.ts:75 "E3-U4 GPU model check and E3-PC12":
+      "Error: worker process exited unexpectedly (code=134, signal=null)"; the Node worker hit
+      "FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory".
+   E41 tests in the full suite all passed in both browsers (A05 1x and 4x, A06, A07, A08, A09).
+   Reports in gpu/full-suite/: chrome-* and edge-* folders. A05: 16 rows per file, worst max 1.94, over3 sum 0, errors empty.
+   A06: 32 rows, all identical. A07, A08, A09: failures [].
+
+6. A06 bench, part 2 (results in a06/, pointer-busy, ui0, typing, isolation)
+   $env:M8_N3_BASELINE=<as above>
+   $env:E26_SCENARIOS='e26-pointer-busy-,e26-ui0-,m9-typing-,e26-isolation-'; $env:E26_REPETITIONS='3'; $env:E26_RESULTS_DIR='test-results/e41-u7c-a06b'
+   pnpm test:e26 --project=chrome-dpr1 --project=chrome-dpr2 --project=chrome-dpr1-v2 --project=chrome-dpr2-v2
+   PASS: 72 passed, 72 skipped (19.6 min), 72 run JSONs. Skips as in step 3.
+   One console error (404) in the first pointer-busy run of each project that runs it; no other errors.
+
+7. A12
+   Remove-Item Env:E26_*; pnpm test:e41-next-host   (playwright.e41-studio.config.ts)
+   PASS: 4 passed (22.6 s): e41-booleans and e41-effects specs in chrome (Chrome 156.0.8078.81) and edge (Edge 157.0.4341.42).
+
+Files
+- cards/: 20 run JSONs from step 2.
+- a06/: 48 run JSONs from step 3 and 72 from step 6.
+- gpu/: a07.json, a08.json, a09.json from step 4; gpu/full-suite/ holds the E41 reports from step 5.
+
+Follow-up the same day (about 06:15 to 11:06 UTC; step 11 ran 07:54 to 09:50 UTC, step 12 10:09 to 11:06 UTC), same machine and browsers
+
+8. A08 corpus rerun: NOT RUN
+   pnpm test:geometry (rebuilds the kernel at 1bbec13): exit 0, but the kernel is unchanged and its hash still differs from the pin.
+   Local kernel sha256 1d7cd698a49e23100842defe75ca1a934842c57218b6cd109a2c9a8676fa2788 before and after the rebuild;
+   tests/visual/viz-v4/a08-expected-status.json pins 58f26517603d0d599f187481c967832e3f6abea2eb53c738e5540b6200b4fd35.
+   The pin was last updated in 332117fe (#522, 2026-11-06); packages/geometry-wasm/kernel changed after it in #530, #533 and #535.
+   It was not rerun here. Correction (see step 11): the mismatch was a skipped prerequisite, not a stale pin;
+   docs/validation.md has test:gpu:full run pnpm viz-v4:expected first, which regenerates the statuses for the local WASM.
+
+9. E3-U4 rerun: STOPPED, not completed
+   $env:NODE_OPTIONS='--max-old-space-size=8192'; $env:VS_GPU_TIER='3'; pnpm test:gpu -g "E3-U4 GPU model check"
+   Started 06:42 UTC; stopped at about 07:28 UTC on request, after about 45 min in [chrome] (test 1 of 2), with the Node worker
+   at about 6.9 GB. Edge did not start. No result.
+
+10. A/B for the -v2 projects (mouse untouched), M8_N3_BASELINE as above
+   For each commit: git checkout <commit>; pnpm install; pnpm --filter @vector-studio/react exec tsc --build --clean; pnpm build
+   $env:E26_SCENARIOS='e26-mixed-view-edit-10k/v2,e26-pointer-busy-10k/v2'; $env:E26_REPETITIONS='5'
+   $env:E26_RESULTS_DIR='test-results/e41-ab-<commit>'; pnpm test:e26 --project=chrome-dpr1-v2 --project=chrome-dpr2-v2
+   e8ba618a (ab-e8ba618/): build PASS, 30 passed (7.7 min). 1bbec13a (ab-1bbec13/): build PASS, 30 passed (8.5 min). Records are clean (dirty false).
+   Medians over 5 repetitions (e8ba618 -> 1bbec13):
+   - mixed-view-edit/v2 chrome-dpr1-v2: rafCallbackIntervalMs 16.7 / p95 16.8 both; split.gpuMs median 35.9 -> 36.8
+     (per rep 35.7 36.8 36.9 35.9 35.5 -> 36.5 36.3 37.3 36.8 36.8)
+   - mixed-view-edit/v2 chrome-dpr2-v2: raf 16.7 / 16.8 both; gpuMs 36.3 -> 36.5 (36.3 36.1 36.3 35.8 36.9 -> 36.9 36.5 36.5 36.4 36.4)
+   - pointer-busy/v2 busy, pointerToWorkDoneMs median: dpr1 105.7 -> 124.1 (93.7 130.5 100.1 106.2 105.7 -> 85.8 124.4 93.0 124.1 126.3);
+     dpr2 123.4 -> 105.4 (123.4 90.0 124.2 103.2 143.1 -> 105.4 91.5 97.0 107.5 128.6); long tasks over 50 ms 2,2,2,2,3 in both
+   - pointer-busy/v2 plain: dpr1 110.4 -> 97.5; dpr2 96.8 -> 95.4; long tasks over 50 ms 0 or 1 per run in both
+   One console error (404) in the first mixed-view-edit run of each project on both commits; no other errors, failed 0.
+
+11. A08 corpus with its prerequisite (09:54 to 11:50 local, 07:54 to 09:50 UTC), at 1bbec13
+   pnpm viz-v4:expected   PASS (1 test file, 1 test); regenerates tests/visual/viz-v4/a08-expected-status.json for the local WASM
+     (wasmSha256 1d7cd698a49e23100842defe75ca1a934842c57218b6cd109a2c9a8676fa2788). The regenerated file is kept here as
+     viz-v4/a08-expected-status-1bbec13-local.json and was not committed to tests/; the tracked file was restored afterwards.
+   pnpm test:gpu:viz-v4   PASS: 24 passed (1.9 h, 1 worker): fringe-1x, fringe-4x, msaa-4x x DPR 1, 1.5, 2, 3 in chrome (55.0 min) and edge (61.0 min).
+     Timing record: viz-v4/headed-timing.json.
+12. E3-U4 alone with a 12 GB heap: NOT RUN (moved to the laptop)
+   Intended: $env:NODE_OPTIONS='--max-old-space-size=12288'; $env:VS_GPU_TIER='3'; pnpm test:gpu -g "E3-U4 GPU model check" --project=chrome --workers=1
+   Launched at 10:09:39 UTC through a wrapper that started it via cmd.exe; the wrapper's quoting was wrong and the Playwright run never
+   started (no output file was written; the largest node process sampled every 30 s stayed at 45 to 47 MB, an unrelated process).
+   Stopped at 11:06 UTC when the user moved the out-of-memory tests to the laptop sitting. No E3-U4 result from the main PC.
