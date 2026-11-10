@@ -4,7 +4,7 @@ import { expect, test, type Page } from '@playwright/test';
 // E41 contract (docs/plans/d9-e41-boolean-effects-contract.md), E41-A12, the boolean half
 // (E41-U3b): on the next-host studio page (`?test=1&layout=studio`), the four booleans from the
 // canvas context menu, the keys (Ctrl+Alt+U, S, I, X), the top toolbar and the property panel's
-// Boolean section, undo, and a refusal's notice. Runs in playwright.e41-next-host.config.ts
+// Boolean section, undo, and a refusal's notice. Runs in playwright.e41-studio.config.ts
 // (headed Chrome and Edge, or the headless smoke project with M8_NEXT_HOST_CHROMIUM).
 
 type Hook = Readonly<{ editor: Editor }>;
