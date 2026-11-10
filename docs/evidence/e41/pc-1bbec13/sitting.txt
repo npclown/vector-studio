@@ -76,3 +76,31 @@ Files
 - cards/: 20 run JSONs from step 2.
 - a06/: 48 run JSONs from step 3 and 72 from step 6.
 - gpu/: a07.json, a08.json, a09.json from step 4; gpu/full-suite/ holds the E41 reports from step 5.
+
+Follow-up the same day (about 06:15 to 08:30 UTC), same machine and browsers
+
+8. A08 corpus rerun: NOT RUN
+   pnpm test:geometry (rebuilds the kernel at 1bbec13): exit 0, but the kernel is unchanged and its hash still differs from the pin.
+   Local kernel sha256 1d7cd698a49e23100842defe75ca1a934842c57218b6cd109a2c9a8676fa2788 before and after the rebuild;
+   tests/visual/viz-v4/a08-expected-status.json pins 58f26517603d0d599f187481c967832e3f6abea2eb53c738e5540b6200b4fd35.
+   The pin was last updated in 332117fe (#522, 2026-11-06); packages/geometry-wasm/kernel changed after it in #530, #533 and #535.
+   The pin is stale in the repository, so the corpus spec would fail the same check; it was not rerun.
+
+9. E3-U4 rerun: STOPPED, not completed
+   $env:NODE_OPTIONS='--max-old-space-size=8192'; $env:VS_GPU_TIER='3'; pnpm test:gpu -g "E3-U4 GPU model check"
+   Started 06:42 UTC; stopped at about 07:28 UTC on request, after about 45 min in [chrome] (test 1 of 2), with the Node worker
+   at about 6.9 GB. Edge did not start. No result.
+
+10. A/B for the -v2 projects (mouse untouched), M8_N3_BASELINE as above
+   For each commit: git checkout <commit>; pnpm install; pnpm --filter @vector-studio/react exec tsc --build --clean; pnpm build
+   $env:E26_SCENARIOS='e26-mixed-view-edit-10k/v2,e26-pointer-busy-10k/v2'; $env:E26_REPETITIONS='5'
+   $env:E26_RESULTS_DIR='test-results/e41-ab-<commit>'; pnpm test:e26 --project=chrome-dpr1-v2 --project=chrome-dpr2-v2
+   e8ba618a (ab-e8ba618/): build PASS, 30 passed (7.7 min). 1bbec13a (ab-1bbec13/): build PASS, 30 passed (8.5 min). Records are clean (dirty false).
+   Medians over 5 repetitions (e8ba618 -> 1bbec13):
+   - mixed-view-edit/v2 chrome-dpr1-v2: rafCallbackIntervalMs 16.7 / p95 16.8 both; split.gpuMs median 35.9 -> 36.8
+     (per rep 35.7 36.8 36.9 35.9 35.5 -> 36.5 36.3 37.3 36.8 36.8)
+   - mixed-view-edit/v2 chrome-dpr2-v2: raf 16.7 / 16.8 both; gpuMs 36.3 -> 36.5 (36.3 36.1 36.3 35.8 36.9 -> 36.9 36.5 36.5 36.4 36.4)
+   - pointer-busy/v2 busy, pointerToWorkDoneMs median: dpr1 105.7 -> 124.1 (93.7 130.5 100.1 106.2 105.7 -> 85.8 124.4 93.0 124.1 126.3);
+     dpr2 123.4 -> 105.4 (123.4 90.0 124.2 103.2 143.1 -> 105.4 91.5 97.0 107.5 128.6); long tasks over 50 ms 2,2,2,2,3 in both
+   - pointer-busy/v2 plain: dpr1 110.4 -> 97.5; dpr2 96.8 -> 95.4; long tasks over 50 ms 0 or 1 per run in both
+   One console error (404) in the first mixed-view-edit run of each project on both commits; no other errors, failed 0.
