@@ -112,3 +112,8 @@ Follow-up the same day (about 06:15 to 08:30 UTC), same machine and browsers
      viz-v4/a08-expected-status-1bbec13-local.json and was not committed to tests/; the tracked file was restored afterwards.
    pnpm test:gpu:viz-v4   PASS: 24 passed (1.9 h, 1 worker): fringe-1x, fringe-4x, msaa-4x x DPR 1, 1.5, 2, 3 in chrome (55.0 min) and edge (61.0 min).
      Timing record: viz-v4/headed-timing.json.
+12. E3-U4 alone with a 12 GB heap: NOT RUN (moved to the laptop)
+   Intended: $env:NODE_OPTIONS='--max-old-space-size=12288'; $env:VS_GPU_TIER='3'; pnpm test:gpu -g "E3-U4 GPU model check" --project=chrome --workers=1
+   Launched at 10:09:39 UTC through a wrapper that started it via cmd.exe; the wrapper's quoting was wrong and the Playwright run never
+   started (no output file was written; the largest node process sampled every 30 s stayed at 45 to 47 MB, an unrelated process).
+   Stopped at 11:06 UTC when the user moved the out-of-memory tests to the laptop sitting. No E3-U4 result from the main PC.
