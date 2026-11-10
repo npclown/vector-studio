@@ -1,3 +1,4 @@
+import { rebaseClipChain } from './clip-resolution.js';
 import type { SceneBounds } from './scene-numeric.js';
 import {
   deviceEffects,
@@ -155,11 +156,12 @@ function chainBetween(scope: LayerScope): readonly SceneBounds[] {
   return chain.bounds.slice(parentLength);
 }
 
-function insideEffectRoot(scope: LayerScope): boolean {
+/** The innermost effect root around a scope (not the scope itself), or null. */
+function effectRootOf(scope: LayerScope): LayerScope | null {
   for (let parent = scope.parent; parent !== null; parent = parent.parent) {
-    if (parent.effects !== undefined) return true;
+    if (parent.effects !== undefined) return parent;
   }
-  return false;
+  return null;
 }
 
 function rootOf(scope: LayerScope): LayerScope {
@@ -254,14 +256,20 @@ export function planEffectLayers(
     const effects = device.get(scope);
     let bound: DeviceRect | null;
     if (effects === undefined) {
+      // E41-K2b: inside an effect root, the layer's draws carry chains rebased at the innermost
+      // root, so its bound is cut by the levels inside that root only; its ancestors' clips
+      // apply at its composite. (A backend that does not rebase still clips each draw.)
+      const root = effectRootOf(scope);
       bound = layerBound(
         content.get(scope) ?? [],
         nested.get(scope) ?? [],
-        scope.chain,
+        root === null
+          ? scope.chain
+          : rebaseClipChain(scope.chain, root.outerChain ?? null, root.nodeId),
         camera,
         target,
         null,
-        !insideEffectRoot(scope),
+        root === null,
       );
     } else {
       const box = contentBox(scope, content.get(scope) ?? [], nested.get(scope) ?? [], view);

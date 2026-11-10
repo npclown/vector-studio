@@ -288,6 +288,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   #culled: KeptCull | null = null;
   /** E30-U4b: the last mask plan with its inputs, all of its content admitted. */
   #keptMaskPlan: Readonly<{ inputs: readonly unknown[]; plan: MaskPlan }> | null = null;
+  #effectClips: Readonly<{ roots: readonly LayerScope[]; clips: EffectClips | null }> | null = null;
   #maskPlanCounts = { kept: 0, planned: 0 };
   #textFrameCounts = { repeated: 0, planned: 0 };
   /** E30-U4b: each derived path's layer content bounds (`#pathContentBounds`). */
@@ -573,7 +574,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     // root composites as an E25 layer of its content (5.3), with the chains as they are.
     const effectClips =
       clipSeen.value && target.offTargetEffectLayers === true
-        ? effectClipResolver(layerPlan)
+        ? this.#effectClipsOf(layerPlan)
         : null;
     if (clipSeen.value) {
       const content = this.#maskContentOf(
@@ -1853,6 +1854,27 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     return content;
   }
 
+  /**
+   * E41-K2b: the frame's effect clips, kept while the drawn roots are the same scope objects in
+   * the same order (a resolver depends only on them and their ancestors), so the mask content and
+   * the mask plan keep their reuse across frames.
+   */
+  #effectClipsOf(plan: DrawnLayers | null): EffectClips | null {
+    const roots = plan === null ? [] : plan.order.filter((scope) => plan.effects.has(scope));
+    const kept = this.#effectClips;
+    if (
+      !this.#fullDerivation &&
+      kept !== null &&
+      kept.roots.length === roots.length &&
+      kept.roots.every((root, index) => root === roots[index])
+    ) {
+      return kept.clips;
+    }
+    const clips = effectClipResolver(plan);
+    if (!this.#fullDerivation) this.#effectClips = Object.freeze({ roots, clips });
+    return clips;
+  }
+
   /** E30-U3b: the kept array for this name when it holds the same items, else this one. */
   #intern<T>(name: string, items: T[]): T[] {
     if (this.#fullDerivation) return items;
@@ -3118,10 +3140,16 @@ function effectClipResolver(plan: DrawnLayers | null): EffectClips | null {
   for (const root of plan.order) {
     if (plan.effects.has(root)) composites.set(root, chainOf(root.outerChain ?? null, root.parent));
   }
-  const admitted = new Map<LayerScope, boolean>();
+  // Per plan: a kept resolver serves later frames' plans too.
+  const admittedByPlan = new WeakMap<MaskPlan, Map<LayerScope, boolean>>();
   const rootsAdmitted = (masks: MaskPlan, layer: LayerScope | null | undefined): boolean => {
     const root = rootOf(layer);
     if (root === null) return true;
+    let admitted = admittedByPlan.get(masks);
+    if (admitted === undefined) {
+      admitted = new Map();
+      admittedByPlan.set(masks, admitted);
+    }
     let known = admitted.get(root);
     if (known === undefined) {
       known = masks.admit(composites.get(root) ?? null) && rootsAdmitted(masks, root.parent);

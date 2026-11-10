@@ -16,7 +16,10 @@ import type {
   PrimitivePacket,
   PrimitiveTarget,
 } from '../../packages/renderer-core/src/primitive-packet.js';
-import { PrimitiveSceneSource } from '../../packages/renderer-core/src/primitive-scene-source.js';
+import {
+  PrimitiveSceneSource,
+  packingCountsForTesting,
+} from '../../packages/renderer-core/src/primitive-scene-source.js';
 import { RetainedSceneMirror } from '../../packages/renderer-core/src/scene-mirror.js';
 
 // E41 contract (docs/plans/d9-e41-boolean-effects-contract.md), unit U5c: E41-K2b in the source.
@@ -265,6 +268,105 @@ describe('E41-K2b in the packet', () => {
       widths: [400],
       masks: [],
     });
+  });
+
+  it('bounds an E25 layer inside a root by the levels inside the root only', () => {
+    // A translucent group inside a shadowed group in a clipping frame: its rect lies past the
+    // frame, and its shadow falls inside it.
+    const packet = prepare([
+      group('frame', null, ['card'], { clip: rect(0, 0, 100, 100) }),
+      group('card', 'frame', ['a', 'half'], { effects: [shadow(-80, 0, 2)] }),
+      box('a', 'card', 10),
+      group('half', 'card', ['b'], { opacity: 0.5 }),
+      box('b', 'half', 120),
+    ]);
+    const card = layerOf(packet, 'card');
+    const half = layerOf(packet, 'half');
+    expect(half.layer.draws).toHaveLength(1);
+    expect(half.layer.draws[0]!.clipState).toBeUndefined();
+    expect(half.layer.bound.x + half.layer.bound.width).toBeGreaterThanOrEqual(160);
+    expect(card.layer.bound.x + card.layer.bound.width).toBeGreaterThanOrEqual(160);
+    expect(shape(stateOf(packet, card.composite.clipState))).toEqual({ widths: [100], masks: [] });
+  });
+
+  it('draws nothing of a root whose composite chain is over the mask budget', () => {
+    // Four nested full-target masks at 4096²: the fourth level is over the budget, so the root
+    // inside it has no content and an unclipped composite, and no state names its level.
+    const mask: SceneClip = { kind: 'mask' };
+    const big = 4096;
+    const nodes: RenderNodeSnapshot[] = [];
+    let parent: string | null = null;
+    for (const level of [1, 2, 3, 4]) {
+      const id = `M${level}`;
+      const children = [`s${level}`, level < 4 ? `M${level + 1}` : 'B'];
+      if (level < 4) children.push(`c${level}`);
+      nodes.push(
+        group(id, parent, children, { clip: mask }),
+        box(`s${level}`, id, 0, { size: big }),
+      );
+      if (level < 4) nodes.push(box(`c${level}`, id, 100 * level));
+      parent = id;
+    }
+    nodes.push(box('B', 'M4', 400, { effects: [shadow(10, 0, 2)] }));
+    const mirror = new RetainedSceneMirror(undefined, {
+      pathNodes: 'unsupported',
+      clips: 'supported',
+      groupOpacity: 'supported',
+      effects: 'v0',
+    });
+    mirror.setCamera({ position: { x: 0, y: 0 }, zoom: 1 });
+    const applied = mirror.replaceSnapshot({
+      identity: { documentId: 'e41-u5c', pageId: 'page' },
+      revision: 1,
+      nodes,
+      rootOrder: ['M1'],
+    });
+    expect(applied.status).toBe('applied');
+    const packet = new PrimitiveSceneSource(mirror).prepare({
+      ...target,
+      width: big,
+      height: big,
+      maxTextureDimension2D: 8192,
+      offTargetEffectLayers: true,
+    })!;
+    const levels = packet.clip!.masks.map((level) => level.id);
+    expect(levels).toEqual(['M1', 'M2', 'M3']);
+    for (const state of packet.clip!.states) {
+      for (const id of state.masks) expect(levels).toContain(id);
+    }
+    const root = layerOf(packet, 'B');
+    expect(root.layer.draws).toEqual([]);
+    expect(root.composite.clipState).toBeUndefined();
+  });
+
+  it('keeps the mask plan across frames with the same drawn roots', () => {
+    const nodes = [
+      group('frame', null, ['g'], { clip: rect(0, 0, 300, 200) }),
+      group('g', 'frame', ['mg'], { effects: [shadow(20, 10, 3)] }),
+      group('mg', 'g', ['s', 'c'], { clip: { kind: 'mask' } }),
+      box('s', 'mg', 20, { size: 60 }),
+      box('c', 'mg', 40, { size: 60 }),
+    ];
+    const mirror = new RetainedSceneMirror(undefined, {
+      pathNodes: 'unsupported',
+      clips: 'supported',
+      groupOpacity: 'supported',
+      effects: 'v0',
+    });
+    mirror.setCamera({ position: { x: 0, y: 0 }, zoom: 1 });
+    mirror.replaceSnapshot({
+      identity: { documentId: 'e41-u5c', pageId: 'page' },
+      revision: 1,
+      nodes,
+      rootOrder: ['frame'],
+    });
+    const source = new PrimitiveSceneSource(mirror);
+    const frame = { ...target, offTargetEffectLayers: true };
+    const first = source.prepare(frame)!;
+    const second = source.prepare(frame)!;
+    expect(packingCountsForTesting(source).masks).toEqual({ kept: 1, planned: 1 });
+    expect(second.clip!.masks).toEqual(first.clip!.masks);
+    expect(second.layers!.composites).toEqual(first.layers!.composites);
   });
 
   it('keeps E25 layers’ composites unclipped and their content’s full chains', () => {

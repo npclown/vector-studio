@@ -36,7 +36,7 @@ With rebasing turned off in the source (draws keep their full chains and composi
 
 - `tests/unit/e41-u5c-clip-chains.test.ts`:
   - `rebaseClipChain` drops the root's ancestor levels, renames the mask levels left, keeps one object per chain and root, returns the chain under an unclipped root and null for the root's own chain, and refuses a chain that does not extend the root's;
-  - in the packet: F6, a container root's own clip kept in `L`, F11, F12 (the rebased mask level, with no parent and no rect above the root), a root inside a root, unclipped E25 composites, and draws outside every root keeping their chains.
+  - in the packet: F6, a container root's own clip kept in `L`, F11, F12 (the rebased mask level, with no parent and no rect above the root), a root inside a root, an E25 layer inside a root bounded past the root's ancestor clip, a root under an over-budget mask level (no content, an unclipped composite, every state naming a planned level), the mask plan kept across frames, unclipped E25 composites, and draws outside every root keeping their chains.
 - `tests/unit/e41-u5-effect-scene.test.ts`:
   - the clip variants' modules and pipelines (13 modules and 49 pipelines with every path);
   - a root inside a root under two clipping frames: the inner composite uses the shifted clip variant, the outer one the main-pass clip variant, each with its state's clip group offset;

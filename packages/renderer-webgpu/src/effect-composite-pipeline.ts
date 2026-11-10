@@ -17,6 +17,9 @@ import { SHIFTED_LAYER_VARIANT_SUFFIX, shiftedVertexStages } from './shifted-lay
 // attachment pixel plus `layerPass.shift`, 0 in the main pass), so one module serves the main
 // pass and E25 layer passes; its shifted form serves a root inside a root, whose pass maps the
 // tile through its vertex stage (U5b). E25's composite module, keys and pipelines are untouched.
+// A mask level reads coverage 0 past the target; a root whose subtree holds a mask group is
+// clamped to the target (E41-K2), which keeps that exact. Relaxing that clamp needs mask levels
+// past the target first.
 
 export const EFFECT_COMPOSITE_SHADER_KEY = 'e41-effect-composite-v0';
 
