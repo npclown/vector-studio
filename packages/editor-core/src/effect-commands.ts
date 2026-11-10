@@ -82,6 +82,10 @@ function commit(
     if (!result.ok) return fail(result.code, nodePath(node.id, result.path));
     const rejected = custom.check(deepFreeze(result.node));
     if (rejected !== null) return fail(rejected.code, nodePath(node.id, rejected.path));
+    // A change of no value (compared after the model's normalization) records no step.
+    if (JSON.stringify(result.node.effects) === JSON.stringify(document.nodes[node.id]!.effects)) {
+      continue;
+    }
     checked.push(result.node);
   }
   if (checked.length === 0) return { ok: true, document, touched: [], created: [] };

@@ -138,6 +138,14 @@ describe('E41-A11 setEffect and removeEffect', () => {
     const r = revision(target);
     ok(target, { type: 'setEffect', ids: [a], index: 0, patch: { visible: false } });
     expect(revision(target)).toBe(r);
+    // The same colour with its keys in another order is no change either (review S1).
+    ok(target, {
+      type: 'setEffect',
+      ids: [a],
+      index: 0,
+      patch: { color: { a: 0.25, b: 0, g: 0, r: 0 } },
+    });
+    expect(revision(target)).toBe(r);
     // The undo goes back past the toggle, not a no-op step.
     ok(target, { type: 'undo' });
     expect(node(target, a).effects[0]!.visible).toBe(true);
@@ -173,6 +181,10 @@ describe('E41-A11 setEffect and removeEffect', () => {
     const big = target.execute({ type: 'setEffect', ids: [a], index: 0, patch: { radius: 1001 } });
     expect(big).toMatchObject({ ok: false, code: 'document.invalid-field' });
     expect(big.ok ? '' : big.path).toMatch(new RegExp(`^/nodes/${a}/effects/0`));
+    // One node out of range: no node changes.
+    expect(
+      target.execute({ type: 'setEffect', ids: [c, a], index: 0, patch: { radius: -1 } }),
+    ).toMatchObject({ ok: false, code: 'document.invalid-field' });
     refused({ type: 'removeEffect', ids: [a], index: 3 }, 'editor.invalid-command', '/index');
     expect(text(target)).toBe(before);
   });
@@ -226,5 +238,40 @@ describe('E41-A11 visual bounds (5.5)', () => {
       width: 316,
       height: 82,
     });
+  });
+
+  it("rotates with the node; an instance without effects takes its symbol's (S10)", () => {
+    const target = editor();
+    const a = rect(target, 0, 0);
+    ok(target, { type: 'addEffect', ids: [a], kind: 'dropShadow' });
+    ok(target, { type: 'rotateNodes', ids: [a], angle: Math.PI / 2 });
+    const doc = () => target.query({ type: 'document' });
+    // The 132 × 82 grown box turned a quarter about the centre (50, 25).
+    const turned = visualBounds(doc(), node(target, a));
+    expect(turned.width).toBeCloseTo(82, 9);
+    expect(turned.height).toBeCloseTo(132, 9);
+    expect(turned.x).toBeCloseTo(50 - 41, 9);
+    expect(turned.y).toBeCloseTo(25 - 66, 9);
+
+    const [symbol] = ok(target, { type: 'createSymbol', ids: [rect(target, 300, 0)] });
+    ok(target, { type: 'addEffect', ids: [symbol!], kind: 'dropShadow' });
+    const [instance] = ok(target, {
+      type: 'createInstance',
+      symbol: symbol!,
+      frame: { x: 600, y: 0, width: 100, height: 50 },
+    });
+    const own = node(target, instance!);
+    expect(own.effects).toEqual([]);
+    const bound = visualBounds(doc(), own);
+    expect(bound.x).toBe(own.frame.x - 16);
+    expect(bound.width).toBe(own.frame.width + 32);
+  });
+
+  it('createSymbol wraps a shadowed node by its grown bounds', () => {
+    const target = editor();
+    const a = rect(target, 10, 20);
+    ok(target, { type: 'addEffect', ids: [a], kind: 'dropShadow' });
+    const [symbol] = ok(target, { type: 'createSymbol', ids: [a] });
+    expect(node(target, symbol!).frame).toEqual({ x: -6, y: 4, width: 132, height: 82 });
   });
 });
