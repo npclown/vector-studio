@@ -8,6 +8,8 @@ import type {
   SceneClip,
   SceneColor,
   SceneEffect,
+  ScenePaint,
+  PathStroke,
 } from '@vector-studio/contracts';
 import type { E23GradientPaintApi } from '../../apps/playground/src/e23-gradient-paint.js';
 import {
@@ -89,8 +91,9 @@ function star(
   parentId: string | null,
   [x, y]: readonly [number, number],
   size: number,
-  fill: SceneColor,
+  fill: ScenePaint,
   effects?: readonly SceneEffect[],
+  extra: Partial<{ opacity: number; stroke: PathStroke }> = {},
 ): RenderNodeSnapshot {
   const points: number[] = [];
   for (let index = 0; index < 10; index += 1) {
@@ -103,7 +106,7 @@ function star(
     parentId,
     transform: [1, 0, 0, 1, x, y],
     visible: true,
-    opacity: 1,
+    opacity: extra.opacity ?? 1,
     kind: 'path',
     geometry: {
       kind: 'path',
@@ -111,10 +114,21 @@ function star(
       points,
       fillRule: 'nonzero',
     },
-    style: { fill, stroke: null },
+    style: { fill, stroke: extra.stroke ?? null },
     ...(effects === undefined ? {} : { effects }),
   };
 }
+
+/** U7b: a linear gradient over a star `size` across (E23). */
+const starGradient = (size: number): ScenePaint => ({
+  kind: 'linear',
+  transform: [size, 0, 0, size, 0, 0],
+  stops: [
+    { offset: 0, color: RED },
+    { offset: 1, color: BLUE },
+  ],
+  spread: 'pad',
+});
 
 /** U7b (F7): one text run through the glyph atlas (the page's canvas raster port). */
 function text(
@@ -319,8 +333,26 @@ const FIXTURES: readonly Fixture[] = [
     [],
     [-150, 0],
   ),
-  // The frame also holds a mesh path below the root, so the root's clipped composite runs in a
-  // stencil pass; the expected frame is R over that path's own capture (`under`).
+  // Draws U5b left to U7 in a shifted pass: a joint draw (a gradient-filled, stroked star at
+  // opacity 0.6) under a rect clip inside a shadowed container root past the bottom edge.
+  fixture(
+    'joint draw, gradient and inner clip in a shifted pass',
+    container('jr', ['jc'], [dropShadow(30, -60, 4)]),
+    [
+      container('jc', ['js'], [], {
+        parentId: 'jr',
+        clip: { kind: 'rect', x: 150, y: 240, width: 200, height: 110 },
+      }),
+      star('js', 'jc', [180, 230], 140, starGradient(140), undefined, {
+        opacity: 0.6,
+        stroke: { color: TEAL, width: 6, cap: 'round', join: 'round', miterLimit: 4 },
+      }),
+    ],
+    [0, -150],
+  ),
+  // The frame also holds a mesh path below the root, a winding stencil-and-cover draw in the
+  // same pass as the root's clipped composite (every pass on this page has the stencil
+  // attachment); the expected frame is R over that path's own capture (`under`).
   {
     ...clipped(
       'stencil-pass clip composite: shadowed mesh path beside a mesh path in a clipping frame',
@@ -376,6 +408,12 @@ function clipped(
     contentNodes: build(null),
   };
 }
+
+/** A node without its effects. */
+const withoutEffects = (node: RenderNodeSnapshot) =>
+  Object.fromEntries(
+    Object.entries(node).filter(([key]) => key !== 'effects'),
+  ) as RenderNodeSnapshot;
 
 function snapshot(nodes: readonly RenderNodeSnapshot[]): RenderSceneSnapshot {
   return {
@@ -461,7 +499,11 @@ function oracleEffect(fixture: Fixture): OracleEffect {
   return { shadows, blurSigmaPx, contentOpacity: fixture.contentOpacity };
 }
 
-/** Zeroes the image outside a rect on whole pixels (the image is at the target's origin). */
+/**
+ * Zeroes the image outside a rect on whole pixels (the image is at the target's origin). The
+ * rect is in device pixels at the home camera: a fixture with both `clip` and `camera` is not
+ * supported (the spec asserts it).
+ */
 function clipImage(
   image: OracleImage,
   [x, y, width, height]: readonly [number, number, number, number],
@@ -541,6 +583,7 @@ for (const samples of [1, 4] as const) {
     const content = await open(contentPage, { samples, effects: true, content: true });
     const rows: unknown[] = [];
     for (const fixture of FIXTURES) {
+      expect(fixture.clip === undefined || fixture.camera === undefined, fixture.name).toBe(true);
       const view = fixture.camera ?? HOME;
       const drawn = await render(effectsPage, fixture.nodes, view);
       const { width, height } = drawn.result.frame;
@@ -589,13 +632,24 @@ for (const samples of [1, 4] as const) {
       );
       const result = overBlack.worst >= overWhite.worst ? overBlack : overWhite;
       const counters = drawn.result.counters;
-      // The effects show: pixels over white where the frame differs from L alone by over 8/255.
+      // The effects show: pixels over white where the frame differs from L alone by over 8/255
+      // (with `under`, from the same frame drawn without the root's effects).
+      const reference =
+        fixture.under === undefined
+          ? white.rgba
+          : (
+              await render(
+                effectsPage,
+                [backdrop(width, height), ...fixture.nodes.map(withoutEffects)],
+                view,
+              )
+            ).rgba;
       let changed = 0;
       for (let index = 0; index < width * height; index += 1) {
         const at = index * 4;
         if (
           [0, 1, 2].some(
-            (lane) => Math.abs(drawnWhite.rgba[at + lane]! - white.rgba[at + lane]!) > 8,
+            (lane) => Math.abs(drawnWhite.rgba[at + lane]! - reference[at + lane]!) > 8,
           )
         )
           changed += 1;
@@ -640,12 +694,7 @@ test('E41-A06 scenes without effects draw identically under effects v0', async (
     await open(withOption, { samples, effects: true });
     await open(without, { samples, effects: false });
     for (const fixture of FIXTURES) {
-      const plain = fixture.nodes.map(
-        (node) =>
-          Object.fromEntries(
-            Object.entries(node).filter(([key]) => key !== 'effects'),
-          ) as RenderNodeSnapshot,
-      );
+      const plain = fixture.nodes.map(withoutEffects);
       const a = await render(withOption, plain, fixture.camera);
       const b = await render(without, plain, fixture.camera);
       const identical = Buffer.compare(Buffer.from(a.rgba), Buffer.from(b.rgba)) === 0;
