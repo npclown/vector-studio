@@ -13,7 +13,12 @@ The full log of the sitting, with the machine, the browser versions and every co
 - Step 4 (counters): `pnpm test:gpu -g "A07|A08|A09"`, 12 of 12 passed, all in the `chrome` project. The pattern also matched nine tests of other suites (E23, E25, E28, P4 and V-3; listed in sitting.txt); the three E41 tests are E41-A07, A08 and A09. Reports: [pc-1bbec13/gpu/](pc-1bbec13/gpu/).
 - Step 5: the full GPU tier (`pnpm test:gpu:full`). Every E41 test passed in Chrome and in Edge (A05 at 1x and 4x, A06, A07, A08, A09); the E41 reports are in [pc-1bbec13/gpu/full-suite/](pc-1bbec13/gpu/full-suite/). Other suites' results are under A06 in the exit record.
 - Step 7 (A12): `pnpm test:e41-next-host`, 4 of 4 passed: the boolean and the effects flows in Chrome 156.0.8078.81 and Edge 157.0.4341.42.
-- Steps 8 to 10, after the first pass of the records: step 8 first left the `viz-v4` A08 corpus out (step 5 had skipped its prerequisite `pnpm viz-v4:expected`), and step 11 ran it with the prerequisite: 24 of 24 in Chrome and Edge, the `e3-a04-readback` rerun with an 8 GB Node heap was stopped without a result and a 12 GB attempt did not start (it passed on the laptop instead; see the exit record), and the `-v2` A/B at e8ba618 and 1bbec13 ran 30 of 30 at each commit (see A06).
+- Steps 8 to 12, after the first pass of the records (sitting.txt):
+  - Step 8 first left the `viz-v4` A08 corpus out; step 5 had skipped its prerequisite `pnpm viz-v4:expected`.
+  - Step 9: an `e3-a04-readback` rerun with an 8 GB Node heap was stopped on request after about 45 minutes, without a result.
+  - Step 10: the `-v2` A/B at e8ba618 and 1bbec13 ran 30 of 30 at each commit (see A06).
+  - Step 11: the corpus with its prerequisite passed 24 of 24 in Chrome and Edge.
+  - Step 12: a 12 GB `e3-a04-readback` attempt did not start; it passed on the laptop instead (see the exit record).
 - In each of steps 2, 3 and 6, one run per project logged one console 404 for a static resource, always in a first repetition: `e41-cards-view` r1 (step 2), `e26-mixed-view-edit` r1 (step 3) and `e26-pointer-busy` r1 (step 6). The eadc1d7 records show the same single 404 in each project's `e26-mixed-view-edit` r1, so it predates E41. Console errors are recorded but do not fail a run. Page errors would fail a run, and there were none.
 
 ## E41-A10: `e41-cards`
@@ -94,7 +99,7 @@ Typing (`keyToWorkDoneMs` median / p95 in ms) and isolation (one and sixteen iso
 
 Findings:
 
-- **No frame metric got worse.** Every frame median and p95 is the same as at eadc1d7 or lower. The all-visible scenarios (`mixed-all-*`, `ui0-mixed-all-*`) are one or two 60 Hz intervals faster, and their `gpuMs` dropped from about 190 to 360 ms to about 44 to 107 ms. The likely cause is E39's stencil paths, merged after eadc1d7; no bisect was run.
+- **No frame metric got worse in the step 3 and 6 runs.** Every frame median and p95 there is the same as at eadc1d7 or lower (for the A/B's two 33 ms p95 runs, see below). The all-visible scenarios (`mixed-all-*`, `ui0-mixed-all-*`) are one or two 60 Hz intervals faster, and their `gpuMs` dropped from about 190 to 360 ms to about 44 to 107 ms. The likely cause is E39's stencil paths, merged after eadc1d7; no bisect was run.
 - **Typing and isolation did not get worse.** Typing is faster (median 26 to 35 ms against 39 to 52 ms), and every isolation run is inside its bounds.
 - **v1 pointer latency did not get worse.** The v1 medians are 37 to 42 ms against 40 to 45 ms.
 - **The `-v2` (studio page) scenarios: not caused by E41.** Against eadc1d7, `e26-mixed-view-edit-10k/v2` reads a `gpuMs` of 20.5 to 35.6 ms against 19.0 to 19.6 ms, with the frame unchanged at 16.7 / 16.8 ms, and `e26-pointer-busy-10k/v2` plain at DPR 1 reads a latency median of 92 to 116 ms against 74 to 86 ms (its CPU parts within 0.2 ms; the wait from claim to GPU done 71 to 89 ms against 44 to 56 ms). To attribute it, the reference PC ran both scenarios at e8ba618 (main before E41 turned on `effects: 'v0'` in the editor hosts, db163f6) and at 1bbec13 in one sitting, 5 repetitions each, clean builds (sitting.txt step 10; records [pc-1bbec13/ab-e8ba618/](pc-1bbec13/ab-e8ba618/) and [pc-1bbec13/ab-1bbec13/](pc-1bbec13/ab-1bbec13/)). Medians of the run medians, e8ba618 to 1bbec13:

@@ -77,7 +77,7 @@ Files
 - a06/: 48 run JSONs from step 3 and 72 from step 6.
 - gpu/: a07.json, a08.json, a09.json from step 4; gpu/full-suite/ holds the E41 reports from step 5.
 
-Follow-up the same day (about 06:15 to 08:30 UTC), same machine and browsers
+Follow-up the same day (about 06:15 to 11:06 UTC; step 11 ran 07:54 to 09:50 UTC, step 12 10:09 to 11:06 UTC), same machine and browsers
 
 8. A08 corpus rerun: NOT RUN
    pnpm test:geometry (rebuilds the kernel at 1bbec13): exit 0, but the kernel is unchanged and its hash still differs from the pin.
