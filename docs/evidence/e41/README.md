@@ -16,6 +16,7 @@ Contract: [d9-e41-boolean-effects-contract.md](../../plans/d9-e41-boolean-effect
 | [pc-1bbec13/a06/](pc-1bbec13/a06/) | U7c | A06 bench run records (120), compared with [pa-u9/eadc1d7](../pa-u9/eadc1d7/timing/runs) | Reference PC, headed Chrome |
 | [pc-1bbec13/ab-e8ba618/](pc-1bbec13/ab-e8ba618/) and [ab-1bbec13/](pc-1bbec13/ab-1bbec13/) | U8 | A06: the `-v2` A/B before and after the effects wiring (30 + 30 run records) | Reference PC, headed Chrome |
 | [pc-1bbec13/viz-v4/](pc-1bbec13/viz-v4/) | U8 | A06 full suite: the A08 corpus statuses regenerated for the PC kernel and the corpus run timing | Reference PC, headed Chrome and Edge |
+| [laptop-1bbec13/](laptop-1bbec13/e3-u4.txt) | U8 | A06 full suite: `e3-a04-readback` in Chrome and Edge at 1bbec13 (secondary record) | Laptop, Intel iGPU, headed Chrome and Edge |
 | [pc-1bbec13/gpu/](pc-1bbec13/gpu/) | U7c, U8 | A07 to A09 reports; `full-suite/` holds the E41 reports of the full GPU suite (A05 to A09, Chrome and Edge) | Reference PC, headed Chrome and Edge |
 
 Commands:
