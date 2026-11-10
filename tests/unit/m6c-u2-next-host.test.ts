@@ -127,9 +127,12 @@ describe("M6c-U2 next-host renderer options (text: 'atlas')", () => {
       paints: 'gradient',
       groups: 'isolated',
       text: 'atlas',
+      effects: 'v0',
       glyphRaster: port,
     });
     const service = new PrimitiveRendererService(target, options.hostRendererOptions(port));
+    // E41-U7: node effects (E41-S6).
+    expect(service.requiresEffectPipeline).toBe(true);
     expect(service.requiresTextPipeline).toBe(true);
     expect(service.requiresClipPipeline).toBe(true);
     expect(service.requiresPaintPipeline).toBe(true);

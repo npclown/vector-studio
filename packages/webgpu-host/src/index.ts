@@ -21,18 +21,30 @@ export type EditorGlyphRaster = NonNullable<PrimitiveRendererServiceOptions['gly
 
 /** The service options the editor needs, without the fill and stroke mesh ports. */
 export type EditorRendererOptions = Readonly<
-  Required<Pick<PrimitiveRendererServiceOptions, 'clips' | 'paints' | 'groups' | 'text'>> & {
+  Required<
+    Pick<PrimitiveRendererServiceOptions, 'clips' | 'paints' | 'groups' | 'text' | 'effects'>
+  > & {
     glyphRaster: EditorGlyphRaster;
   }
 >;
 
 /**
  * The service options every editor renderer gets: rect and mask clips (P4), gradient paints
- * (E23), isolated groups (E25) and atlas text (E28) with the given glyph raster port, so the
- * editor's projected scene draws instead of being isolated as `editor.renderer-unsupported`.
+ * (E23), isolated groups (E25), atlas text (E28) with the given glyph raster port and node
+ * effects (E41-U7, `effects: 'v0'`), so the editor's projected scene draws instead of being
+ * isolated as `editor.renderer-unsupported`. A renderer on 'v0' also draws scenes without
+ * effects exactly as on 'none' (E41-A06), so an editor that does not project effects
+ * (`EditorOptions.projectEffects` off) draws as before.
  */
 export function editorRendererOptions(glyphRaster: EditorGlyphRaster): EditorRendererOptions {
-  return { clips: 'all', paints: 'gradient', groups: 'isolated', text: 'atlas', glyphRaster };
+  return {
+    clips: 'all',
+    paints: 'gradient',
+    groups: 'isolated',
+    text: 'atlas',
+    effects: 'v0',
+    glyphRaster,
+  };
 }
 
 /**

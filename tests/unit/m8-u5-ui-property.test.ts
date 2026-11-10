@@ -616,7 +616,10 @@ describe('M8-A11 markup: one node editable, several read-only (V-25: transform a
       expect(html).toContain(
         `<div role="group" aria-label="${name}" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><span>${name}</span><button type="button">Reset text</button></div>`,
       );
-    const buttons = html.match(/<button[^>]*>/gu) ?? [];
+    // E41-U7: the Effects section's add buttons carry test IDs; they are not section 7.3's.
+    const buttons = (html.match(/<button[^>]*>/gu) ?? []).filter(
+      (tag) => !tag.includes('data-testid="effects-add-'),
+    );
     expect(buttons.length).toBe(3);
     expect(buttons.every((tag) => !tag.includes('data-testid'))).toBe(true);
   });

@@ -15,6 +15,20 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { colorHex, parseNumber, type Common } from './appearance-model.js';
 import { booleanActions } from './boolean-model.js';
+import {
+  addEffectCommand,
+  effectColorCommand,
+  effectLabel,
+  effectNumberCommand,
+  effectRows,
+  effectOpacityCommand,
+  isMaskSource,
+  opacityText,
+  removeEffectCommand,
+  toggleEffectCommand,
+  type EffectNumberKey,
+  type EffectRow,
+} from './effects-model.js';
 import { withShortcut } from './editor-toolbar-model.js';
 import { AppearancePanel } from './appearance-panel.js';
 import { ColorWell, Swatches } from './color-controls.js';
@@ -427,6 +441,164 @@ function SymbolSection({
   );
 }
 
+const EFFECT_FIELDS: readonly Readonly<{ key: EffectNumberKey; label: string; shadow: boolean }>[] =
+  [
+    { key: 'offsetX', label: 'X', shadow: true },
+    { key: 'offsetY', label: 'Y', shadow: true },
+    { key: 'radius', label: 'Blur', shadow: false },
+  ];
+
+/** One effect row: visible, colour and opacity (shadows), X, Y (shadows), blur, remove. */
+function EffectRowFields({
+  nodes,
+  row,
+  disabled,
+  run,
+}: {
+  nodes: readonly NodeV7[];
+  row: EffectRow;
+  disabled: boolean;
+  run: Run;
+}) {
+  const name = `Effect ${row.index + 1}`;
+  const box = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (box.current !== null) box.current.indeterminate = row.visible.state === 'mixed';
+  }, [row.visible.state]);
+  const colorValue = row.color.state === 'one' ? colorHex(row.color.value) : null;
+  const setColor = (hex: string) => {
+    const command = effectColorCommand(nodes, row, hex);
+    return command !== null && run(command);
+  };
+  const identity = `${fieldIdentity(nodes)} ${row.index}`;
+  return (
+    <div
+      role="group"
+      aria-label={name}
+      data-testid={`effect-${row.index}`}
+      data-kind={row.kind}
+      style={{ ...ROW_STYLE, marginBottom: 4 }}
+    >
+      <label>
+        <input
+          ref={box}
+          type="checkbox"
+          aria-label={`${name} visible`}
+          data-testid={`effect-${row.index}-visible`}
+          checked={row.visible.state === 'one' && row.visible.value}
+          disabled={disabled}
+          onChange={() => void run(toggleEffectCommand(nodes, row))}
+        />{' '}
+        {effectLabel(row.kind)}
+      </label>
+      {row.shadow && (
+        <>
+          <TextField
+            identity={identity}
+            label={`${name} colour`}
+            value={colorValue}
+            disabled={disabled}
+            commit={setColor}
+          />
+          <ColorWell
+            label={`${name} colour picker`}
+            testId={`effect-${row.index}-colour-picker`}
+            value={colorValue}
+            disabled={disabled}
+            commit={setColor}
+          />
+          <TextField
+            identity={identity}
+            label={`${name} opacity`}
+            value={opacityText(row.color)}
+            disabled={disabled || row.color.state !== 'one'}
+            commit={(text) => {
+              const command = effectOpacityCommand(nodes, row, text);
+              return command !== null && run(command);
+            }}
+          />
+        </>
+      )}
+      {EFFECT_FIELDS.filter((field) => row.shadow || !field.shadow).map(({ key, label }) => (
+        <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <span aria-hidden="true" style={{ opacity: 0.6 }}>
+            {label}
+          </span>
+          <TextField
+            identity={identity}
+            label={`${name} ${label}`}
+            value={commonText(row[key])}
+            disabled={disabled}
+            commit={(text) => {
+              const command = effectNumberCommand(nodes, row, key, text);
+              return command !== null && run(command);
+            }}
+          />
+        </label>
+      ))}
+      <button
+        type="button"
+        aria-label={`Remove ${name}`}
+        title={`Remove ${name.toLowerCase()}`}
+        data-testid={`effect-${row.index}-remove`}
+        disabled={disabled}
+        onClick={() => void run(removeEffectCommand(nodes, row.index))}
+      >
+        −
+      </button>
+    </div>
+  );
+}
+
+/**
+ * E41-U7 (E41 contract, section 6): add a drop shadow or a layer blur to each selected node, and
+ * per effect index a visible toggle, colour, X, Y, blur and remove, "mixed" where the selected
+ * nodes differ. A mask source's effects do not render (section 3): the section shows them
+ * disabled with a note.
+ */
+function EffectsSection({
+  document,
+  nodes,
+  run,
+}: {
+  document: DocumentV7;
+  nodes: readonly NodeV7[];
+  run: Run;
+}) {
+  const masked = nodes.some((node) => isMaskSource(document, node));
+  const rows = effectRows(nodes);
+  return (
+    <Section legend="Effects">
+      <Row>
+        <button
+          type="button"
+          data-testid="effects-add-shadow"
+          disabled={masked}
+          onClick={() => void run(addEffectCommand(nodes, 'dropShadow'))}
+        >
+          + Drop shadow
+        </button>
+        <button
+          type="button"
+          data-testid="effects-add-blur"
+          disabled={masked}
+          onClick={() => void run(addEffectCommand(nodes, 'layerBlur'))}
+        >
+          + Layer blur
+        </button>
+      </Row>
+      {masked && (
+        <p data-testid="effects-mask-note" style={{ margin: '4px 0', opacity: 0.7 }}>
+          A mask uses its shape only, so its effects do not show
+        </p>
+      )}
+      {rows.map((row) => (
+        <EffectRowFields key={row.index} nodes={nodes} row={row} disabled={masked} run={run} />
+      ))}
+    </Section>
+  );
+}
+
 /**
  * E41-U3b (E41 contract, section 6): union, subtract, intersect and exclude for a qualifying
  * selection (section 2.1), each `property-boolean-<op>`; the command selects its result.
@@ -516,6 +688,7 @@ export function PropertySections() {
           exitTextEdit={exitTextEdit}
         />
       )}
+      <EffectsSection document={document} nodes={nodes} run={run} />
       <BooleanSection document={document} selection={selection} keymap={keymap} run={run} />
       <SymbolSection
         document={document}
