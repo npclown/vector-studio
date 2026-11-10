@@ -3,7 +3,8 @@ import { headedReporter, headedWorkers } from './tooling/headed-run.mjs';
 
 // E41 contract (docs/plans/d9-e41-boolean-effects-contract.md), E41-A12: next-host flows on the
 // studio page (`?test=1&layout=studio`), in headed Chrome and Edge at 1280 × 900. U3b adds the
-// boolean half (context menu, keys, toolbar, panel, undo); U7 adds the effects half. Not an M8
+// boolean half (context menu, keys, toolbar, panel, undo); U7a the effects half (the panel's
+// Effects section, with pixel probes of the presented frame). Not an M8
 // layout, so the M8-N3 budget does not apply, and the file name leaves out `next-host` so that
 // tooling/m8-n3-configs.mjs does not list it. Needs `pnpm build`. M8_NEXT_HOST_CHROMIUM names a
 // Chromium executable for one headless smoke project, as in the M8 config.
@@ -41,7 +42,18 @@ const smoke: Project[] = [
       ...devices['Desktop Chrome'],
       viewport,
       headless: true,
-      launchOptions: { executablePath: chromium, args: webGpuArguments },
+      // SwiftShader WebGPU (the flags of playwright.e41-swiftshader.config.ts), so that the
+      // effects spec's pixel probes run in the container too.
+      launchOptions: {
+        executablePath: chromium,
+        args: [
+          ...webGpuArguments,
+          '--use-vulkan=swiftshader',
+          '--use-angle=swiftshader',
+          '--enable-unsafe-swiftshader',
+          '--enable-features=Vulkan',
+        ],
+      },
     },
   },
 ];

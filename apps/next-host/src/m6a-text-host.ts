@@ -67,6 +67,8 @@ export function composeHost(options: HostCompositionOptions): HostComposition {
       textLayout: textDom,
       returnToSelect: options.returnToSelect === true,
       adoptIntoFrames: options.adoptIntoFrames === true,
+      // E41-U7 (E41-S6): node effects reach the renderer, which runs on `effects: 'v0'`.
+      projectEffects: true,
       ...(options.drawStrokeColor === undefined
         ? {}
         : { drawStrokeColor: options.drawStrokeColor }),
