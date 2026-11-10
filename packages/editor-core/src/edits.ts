@@ -19,6 +19,7 @@ import {
 } from './arrange.js';
 import { booleanNodes } from './boolean-command.js';
 import { paste } from './clipboard.js';
+import { addEffect, removeEffect, setEffect } from './effect-commands.js';
 import { Draft, fail, type Failure } from './draft.js';
 import { ExpansionCache, expansionFailure } from './expansion.js';
 import {
@@ -324,6 +325,12 @@ export function applyEdit(
       return group(document, command, context, finish);
     case 'booleanNodes':
       return booleanNodes(document, command, context, custom, finish);
+    case 'addEffect':
+      return addEffect(document, command, context, custom, finish);
+    case 'setEffect':
+      return setEffect(document, command, context, custom, finish);
+    case 'removeEffect':
+      return removeEffect(document, command, context, custom, finish);
     case 'createSymbol':
       return createSymbol(document, command, context, finish);
     case 'createInstance':
