@@ -156,7 +156,10 @@ class Painter {
 
   layer(): { surface: Surface; context: Context } {
     const surface = this.make(this.width, this.height);
-    const context = surface.getContext('2d');
+    // With some DOM lib versions (the reference PC's), `getContext('2d')` on the surface union
+    // includes the other context kinds (TS2322); with others the assertion is a no-op.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+    const context = surface.getContext('2d') as Context | null;
     if (context === null) throw new Error('exportPng: no 2d context');
     return { surface, context };
   }
