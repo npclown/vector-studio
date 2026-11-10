@@ -10,7 +10,11 @@ Contract: [d9-e41-boolean-effects-contract.md](../../plans/d9-e41-boolean-effect
 | [u5c-swiftshader.md](u5c-swiftshader.md) | U5c | A05 (clip chains) | Cloud container, SwiftShader |
 | [u7b-swiftshader.md](u7b-swiftshader.md) | U7b | A05, A06 (remaining fixtures) | Cloud container, SwiftShader |
 | [u7b-headed-reference-pc.md](u7b-headed-reference-pc.md) | U7b | A05, A06 captures | Reference PC, headed Chrome |
-| [u7c-headed-reference-pc.md](u7c-headed-reference-pc.md) | U7c | A10, A06 bench, A07 to A09 | Reference PC, headed Chrome |
+| [u7c-headed-reference-pc.md](u7c-headed-reference-pc.md) | U7c | A10, A06 bench, A07 to A09, A12 | Reference PC, headed Chrome and Edge |
+| [pc-1bbec13/sitting.txt](pc-1bbec13/sitting.txt) | U8 | The sitting at 1bbec13: machine, browser versions, every command and its result | Reference PC |
+| [pc-1bbec13/cards/](pc-1bbec13/cards/) | U7c | A10 run records (20) | Reference PC, headed Chrome |
+| [pc-1bbec13/a06/](pc-1bbec13/a06/) | U7c | A06 bench run records (120), compared with [pa-u9/eadc1d7](../pa-u9/eadc1d7/timing/runs) | Reference PC, headed Chrome |
+| [pc-1bbec13/gpu/](pc-1bbec13/gpu/) | U7c, U8 | A07 to A09 reports; `full-suite/` holds the E41 reports of the full GPU suite (A05 to A09, Chrome and Edge) | Reference PC, headed Chrome and Edge |
 
 Commands:
 
