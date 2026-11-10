@@ -84,7 +84,8 @@ Follow-up the same day (about 06:15 to 08:30 UTC), same machine and browsers
    Local kernel sha256 1d7cd698a49e23100842defe75ca1a934842c57218b6cd109a2c9a8676fa2788 before and after the rebuild;
    tests/visual/viz-v4/a08-expected-status.json pins 58f26517603d0d599f187481c967832e3f6abea2eb53c738e5540b6200b4fd35.
    The pin was last updated in 332117fe (#522, 2026-11-06); packages/geometry-wasm/kernel changed after it in #530, #533 and #535.
-   The pin is stale in the repository, so the corpus spec would fail the same check; it was not rerun.
+   It was not rerun here. Correction (see step 11): the mismatch was a skipped prerequisite, not a stale pin;
+   docs/validation.md has test:gpu:full run pnpm viz-v4:expected first, which regenerates the statuses for the local WASM.
 
 9. E3-U4 rerun: STOPPED, not completed
    $env:NODE_OPTIONS='--max-old-space-size=8192'; $env:VS_GPU_TIER='3'; pnpm test:gpu -g "E3-U4 GPU model check"
@@ -104,3 +105,10 @@ Follow-up the same day (about 06:15 to 08:30 UTC), same machine and browsers
      dpr2 123.4 -> 105.4 (123.4 90.0 124.2 103.2 143.1 -> 105.4 91.5 97.0 107.5 128.6); long tasks over 50 ms 2,2,2,2,3 in both
    - pointer-busy/v2 plain: dpr1 110.4 -> 97.5; dpr2 96.8 -> 95.4; long tasks over 50 ms 0 or 1 per run in both
    One console error (404) in the first mixed-view-edit run of each project on both commits; no other errors, failed 0.
+
+11. A08 corpus with its prerequisite (09:54 to 11:50 local, 07:54 to 09:50 UTC), at 1bbec13
+   pnpm viz-v4:expected   PASS (1 test file, 1 test); regenerates tests/visual/viz-v4/a08-expected-status.json for the local WASM
+     (wasmSha256 1d7cd698a49e23100842defe75ca1a934842c57218b6cd109a2c9a8676fa2788). The regenerated file is kept here as
+     viz-v4/a08-expected-status-1bbec13-local.json and was not committed to tests/; the tracked file was restored afterwards.
+   pnpm test:gpu:viz-v4   PASS: 24 passed (1.9 h, 1 worker): fringe-1x, fringe-4x, msaa-4x x DPR 1, 1.5, 2, 3 in chrome (55.0 min) and edge (61.0 min).
+     Timing record: viz-v4/headed-timing.json.
