@@ -24,6 +24,8 @@ import {
   E26_DRIVERS,
   E26_ISOLATION,
   E26_SCENARIOS,
+  E41_SCENARIOS,
+  e41CardsMoveSelection,
   E26_TYPICAL_VISIBLE,
   e26Configuration,
   editDragOffset,
@@ -253,6 +255,7 @@ const runs: { scenario: E26Scenario; variant: Variant }[] = [
   ...E26_SCENARIOS,
   ...M9_SCENARIOS,
   ...V20_UI0_SCENARIOS,
+  ...E41_SCENARIOS,
 ]
   .filter(
     (scenario) => filter.length === 0 || filter.some((entry) => scenario.id.startsWith(entry)),
@@ -323,6 +326,9 @@ type PageHook = {
     };
     invalidate(invalidation: { reason: 'scene' }): void;
     waitForSubmittedWork(): Promise<void>;
+    /** E41-U7c: effect roots drawn with their effects, one per root and frame. */
+    getEffectPassesForTesting(): number;
+    readonly effectPipelineAvailable: boolean;
   } | null;
   setDriver(driver: unknown): void;
   driverSteps(): number;
@@ -564,11 +570,16 @@ async function clientPoint(
   };
 }
 
-/** The M1-A13 move selection, its pressed leaf's draw-bounds centre, and a node outside it. */
+/**
+ * The M1-A13 move selection, its pressed leaf's draw-bounds centre, and a node outside it.
+ * E41-U7c: on `e41-cards`, the dragged card, pressed at its background's centre.
+ */
 function moveTarget(document: E26Loaded) {
   const generated = document.generated as Parameters<typeof m1A13MoveSelection>[0];
-  const selection = m1A13MoveSelection(generated);
-  const box = document.bounds.get(selection.ids[0]);
+  const cards = document.pageId === 'cards-page' ? e41CardsMoveSelection() : null;
+  const selection: { group: string; ids: readonly string[] } =
+    cards ?? m1A13MoveSelection(generated);
+  const box = document.bounds.get(cards?.pressed ?? selection.ids[0]!);
   if (box === null || box === undefined) throw new Error('the pressed leaf has no draw bounds');
   const page = generated.pages[0]!.children as readonly string[];
   return {
@@ -908,6 +919,7 @@ for (const { scenario, variant } of runs) {
             const steps = hook.driverSteps();
             const revisions = hook.latencies.length;
             const submitted = backend.getStatistics().framesSubmitted;
+            const effectPassesBefore = backend.getEffectPassesForTesting();
             for (const name of Object.values(splitNames)) performance.clearMeasures(name);
             backend.startFrameMeasurements(8192);
             await until(t0 + windowEndMs);
@@ -932,6 +944,9 @@ for (const { scenario, variant } of runs) {
               // Edit drag: moves in the window that produced a scene revision (the drag happened).
               revisedMoves: hook.latencies.length - revisions,
               framesSubmitted: backend.getStatistics().framesSubmitted - submitted,
+              // E41-U7c: effect roots drawn with effects over the window (0 without effects).
+              effectPasses: backend.getEffectPassesForTesting() - effectPassesBefore,
+              effectPipelineAvailable: backend.effectPipelineAvailable,
               lifecycle: backend.getStatistics().lifecycle,
               recoveryAttempts: backend.getStatistics().recoveryAttempts,
               measurements,
@@ -1030,6 +1045,16 @@ for (const { scenario, variant } of runs) {
         if (!smoke) {
           expect(intervals.length).toBeGreaterThan(0);
           if (scenario.interaction === 'edit-drag') expect(run.revisedMoves).toBeGreaterThan(0);
+        }
+        // E41-U7c: every card's effects drew in every frame of the window (one pass per root and
+        // frame; a frame in flight at either end can add or drop one frame's worth).
+        if (scenario.document === 'e41-cards') {
+          expect(run.effectPipelineAvailable, 'the effect pipeline').toBe(true);
+          const roots = loaded(scenario.document).document.pages[0]!.children.length;
+          expect(run.effectPasses, 'effect passes over the window').toBeGreaterThanOrEqual(
+            roots * (run.framesSubmitted - 1),
+          );
+          expect(run.effectPasses).toBeLessThanOrEqual(roots * (run.framesSubmitted + 1));
         }
         return;
       }

@@ -705,3 +705,247 @@ test('E41-A06 scenes without effects draw identically under effects v0', async (
   }
   writeReport('a06', { rows });
 });
+
+// --- U7c: the headed counters (E41-A07 to A09) on the same page. ---
+
+type Counters = Awaited<ReturnType<Window['__vectorStudioE23']['counters']>>;
+
+const counters = (page: Page) => page.evaluate(() => window.__vectorStudioE23.counters());
+
+async function show(page: Page, nodes: readonly RenderNodeSnapshot[], camera = HOME) {
+  const shown = await page.evaluate(([scene, view]) => window.__vectorStudioE23.show(scene, view), [
+    snapshot(nodes),
+    camera,
+  ] as const);
+  expect(shown.status).toBe('applied');
+  return shown;
+}
+
+async function edit(page: Page, updated: readonly RenderNodeSnapshot[]) {
+  const edited = await page.evaluate(
+    ([scene, nodes]) => window.__vectorStudioE23.edit(scene, nodes),
+    [identity, updated] as const,
+  );
+  expect(edited.status).toBe('applied');
+  return edited;
+}
+
+async function pan(page: Page, camera: RenderCamera) {
+  return page.evaluate((view) => window.__vectorStudioE23.pan(view), camera);
+}
+
+/** K6's cost: fill and stroke port calls and geometry builds between two counter readings. */
+const cost = (before: Counters, after: Counters) => ({
+  portCalls: (after.pathMesh?.portCalls ?? 0) - (before.pathMesh?.portCalls ?? 0),
+  strokePortCalls: (after.pathMesh?.strokePortCalls ?? 0) - (before.pathMesh?.strokePortCalls ?? 0),
+  geometryBuilds: after.preparation.geometryBuilds - before.preparation.geometryBuilds,
+});
+
+/** Live textures and their bytes, the resource accounting E41-A09 reads. */
+const textures = (value: Counters) => {
+  const entry = value.statistics.resources.byCategory.texture;
+  return { live: entry.live, liveBytes: entry.liveBytes };
+};
+
+/** Three effect roots: a shadowed card group with a star path, a blurred star, a shadowed rect. */
+function countersScene(effects = true, p = 'a07'): RenderNodeSnapshot[] {
+  const nodes = [
+    container(`${p}-card`, [`${p}-card-bg`, `${p}-card-star`], [dropShadow(0, 8, 4)]),
+    shape(`${p}-card-bg`, `${p}-card`, 'rectangle', [40, 40, 160, 120], WHITE),
+    star(`${p}-card-star`, `${p}-card`, [80, 60], 80, RED, undefined, {
+      stroke: { color: BLUE, width: 3, cap: 'round', join: 'round', miterLimit: 4 },
+    }),
+    star(`${p}-blurred`, null, [260, 60], 100, TEAL, [layerBlur(3)]),
+    shape(`${p}-rect`, null, 'rectangle', [400, 80, 80, 80], AMBER, {
+      effects: [dropShadow(6, 6, 2, SHADE)],
+    }),
+  ];
+  return effects ? nodes : nodes.map(withoutEffects);
+}
+
+test('E41-A07 effect edits, pan and zoom cost no geometry; effectPasses per frame', async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const page = await browser.newPage();
+  const { pageErrors } = await open(page, { samples: 4, effects: true });
+  const failures: string[] = [];
+  const rows: Record<string, unknown> = {};
+  const scene = countersScene();
+  const free = (value: ReturnType<typeof cost>) =>
+    value.portCalls === 0 && value.strokePortCalls === 0 && value.geometryBuilds === 0;
+  // K6: an effect edit (offset and σ, a new shadow, removal) changes composite records only.
+  await show(page, scene);
+  const card = scene[0]!;
+  const edits: Record<string, readonly SceneEffect[]> = {
+    offsetAndSigma: [dropShadow(4, 12, 6)],
+    secondShadow: [dropShadow(4, 12, 6), dropShadow(-3, -3, 1, BLUE)],
+    withBlur: [dropShadow(4, 12, 6), layerBlur(2)],
+    removed: [],
+  };
+  for (const [name, effects] of Object.entries(edits)) {
+    const before = await counters(page);
+    const edited = await edit(page, [
+      { ...withoutEffects(card), ...(effects.length === 0 ? {} : { effects }) },
+    ]);
+    const value = cost(before, edited.counters);
+    rows[`edit-${name}`] = value;
+    if (!free(value)) failures.push(`edit ${name}: ${JSON.stringify(value)}`);
+  }
+  // Pan and zoom cost the same with effects as without; a pan alone costs nothing. Each run has
+  // its own node ids, so neither finds the other's meshes in the cache.
+  const panCost = async (effects: boolean) => {
+    await show(page, countersScene(effects, effects ? 'pan-on' : 'pan-off'));
+    const before = await counters(page);
+    await pan(page, { position: { x: 13, y: -7 }, zoom: 1 });
+    const panned = await counters(page);
+    await pan(page, { position: { x: 13, y: -7 }, zoom: 1.5 });
+    return { pan: cost(before, panned), zoom: cost(panned, await counters(page)) };
+  };
+  const withEffects = await panCost(true);
+  const withoutEffectsCost = await panCost(false);
+  rows.pan = { withEffects, withoutEffects: withoutEffectsCost };
+  if (!free(withEffects.pan)) failures.push(`pan with effects ${JSON.stringify(withEffects.pan)}`);
+  if (JSON.stringify(withEffects) !== JSON.stringify(withoutEffectsCost))
+    failures.push(`pan and zoom ${JSON.stringify(rows.pan)}`);
+  // effectPasses: one per drawn root per submitted frame (three roots).
+  await show(page, scene);
+  const before = await counters(page);
+  for (const x of [5, 10, 15]) await pan(page, { position: { x, y: 0 }, zoom: 1 });
+  const after = await counters(page);
+  const frames = after.statistics.framesSubmitted - before.statistics.framesSubmitted;
+  const passes = after.effectPasses - before.effectPasses;
+  rows.passes = { frames, passes };
+  if (frames < 3 || passes !== 3 * frames)
+    failures.push(`effect passes ${passes} over ${frames} frames, expected 3 per frame`);
+  writeReport('a07', { rows, failures });
+  expect(pageErrors).toEqual([]);
+  expect(failures).toEqual([]);
+});
+
+test('E41-A08 over the budget: one notice per transition, content drawn without effects', async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const page = await browser.newPage();
+  const { pageErrors } = await open(page, { samples: 4, effects: true });
+  const failures: string[] = [];
+  // A 2000 × 1300 surface at DPR 2 (4000 × 2600 device px): a shadowed rectangle that nearly fills
+  // it needs R (≈ 41.6 MB) and the scratch chain (≈ 111 MB), over the 96 MiB layer budget.
+  const white = shape('a08-white', null, 'rectangle', [-50, -50, 2100, 1400], WHITE);
+  await show(page, [white]);
+  await page.evaluate(() => window.__vectorStudioE23.resize(2000, 1300, 2));
+  const big = (sigma: number) =>
+    shape('a08-big', null, 'rectangle', [100, 100, 1700, 1000], RED, {
+      effects: [dropShadow(0, 40, sigma)],
+    });
+  const small = shape('a08-small', null, 'rectangle', [100, 100, 300, 200], RED, {
+    effects: [dropShadow(0, 40, 4)],
+  });
+  const notices = async () =>
+    (await page.evaluate(() => window.__vectorStudioE23.diagnostics())).filter(
+      (event) => event.code === 'render.effect-resource-limit',
+    ).length;
+  /** The shadow's pixel below the rectangle (device px), drawn at the frame's size. */
+  const probe = async (nodes: readonly RenderNodeSnapshot[], y: number) => {
+    const drawn = await render(page, nodes);
+    const { width } = drawn.result.frame;
+    const at = (Math.round(y * 2) * width + 400) * 4;
+    return {
+      rgb: [drawn.rgba[at]!, drawn.rgba[at + 1]!, drawn.rgba[at + 2]!],
+      effectPasses: drawn.result.counters.effectPasses,
+    };
+  };
+  const rows: Record<string, unknown> = {};
+  const start = await notices();
+  const over = await probe([white, big(4)], 1120);
+  const overAgain = await probe([white, big(6)], 1120);
+  const afterOver = await notices();
+  const under = await probe([white, small], 320);
+  const overOnceMore = await probe([white, big(4)], 1120);
+  const afterReturn = await notices();
+  rows.over = over;
+  rows.overAgain = overAgain;
+  rows.under = under;
+  rows.overOnceMore = overOnceMore;
+  rows.notices = { start, afterOver, afterReturn };
+  // Over budget: the rectangle draws (red inside), the shadow does not (white below it).
+  const isWhite = (rgb: readonly number[]) => rgb.every((value) => value >= 250);
+  if (!isWhite(over.rgb)) failures.push(`over budget, below the rectangle ${over.rgb.join(',')}`);
+  if (afterOver - start !== 1)
+    failures.push(`notices on the first transition ${afterOver - start}`);
+  // Under budget the shadow draws; going over again raises one more notice.
+  if (isWhite(under.rgb)) failures.push('under budget, no shadow below the small rectangle');
+  if (afterReturn - afterOver !== 1)
+    failures.push(`notices on the second transition ${afterReturn - afterOver}`);
+  const inside = await render(page, [white, big(4)]);
+  const centre = (Math.round(600 * 2) * inside.result.frame.width + 1000 * 2) * 4;
+  rows.inside = [inside.rgba[centre], inside.rgba[centre + 1], inside.rgba[centre + 2]];
+  if (inside.rgba[centre]! < 250 || inside.rgba[centre + 1]! > 5)
+    failures.push(`over budget, the content ${JSON.stringify(rows.inside)}`);
+  writeReport('a08', { rows, failures });
+  expect(pageErrors).toEqual([]);
+  expect(failures).toEqual([]);
+});
+
+test('E41-A09 effect textures in accounting, released, back to baseline', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const page = await browser.newPage();
+  const { pageErrors } = await open(page, { samples: 4, effects: true });
+  const failures: string[] = [];
+  const rows: Record<string, unknown> = {};
+  const plain = countersScene(false);
+  const effects = countersScene(true);
+  const baselineFrame = await render(page, plain);
+  const baseline = textures(baselineFrame.result.counters);
+  const createdBefore = baselineFrame.result.counters.statistics.resources.byCategory.texture;
+  const drawn = await render(page, effects);
+  const created = drawn.result.counters.statistics.resources.byCategory.texture;
+  rows.baseline = baseline;
+  rows.effects = { created: created.created, peakLiveBytes: created.peakLiveBytes };
+  // Each root's L and R and the scratch pair are accounted while the frame is encoded.
+  if (created.created < createdBefore.created + 3)
+    failures.push(
+      `effect textures not in accounting: ${createdBefore.created} → ${created.created}`,
+    );
+  if (created.peakLiveBytes <= baseline.liveBytes)
+    failures.push(`texture peak ${created.peakLiveBytes} not above ${baseline.liveBytes}`);
+  // Released after submission.
+  if (JSON.stringify(textures(drawn.result.counters)) !== JSON.stringify(baseline))
+    failures.push(`after the effects frame ${JSON.stringify(textures(drawn.result.counters))}`);
+  const removed = textures((await render(page, plain)).result.counters);
+  if (JSON.stringify(removed) !== JSON.stringify(baseline))
+    failures.push(`after removal ${JSON.stringify(removed)}`);
+  // On resize: the effects frame at the new size releases its textures too.
+  await page.evaluate(() => window.__vectorStudioE23.resize(800, 500, 2));
+  const resizedBaseline = textures((await render(page, plain)).result.counters);
+  const resizedEffects = textures((await render(page, effects)).result.counters);
+  const resizedRemoved = textures((await render(page, plain)).result.counters);
+  rows.resized = { resizedBaseline, resizedEffects, resizedRemoved };
+  if (JSON.stringify(resizedEffects) !== JSON.stringify(resizedBaseline))
+    failures.push(`resized, after the effects frame ${JSON.stringify(rows.resized)}`);
+  if (JSON.stringify(resizedRemoved) !== JSON.stringify(resizedBaseline))
+    failures.push(`resized, after removal ${JSON.stringify(rows.resized)}`);
+  // Device loss: the recovered generation draws the same frame and returns to the baseline.
+  const preLoss = await render(page, effects);
+  const recovered = await page.evaluate(() => window.__vectorStudioE23.recover());
+  const sameFrame =
+    Buffer.compare(
+      Buffer.from(decodeFrame(recovered.frame.rgbaBase64)),
+      Buffer.from(preLoss.rgba),
+    ) === 0;
+  rows.sameFrame = sameFrame;
+  if (!sameFrame) failures.push('device loss: the recovered frame differs from the pre-loss one');
+  if (recovered.counters.effectPasses === 0 && recovered.counters.effectPipelineAvailable !== true)
+    failures.push('device loss: no effect pipeline after recovery');
+  const afterRecovery = textures((await render(page, plain)).result.counters);
+  rows.afterRecovery = afterRecovery;
+  if (JSON.stringify(afterRecovery) !== JSON.stringify(resizedBaseline))
+    failures.push(`after recovery ${JSON.stringify(afterRecovery)}`);
+  const disposed = await page.evaluate(() => window.__vectorStudioE23.dispose());
+  rows.disposedLive = disposed.resources.live;
+  if (disposed.resources.live !== 0) failures.push(`live after dispose ${disposed.resources.live}`);
+  writeReport('a09', { rows, failures });
+  expect(pageErrors).toEqual([]);
+  expect(failures).toEqual([]);
+});

@@ -145,8 +145,10 @@ describe('M9-A03: the M9 bench flags are inert without ?bench=1', () => {
     expect(bench.benchQuery('?bench=1')).toMatchObject({ ui: false, doc: null });
     expect(bench.benchQuery('?bench=1&ui=0')).toMatchObject({ ui: false });
     expect(bench.benchQuery('?bench=1&doc=m9-v3')).toMatchObject({ doc: null });
-    // The route serves the v2 document by name and nothing else new.
-    expect(ROUTE).toContain("const DOCUMENTS = new Set(['m1-a13', 'stress', 'm9-v2']);");
+    // The route serves the v2 document by name and nothing else new (E41-U7c adds e41-cards).
+    expect(ROUTE).toContain(
+      "const DOCUMENTS = new Set(['m1-a13', 'stress', 'm9-v2', 'e41-cards']);",
+    );
   });
 
   it('registers the test font and lists it as the fallback only for ?bench=1&doc=m9-v2', () => {

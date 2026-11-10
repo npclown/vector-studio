@@ -88,7 +88,11 @@ export type E26ScenarioId =
   | 'e26-simple-stress-10k/v1'
   | 'e26-pointer-busy-10k/v1'
   | M9ScenarioId
-  | V20Ui0ScenarioId;
+  | V20Ui0ScenarioId
+  | E41ScenarioId;
+
+/** E41-U7c (E41 contract, section 5.6, E41-A10): the `e41-cards` scenarios. */
+export type E41ScenarioId = 'e41-cards-view/v1' | 'e41-cards-drag/v1';
 
 /** The M9 scenarios (M9 contract, section 3.2). */
 export type M9ScenarioId =
@@ -114,7 +118,7 @@ export type V20Ui0ScenarioId =
 
 export type E26Scenario = Readonly<{
   id: E26ScenarioId;
-  document: 'm1-a13' | 'stress' | 'm9-v2';
+  document: 'm1-a13' | 'stress' | 'm9-v2' | 'e41-cards';
   seed: number;
   camera: 'typical' | 'fitted';
   interaction: 'edit-drag' | 'pan-zoom' | 'latency-drag' | 'typing';
@@ -148,7 +152,13 @@ export type M9Extras = Readonly<{
 }>;
 
 const seedOf = (document: E26Scenario['document']) =>
-  document === 'm1-a13' ? M1_A13_SEED : document === 'm9-v2' ? M9_V2_SEED : E26_STRESS.seed;
+  document === 'm1-a13'
+    ? M1_A13_SEED
+    : document === 'm9-v2'
+      ? M9_V2_SEED
+      : document === 'e41-cards'
+        ? E41_CARDS.seed
+        : E26_STRESS.seed;
 
 const frame = (
   id: E26ScenarioId,
@@ -270,6 +280,126 @@ export const V20_UI0_SCENARIOS: readonly E26Scenario[] = Object.freeze(
     return Object.freeze({ ...v2, id, m9: Object.freeze({ ...v2.m9!, ui: false }) });
   }),
 );
+
+// ---------------------------------------------------------------------------------------------
+// E41-U7c (E41 contract, section 5.6, E41-A10): the `e41-cards` scene and its two scenarios.
+
+/**
+ * The `e41-cards` scene: 50 cards in a 10 × 5 grid. Each card is a group (a container effect
+ * root) of a rounded background, a coloured header and an avatar ellipse, with one drop shadow
+ * (radius 16, so σ 8); every tenth card (index 0, 10, …) also has a layer blur (radius 8). The
+ * grid's aspect is near the 16:9 canvas, so the fitted camera shows every card at once: all 50
+ * effect roots are drawn in every frame. `seed` picks the header colours (P1's LCG).
+ */
+export const E41_CARDS = Object.freeze({
+  seed: 0x4541_0050,
+  count: 50,
+  columns: 10,
+  card: Object.freeze({ width: 200, height: 230, cornerRadius: 12 }),
+  gap: 40,
+  shadow: Object.freeze({
+    color: { r: 0, g: 0, b: 0, a: 0.25 },
+    offsetX: 0,
+    offsetY: 8,
+    radius: 16,
+  }),
+  blurEvery: 10,
+  blurRadius: 8,
+  /** The dragged card (row 2, column 2), well inside the view through the drag. */
+  dragged: 22,
+});
+
+const e41CardId = (i: number) => `card-${String(i).padStart(2, '0')}`;
+
+/**
+ * The `e41-cards` document at the current schema (v7, which has effects): generated as a v2
+ * document without effects, parsed (migrated), then given each card's effects.
+ */
+export function generateE41CardsDocument() {
+  const { card, gap, columns, count, seed } = E41_CARDS;
+  const nodes: Record<string, Record<string, unknown>> = {};
+  const children: string[] = [];
+  const base = (id: string, parent: string, frame: Record<string, number>) => ({
+    id,
+    name: id,
+    parent,
+    frame,
+    rotation: 0,
+    constraints: { horizontal: 'start', vertical: 'start' },
+    opacity: 1,
+    visible: true,
+  });
+  for (let i = 0; i < count; i += 1) {
+    const id = e41CardId(i);
+    const x = (i % columns) * (card.width + gap);
+    const y = Math.floor(i / columns) * (card.height + gap);
+    const word = (Math.imul(1664525, (seed ^ i) >>> 0) + 1013904223) >>> 0;
+    const q = (j: number) => ((word >>> (8 * j)) & 255) / 255;
+    const r = card.cornerRadius;
+    nodes[`${id}-bg`] = {
+      ...base(`${id}-bg`, id, { x: 0, y: 0, width: card.width, height: card.height }),
+      type: 'rectangle',
+      cornerRadii: [r, r, r, r],
+      fill: { r: 1, g: 1, b: 1, a: 1 },
+      stroke: null,
+    };
+    nodes[`${id}-header`] = {
+      ...base(`${id}-header`, id, { x: 0, y: 0, width: card.width, height: 60 }),
+      type: 'rectangle',
+      cornerRadii: [r, r, 0, 0],
+      fill: { r: 0.2 + 0.6 * q(0), g: 0.2 + 0.6 * q(1), b: 0.2 + 0.6 * q(2), a: 1 },
+      stroke: null,
+    };
+    nodes[`${id}-avatar`] = {
+      ...base(`${id}-avatar`, id, { x: 16, y: 80, width: 48, height: 48 }),
+      type: 'ellipse',
+      fill: { r: 0.85, g: 0.85, b: 0.88, a: 1 },
+      stroke: null,
+    };
+    nodes[id] = {
+      ...base(id, 'cards-page', { x, y, width: card.width, height: card.height }),
+      type: 'group',
+      children: [`${id}-bg`, `${id}-header`, `${id}-avatar`],
+    };
+    children.push(id);
+  }
+  const v2 = {
+    schemaVersion: 2 as const,
+    id: 'e41-cards',
+    pages: [{ id: 'cards-page', name: 'Cards', children }],
+    nodes,
+  };
+  const parsed = parseDocument(JSON.stringify(v2));
+  if (!parsed.ok) throw new Error(`e41-cards parse: ${parsed.code} ${parsed.path}`);
+  const document = JSON.parse(JSON.stringify(parsed.document)) as {
+    schemaVersion: number;
+    nodes: Record<string, { effects: unknown[] }>;
+  };
+  if (document.schemaVersion !== 7) throw new Error('e41-cards: not schema version 7');
+  for (let i = 0; i < count; i += 1) {
+    const effects: unknown[] = [{ kind: 'dropShadow', visible: true, ...E41_CARDS.shadow }];
+    if (i % E41_CARDS.blurEvery === 0)
+      effects.push({ kind: 'layerBlur', visible: true, radius: E41_CARDS.blurRadius });
+    document.nodes[e41CardId(i)]!.effects = effects;
+  }
+  return document;
+}
+
+/** The dragged card, as a move selection, and the leaf pressed (its background). */
+export function e41CardsMoveSelection(): { group: string; ids: [string]; pressed: string } {
+  const id = e41CardId(E41_CARDS.dragged);
+  return { group: id, ids: [id], pressed: `${id}-bg` };
+}
+
+/**
+ * The two `e41-cards` scenarios (section 5.6), both at the fitted camera, so all 50 roots draw:
+ * the view under the pan and zoom driver, and the edit drag of one card. The ceiling is 16.7 ms
+ * for both.
+ */
+export const E41_SCENARIOS: readonly E26Scenario[] = Object.freeze([
+  frame('e41-cards-view/v1', 'e41-cards', 'fitted', 'pan-zoom', 16.7),
+  frame('e41-cards-drag/v1', 'e41-cards', 'fitted', 'edit-drag', 16.7),
+]);
 
 // ---------------------------------------------------------------------------------------------
 // The stress document (section 3.1): P1's positions, sizes and seed, reduced styles.
@@ -611,11 +741,19 @@ export function loadScenarioDocument(
       ? generateM1A13Document()
       : document === 'm9-v2'
         ? generateM9V2Document()
-        : generateStressDocument();
+        : document === 'e41-cards'
+          ? generateE41CardsDocument()
+          : generateStressDocument();
   const parsed = parseDocument(JSON.stringify(generated));
   if (!parsed.ok) throw new Error(`parse: ${parsed.code} ${parsed.path}`);
   const pageId =
-    document === 'm1-a13' ? 'page-1' : document === 'm9-v2' ? M9_V2_PAGE : 'stress-page';
+    document === 'm1-a13'
+      ? 'page-1'
+      : document === 'm9-v2'
+        ? M9_V2_PAGE
+        : document === 'e41-cards'
+          ? 'cards-page'
+          : 'stress-page';
   // M9-U1: the v2 page's text projects through the committed font's recorded layouts.
   const projection =
     document === 'm9-v2'

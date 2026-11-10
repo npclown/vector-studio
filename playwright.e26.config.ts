@@ -56,10 +56,14 @@ const smoke: Project[] = [
       headless: true,
       launchOptions: {
         executablePath: chromium,
+        // E41-U7c: the SwiftShader flags of playwright.e41-swiftshader.config.ts; with
+        // `--use-webgpu-adapter=swiftshader` alone the device is lost under the effect passes.
         args: [
           ...webGpuArguments,
+          '--use-vulkan=swiftshader',
+          '--use-angle=swiftshader',
           '--enable-unsafe-swiftshader',
-          '--use-webgpu-adapter=swiftshader',
+          '--enable-features=Vulkan',
         ],
       },
     },
