@@ -6,7 +6,7 @@ import {
   type Command,
   type Editor,
 } from '@vector-studio/editor-core';
-import { EditorProvider, PropertySections } from '@vector-studio/ui';
+import { EditorProvider, EditorToolbar, PropertySections } from '@vector-studio/ui';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import {
@@ -171,6 +171,31 @@ describe('E41-U3b property panel', () => {
       op: 'subtract',
       command: { type: 'booleanNodes', ids: [b, a], op: 'subtract' },
     });
+  });
+});
+
+describe('E41-U3b top toolbar', () => {
+  const toolbar = (target: Editor) =>
+    renderToString(createElement(EditorProvider, { editor: target }, createElement(EditorToolbar)));
+  const button = (html: string, op: string) =>
+    new RegExp(`<button[^>]*data-testid="boolean-${op}"[^>]*>`).exec(html)?.[0] ?? '';
+
+  it('shows the four booleans, disabled until the selection qualifies', () => {
+    const target = editor();
+    const a = rect(target, 0, 0);
+    const b = rect(target, 10, 10);
+    ok(target, { type: 'setSelection', ids: [a] });
+    let html = toolbar(target);
+    for (const op of ['union', 'subtract', 'intersect', 'exclude']) {
+      expect(button(html, op)).toContain('disabled');
+    }
+    ok(target, { type: 'setSelection', ids: [a, b] });
+    html = toolbar(target);
+    for (const op of ['union', 'subtract', 'intersect', 'exclude']) {
+      expect(button(html, op)).not.toContain('disabled');
+    }
+    expect(button(html, 'union')).toContain('aria-label="Union selection (Ctrl+Alt+U)"');
+    expect(button(html, 'exclude')).toContain('aria-label="Exclude overlap (Ctrl+Alt+X)"');
   });
 });
 

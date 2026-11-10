@@ -3,9 +3,9 @@ import { expect, test, type Page } from '@playwright/test';
 
 // E41 contract (docs/plans/d9-e41-boolean-effects-contract.md), E41-A12, the boolean half
 // (E41-U3b): on the next-host studio page (`?test=1&layout=studio`), the four booleans from the
-// canvas context menu, the keys (Ctrl+Alt+U, S, I, X) and the property panel's Boolean section,
-// undo, and a refusal's notice. Runs in playwright.e41-next-host.config.ts (headed Chrome and
-// Edge, or the headless smoke project with M8_NEXT_HOST_CHROMIUM).
+// canvas context menu, the keys (Ctrl+Alt+U, S, I, X), the top toolbar and the property panel's
+// Boolean section, undo, and a refusal's notice. Runs in playwright.e41-next-host.config.ts
+// (headed Chrome and Edge, or the headless smoke project with M8_NEXT_HOST_CHROMIUM).
 
 type Hook = Readonly<{ editor: Editor }>;
 type State = Readonly<{
@@ -127,6 +127,19 @@ test('E41-A12 booleans: context menu, keys, panel, undo and a refusal notice', a
     await page.keyboard.press('ControlOrMeta+Z');
     expect(await state(page), `${op} key undo`).toEqual(inputs);
   }
+
+  // The top toolbar's buttons, each undone.
+  for (const op of ['union', 'subtract', 'intersect', 'exclude']) {
+    await page.getByTestId(`boolean-${op}`).click();
+    await expectResult(page);
+    await page.locator('[data-testid="studio-canvas"] canvas').focus();
+    await page.keyboard.press('ControlOrMeta+Z');
+    expect(await state(page), `${op} toolbar undo`).toEqual(inputs);
+  }
+  // One selected node: the toolbar's booleans are disabled.
+  await ok(page, { type: 'setSelection', ids: [a] });
+  await expect(page.getByTestId('boolean-union')).toBeDisabled();
+  await ok(page, { type: 'setSelection', ids: [a, b] });
 
   // The property panel's Boolean section.
   await page.getByTestId('property-boolean-intersect').click();
