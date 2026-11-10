@@ -63,6 +63,7 @@ import {
   MaskPlan,
   extendClipChain,
   meetsClipChain,
+  rebaseClipChain,
   type ClipChain,
   type ClipMaskLevel,
   type ClipStateRecord,
@@ -287,6 +288,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   #culled: KeptCull | null = null;
   /** E30-U4b: the last mask plan with its inputs, all of its content admitted. */
   #keptMaskPlan: Readonly<{ inputs: readonly unknown[]; plan: MaskPlan }> | null = null;
+  #effectClips: Readonly<{ roots: readonly LayerScope[]; clips: EffectClips | null }> | null = null;
   #maskPlanCounts = { kept: 0, planned: 0 };
   #textFrameCounts = { repeated: 0, planned: 0 };
   /** E30-U4b: each derived path's layer content bounds (`#pathContentBounds`). */
@@ -566,8 +568,24 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     // visible primitives in the origin choice and the packing budget.
     let assessed = visible;
     const pathClips = this.#pathClips(paths);
+    // E41-K2b: inside a drawn effect root, a draw's chain is rebased at the innermost root; the
+    // root's composite carries its ancestors' chain, rebased at the root around it. Only for a
+    // backend that draws the effect passes (and so the composite's clip variant); otherwise a
+    // root composites as an E25 layer of its content (5.3), with the chains as they are.
+    const effectClips =
+      clipSeen.value && target.offTargetEffectLayers === true
+        ? this.#effectClipsOf(layerPlan)
+        : null;
     if (clipSeen.value) {
-      const content = this.#maskContentOf(visible, pathDraws, texts, pathSequences, pathClips);
+      const content = this.#maskContentOf(
+        visible,
+        pathDraws,
+        texts,
+        pathSequences,
+        pathClips,
+        pathLayers,
+        effectClips,
+      );
       // E30-U4b: a frame with the kept plan's inputs (the same derivation, path draws, content,
       // camera and target) keeps the plan, whose levels and admissions are then the same.
       const camera = cameraState.camera;
@@ -594,18 +612,25 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
         this.#maskPlanCounts.kept += 1;
       } else {
         masks = this.#planMasks(scene, derived, pathDraws, camera, target);
+        // E41-K2b: a root's composite chain is planned before the content under it, which is
+        // drawn only when every root around it is.
+        for (const chain of effectClips?.composites.values() ?? []) masks.admit(chain);
         for (const entry of content) masks.admit(entry.chain);
         this.#maskPlanCounts.planned += 1;
         if (!this.#fullDerivation) this.#keptMaskPlan = Object.freeze({ inputs, plan: masks });
       }
       const plan = masks;
+      const admit = (chain: ClipChain | null, layer: LayerScope | null | undefined) =>
+        effectClips === null
+          ? plan.admit(chain)
+          : plan.admit(effectClips.chainOf(chain, layer)) && effectClips.rootsAdmitted(plan, layer);
       visible = this.#intern(
         'mask-visible',
-        visible.filter((primitive) => plan.admit(primitive.clip)),
+        visible.filter((primitive) => admit(primitive.clip, primitive.layer)),
       );
       texts = this.#intern(
         'mask-texts',
-        texts.filter((text) => plan.admit(text.clip)),
+        texts.filter((text) => admit(text.clip, text.layer)),
       );
       const used = new Set(
         plan.levels.flatMap((level) => (level.source.kind === 'mesh' ? [level.source.nodeId] : [])),
@@ -624,7 +649,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
         pathDraws.filter((draw) =>
           draw.maskSource === true
             ? used.has(draw.nodeId)
-            : plan.admit(pathClips.get(draw.nodeId) ?? null),
+            : admit(pathClips.get(draw.nodeId) ?? null, pathLayers.get(draw.nodeId)),
         ),
       );
     }
@@ -784,15 +809,28 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     let clip: ClipStates = NO_CLIP_STATES;
     if (clipSeen.value) {
       // The mesh part's draws are the content path draws, in the same order.
+      const chainOf = (chain: ClipChain | null, layer: LayerScope | null | undefined) =>
+        effectClips === null ? chain : effectClips.chainOf(chain, layer);
       clip = this.#assignClipStates(
         visible,
-        items.map((item) => ({
-          sequence: item.sequence,
-          clip:
-            item.kind === 'mesh'
-              ? (pathClips.get(contentPathDraws[item.index]!.nodeId) ?? null)
-              : textItems[item.index]!.text.clip,
-        })),
+        items.map((item) => {
+          if (item.kind === 'mesh') {
+            const nodeId = contentPathDraws[item.index]!.nodeId;
+            return {
+              sequence: item.sequence,
+              clip: chainOf(pathClips.get(nodeId) ?? null, pathLayers.get(nodeId)),
+            };
+          }
+          const text = textItems[item.index]!.text;
+          return { sequence: item.sequence, clip: chainOf(text.clip, text.layer) };
+        }),
+        effectClips === null ? null : (primitive) => chainOf(primitive.clip, primitive.layer),
+        // A root under a level that is not drawn has no content; its composite is unclipped.
+        effectClips === null
+          ? []
+          : [...effectClips.composites].map(([root, chain]) =>
+              effectClips.rootsAdmitted(masks!, root) ? chain : null,
+            ),
       );
     } else if (this.#clipStatesUsed) {
       // Releases the previous frame's states once the scene has no clip left; a mask that
@@ -934,7 +972,9 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
                 }),
               ),
             ),
-            composites: Object.freeze(layered?.composites ?? []),
+            composites: Object.freeze(
+              compositeClipStates(layered?.composites ?? [], layerPlan, effectClips, clip),
+            ),
             notices: Object.freeze(layerNotices),
             ...(effectNotices.length === 0 ? {} : { effectNotices: Object.freeze(effectNotices) }),
           });
@@ -1459,22 +1499,27 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   #assignClipStates(
     visible: readonly DerivedPrimitive[],
     meshDraws: readonly Readonly<{ sequence: number; clip: ClipChain | null }>[],
+    primitiveClip: ((primitive: DerivedPrimitive) => ClipChain | null) | null = null,
+    composites: readonly (ClipChain | null)[] = [],
   ): ClipStates {
     this.#clipStates.begin();
     const primitiveStates: number[] = [];
     const meshStates: number[] = [];
+    const clipOf = primitiveClip ?? ((primitive: DerivedPrimitive) => primitive.clip);
     let next = 0;
     for (const draw of meshDraws) {
       while (next < visible.length && visible[next]!.sequence < draw.sequence) {
-        primitiveStates.push(this.#clipStates.stateOf(visible[next]!.clip));
+        primitiveStates.push(this.#clipStates.stateOf(clipOf(visible[next]!)));
         next += 1;
       }
       meshStates.push(this.#clipStates.stateOf(draw.clip));
     }
     for (; next < visible.length; next += 1) {
-      primitiveStates.push(this.#clipStates.stateOf(visible[next]!.clip));
+      primitiveStates.push(this.#clipStates.stateOf(clipOf(visible[next]!)));
     }
-    return { primitiveStates, meshStates, records: this.#clipStates.end() };
+    // E41-K2b: the effect roots' composite chains, after the draws.
+    const compositeStates = composites.map((chain) => this.#clipStates.stateOf(chain));
+    return { primitiveStates, meshStates, compositeStates, records: this.#clipStates.end() };
   }
 
   /** @internal Tests only (E10 contract, section 3.1): null before a prepare or without a port. */
@@ -1778,8 +1823,10 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     texts: readonly DerivedText[],
     pathSequences: ReadonlyMap<string, number>,
     pathClips: ReadonlyMap<string, ClipChain | null>,
+    pathLayers: ReadonlyMap<string, LayerScope | null>,
+    effectClips: EffectClips | null,
   ): readonly Readonly<{ sequence: number; chain: ClipChain | null }>[] {
-    const inputs = [visible, pathDraws, texts, pathSequences, pathClips];
+    const inputs = [visible, pathDraws, texts, pathSequences, pathClips, pathLayers, effectClips];
     const kept = this.#maskContent;
     if (
       !this.#fullDerivation &&
@@ -1788,18 +1835,44 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     ) {
       return kept.content;
     }
+    const chainOf = (chain: ClipChain | null, layer: LayerScope | null | undefined) =>
+      effectClips === null ? chain : effectClips.chainOf(chain, layer);
     const content = [
-      ...visible.map((primitive) => ({ sequence: primitive.sequence, chain: primitive.clip })),
+      ...visible.map((primitive) => ({
+        sequence: primitive.sequence,
+        chain: chainOf(primitive.clip, primitive.layer),
+      })),
       ...pathDraws
         .filter((draw) => draw.maskSource !== true)
         .map((draw) => ({
           sequence: pathSequences.get(draw.nodeId)!,
-          chain: pathClips.get(draw.nodeId) ?? null,
+          chain: chainOf(pathClips.get(draw.nodeId) ?? null, pathLayers.get(draw.nodeId)),
         })),
-      ...texts.map((text) => ({ sequence: text.sequence, chain: text.clip })),
+      ...texts.map((text) => ({ sequence: text.sequence, chain: chainOf(text.clip, text.layer) })),
     ].sort((left, right) => left.sequence - right.sequence);
     if (!this.#fullDerivation) this.#maskContent = Object.freeze({ inputs, content });
     return content;
+  }
+
+  /**
+   * E41-K2b: the frame's effect clips, kept while the drawn roots are the same scope objects in
+   * the same order (a resolver depends only on them and their ancestors), so the mask content and
+   * the mask plan keep their reuse across frames.
+   */
+  #effectClipsOf(plan: DrawnLayers | null): EffectClips | null {
+    const roots = plan === null ? [] : plan.order.filter((scope) => plan.effects.has(scope));
+    const kept = this.#effectClips;
+    if (
+      !this.#fullDerivation &&
+      kept !== null &&
+      kept.roots.length === roots.length &&
+      kept.roots.every((root, index) => root === roots[index])
+    ) {
+      return kept.clips;
+    }
+    const clips = effectClipResolver(plan);
+    if (!this.#fullDerivation) this.#effectClips = Object.freeze({ roots, clips });
+    return clips;
   }
 
   /** E30-U3b: the kept array for this name when it holds the same items, else this one. */
@@ -2882,6 +2955,8 @@ function sameIds(left: readonly string[], right: readonly string[]): boolean {
 type ClipStates = Readonly<{
   primitiveStates: readonly number[];
   meshStates: readonly number[];
+  /** E41-K2b: the states of `EffectClips.composites`, in its order. */
+  compositeStates?: readonly number[];
   records: readonly ClipStateRecord[];
 }>;
 const NO_CLIP_STATES: ClipStates = Object.freeze({
@@ -3032,6 +3107,78 @@ type DrawnLayers = Readonly<{
   /** The layer's index in `order` (after dissolving), or -1 for the main pass. */
   indexOf(layer: LayerScope | null | undefined): number;
 }>;
+
+/**
+ * E41-K2b: the clip chains of a frame with drawn effect roots. `chainOf` rebases a draw's chain
+ * at the innermost drawn root around its layer; `composites` holds each root's composite chain
+ * (its ancestors' chain rebased at the root around it), in the plan's root order.
+ */
+type EffectClips = Readonly<{
+  chainOf(chain: ClipChain | null, layer: LayerScope | null | undefined): ClipChain | null;
+  composites: ReadonlyMap<LayerScope, ClipChain | null>;
+  /** Whether every drawn root around `layer` has its composite chain admitted. */
+  rootsAdmitted(plan: MaskPlan, layer: LayerScope | null | undefined): boolean;
+}>;
+
+function effectClipResolver(plan: DrawnLayers | null): EffectClips | null {
+  if (plan === null || plan.effects.size === 0) return null;
+  const roots = new Map<LayerScope, LayerScope | null>();
+  const rootOf = (layer: LayerScope | null | undefined): LayerScope | null => {
+    if (layer === null || layer === undefined) return null;
+    let root = roots.get(layer);
+    if (root === undefined) {
+      root = plan.effects.has(layer) ? layer : rootOf(layer.parent);
+      roots.set(layer, root);
+    }
+    return root;
+  };
+  const chainOf = (chain: ClipChain | null, layer: LayerScope | null | undefined) => {
+    const root = rootOf(layer);
+    return root === null ? chain : rebaseClipChain(chain, root.outerChain ?? null, root.nodeId);
+  };
+  const composites = new Map<LayerScope, ClipChain | null>();
+  for (const root of plan.order) {
+    if (plan.effects.has(root)) composites.set(root, chainOf(root.outerChain ?? null, root.parent));
+  }
+  // Per plan: a kept resolver serves later frames' plans too.
+  const admittedByPlan = new WeakMap<MaskPlan, Map<LayerScope, boolean>>();
+  const rootsAdmitted = (masks: MaskPlan, layer: LayerScope | null | undefined): boolean => {
+    const root = rootOf(layer);
+    if (root === null) return true;
+    let admitted = admittedByPlan.get(masks);
+    if (admitted === undefined) {
+      admitted = new Map();
+      admittedByPlan.set(masks, admitted);
+    }
+    let known = admitted.get(root);
+    if (known === undefined) {
+      known = masks.admit(composites.get(root) ?? null) && rootsAdmitted(masks, root.parent);
+      admitted.set(root, known);
+    }
+    return known;
+  };
+  return Object.freeze({ chainOf, composites, rootsAdmitted });
+}
+
+/** E41-K2b: an effect root's composite carries the state of its composite chain. */
+function compositeClipStates(
+  composites: readonly LayerComposite[],
+  plan: DrawnLayers | null,
+  effectClips: EffectClips | null,
+  clip: ClipStates,
+): readonly LayerComposite[] {
+  if (effectClips === null || plan === null || clip.compositeStates === undefined) {
+    return composites;
+  }
+  const states = new Map<LayerScope, number>();
+  [...effectClips.composites.keys()].forEach((root, index) =>
+    states.set(root, clip.compositeStates![index] ?? 0),
+  );
+  return composites.map((composite) => {
+    const state = states.get(plan.order[composite.layer]!) ?? 0;
+    return state === 0 ? composite : Object.freeze({ ...composite, clipState: state });
+  });
+}
 
 /** E41: the packet record of a drawn effect root, spread into its layer entry. */
 function effectRecordOf(effect: EffectLayer | undefined): { effect?: LayerEffectRecord } {

@@ -24,7 +24,9 @@ export type PrimitiveTarget = Readonly<{
   maxTextureDimension2D?: number;
   /**
    * E41 U5b: whether the backend draws an effect root's layer (and the layers inside it) past
-   * the target. Absent or false, those bounds are clamped to the target (U4b's packet).
+   * the target. Absent or false, those bounds are clamped to the target (U4b's packet). U5c:
+   * true also rebases the clip chains inside an effect root (E41-K2b), whose composite then
+   * carries a clip state; a backend sets it only when it draws the effect passes.
    */
   offTargetEffectLayers?: boolean;
 }>;
@@ -238,6 +240,12 @@ export type LayerPacketPart = Readonly<{
      * precede it.
      */
     order: number;
+    /**
+     * E41-K2b: on an effect root's composite only, the 1-based clip state of its ancestors' clip
+     * chain (rebased at the root around it), applied once to `R`; absent when unclipped. The
+     * root's draws carry their chains rebased at the root, so `L` holds no level above it.
+     */
+    clipState?: number;
   }>[];
   /** Layer trees newly over the budget, at most 32. Emitted as `render.layer-resource-limit`. */
   notices: readonly LayerResourceNotice[];

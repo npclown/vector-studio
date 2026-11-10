@@ -59,7 +59,12 @@ const TARGET_SIZE_READS: readonly string[] = Object.freeze([
   'textTarget.size',
 ]);
 
-function rewriteVertexStages(source: string): string {
+/**
+ * A module's vertex stages mapped through the tile, its fragment stage untouched (for a module
+ * that already reads the shifted fragment position, as E25's composite and U5c's effect
+ * composite do).
+ */
+export function shiftedVertexStages(source: string): string {
   let rewritten = source;
   let applied = 0;
   for (const [from, to] of NDC_REWRITES) {
@@ -86,7 +91,7 @@ function rewriteVertexStages(source: string): string {
  * module draws in a shifted pass through it).
  */
 export function shiftedLayerVariantSource(source: string): string {
-  const rewritten = rewriteVertexStages(source);
+  const rewritten = shiftedVertexStages(source);
   return `${rewritten.split(POSITION_READ).join(`(${POSITION_READ} + layerPass.shift)`)}${LAYER_BLOCK}`;
 }
 
@@ -113,7 +118,7 @@ export const MESH_FILL_PAINT_CLIP_SHIFTED_SHADER = shiftedLayerVariantSource(
 export const TEXT_SHIFTED_SHADER = shiftedLayerVariantSource(TEXT_SHADER);
 export const TEXT_CLIP_SHIFTED_SHADER = shiftedLayerVariantSource(TEXT_CLIP_SHADER);
 /** E25's composite module, which already holds the layer block and its shifted fragment read. */
-export const LAYER_COMPOSITE_SHIFTED_SHADER = rewriteVertexStages(LAYER_COMPOSITE_SHADER);
+export const LAYER_COMPOSITE_SHIFTED_SHADER = shiftedVertexStages(LAYER_COMPOSITE_SHADER);
 
 /**
  * A shifted variant's cache key: the base variant's key (its clip and paint suffixes) with the
