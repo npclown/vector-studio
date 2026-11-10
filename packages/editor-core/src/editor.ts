@@ -1248,21 +1248,25 @@ class EditorCore implements Editor {
       // A command's draws all run on `base`.
       const drawn = this.unlink(EditorCore.taken(returned, base));
       this.interrupt();
-      // E41-B3: the boolean result becomes the selection, and undo restores the inputs'.
+      // E41-B3: the boolean result becomes the selection, and undo restores the inputs'. A
+      // result on another page than the active one is not selectable (`normalizeSelection`).
       const selects = command.type === 'booleanNodes';
+      const selected = selects
+        ? (normalizeSelection(result.document, this.activePage, result.created) ?? [])
+        : result.created;
       const entry: HistoryEntry = {
         before: base,
         after: result.document,
         touched: result.touched,
         drawn,
         caret: null,
-        ...(selects ? { selection: { before: this.selection, after: result.created } } : {}),
+        ...(selects ? { selection: { before: this.selection, after: selected } } : {}),
       };
       this.undoStack.push(entry);
       this.redoStack = [];
       this.changeDocument(result.document, 'command', result.touched);
       // The pasted roots become the selection (section 6).
-      if (command.type === 'paste' || selects) this.setSelectionState(result.created);
+      if (command.type === 'paste' || selects) this.setSelectionState(selected);
       return { ok: true, ids: result.ids ?? result.created };
     }
     switch (command.type) {

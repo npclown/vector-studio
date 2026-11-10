@@ -233,8 +233,8 @@ const isFiniteNumber = (value: unknown) => typeof value === 'number' && Number.i
  * Whether a built-in action's `args` are well formed (section 7): `setTool { tool }` (a built-in
  * tool, or an extension tool `tool(id)` accepts),
  * `nudge { dx, dy }` (finite page units), `reorder { op }`, `align { edge }`,
- * `distribute { axis }`, `boolean { op }` (E41) and `duplicate { offset? }` with a finite page vector. Other actions take
- * any JSON `args` (an extension command validates its own).
+ * `distribute { axis }`, `boolean { op }` (E41) and `duplicate { offset? }` with a finite page
+ * vector. Other actions take any JSON `args` (an extension command validates its own).
  */
 function argsValid(
   action: string,

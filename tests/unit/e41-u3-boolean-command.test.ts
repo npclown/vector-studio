@@ -574,3 +574,112 @@ describe('E41 section 6: the boolean key action', () => {
     ).toBe(true);
   });
 });
+
+describe('E41-A03 review follow-ups', () => {
+  it('a path input scales its unit box per axis', () => {
+    const target = editor();
+    const path = ok(target, {
+      type: 'createPath',
+      verbs: ['move', 'line', 'line', 'line', 'close'],
+      points: [100, 100, 300, 100, 300, 200, 100, 200],
+      fill: red,
+    })[0]!;
+    const b = rect(target, 200, 150, 400, 400);
+    const [id] = ok(target, { type: 'booleanNodes', ids: [path, b], op: 'intersect' });
+    expect(node(target, id!).frame).toEqual({ x: 200, y: 150, width: 100, height: 50 });
+    expect(area(node(target, id!))).toBeCloseTo(100 * 50, 9);
+  });
+
+  it('a self-crossing path counts under its own fill rule', () => {
+    // A pentagram drawn in one stroke: under evenodd its centre is a hole, under nonzero not.
+    const star: number[] = [];
+    for (let k = 0; k < 5; k += 1) {
+      const t = -Math.PI / 2 + (k * 4 * Math.PI) / 5;
+      star.push(100 + 100 * Math.cos(t), 100 + 100 * Math.sin(t));
+    }
+    const areas = (['evenodd', 'nonzero'] as const).map((fillRule) => {
+      const target = editor();
+      const path = ok(target, {
+        type: 'createPath',
+        verbs: ['move', 'line', 'line', 'line', 'line', 'close'],
+        points: star,
+        fillRule,
+        fill: red,
+      })[0]!;
+      const cover = rect(target, -50, -50, 300, 300);
+      const [id] = ok(target, { type: 'booleanNodes', ids: [path, cover], op: 'intersect' });
+      return area(node(target, id!));
+    });
+    expect(areas[0]!).toBeLessThan(areas[1]!);
+    expect(areas[0]!).toBeGreaterThan(0);
+  });
+
+  it('a gradient stroke is re-mapped too; a zero-size A₀ keeps its gradient transform', () => {
+    const gradient: Gradient = {
+      kind: 'radial',
+      transform: [0.5, 0, 0, 0.5, 0.5, 0.5],
+      stops: [
+        { offset: 0, color: red },
+        { offset: 1, color: blue },
+      ],
+      spread: 'pad',
+    };
+    const stroke = {
+      color: gradient,
+      width: 2,
+      cap: 'butt',
+      join: 'miter',
+      miterLimit: 4,
+      dash: null,
+    } as const;
+    const target = editor();
+    const a = rect(target, 0, 0, 100, 100, { stroke });
+    const b = rect(target, 50, 0, 100, 100);
+    const [id] = ok(target, { type: 'booleanNodes', ids: [a, b], op: 'union' });
+    const result = node(target, id!);
+    if (!('stroke' in result) || result.stroke === null || !('kind' in result.stroke.color)) {
+      throw new Error('no gradient stroke');
+    }
+    // The result box is 150 wide: the unit-box scale in x shrinks by 100/150.
+    const t = result.stroke.color.transform;
+    expect(t[0]).toBeCloseTo(0.5 * (100 / 150), 12);
+    expect(t[3]).toBeCloseTo(0.5, 12);
+    expect(t[4]).toBeCloseTo(0.5 * (100 / 150), 12);
+
+    const flat = editor();
+    const zero = rect(flat, 0, 0, 0, 100, { fill: gradient });
+    const c = rect(flat, 0, 0, 100, 100);
+    const [id2] = ok(flat, { type: 'booleanNodes', ids: [zero, c], op: 'union' });
+    expect(node(flat, id2!)).toMatchObject({ fill: { transform: gradient.transform } });
+  });
+
+  it('undo restores a selection other than the inputs, filtered to the active page', () => {
+    const target = editor();
+    const a = rect(target, 0, 0, 100, 100);
+    const b = rect(target, 50, 50, 100, 100);
+    const x = rect(target, 500, 0, 10, 10);
+    ok(target, { type: 'setSelection', ids: [x] });
+    ok(target, { type: 'booleanNodes', ids: [a, b], op: 'union' });
+    ok(target, { type: 'undo' });
+    expect(selection(target)).toEqual([x]);
+    ok(target, { type: 'redo' });
+    ok(target, { type: 'setSelection', ids: [x] });
+    ok(target, { type: 'undo' });
+    expect(selection(target)).toEqual([x]);
+  });
+
+  it('a result on another page than the active one is not selected', () => {
+    const target = editor();
+    const a = rect(target, 0, 0, 100, 100);
+    const b = rect(target, 50, 50, 100, 100);
+    const [page] = ok(target, { type: 'addPage' });
+    ok(target, { type: 'setActivePage', id: page! });
+    const [id] = ok(target, { type: 'booleanNodes', ids: [a, b], op: 'union' });
+    expect(node(target, id!).type).toBe('path');
+    expect(selection(target)).toEqual([]);
+    ok(target, { type: 'undo' });
+    expect(selection(target)).toEqual([]);
+    ok(target, { type: 'redo' });
+    expect(selection(target)).toEqual([]);
+  });
+});
