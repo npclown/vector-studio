@@ -83,6 +83,77 @@ function shape(
   };
 }
 
+/** U7b: a mesh path (a five-point star, nonzero) at `[x, y]`, `size` across. */
+function star(
+  id: string,
+  parentId: string | null,
+  [x, y]: readonly [number, number],
+  size: number,
+  fill: SceneColor,
+  effects?: readonly SceneEffect[],
+): RenderNodeSnapshot {
+  const points: number[] = [];
+  for (let index = 0; index < 10; index += 1) {
+    const angle = -Math.PI / 2 + (index * Math.PI) / 5;
+    const radius = (index % 2 === 0 ? 0.5 : 0.22) * size;
+    points.push(size / 2 + radius * Math.cos(angle), size / 2 + radius * Math.sin(angle));
+  }
+  return {
+    id,
+    parentId,
+    transform: [1, 0, 0, 1, x, y],
+    visible: true,
+    opacity: 1,
+    kind: 'path',
+    geometry: {
+      kind: 'path',
+      verbs: ['move', ...Array.from({ length: 9 }, () => 'line' as const), 'close'],
+      points,
+      fillRule: 'nonzero',
+    },
+    style: { fill, stroke: null },
+    ...(effects === undefined ? {} : { effects }),
+  };
+}
+
+/** U7b (F7): one text run through the glyph atlas (the page's canvas raster port). */
+function text(
+  id: string,
+  [x, y]: readonly [number, number],
+  value: string,
+  size: number,
+  color: SceneColor,
+  effects: readonly SceneEffect[],
+): RenderNodeSnapshot {
+  return {
+    id,
+    parentId: null,
+    transform: [1, 0, 0, 1, x, y],
+    visible: true,
+    opacity: 1,
+    kind: 'text',
+    generation: 1,
+    lang: 'en',
+    runs: [
+      {
+        fontList: 'Arial, sans-serif',
+        size,
+        color,
+        clusters: [...value].map((character, index) => ({
+          text: character,
+          x: index * size * 0.6,
+          y: size,
+          advance: size * 0.6,
+        })),
+      },
+    ],
+    effects,
+  };
+}
+
+const COS30 = Math.cos(Math.PI / 6);
+const SIN30 = Math.sin(Math.PI / 6);
+
 function container(
   id: string,
   children: readonly string[],
@@ -121,6 +192,15 @@ type Fixture = Readonly<{
    */
   clip?: readonly [number, number, number, number];
   contentNodes?: readonly RenderNodeSnapshot[];
+  /** U7b: the view (F9's zoom); the home camera when absent. */
+  camera?: RenderCamera;
+  /**
+   * U7b (E41-S9): the root's linear scene transform `[a, b, c, d]`, which maps its offsets and
+   * scales σ by its largest singular value (F2's rotation); the identity when absent.
+   */
+  linear?: readonly [number, number, number, number];
+  /** U7b: what the frame draws below the root, captured alone; nothing when absent. */
+  under?: readonly RenderNodeSnapshot[];
 }>;
 
 function fixture(
@@ -219,6 +299,60 @@ const FIXTURES: readonly Fixture[] = [
     shape('f12s', 'f12m', 'rectangle', [60, 40, 150, 90], WHITE),
     shape('f12c', 'f12m', 'ellipse', [100, 60, 180, 120], AMBER),
   ]),
+  // U7b: the fixtures U5 left to the headed run.
+  {
+    ...fixture('F2 shadow on a rectangle rotated 30 degrees', {
+      ...shape('f2', null, 'rectangle', [0, 0, 90, 50], RED, {
+        effects: [dropShadow(24, 18, 5)],
+      }),
+      transform: [COS30, SIN30, -SIN30, COS30, 200, 80],
+    }),
+    linear: [COS30, SIN30, -SIN30, COS30],
+  },
+  fixture(
+    'F7 shadow on text',
+    text('f7', [150, 120], 'Shadow', 40, TEAL, [dropShadow(4, 5, 3, { ...SHADE, a: 0.7 })]),
+  ),
+  fixture(
+    'mesh path past the right edge in a shifted pass, shadow and blur',
+    star('mp', null, [440, 120], 120, AMBER, [dropShadow(-70, 10, 6), layerBlur(2)]),
+    [],
+    [-150, 0],
+  ),
+  // The frame also holds a mesh path below the root, so the root's clipped composite runs in a
+  // stencil pass; the expected frame is R over that path's own capture (`under`).
+  {
+    ...clipped(
+      'stencil-pass clip composite: shadowed mesh path beside a mesh path in a clipping frame',
+      [100, 60, 260, 160],
+      (clip) =>
+        clip === null
+          ? [
+              container('sc', ['scs'], [], { clip }),
+              star('scs', 'sc', [240, 90], 110, RED, [dropShadow(60, 40, 5)]),
+            ]
+          : [
+              container('sc', ['scp', 'scs'], [], { clip }),
+              star('scp', 'sc', [120, 80], 130, BLUE),
+              star('scs', 'sc', [240, 90], 110, RED, [dropShadow(60, 40, 5)]),
+            ],
+    ),
+    under: [
+      container('sc', ['scp'], [], {
+        clip: { kind: 'rect', x: 100, y: 60, width: 260, height: 160 },
+      }),
+      star('scp', 'sc', [120, 80], 130, BLUE),
+    ],
+  },
+  {
+    ...fixture(
+      'F9 zoom 8, radius 40 (sigma 160 px)',
+      shape('f9', null, 'rectangle', [20, 12, 16, 12], TEAL, {
+        effects: [dropShadow(2, 2, 20)],
+      }),
+    ),
+    camera: { position: { x: 0, y: 0 }, zoom: 8 },
+  },
 ];
 
 /**
@@ -262,6 +396,8 @@ async function open(page: Page, options: PageOptions) {
     samples: String(options.samples),
     dpr: '1',
     groups: 'isolated',
+    // U7b: text leaves draw (F7); the same option on every page, so captures stay comparable.
+    text: 'atlas',
   });
   if (options.effects) query.set('effects', 'v0');
   if (options.content === true) query.set('effectcontent', '1');
@@ -303,16 +439,23 @@ function contentOf(black: Uint8Array, white: Uint8Array, width: number, height: 
 }
 
 function oracleEffect(fixture: Fixture): OracleEffect {
+  // E41-S9: offsets map through the root's linear transform and the camera's zoom; σ scales by
+  // the largest singular value (1 for a rotation) times the zoom.
+  const zoom = fixture.camera?.zoom ?? 1;
+  const [a, b, c, d] = fixture.linear ?? [1, 0, 0, 1];
+  const p = (a * a + b * b + c * c + d * d) / 2;
+  const q = Math.sqrt(Math.max(p * p - (a * d - b * c) ** 2, 0));
+  const scale = zoom * Math.sqrt(p + q);
   let blurSigmaPx: number | null = null;
   const shadows: OracleEffect['shadows'][number][] = [];
   for (const effect of fixture.effects) {
-    if (effect.kind === 'layerBlur') blurSigmaPx = effect.sigma;
+    if (effect.kind === 'layerBlur') blurSigmaPx = effect.sigma * scale;
     else
       shadows.push({
         color: effect.color,
-        dx: effect.offsetX,
-        dy: effect.offsetY,
-        sigmaPx: effect.sigma,
+        dx: zoom * (a * effect.offsetX + c * effect.offsetY),
+        dy: zoom * (b * effect.offsetX + d * effect.offsetY),
+        sigmaPx: effect.sigma * scale,
       });
   }
   return { shadows, blurSigmaPx, contentOpacity: fixture.contentOpacity };
@@ -331,25 +474,57 @@ function clipImage(
 }
 
 /** The frame against `R₁ × scale` over the backdrop (0 black, 1 white). */
-function compare(actual: Uint8Array, expected: OracleImage, scale: number, backdrop: 0 | 1) {
+/**
+ * U7b: whether a pixel lies within 1 px of a corner of the ancestors' clip rect. P4's clip
+ * coverage there comes from `fwidth` of the distance to the rect, which depends on the device's
+ * derivative mode (SwiftShader's coarse derivatives give the corner's inner 2 × 2 pixels 0.75
+ * and its outer diagonal neighbour 0.25), so the hard 0 or 1 of `clipImage` holds off the
+ * corners only. Content drawn under a clip has the same corners; they are not the effect's.
+ */
+function nearClipCorner(
+  x: number,
+  y: number,
+  clip: readonly [number, number, number, number] | undefined,
+) {
+  if (clip === undefined) return false;
+  const [cx, cy, width, height] = clip;
+  return [cx, cx + width].some(
+    (cornerX) =>
+      Math.abs(x + 0.5 - cornerX) <= 1.5 &&
+      [cy, cy + height].some((cornerY) => Math.abs(y + 0.5 - cornerY) <= 1.5),
+  );
+}
+
+function compare(
+  actual: Uint8Array,
+  expected: OracleImage,
+  scale: number,
+  backdrop: 0 | 1 | Uint8Array,
+  clip?: readonly [number, number, number, number],
+) {
   let worst = 0;
   let at: [number, number] = [0, 0];
   let over3 = 0;
+  let detail: Readonly<{ actual: number; expected: number; alpha: number; lane: number }> | null =
+    null;
   for (let y = 0; y < expected.height; y += 1)
     for (let x = 0; x < expected.width; x += 1) {
+      if (nearClipCorner(x, y, clip)) continue;
       const index = (y * expected.width + x) * 4;
       for (let lane = 0; lane < 3; lane += 1) {
         const alpha = expected.data[index + 3]! * scale;
-        const value = expected.data[index + lane]! * scale + backdrop * (1 - alpha);
+        const below = typeof backdrop === 'number' ? backdrop : backdrop[index + lane]! / 255;
+        const value = expected.data[index + lane]! * scale + below * (1 - alpha);
         const difference = Math.abs(actual[index + lane]! - value * 255);
         if (difference > worst) {
           worst = difference;
           at = [x, y];
+          detail = { actual: actual[index + lane]!, expected: value * 255, alpha, lane };
         }
         if (difference > 3) over3 += 1;
       }
     }
-  return { worst, at, over3 };
+  return { worst, at, over3, detail };
 }
 
 function writeReport(name: string, report: unknown) {
@@ -366,12 +541,23 @@ for (const samples of [1, 4] as const) {
     const content = await open(contentPage, { samples, effects: true, content: true });
     const rows: unknown[] = [];
     for (const fixture of FIXTURES) {
-      const drawn = await render(effectsPage, fixture.nodes);
+      const view = fixture.camera ?? HOME;
+      const drawn = await render(effectsPage, fixture.nodes, view);
       const { width, height } = drawn.result.frame;
-      const drawnWhite = await render(effectsPage, [backdrop(width, height), ...fixture.nodes]);
-      // L from a camera that moves it by `shift`, placed back at its own pixels.
+      const drawnWhite = await render(
+        effectsPage,
+        [backdrop(width, height), ...fixture.nodes],
+        view,
+      );
+      // L from a camera that moves it by `shift` (device pixels), placed back at its own pixels.
       const [sx, sy] = fixture.shift;
-      const camera: RenderCamera = { position: { x: -sx, y: -sy }, zoom: 1 };
+      const camera: RenderCamera = {
+        position: {
+          x: view.position.x - sx / view.zoom,
+          y: view.position.y - sy / view.zoom,
+        },
+        zoom: view.zoom,
+      };
       const contentNodes = fixture.contentNodes ?? fixture.nodes;
       const black = await render(contentPage, contentNodes, camera);
       const white = await render(contentPage, [backdrop(width, height), ...contentNodes], camera);
@@ -384,8 +570,23 @@ for (const samples of [1, 4] as const) {
         (sigma) => oracleLevels(sigma) > 0,
       );
       const tolerance = downsampled ? 6 : 3;
-      const overBlack = compare(drawn.rgba, expected, effect.contentOpacity, 0);
-      const overWhite = compare(drawnWhite.rgba, expected, effect.contentOpacity, 1);
+      // U7b: what the frame draws below the root (`under`), over black and over white.
+      const under =
+        fixture.under === undefined
+          ? null
+          : [
+              (await render(effectsPage, fixture.under, view)).rgba,
+              (await render(effectsPage, [backdrop(width, height), ...fixture.under], view)).rgba,
+            ];
+      const clip = fixture.clip;
+      const overBlack = compare(drawn.rgba, expected, effect.contentOpacity, under?.[0] ?? 0, clip);
+      const overWhite = compare(
+        drawnWhite.rgba,
+        expected,
+        effect.contentOpacity,
+        under?.[1] ?? 1,
+        clip,
+      );
       const result = overBlack.worst >= overWhite.worst ? overBlack : overWhite;
       const counters = drawn.result.counters;
       // The effects show: pixels over white where the frame differs from L alone by over 8/255.
@@ -445,8 +646,8 @@ test('E41-A06 scenes without effects draw identically under effects v0', async (
             Object.entries(node).filter(([key]) => key !== 'effects'),
           ) as RenderNodeSnapshot,
       );
-      const a = await render(withOption, plain);
-      const b = await render(without, plain);
+      const a = await render(withOption, plain, fixture.camera);
+      const b = await render(without, plain, fixture.camera);
       const identical = Buffer.compare(Buffer.from(a.rgba), Buffer.from(b.rgba)) === 0;
       rows.push({ samples, fixture: fixture.name, identical });
       expect(identical, `${fixture.name} at ${samples}x`).toBe(true);
