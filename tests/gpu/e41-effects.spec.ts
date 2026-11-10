@@ -846,7 +846,7 @@ test('E41-A08 over the budget: one notice per transition, content drawn without 
     (await page.evaluate(() => window.__vectorStudioE23.diagnostics())).filter(
       (event) => event.code === 'render.effect-resource-limit',
     ).length;
-  /** The shadow's pixel below the rectangle (device px), drawn at the frame's size. */
+  /** The pixel at CSS (200, y), below the rectangle, from a frame at DPR 2. */
   const probe = async (nodes: readonly RenderNodeSnapshot[], y: number) => {
     const drawn = await render(page, nodes);
     const { width } = drawn.result.frame;
@@ -872,6 +872,9 @@ test('E41-A08 over the budget: one notice per transition, content drawn without 
   // Over budget: the rectangle draws (red inside), the shadow does not (white below it).
   const isWhite = (rgb: readonly number[]) => rgb.every((value) => value >= 250);
   if (!isWhite(over.rgb)) failures.push(`over budget, below the rectangle ${over.rgb.join(',')}`);
+  if (!isWhite(overAgain.rgb)) failures.push(`still over, below it ${overAgain.rgb.join(',')}`);
+  if (!isWhite(overOnceMore.rgb))
+    failures.push(`over again, below it ${overOnceMore.rgb.join(',')}`);
   if (afterOver - start !== 1)
     failures.push(`notices on the first transition ${afterOver - start}`);
   // Under budget the shadow draws; going over again raises one more notice.
@@ -908,8 +911,8 @@ test('E41-A09 effect textures in accounting, released, back to baseline', async 
     failures.push(
       `effect textures not in accounting: ${createdBefore.created} → ${created.created}`,
     );
-  if (created.peakLiveBytes <= baseline.liveBytes)
-    failures.push(`texture peak ${created.peakLiveBytes} not above ${baseline.liveBytes}`);
+  if (created.peakLiveBytes <= createdBefore.peakLiveBytes)
+    failures.push(`texture peak ${created.peakLiveBytes} not above ${createdBefore.peakLiveBytes}`);
   // Released after submission.
   if (JSON.stringify(textures(drawn.result.counters)) !== JSON.stringify(baseline))
     failures.push(`after the effects frame ${JSON.stringify(textures(drawn.result.counters))}`);
@@ -918,8 +921,16 @@ test('E41-A09 effect textures in accounting, released, back to baseline', async 
     failures.push(`after removal ${JSON.stringify(removed)}`);
   // On resize: the effects frame at the new size releases its textures too.
   await page.evaluate(() => window.__vectorStudioE23.resize(800, 500, 2));
-  const resizedBaseline = textures((await render(page, plain)).result.counters);
-  const resizedEffects = textures((await render(page, effects)).result.counters);
+  const resizedPlainFrame = await render(page, plain);
+  const resizedBaseline = textures(resizedPlainFrame.result.counters);
+  const resizedFrame = await render(page, effects);
+  const resizedEffects = textures(resizedFrame.result.counters);
+  const resizedCreated = [
+    resizedPlainFrame.result.counters.statistics.resources.byCategory.texture.created,
+    resizedFrame.result.counters.statistics.resources.byCategory.texture.created,
+  ];
+  if (resizedCreated[1]! < resizedCreated[0]! + 3)
+    failures.push(`resized, effect textures not in accounting: ${resizedCreated.join(' → ')}`);
   const resizedRemoved = textures((await render(page, plain)).result.counters);
   rows.resized = { resizedBaseline, resizedEffects, resizedRemoved };
   if (JSON.stringify(resizedEffects) !== JSON.stringify(resizedBaseline))
@@ -936,7 +947,7 @@ test('E41-A09 effect textures in accounting, released, back to baseline', async 
     ) === 0;
   rows.sameFrame = sameFrame;
   if (!sameFrame) failures.push('device loss: the recovered frame differs from the pre-loss one');
-  if (recovered.counters.effectPasses === 0 && recovered.counters.effectPipelineAvailable !== true)
+  if (recovered.counters.effectPipelineAvailable !== true)
     failures.push('device loss: no effect pipeline after recovery');
   const afterRecovery = textures((await render(page, plain)).result.counters);
   rows.afterRecovery = afterRecovery;

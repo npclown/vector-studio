@@ -622,6 +622,19 @@ function record(name: string, value: unknown): void {
   writeFileSync(path.join(resultsDirectory, `${name}.json`), `${JSON.stringify(value, null, 2)}\n`);
 }
 
+/** A node's frame in the page's document (E41-U7c: the dragged card moved). */
+function nodeFrame(page: Page, id: string): Promise<unknown> {
+  return page.evaluate(
+    (nodeId) =>
+      (
+        window.__e26Bench!.editor()!.query({ type: 'node', id: nodeId }) as {
+          frame?: unknown;
+        } | null
+      )?.frame ?? null,
+    id,
+  );
+}
+
 /** The text of a text node in the page's document. */
 function nodeText(page: Page, id: string): Promise<string | null> {
   return page.evaluate((nodeId) => {
@@ -883,11 +896,17 @@ for (const { scenario, variant } of runs) {
       }
 
       if (variant === 'frame') {
+        // E41-U7c (A06's bench part): navigation to the loaded scene's first finished frame.
+        const openStartedMs = Date.now();
         await open(page, `doc=${scenario.document}`, errors, ui, budget);
+        const firstFrameMs = Date.now() - openStartedMs;
         await execute(page, [{ type: 'setViewport', camera }]);
         const layers = await expandTree();
         const env = await environment(page);
         let driver: unknown;
+        // E41-U7c: the pressed selection's first node's frame before the drag and at its end.
+        let draggedFrameBefore: unknown = null;
+        let draggedFrameAfter: unknown = null;
         if (scenario.interaction === 'edit-drag') {
           const target = moveTarget(document);
           await execute(page, [
@@ -895,6 +914,7 @@ for (const { scenario, variant } of runs) {
             { type: 'setSelection', ids: target.selection.ids },
           ]);
           const start = await clientPoint(page, camera, target.press);
+          draggedFrameBefore = await nodeFrame(page, target.selection.ids[0]!);
           await page.mouse.move(start.x, start.y);
           await page.mouse.down();
           driver = { kind: 'edit-drag', startClient: start };
@@ -965,7 +985,11 @@ for (const { scenario, variant } of runs) {
             splitNames: SPLIT_MEASURES,
           },
         );
-        if (scenario.interaction === 'edit-drag') await page.mouse.up();
+        if (scenario.interaction === 'edit-drag') {
+          // Read while pressed: the release lands on the start point, where the drag ends.
+          draggedFrameAfter = await nodeFrame(page, moveTarget(document).selection.ids[0]!);
+          await page.mouse.up();
+        }
         const end = await presence(page);
         const pageErrors = await page.evaluate(() => window.__e26Probe!.pageErrors);
         let memory: unknown;
@@ -1028,6 +1052,7 @@ for (const { scenario, variant } of runs) {
               }
             : null,
           ceilingMs: scenario.frameCeilingMs,
+          firstFrameMs,
           // Each interval should end in a submission: intervals + 1 against submissions.
           intervalsPlusOne: intervals.length + 1,
           run,
@@ -1046,15 +1071,16 @@ for (const { scenario, variant } of runs) {
           expect(intervals.length).toBeGreaterThan(0);
           if (scenario.interaction === 'edit-drag') expect(run.revisedMoves).toBeGreaterThan(0);
         }
-        // E41-U7c: every card's effects drew in every frame of the window (one pass per root and
-        // frame; a frame in flight at either end can add or drop one frame's worth).
+        // E41-U7c: every card's effects drew in every frame of the window, exactly one pass per
+        // root and frame (the backend counts the passes and the submission in one callback).
         if (scenario.document === 'e41-cards') {
           expect(run.effectPipelineAvailable, 'the effect pipeline').toBe(true);
           const roots = loaded(scenario.document).document.pages[0]!.children.length;
-          expect(run.effectPasses, 'effect passes over the window').toBeGreaterThanOrEqual(
-            roots * (run.framesSubmitted - 1),
+          expect(run.effectPasses, 'effect passes over the window').toBe(
+            roots * run.framesSubmitted,
           );
-          expect(run.effectPasses).toBeLessThanOrEqual(roots * (run.framesSubmitted + 1));
+          if (scenario.interaction === 'edit-drag')
+            expect(draggedFrameAfter, 'the dragged card moved').not.toEqual(draggedFrameBefore);
         }
         return;
       }
