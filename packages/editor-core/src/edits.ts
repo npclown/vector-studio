@@ -17,6 +17,7 @@ import {
   nudgeNodes,
   reorderNodes,
 } from './arrange.js';
+import { booleanNodes } from './boolean-command.js';
 import { paste } from './clipboard.js';
 import { Draft, fail, type Failure } from './draft.js';
 import { ExpansionCache, expansionFailure } from './expansion.js';
@@ -321,6 +322,8 @@ export function applyEdit(
     }
     case 'groupNodes':
       return group(document, command, context, finish);
+    case 'booleanNodes':
+      return booleanNodes(document, command, context, custom, finish);
     case 'createSymbol':
       return createSymbol(document, command, context, finish);
     case 'createInstance':

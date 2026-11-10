@@ -47,6 +47,8 @@ export const BUILTIN_ACTIONS: ReadonlySet<string> = new Set([
   'cut',
   'paste',
   'togglePathClosed',
+  // E41 contract, section 6: `boolean { op }`.
+  'boolean',
 ]);
 
 /**
@@ -70,6 +72,10 @@ export const DEFAULT_KEYMAP: readonly KeyBinding[] = deepFreeze([
   { chord: 'Mod+G', action: 'group' },
   { chord: 'Mod+Shift+G', action: 'ungroup' },
   { chord: 'Mod+Alt+M', action: 'maskGroup' },
+  { chord: 'Mod+Alt+U', action: 'boolean', args: { op: 'union' } },
+  { chord: 'Mod+Alt+S', action: 'boolean', args: { op: 'subtract' } },
+  { chord: 'Mod+Alt+I', action: 'boolean', args: { op: 'intersect' } },
+  { chord: 'Mod+Alt+X', action: 'boolean', args: { op: 'exclude' } },
   { chord: 'Mod+D', action: 'duplicate' },
   { chord: 'ArrowLeft', action: 'nudge', args: { dx: -1, dy: 0 } },
   { chord: 'ArrowRight', action: 'nudge', args: { dx: 1, dy: 0 } },
@@ -227,7 +233,7 @@ const isFiniteNumber = (value: unknown) => typeof value === 'number' && Number.i
  * Whether a built-in action's `args` are well formed (section 7): `setTool { tool }` (a built-in
  * tool, or an extension tool `tool(id)` accepts),
  * `nudge { dx, dy }` (finite page units), `reorder { op }`, `align { edge }`,
- * `distribute { axis }` and `duplicate { offset? }` with a finite page vector. Other actions take
+ * `distribute { axis }`, `boolean { op }` (E41) and `duplicate { offset? }` with a finite page vector. Other actions take
  * any JSON `args` (an extension command validates its own).
  */
 function argsValid(
@@ -256,6 +262,11 @@ function argsValid(
       );
     case 'distribute':
       return record !== null && (record.axis === 'horizontal' || record.axis === 'vertical');
+    case 'boolean':
+      return (
+        record !== null &&
+        ['union', 'subtract', 'intersect', 'exclude'].includes(record.op as string)
+      );
     case 'duplicate': {
       if (args === undefined) return true;
       if (record === null) return false;

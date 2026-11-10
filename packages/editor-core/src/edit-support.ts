@@ -1,4 +1,4 @@
-import { isValidId, type DocumentV7, type NodeV7 } from '@vector-studio/model';
+import { isValidId, type DocumentV7, type NodeV7, type PathData } from '@vector-studio/model';
 import { fail, type Draft, type Failure } from './draft.js';
 import { expansionFailure, type ExpansionCache } from './expansion.js';
 import type { CustomDefaults, CustomFailure } from './extensions.js';
@@ -36,6 +36,8 @@ export type EditResult =
 export type CustomRules = Readonly<{
   check(node: NodeV7): CustomFailure | null;
   defaults(customType: string): CustomDefaults;
+  /** Frame-local path geometry of a custom node, or null (E41 boolean inputs, section 2.1). */
+  geometry?(node: NodeV7): PathData | null;
 }>;
 
 export type EditContext = Readonly<{
