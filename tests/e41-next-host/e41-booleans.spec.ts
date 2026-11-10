@@ -107,30 +107,31 @@ async function expectResult(page: Page) {
 test('E41-A12 booleans: context menu, keys, panel, undo and a refusal notice', async ({ page }) => {
   const errors = await open(page);
 
-  // Context menu: union, then undo restores both inputs, their order and the selection.
+  // Each boolean from the context menu, then from its key on the focused canvas; undo
+  // (ControlOrMeta, Mod on either platform) restores both inputs, their order and the selection.
   const [a, b] = await pair(page);
-  await contextMenu(page, 'boolean-union');
-  await expectResult(page);
-  await page.keyboard.press('Control+Z');
-  expect(await state(page)).toEqual({
-    children: [a, b],
-    types: ['rectangle', 'rectangle'],
-    selection: [a, b],
-  });
-
-  // Keys on the focused canvas: subtract, intersect and exclude, each undone.
-  await page.locator('[data-testid="studio-canvas"] canvas').focus();
-  for (const key of ['S', 'I', 'X']) {
-    await page.keyboard.press(`Control+Alt+${key}`);
+  const inputs = { children: [a, b], types: ['rectangle', 'rectangle'], selection: [a, b] };
+  for (const [op, key] of [
+    ['union', 'U'],
+    ['subtract', 'S'],
+    ['intersect', 'I'],
+    ['exclude', 'X'],
+  ] as const) {
+    await contextMenu(page, `boolean-${op}`);
     await expectResult(page);
-    await page.keyboard.press('Control+Z');
-    expect((await state(page)).selection).toEqual([a, b]);
+    await page.keyboard.press('ControlOrMeta+Z');
+    expect(await state(page), `${op} menu undo`).toEqual(inputs);
+    await page.locator('[data-testid="studio-canvas"] canvas').focus();
+    await page.keyboard.press(`ControlOrMeta+Alt+${key}`);
+    await expectResult(page);
+    await page.keyboard.press('ControlOrMeta+Z');
+    expect(await state(page), `${op} key undo`).toEqual(inputs);
   }
 
   // The property panel's Boolean section.
   await page.getByTestId('property-boolean-intersect').click();
   await expectResult(page);
-  // A single selected path does not qualify: no boolean items or buttons.
+  // A single selected path does not qualify: no Boolean section (the menu's rule is unit-tested).
   await expect(page.getByTestId('property-boolean-union')).toHaveCount(0);
   await ok(page, { type: 'deleteNodes', ids: (await state(page)).children });
 

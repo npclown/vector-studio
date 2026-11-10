@@ -63,7 +63,7 @@ export function booleanActions(
 
 const NOTICES: Readonly<Record<string, string>> = {
   'editor.boolean-unsupported':
-    'Boolean needs two or more visible shapes (rectangle, ellipse, path, star) in one group',
+    'Boolean needs two or more visible shapes (rectangle, ellipse, path, star) with the same parent, none of them a mask',
   'editor.boolean-empty': 'The boolean result is empty, so nothing changed',
   'editor.boolean-too-large': 'Too complex for a boolean (over 4,096 segments)',
   'editor.boolean-failed': 'The boolean operation failed, so nothing changed',
