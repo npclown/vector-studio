@@ -6,6 +6,7 @@ import type {
   PagePoint,
   SelectionHandles,
 } from '@vector-studio/react';
+import { booleanActions } from './boolean-model.js';
 import { chordLabel, macKeymap, shortcutFor } from './editor-toolbar-model.js';
 import { runAction, symbolActions, type ActionButton } from './toolbar-model.js';
 
@@ -131,7 +132,8 @@ function pasteItem(keymap: readonly KeyBinding[], point: PagePoint): ContextMenu
  * The menu for the editor state (V-25 slice 10). With a selection: clipboard and edit items
  * (copy, cut, paste here, duplicate, delete), arrange (bring to front, forward, send backward,
  * to back), grouping (group, ungroup for one selected group or mask group, mask for two or
- * more), show or hide (hide when any selected node is visible), symbols (the toolbar's symbol,
+ * more), booleans (union, subtract, intersect, exclude, only when the selection qualifies,
+ * E41), show or hide (hide when any selected node is visible), symbols (the toolbar's symbol,
  * instance and detach rules) and zoom to selection. Without one (empty canvas): paste here,
  * select all (the scope's children, else the page's), zoom to fit and zoom to 100%.
  */
@@ -180,6 +182,7 @@ export function contextMenuItems({ snapshot, point }: ContextMenuInput): Context
   const group = first !== undefined && (first.type === 'group' || first.type === 'maskGroup');
   const anyVisible = nodes.some((node) => node?.visible !== false);
   const symbols = new Map(symbolActions(ids, types).map((button) => [button.testId, button]));
+  const booleans = booleanActions(document, ids, keymap);
   const symbolItem = (id: string, label: string) =>
     item(id, label, null, fromButton(symbols.get(id)!));
   return [
@@ -234,6 +237,14 @@ export function contextMenuItems({ snapshot, point }: ContextMenuInput): Context
         ids.length >= 2 ? thenSelect({ type: 'groupNodes', ids, kind: 'maskGroup' }) : null,
       ),
     ],
+    // E41 contract, section 6: the four booleans, shown only when the selection qualifies.
+    ...(booleans.length === 0
+      ? []
+      : [
+          booleans.map((action) =>
+            item(`boolean-${action.op}`, action.label, action.shortcut, single(action.command)),
+          ),
+        ]),
     [
       item('visibility', anyVisible ? 'Hide' : 'Show', null, (execute) => {
         // One `setNodeProps` per node (each its own undo step), as the layer tree's toggle.

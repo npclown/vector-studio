@@ -7,12 +7,15 @@ import {
   type Command,
   type Constraints,
   type DocumentV7,
+  type KeyBinding,
   type NodeV7,
   type TextEditState,
   type TextNodeV7,
 } from '@vector-studio/react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { colorHex, parseNumber, type Common } from './appearance-model.js';
+import { booleanActions } from './boolean-model.js';
+import { withShortcut } from './editor-toolbar-model.js';
 import { AppearancePanel } from './appearance-panel.js';
 import { ColorWell, Swatches } from './color-controls.js';
 import { Choice, Row, TextField } from './fields.js';
@@ -425,6 +428,42 @@ function SymbolSection({
 }
 
 /**
+ * E41-U3b (E41 contract, section 6): union, subtract, intersect and exclude for a qualifying
+ * selection (section 2.1), each `property-boolean-<op>`; the command selects its result.
+ */
+function BooleanSection({
+  document,
+  selection,
+  keymap,
+  run,
+}: {
+  document: DocumentV7;
+  selection: readonly string[];
+  keymap: readonly KeyBinding[];
+  run: Run;
+}) {
+  const actions = booleanActions(document, selection, keymap);
+  if (actions.length === 0) return null;
+  return (
+    <Section legend="Boolean">
+      <Row>
+        {actions.map((action) => (
+          <button
+            key={action.op}
+            type="button"
+            data-testid={`property-boolean-${action.op}`}
+            title={withShortcut(action.label, action.shortcut)}
+            onClick={() => run(action.command)}
+          >
+            {action.label}
+          </button>
+        ))}
+      </Row>
+    </Section>
+  );
+}
+
+/**
  * The transform, layer, line, constraint, text and symbol sections of the property panel
  * (MVP M8 contract, M8-R2 to M8-R5), without the appearance panel. Each section shows when a
  * selected node has its fields; a field is editable for one selected node and shows the common
@@ -435,6 +474,7 @@ export function PropertySections() {
   const execute = useEditorCommands();
   const selection = useSelection();
   const document = useEditorSelector((snapshot) => snapshot.document);
+  const keymap = useEditorSelector((snapshot) => snapshot.keymap);
   const textEdit = useEditorSelector((snapshot) => snapshot.textEdit);
   const handles = useEditorQuery({ type: 'handles' });
   const page = useActivePage();
@@ -476,6 +516,7 @@ export function PropertySections() {
           exitTextEdit={exitTextEdit}
         />
       )}
+      <BooleanSection document={document} selection={selection} keymap={keymap} run={run} />
       <SymbolSection
         document={document}
         selection={selection}

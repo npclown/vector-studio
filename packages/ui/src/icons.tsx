@@ -51,6 +51,30 @@ const PATHS: Readonly<Record<string, ReactNode>> = {
   'create-symbol': <path d="M8 1.5 L14.5 8 L8 14.5 L1.5 8 Z M8 5 L11 8 L8 11 L5 8 Z" />,
   'create-instance': <path d="M8 1.5 L14.5 8 L8 14.5 L1.5 8 Z" />,
   detach: <path d="M8 1.5 L11 4.5 M14.5 8 L11.5 11 M8 14.5 L5 11.5 M1.5 8 L4.5 5" />,
+  // E41-U3b: two overlapping squares, the result region filled.
+  'boolean-union': (
+    <path d="M2 2 H10 V6 H14 V14 H6 V10 H2 Z" fill="currentColor" fillOpacity={0.35} />
+  ),
+  'boolean-subtract': (
+    <>
+      <path d="M2 2 H10 V6 H6 V10 H2 Z" fill="currentColor" fillOpacity={0.35} />
+      <path d="M6 6 H14 V14 H6 Z" strokeDasharray="1.5 1.5" />
+    </>
+  ),
+  'boolean-intersect': (
+    <>
+      <path d="M2 2 H10 V10 H2 Z M6 6 H14 V14 H6 Z" strokeDasharray="1.5 1.5" />
+      <path d="M6 6 H10 V10 H6 Z" fill="currentColor" fillOpacity={0.35} />
+    </>
+  ),
+  'boolean-exclude': (
+    <path
+      d="M2 2 H10 V6 H14 V14 H6 V10 H2 Z M6 6 H10 V10 H6 Z"
+      fill="currentColor"
+      fillOpacity={0.35}
+      fillRule="evenodd"
+    />
+  ),
 };
 
 /** Whether `name` has an icon. */

@@ -17,12 +17,15 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from 'react';
+import { booleanNotice, booleanQualifies, type BooleanOpName } from './boolean-model.js';
 import {
   actionName,
   actionShortcut,
   actionTitle,
   nextMenuIndex,
+  shortcutFor,
   toolTitle,
+  withShortcut,
   zoomPercent,
 } from './editor-toolbar-model.js';
 import { Icon, hasIcon } from './icons.js';
@@ -47,6 +50,13 @@ const KEYMAP = { type: 'keymap' } as const;
 
 const ROW = { display: 'flex', alignItems: 'center', gap: 2 } as const;
 
+const BOOLEAN_BUTTONS: readonly (readonly [BooleanOpName, string])[] = [
+  ['union', 'Union selection'],
+  ['subtract', 'Subtract selection'],
+  ['intersect', 'Intersect selection'],
+  ['exclude', 'Exclude overlap'],
+];
+
 const selectedTypes = (snapshot: EditorSnapshot): readonly string[] =>
   snapshot.selection.map((id) => snapshot.document.nodes[id]?.type ?? '');
 const sameTypes = (a: readonly string[], b: readonly string[]): boolean =>
@@ -54,7 +64,11 @@ const sameTypes = (a: readonly string[], b: readonly string[]): boolean =>
 
 function useRefusal(): [string | null, (result: CommandResult | null) => void] {
   const [refusal, setRefusal] = useState<string | null>(null);
-  return [refusal, (result) => setRefusal(result !== null && !result.ok ? result.code : null)];
+  return [
+    refusal,
+    (result) =>
+      setRefusal(result !== null && !result.ok ? (booleanNotice(result) ?? result.code) : null),
+  ];
 }
 
 function IconButton({
@@ -99,7 +113,8 @@ export type EditorToolbarProps = Readonly<{
 /**
  * The one-row icon toolbar (V-25): the built-in and extension tools (`tool-<id>`, the active one
  * pressed), then undo and redo, group, ungroup and mask, symbol, instance and detach, toggle
- * closed and delete, with the M8 rows' commands, enable rules and test IDs. Each button's
+ * closed and delete, and the four booleans (`boolean-<op>`, E41-U3b, enabled for a selection
+ * that qualifies), with the M8 rows' commands, enable rules and test IDs. Each button's
  * tooltip names it and its shortcut from the `keymap` query. A refused command shows its code
  * (`toolbar-refusal`). Host controls follow as `children`.
  */
@@ -125,6 +140,10 @@ export function EditorToolbar({ children }: EditorToolbarProps) {
     ['edit', ['toggle-closed', 'delete']],
   ];
   const run = (button: ActionButton) => show(runAction(execute, button));
+  // E41-U3b: the four booleans, enabled when the selection qualifies (E41 section 2.1).
+  const qualifies = useEditorSelector((snapshot) =>
+    booleanQualifies(snapshot.document, snapshot.selection),
+  );
   return (
     <div role="toolbar" aria-label="tools" className="vs-toolbar" style={ROW}>
       <span role="group" aria-label="tool" style={ROW}>
@@ -157,6 +176,19 @@ export function EditorToolbar({ children }: EditorToolbarProps) {
           })}
         </span>
       ))}
+      <span role="group" aria-label="boolean" style={ROW}>
+        <Divider />
+        {BOOLEAN_BUTTONS.map(([op, label]) => (
+          <IconButton
+            key={op}
+            testId={`boolean-${op}`}
+            name={withShortcut(label, shortcutFor(keymap, 'boolean', { op }))}
+            icon={`boolean-${op}`}
+            disabled={!qualifies}
+            onClick={() => show(execute({ type: 'booleanNodes', ids: selection, op }))}
+          />
+        ))}
+      </span>
       {children}
       {refusal === null ? null : (
         <output role="status" className="vs-refusal" data-testid="toolbar-refusal">

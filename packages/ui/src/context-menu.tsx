@@ -20,6 +20,7 @@ import {
   type ContextMenuItem,
 } from './context-menu-model.js';
 import { nextMenuIndex } from './editor-toolbar-model.js';
+import { booleanNotice } from './boolean-model.js';
 
 // V-25 slice 10 (editor UI usability): the canvas's right click menu (Figma). The host opens it
 // from the canvas's `contextmenu` event: `selectForContextMenu` first gives the press the
@@ -115,7 +116,7 @@ async function runItem(
  * takes focus, ArrowUp, ArrowDown, Home and End move between enabled items, Escape, Tab, a pick
  * or a wheel closes it (`onClose(true)`), and a press outside or a window blur closes it
  * (`onClose(false)`). A menu taller than its offset parent scrolls. A refused command shows its
- * code (`context-refusal`) after it closes.
+ * code (`context-refusal`) after it closes; a refused boolean shows its notice (E41-U3b).
  */
 export function CanvasContextMenu({ at, onClose }: CanvasContextMenuProps) {
   const editor = useEditor();
@@ -204,7 +205,7 @@ export function CanvasContextMenu({ at, onClose }: CanvasContextMenuProps) {
     const point = at.point;
     onClose(true);
     void runItem(editor, execute, entry, point).then((result) =>
-      setRefusal(result !== null && !result.ok ? result.code : null),
+      setRefusal(result !== null && !result.ok ? (booleanNotice(result) ?? result.code) : null),
     );
   };
   return (
