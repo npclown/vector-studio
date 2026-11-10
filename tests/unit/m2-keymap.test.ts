@@ -250,7 +250,8 @@ describe('M2-A11 default bindings run their actions through input', () => {
     expect(Object.isFrozen(keymap)).toBe(true);
     const chords = keymap.map((binding) => binding.chord);
     expect(chords).toEqual([...chords].sort());
-    // M2-U4 adds duplicate, nudge and reorder, M2-U5 Enter and Escape (section 7).
+    // M2-U4 adds duplicate, nudge and reorder, M2-U5 Enter and Escape (section 7), E41-U3 the
+    // four booleans.
     expect(chords).toEqual([
       '-',
       '=',
@@ -259,7 +260,11 @@ describe('M2-A11 default bindings run their actions through input', () => {
       'ArrowRight',
       'ArrowUp',
       'Backspace',
+      'Ctrl+Alt+KeyI',
       'Ctrl+Alt+KeyM',
+      'Ctrl+Alt+KeyS',
+      'Ctrl+Alt+KeyU',
+      'Ctrl+Alt+KeyX',
       'Ctrl+KeyA',
       'Ctrl+KeyD',
       'Ctrl+KeyG',
@@ -727,6 +732,16 @@ describe('M2-A11 rest (M2-U7): every default binding through input, and host-bou
     rect(s.target, 90, 90);
     ok(s.target, { type: 'setSelection', ids: [s.c] });
   };
+  const overlapped = (s: Scene) => {
+    rect(s.target, 25, 5);
+    ok(s.target, { type: 'setSelection', ids: [s.b, 'n6'] });
+  };
+  const booleanResult = (s: Scene) => {
+    // The result takes n6's slot, the topmost input's (E41-B2).
+    expect(children(s.target)).toEqual([s.a, s.c, 'n7']);
+    expect(s.target.query({ type: 'node', id: 'n7' })?.type).toBe('path');
+    expect(s.target.query({ type: 'selection' })).toEqual(['n7']);
+  };
   const tool = (name: ToolName) => (s: Scene) => {
     expect(s.target.query({ type: 'tool' })).toBe(name);
   };
@@ -814,6 +829,42 @@ describe('M2-A11 rest (M2-U7): every default binding through input, and host-bou
         consumed: true,
       }),
       check: order(['a', 'b', 'c']),
+    },
+    // E41 contract, section 6: b and an overlapping n6 become one path, n7.
+    {
+      chord: 'Mod+Alt+U',
+      key: 'u',
+      modifiers: mods('ctrl', 'alt'),
+      before: overlapped,
+      result: () => ({ ok: true, ids: ['n7'], consumed: true }),
+      check: booleanResult,
+    },
+    // E41 contract, section 6: b and an overlapping n6 become one path, n7.
+    {
+      chord: 'Mod+Alt+S',
+      key: 's',
+      modifiers: mods('ctrl', 'alt'),
+      before: overlapped,
+      result: () => ({ ok: true, ids: ['n7'], consumed: true }),
+      check: booleanResult,
+    },
+    // E41 contract, section 6: b and an overlapping n6 become one path, n7.
+    {
+      chord: 'Mod+Alt+I',
+      key: 'i',
+      modifiers: mods('ctrl', 'alt'),
+      before: overlapped,
+      result: () => ({ ok: true, ids: ['n7'], consumed: true }),
+      check: booleanResult,
+    },
+    // E41 contract, section 6: b and an overlapping n6 become one path, n7.
+    {
+      chord: 'Mod+Alt+X',
+      key: 'x',
+      modifiers: mods('ctrl', 'alt'),
+      before: overlapped,
+      result: () => ({ ok: true, ids: ['n7'], consumed: true }),
+      check: booleanResult,
     },
     {
       chord: 'Mod+D',

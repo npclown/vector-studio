@@ -267,6 +267,11 @@ type HistoryEntry = Readonly<{
    * (section 8.3); null for every other step. Never serialized.
    */
   caret: TextCaretEntry | null;
+  /**
+   * The selection before and after a step that sets it (E41-B3: `booleanNodes`), restored by
+   * undo and redo; absent for every other step, which keeps the current selection.
+   */
+  selection?: Readonly<{ before: readonly string[]; after: readonly string[] }>;
 }>;
 
 type TextCaretEntry = Readonly<{ id: string; before: TextCaret; after: TextCaret }>;
@@ -335,6 +340,7 @@ const DOCUMENT_COMMANDS = new Set([
   'setStyle',
   'deleteNodes',
   'groupNodes',
+  'booleanNodes',
   'ungroupNodes',
   'moveNodes',
   'createSymbol',
@@ -452,6 +458,10 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.no-text-layout',
   'editor.no-text-edit',
   'editor.gesture-active',
+  'editor.boolean-unsupported',
+  'editor.boolean-empty',
+  'editor.boolean-too-large',
+  'editor.boolean-failed',
 ]);
 
 /**
@@ -1238,18 +1248,25 @@ class EditorCore implements Editor {
       // A command's draws all run on `base`.
       const drawn = this.unlink(EditorCore.taken(returned, base));
       this.interrupt();
-      const entry = {
+      // E41-B3: the boolean result becomes the selection, and undo restores the inputs'. A
+      // result on another page than the active one is not selectable (`normalizeSelection`).
+      const selects = command.type === 'booleanNodes';
+      const selected = selects
+        ? (normalizeSelection(result.document, this.activePage, result.created) ?? [])
+        : result.created;
+      const entry: HistoryEntry = {
         before: base,
         after: result.document,
         touched: result.touched,
         drawn,
         caret: null,
+        ...(selects ? { selection: { before: this.selection, after: selected } } : {}),
       };
       this.undoStack.push(entry);
       this.redoStack = [];
       this.changeDocument(result.document, 'command', result.touched);
       // The pasted roots become the selection (section 6).
-      if (command.type === 'paste') this.setSelectionState(result.created);
+      if (command.type === 'paste' || selects) this.setSelectionState(selected);
       return { ok: true, ids: result.ids ?? result.created };
     }
     switch (command.type) {
@@ -1279,6 +1296,14 @@ class EditorCore implements Editor {
           this.changeDocument(target, command.type, entry.touched, entry.projected);
         } finally {
           this.textCaretRestore = null;
+        }
+        if (entry.selection !== undefined) {
+          const ids = command.type === 'undo' ? entry.selection.before : entry.selection.after;
+          const tree = documentTree(this.document);
+          const kept = ids.filter(
+            (id) => Object.hasOwn(this.document.nodes, id) && pageOf(tree, id) === this.activePage,
+          );
+          this.setSelectionState(normalizeSelection(this.document, this.activePage, kept) ?? []);
         }
         return { ok: true, ids: [] };
       }
@@ -1906,6 +1931,12 @@ class EditorCore implements Editor {
         });
         if (result.ok) this.run({ type: 'setSelection', ids: result.ids });
         return result;
+      }
+      case 'boolean': {
+        // E41 contract, section 6; the command selects its result (E41-B3).
+        if (selection.length === 0) return nothing;
+        const op = (binding.args as { op: 'union' | 'subtract' | 'intersect' | 'exclude' }).op;
+        return this.run({ type: 'booleanNodes', ids: selection, op });
       }
       case 'ungroup': {
         // `ungroupNodes` takes one group; any other selection does nothing (still consumed).

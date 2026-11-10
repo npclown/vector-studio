@@ -343,6 +343,12 @@ export type DocumentCommand =
   | Readonly<{ type: 'setStyle'; ids: readonly string[]; style: StyleProps }>
   | Readonly<{ type: 'deleteNodes'; ids: readonly string[] }>
   | Readonly<{ type: 'groupNodes'; ids: readonly string[]; kind: 'group' | 'maskGroup' }>
+  /** E41 contract, section 2: replaces sibling shapes by one path, the `op` of their areas. */
+  | Readonly<{
+      type: 'booleanNodes';
+      ids: readonly string[];
+      op: 'union' | 'subtract' | 'intersect' | 'exclude';
+    }>
   | Readonly<{ type: 'ungroupNodes'; id: string }>
   | Readonly<{ type: 'moveNodes'; ids: readonly string[]; parent: string; index: number }>
   // Symbol commands (MVP M7 contract, section 5).
@@ -633,7 +639,12 @@ export type EditorErrorCode =
   | 'editor.no-text-layout'
   // MVP M6b contract, sections 3.1 and 7.1.
   | 'editor.no-text-edit'
-  | 'editor.gesture-active';
+  | 'editor.gesture-active'
+  // E41 contract, section 2.
+  | 'editor.boolean-unsupported'
+  | 'editor.boolean-empty'
+  | 'editor.boolean-too-large'
+  | 'editor.boolean-failed';
 
 /**
  * `consumed` is present on `input` results only (M2-I3): whether navigation, the tool or a key
