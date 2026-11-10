@@ -462,19 +462,25 @@ function EffectRowFields({
 }) {
   const name = `Effect ${row.index + 1}`;
   const box = useRef<HTMLInputElement>(null);
+  // Set on every render: a refused toggle lets the browser clear the mark while the state
+  // stays 'mixed'.
   useEffect(() => {
     if (box.current !== null) box.current.indeterminate = row.visible.state === 'mixed';
-  }, [row.visible.state]);
+  });
   const colorValue = row.color.state === 'one' ? colorHex(row.color.value) : null;
   const setColor = (hex: string) => {
     const command = effectColorCommand(nodes, row, hex);
     return command !== null && run(command);
   };
-  const identity = `${fieldIdentity(nodes)} ${row.index}`;
+  // The kind and each holder's effect are part of what a field edits, so a removal that moves
+  // another effect to this index resets the draft and its invalid mark.
+  const identity = `${fieldIdentity(nodes)} ${row.index} ${JSON.stringify(
+    nodes.map((node) => node.effects[row.index] ?? null),
+  )}`;
   return (
     <div
       role="group"
-      aria-label={name}
+      aria-label={`${name} ${effectLabel(row.kind)}`}
       data-testid={`effect-${row.index}`}
       data-kind={row.kind}
       style={{ ...ROW_STYLE, marginBottom: 4 }}

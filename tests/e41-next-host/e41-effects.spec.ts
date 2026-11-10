@@ -119,6 +119,9 @@ test('E41-A12 effects: add, edit, hide and remove a shadow and a blur from the p
     );
   if (!rendering) {
     expect(smoke, 'the renderer started').toBe(true);
+    // Only a missing geometry WASM excuses the smoke run's renderer.
+    const wasm = await page.request.get('/geometry-kernel.wasm');
+    expect(wasm.status(), 'the WASM is served, so the renderer should start').not.toBe(200);
     test.info().annotations.push({
       type: 'not checked',
       description: 'presented pixels (the smoke run had no renderer)',
