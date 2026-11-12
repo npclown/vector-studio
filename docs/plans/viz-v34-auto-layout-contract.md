@@ -25,7 +25,7 @@ Owners: this file owns V-34's rules, criteria, fixtures and evidence. The [M1 co
 
 ## 2. Schema (v8 fields)
 
-- **V34-S1 frame field.** A `frame` node may carry `autoLayout?: AutoLayout`, with exactly these keys. Absent means no auto layout. Other node types reject the key (`document.invalid-node`, path `/autoLayout`), symbols included (V34-Q2).
+- **V34-S1 frame field.** A `frame` node may carry `autoLayout?: AutoLayout`, with exactly these keys. Absent means no auto layout. Other node types reject the key (`document.invalid-field`, path `/autoLayout`), symbols included (V34-Q2).
 
 ```ts
 type AutoLayout = Readonly<{
@@ -46,7 +46,7 @@ type AxisSizing = 'fixed' | 'hug' | 'fill';
 type LayoutSizing = Readonly<{ horizontal: AxisSizing; vertical: AxisSizing }>;
 ```
 
-- **V34-S3 limits.** `gap` finite in `[−10000, 10000]`; each padding finite in `[0, 10000]`; `−0` reads as `0`. `hug` is valid only on a frame that has `autoLayout`; elsewhere, text included, it is `document.invalid-node` at `/layoutSizing/<axis>`. `fill` is valid on any node and takes effect only when the parent is an auto-layout frame, as `constraints` take effect only under a frame. A loaded text with `autoWidth` and horizontal `fill` is valid; when its parent lays out, the pass sets it to `autoHeight` (4.2's rule) whether or not its width changes.
+- **V34-S3 limits.** `gap` finite in `[−10000, 10000]`; each padding finite in `[0, 10000]`; `−0` reads as `0`. `hug` is valid only on a frame that has `autoLayout`; elsewhere, text included, it is `document.invalid-field` at `/layoutSizing/<axis>`. `fill` is valid on any node and takes effect only when the parent is an auto-layout frame, as `constraints` take effect only under a frame. A loaded text with `autoWidth` and horizontal `fill` is valid; when its parent lays out, the pass sets it to `autoHeight` (4.2's rule) whether or not its width changes.
 - **V34-S4 round trip.** Serialize writes the keys only when present, so input holding `fixed/fixed` does not round-trip byte for byte. The v7 to v8 migration adds neither. A v8 document whose child frames disagree with its layout is valid: frames are stored data, and the next edit that seeds the frame (section 4.3) resolves them.
 
 ## 3. Layout of one frame
@@ -55,7 +55,7 @@ type LayoutSizing = Readonly<{ horizontal: AxisSizing; vertical: AxisSizing }>;
 
 The **participants** of an auto-layout frame `F` are its children with `visible: true`, in `children` order (first child first: left in a row, top in a column; this is back-to-front paint order). Hidden children keep their frames and take no space (V34-Q6).
 
-A participant's **box** is its rotated bounds in `F`'s space (`rotatedBounds`, binary64), size `(m, c)` on the main and cross axes. A participant with rotation other than 0 or π is placed by its box and counts as fixed on both axes.
+A participant's **box** is its rotated bounds in `F`'s space (`rotatedBounds`, binary64; at rotation 0, its `frame` itself), size `(m, c)` on the main and cross axes. A participant with rotation other than 0 or π is placed by its box and counts as fixed on both axes.
 
 ### 3.2 Steps
 
