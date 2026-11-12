@@ -611,6 +611,24 @@ function union(a: SceneBounds, b: SceneBounds): SceneBounds {
   };
 }
 
+/**
+ * A node's draw bounds: its own leaf, or (V-35 P1) the union of the `<id>\u0000fill<i>` and
+ * `<id>\u0000stroke` leaves a node with several fills projects to; undefined without either.
+ */
+export function nodeDrawBounds(
+  bounds: ReadonlyMap<string, SceneBounds | null>,
+  id: string,
+): SceneBounds | null | undefined {
+  const own = bounds.get(id);
+  if (own !== undefined) return own;
+  let result: SceneBounds | null | undefined;
+  for (const [leaf, box] of bounds) {
+    if (!leaf.startsWith(`${id}\u0000`) || box === null) continue;
+    result = result == null ? box : union(result, box);
+  }
+  return result;
+}
+
 /** The union of all drawn leaf bounds. */
 export function contentBounds(bounds: ReadonlyMap<string, SceneBounds | null>): SceneBounds {
   let all: SceneBounds | null = null;
