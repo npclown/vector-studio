@@ -201,7 +201,7 @@ test('E41-A12 effects: add, edit, hide and remove a shadow and a blur from the p
   // A second blur is refused with the notice and no change.
   await page.getByTestId('effects-add-blur').click();
   await expect(page.getByTestId('property-refusal')).toHaveText(
-    'A layer takes at most 8 effects and one layer blur',
+    'A layer takes at most 8 effects, at most one layer blur and one background blur',
   );
   expect(await effects(page, a!)).toHaveLength(2);
 

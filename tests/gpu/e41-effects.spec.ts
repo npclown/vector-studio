@@ -14,6 +14,7 @@ import type {
 } from '@vector-studio/contracts';
 import type { E23GradientPaintApi } from '../../apps/playground/src/e23-gradient-paint.js';
 import {
+  backgroundBlurOracle,
   effectOracle,
   oracleImage,
   oracleLevels,
@@ -612,8 +613,9 @@ function compare(
   actual: Uint8Array,
   expected: OracleImage,
   scale: number,
-  backdrop: 0 | 1 | Uint8Array,
+  backdrop: 0 | 1 | Uint8Array | Float64Array,
   clip?: readonly [number, number, number, number],
+  skip?: (x: number, y: number) => boolean,
 ) {
   let worst = 0;
   let at: [number, number] = [0, 0];
@@ -622,11 +624,16 @@ function compare(
     null;
   for (let y = 0; y < expected.height; y += 1)
     for (let x = 0; x < expected.width; x += 1) {
-      if (nearClipCorner(x, y, clip)) continue;
+      if (nearClipCorner(x, y, clip) || skip?.(x, y) === true) continue;
       const index = (y * expected.width + x) * 4;
       for (let lane = 0; lane < 3; lane += 1) {
         const alpha = expected.data[index + 3]! * scale;
-        const below = typeof backdrop === 'number' ? backdrop : backdrop[index + lane]! / 255;
+        const below =
+          typeof backdrop === 'number'
+            ? backdrop
+            : backdrop instanceof Float64Array
+              ? backdrop[index + lane]!
+              : backdrop[index + lane]! / 255;
         const value = expected.data[index + lane]! * scale + below * (1 - alpha);
         const difference = Math.abs(actual[index + lane]! - value * 255);
         if (difference > worst) {
@@ -1096,6 +1103,284 @@ test('E41-A09 effect textures in accounting, released, back to baseline', async 
   rows.disposedLive = disposed.resources.live;
   if (disposed.resources.live !== 0) failures.push(`live after dispose ${disposed.resources.live}`);
   writeReport('a09', { rows, failures });
+  expect(pageErrors).toEqual([]);
+  expect(failures).toEqual([]);
+});
+
+// --- V-36 U3: background blur (V36-A04 G5 to G7 and G9, A06's nested case, A07). ---
+
+const backgroundBlur = (sigma: number): SceneEffect => ({ kind: 'backgroundBlur', sigma });
+const STRIPE_A: SceneColor = { r: 0.95, g: 0.35, b: 0.1, a: 1 };
+const STRIPE_B: SceneColor = { r: 0.1, g: 0.25, b: 0.85, a: 1 };
+const GLASS: SceneColor = { r: 1, g: 1, b: 1, a: 0.3 };
+
+/** Vertical stripes past every edge of the 512 × 320 target: the backdrop `D`. */
+const stripes = (): RenderNodeSnapshot[] =>
+  Array.from({ length: 36 }, (_, index) =>
+    shape(
+      `stripe-${index}`,
+      null,
+      'rectangle',
+      [-40 + index * 16, -40, 8, 400],
+      index % 3 === 0 ? STRIPE_B : STRIPE_A,
+    ),
+  );
+
+type GlassFixture = Readonly<{
+  name: string;
+  /** The root's subtree (and its clipping frame), drawn over the stripes. */
+  nodes: readonly RenderNodeSnapshot[];
+  /** The root's subtree without the ancestors' clip: its `L` capture. */
+  contentNodes: readonly RenderNodeSnapshot[];
+  /** The stripes and anything else drawn without the root: `D`'s capture. */
+  under: readonly RenderNodeSnapshot[];
+  effects: readonly SceneEffect[];
+  contentOpacity: number;
+  clip?: readonly [number, number, number, number];
+}>;
+
+const glassCard = (
+  id: string,
+  parentId: string | null,
+  rect: readonly [number, number, number, number],
+  effects: readonly SceneEffect[],
+  fill: SceneColor = GLASS,
+  opacity = 1,
+) => shape(id, parentId, 'rectangle', rect, fill, { effects, opacity });
+
+const G5 = glassCard('g5', null, [120, 70, 180, 120], [backgroundBlur(10)]);
+const GLASS_FIXTURES: readonly GlassFixture[] = [
+  {
+    name: 'G5 background blur radius 20 of a 30 % fill over stripes',
+    nodes: [G5],
+    contentNodes: [G5],
+    under: stripes(),
+    effects: G5.effects!,
+    contentOpacity: 1,
+  },
+  {
+    name: 'G6 G5 in a clipping frame',
+    nodes: [
+      container('g6f', ['g6'], [], {
+        clip: { kind: 'rect', x: 160, y: 100, width: 110, height: 70 },
+      }),
+      glassCard('g6', 'g6f', [120, 70, 180, 120], [backgroundBlur(10)]),
+    ],
+    contentNodes: [glassCard('g6', null, [120, 70, 180, 120], [backgroundBlur(10)])],
+    under: stripes(),
+    effects: [backgroundBlur(10)],
+    contentOpacity: 1,
+    clip: [160, 100, 110, 70],
+  },
+  {
+    name: 'G7 G5 at the target edge, radius 40 (downsampled, clamp)',
+    nodes: [glassCard('g7', null, [-30, 180, 200, 160], [backgroundBlur(20)])],
+    contentNodes: [glassCard('g7', null, [-30, 180, 200, 160], [backgroundBlur(20)])],
+    under: stripes(),
+    effects: [backgroundBlur(20)],
+    contentOpacity: 1,
+  },
+  {
+    name: 'G9 background blur with a drop shadow on a leaf at opacity 0.5',
+    nodes: [
+      glassCard(
+        'g9',
+        null,
+        [300, 140, 140, 100],
+        [dropShadow(12, 10, 6), backgroundBlur(8)],
+        { ...TEAL, a: 0.4 },
+        0.5,
+      ),
+    ],
+    contentNodes: [
+      glassCard(
+        'g9',
+        null,
+        [300, 140, 140, 100],
+        [dropShadow(12, 10, 6), backgroundBlur(8)],
+        { ...TEAL, a: 0.4 },
+        0.5,
+      ),
+    ],
+    under: stripes(),
+    effects: [dropShadow(12, 10, 6), backgroundBlur(8)],
+    contentOpacity: 0.5,
+  },
+];
+
+/** A frame's bytes as premultiplied colour in [0, 1] (the frame is opaque). */
+function imageOf(rgba: Uint8Array, width: number, height: number): OracleImage {
+  const image = oracleImage({ x: 0, y: 0, width, height });
+  for (let index = 0; index < width * height * 4; index += 1)
+    image.data[index] = rgba[index]! / 255;
+  return image;
+}
+
+for (const samples of [1, 4] as const) {
+  test(`V36-A04 background blur against the oracle at ${samples}x`, async ({ browser }) => {
+    test.setTimeout(240_000);
+    const effectsPage = await browser.newPage();
+    const contentPage = await browser.newPage();
+    const effects = await open(effectsPage, { samples, effects: 'v1' });
+    const content = await open(contentPage, { samples, effects: 'v1', content: true });
+    const rows: unknown[] = [];
+    for (const fixture of GLASS_FIXTURES) {
+      const drawn = await render(effectsPage, [...fixture.under, ...fixture.nodes]);
+      const { width, height } = drawn.result.frame;
+      const target = { x: 0, y: 0, width, height };
+      // D: the frame without the root.
+      const d = imageOf((await render(effectsPage, fixture.under)).rgba, width, height);
+      // L: the root's content alone, over black and over white.
+      const black = await render(contentPage, fixture.contentNodes);
+      const white = await render(contentPage, [backdrop(width, height), ...fixture.contentNodes]);
+      const l = contentOf(black.rgba, white.rgba, width, height);
+      const c = fixture.contentOpacity;
+      const sigmaPx = fixture.effects.find((effect) => effect.kind === 'backgroundBlur')!.sigma;
+      const r = effectOracle(l, target, {
+        shadows: fixture.effects.flatMap((effect) =>
+          effect.kind === 'dropShadow'
+            ? [
+                {
+                  color: effect.color,
+                  dx: effect.offsetX,
+                  dy: effect.offsetY,
+                  sigmaPx: effect.sigma,
+                },
+              ]
+            : [],
+        ),
+        blurSigmaPx: null,
+        contentOpacity: c,
+      });
+      // P ← B × o over D, then R × o over that (the root's opacity o is c for a leaf).
+      const b = backgroundBlurOracle(d, target, target, sigmaPx, l, c);
+      if (fixture.clip !== undefined) {
+        clipImage(b, fixture.clip);
+        clipImage(r, fixture.clip);
+      }
+      const glassed = new Float64Array(width * height * 4);
+      for (let index = 0; index < width * height; index += 1) {
+        const at = index * 4;
+        const alpha = b.data[at + 3]! * c;
+        for (let lane = 0; lane < 4; lane += 1)
+          glassed[at + lane] = b.data[at + lane]! * c + d.data[at + lane]! * (1 - alpha);
+      }
+      // V36-A04: texels where 0 < α(L) < 2/255 are left out (the 127× gain of `h`).
+      const faint = (x: number, y: number) => {
+        const alpha = l.data[(y * width + x) * 4 + 3]!;
+        return alpha > 0 && alpha < 2 / 255;
+      };
+      const result = compare(drawn.rgba, r, c, glassed, fixture.clip, faint);
+      const tolerance = oracleLevels(sigmaPx) > 0 ? 6 : 3;
+      // The blur shows: pixels that differ from the frame with the root drawn without it.
+      const plain = await render(effectsPage, [
+        ...fixture.under,
+        ...fixture.nodes.map((node) =>
+          node.effects === undefined
+            ? node
+            : {
+                ...node,
+                effects: node.effects.map((effect) =>
+                  effect.kind === 'backgroundBlur' ? backgroundBlur(0) : effect,
+                ),
+              },
+        ),
+      ]);
+      let changed = 0;
+      for (let index = 0; index < width * height; index += 1) {
+        const at = index * 4;
+        if ([0, 1, 2].some((lane) => Math.abs(drawn.rgba[at + lane]! - plain.rgba[at + lane]!) > 8))
+          changed += 1;
+      }
+      const counters = drawn.result.counters;
+      rows.push({
+        fixture: fixture.name,
+        tolerance,
+        ...result,
+        changed,
+        effectPasses: counters.effectPasses,
+        blendSplits: counters.blendSplits,
+        backgroundBlurSkipped: counters.backgroundBlurSkipped,
+      });
+      expect(changed, fixture.name).toBeGreaterThan(500);
+      expect(counters.backgroundBlurSkipped, fixture.name).toBe(0);
+      expect(result.worst, `${fixture.name} at ${result.at.join(', ')}`).toBeLessThanOrEqual(
+        tolerance,
+      );
+    }
+    const diagnostics = await effectsPage.evaluate(() => window.__vectorStudioE23.diagnostics());
+    writeReport(`v36-a04-background-${samples}x`, {
+      adapter: effects.ready.adapter,
+      rows,
+      errors: diagnostics.filter((event) => event.severity === 'error').map((event) => event.code),
+    });
+    expect(effects.pageErrors).toEqual([]);
+    expect(content.pageErrors).toEqual([]);
+  });
+}
+
+test('V36-A06 a nested background blur draws without its blur and is counted', async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const page = await browser.newPage();
+  const { pageErrors } = await open(page, { samples: 4, effects: 'v1' });
+  const nested = (sigma: number) => [
+    ...stripes(),
+    container('n', ['nc'], [], { opacity: 0.5 }),
+    glassCard('nc', 'n', [120, 70, 180, 120], [backgroundBlur(sigma)]),
+  ];
+  const before = await counters(page);
+  const blurred = await render(page, nested(10));
+  const skipped = blurred.result.counters.backgroundBlurSkipped - before.backgroundBlurSkipped;
+  const splits = blurred.result.counters.blendSplits - before.blendSplits;
+  // The same frame with a σ below the epsilon: no blur, no skip; identical bytes.
+  const tiny = await render(page, nested(1e-4));
+  const identical = Buffer.compare(Buffer.from(blurred.rgba), Buffer.from(tiny.rgba)) === 0;
+  writeReport('v36-a06-nested', { skipped, splits, identical });
+  expect(skipped).toBeGreaterThanOrEqual(1);
+  expect(splits).toBe(0);
+  expect(tiny.result.counters.backgroundBlurSkipped).toBe(
+    blurred.result.counters.backgroundBlurSkipped,
+  );
+  expect(identical).toBe(true);
+  expect(pageErrors).toEqual([]);
+});
+
+test('V36-A07 background-blur edits cost no port calls or geometry; textures released', async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const page = await browser.newPage();
+  const { pageErrors } = await open(page, { samples: 4, effects: 'v1' });
+  const failures: string[] = [];
+  const rows: Record<string, unknown> = {};
+  const card = glassCard('a07g', null, [120, 70, 180, 120], [backgroundBlur(10)]);
+  const scene = [...stripes(), star('a07s', null, [140, 90], 80, RED), card];
+  const baseline = textures((await render(page, scene.slice(0, -1))).result.counters);
+  await show(page, scene);
+  const edits: Record<string, readonly SceneEffect[]> = {
+    sigma: [backgroundBlur(16)],
+    withShadow: [dropShadow(4, 6, 3), backgroundBlur(16)],
+    removed: [],
+    added: [backgroundBlur(6)],
+  };
+  for (const [name, effects] of Object.entries(edits)) {
+    const before = await counters(page);
+    const edited = await edit(page, [
+      { ...withoutEffects(card), ...(effects.length === 0 ? {} : { effects }) },
+    ]);
+    const value = cost(before, edited.counters);
+    rows[`edit-${name}`] = value;
+    if (value.portCalls !== 0 || value.strokePortCalls !== 0 || value.geometryBuilds !== 0)
+      failures.push(`edit ${name}: ${JSON.stringify(value)}`);
+  }
+  // D, B and the scratch are transient: after the frame the live textures are the baseline's.
+  const drawn = await render(page, scene);
+  rows.textures = { baseline, after: textures(drawn.result.counters) };
+  if (JSON.stringify(textures(drawn.result.counters)) !== JSON.stringify(baseline))
+    failures.push(`textures after the frame ${JSON.stringify(rows.textures)}`);
+  writeReport('v36-a07-background', { rows, failures });
   expect(pageErrors).toEqual([]);
   expect(failures).toEqual([]);
 });

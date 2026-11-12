@@ -81,7 +81,7 @@ At `N`'s composite slot in the parent's pass:
 
 ### 5.3 Top-level roots (V36-Q2 (a))
 
-The snapshot with a margin reads the main target only. A background blur draws only when `N`'s composite is in the main pass: no ancestor of `N` is an E25 layer (a container with `0 < opacity < 1`) or an effect root. Otherwise `N` draws without its background blur in v1 and the frame statistic `backgroundBlurSkipped` counts it. The panel applies the same rule on the document (an ancestor with opacity < 1 or visible effective effects, E41-S10: an instance without effects of its own counts with its symbol's) and shows "Background blur shows only outside groups with opacity or effects" on that effect. Nested parents are backlog (the backdrop would cross tiles).
+The snapshot with a margin reads the main target only. A background blur draws only when `N`'s composite is in the main pass: no ancestor of `N` is an E25 layer (a container with `0 < opacity < 1`) or an effect root. Otherwise `N` draws without its background blur in v1 and the frame statistic `backgroundBlurSkipped` counts it. The panel applies the same rule on the document (an ancestor with opacity < 1, visible effective effects (E41-S10: an instance without effects of its own counts with its symbol's) or a V-35 blend mode other than pass-through, which makes it a layer too; inside a symbol, each of its instances' ancestry counts) and shows "Background blur shows only outside groups with opacity or effects" on that effect. Nested parents are backlog (the backdrop would cross tiles).
 
 ### 5.4 Fallbacks
 

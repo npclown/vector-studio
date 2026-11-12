@@ -186,3 +186,49 @@ export function effectOracle(
   each((x, y, at) => out.data.set(oracleBilinear(level, (x + 0.5) / scale, (y + 0.5) / scale), at));
   return out;
 }
+
+/**
+ * V-36 contract, section 5.1 (with Q3 (a), clamp): a background blur's `B = (G ∗ D) × h` over
+ * `result`, premultiplied, before the composite's opacity `o`. `backdrop` is `D`, the parent
+ * target just before the root's composite, over `target` (at least where the blur reads it);
+ * beyond `target`'s edges `D` repeats its edge texels. The blur is K4's, as `effectOracle`'s
+ * (levels, box downsample, truncated Gaussian, bilinear upsample), and `h = min(127 α(L) / c, 1)`
+ * from the root's content `L` (`content`, carrying c).
+ */
+export function backgroundBlurOracle(
+  backdrop: OracleImage,
+  target: OracleRect,
+  result: OracleRect,
+  sigmaPx: number,
+  content: OracleImage,
+  contentOpacity: number,
+): OracleImage {
+  const levels = oracleLevels(sigmaPx);
+  const scale = 2 ** levels;
+  // Past K4's reach on every side (s (r + 2) plus slack), so the blur never sees the padding's end.
+  const pad = scale * (Math.min(Math.ceil((3 * sigmaPx) / scale), 32) + 4);
+  const extended = oracleImage({
+    x: result.x - pad,
+    y: result.y - pad,
+    width: result.width + 2 * pad,
+    height: result.height + 2 * pad,
+  });
+  for (let y = 0; y < extended.height; y += 1)
+    for (let x = 0; x < extended.width; x += 1) {
+      const tx = Math.min(Math.max(x + extended.x, target.x), target.x + target.width - 1);
+      const ty = Math.min(Math.max(y + extended.y, target.y), target.y + target.height - 1);
+      extended.data.set(oracleTexel(backdrop, tx, ty), (y * extended.width + x) * 4);
+    }
+  const { level } = sigmaPx > 0 ? blurred(extended, sigmaPx) : { level: extended };
+  const out = oracleImage(result);
+  for (let y = result.y; y < result.y + result.height; y += 1)
+    for (let x = result.x; x < result.x + result.width; x += 1) {
+      const h = Math.min((127 * oracleTexel(content, x, y)[3]!) / contentOpacity, 1);
+      const b = oracleBilinear(level, (x + 0.5) / scale, (y + 0.5) / scale);
+      out.data.set(
+        b.map((v) => v * h),
+        ((y - result.y) * result.width + x - result.x) * 4,
+      );
+    }
+  return out;
+}

@@ -25,8 +25,8 @@ import { nativeFixture, nativeScene, submitted } from '../support/p4-native-fixt
 // V-36 contract (docs/plans/viz-v36-inner-shadow-background-blur-contract.md), unit U2, renderer
 // half: the V36-S3 scene shapes, the V36-S4 gate ('v0' and 'v1'), V36-K1 (output margin, cull
 // reach, source bound), K1b's cut sides in the packet, section 5.5's harden scratch in the
-// budget, the inner-shadow passes in a frame on the fake device, and the pre-U3 background-blur
-// fallback (`backgroundBlurSkipped`). The passes' arithmetic is in e41-u5-effect-passes.test.ts.
+// budget, the inner-shadow passes in a frame on the fake device, and the background-blur fallback
+// (`backgroundBlurSkipped`; since U3 for a nested root, section 5.3). The passes' arithmetic is in e41-u5-effect-passes.test.ts.
 
 const IDENTITY = [1, 0, 0, 1, 0, 0] as const;
 const black: SceneColor = { r: 0, g: 0, b: 0, a: 0.5 };
@@ -310,7 +310,7 @@ describe('V36-K1b cut sides in the packet', () => {
   });
 });
 
-describe('V36 inner shadows and the pre-U3 background blur in a frame', () => {
+describe('V36 inner shadows and the nested background blur in a frame', () => {
   const withEffects = { clipPipeline: true, layerPipeline: true, effectPipeline: true } as const;
 
   it('encodes harden, blur, innerTint, coverage and merge passes after the layer pass', async () => {
@@ -340,22 +340,35 @@ describe('V36 inner shadows and the pre-U3 background blur in a frame', () => {
     creation.dispose();
   });
 
-  it('draws a background-blur root without its blur and counts it until U3', async () => {
+  it('draws a nested background-blur root without its blur and counts it (U3: section 5.3)', async () => {
     const fixture = nativeFixture();
-    const { scene, target: native, creation } = await nativeScene(fixture, withEffects);
-    const packet = prepare(
-      [box('a', null, 100, { effects: [backgroundBlur(4), drop(2, 2, 1)] })],
-      native,
-    );
-    const layer = packet.layers!.layers[0]!;
+    const {
+      scene,
+      target: native,
+      creation,
+    } = await nativeScene(fixture, {
+      ...withEffects,
+      blendPipeline: true,
+    });
+    // U3: a root in a 50 % group composites into the group's layer, not the main pass, so it
+    // asks for no backdrop even on a target that takes snapshots.
+    const nodes = [
+      { ...group('g', null, ['a']), opacity: 0.5 },
+      box('a', 'g', 100, { effects: [backgroundBlur(4), drop(2, 2, 1)] }),
+    ];
+    const packet = prepare(nodes, { ...native, backdropSnapshots: true });
+    const layer = packet.layers!.layers.find((entry) => entry.nodeId === 'a')!;
+    expect(layer.parent).not.toBe(-1);
     expect(layer.effect!.backgroundBlur).toEqual({ sigmaPx: 4 });
+    expect(layer.backdrop).toBeUndefined();
     const plan = planEffectPasses(layer.bound, layer.effect!.output, layer.effect!);
-    // The drop shadow's passes only: the background blur has none before U3.
+    // The drop shadow's passes only: the background blur's run at a main-pass split.
     expect(plan.passes.map((pass) => pass.kind)).toEqual(['blur', 'blur', 'tint', 'merge']);
     submitted(scene.submitPrimitivePacket(packet));
     submitted(scene.submitPrimitivePacket(packet));
     expect(scene.effectPasses).toBe(2);
     expect(scene.backgroundBlurSkipped).toBe(2);
+    expect(scene.blendSplits).toBe(0);
     creation.dispose();
   });
 });

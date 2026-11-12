@@ -133,6 +133,8 @@ export class PrimitiveRendererService
   public readonly requiresEffectPipeline: boolean;
   /** V-35 contract, V35-K2: true exactly when the `blend` option is 'v0'; read at attach. */
   public readonly requiresBlendPipeline: boolean;
+  /** V-36 contract, section 5.2: true exactly when the `effects` option is 'v1'; read at attach. */
+  public readonly requiresBackdropSnapshot: boolean;
   /** V-32 (V32-P1): the image source port under `paints: 'image'`; read at attach. */
   public readonly imageSource?: ImageSourcePort;
   #unsubscribeImages: (() => void) | null = null;
@@ -238,6 +240,7 @@ export class PrimitiveRendererService
     this.requiresLayerPipeline = groups === 'isolated';
     this.requiresEffectPipeline = effects !== 'none';
     this.requiresBlendPipeline = blend === 'v0';
+    this.requiresBackdropSnapshot = effects === 'v1';
     const anyPort = port !== undefined || strokePort !== undefined;
     this.requiresMeshPipeline = anyPort;
     // P3 V3 section a with the B2 section 9.1 amendment (S4): path nodes are supported when a
