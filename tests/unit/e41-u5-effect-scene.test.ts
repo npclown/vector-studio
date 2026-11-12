@@ -109,7 +109,7 @@ const outline = (calls: readonly (readonly unknown[])[]) =>
     .map((call) => (call[0] === 'beginRenderPass' ? call.slice(0, 3) : call));
 
 describe('E41 U5 effect pipeline creation', () => {
-  it('creates the effect module, five pipelines and the shifted layer variants', async () => {
+  it('creates the effect module, eight pipelines (V36-K3) and the shifted layer variants', async () => {
     const plain = nativeFixture();
     const without = await nativeScene(plain, layered);
     const fixture = nativeFixture();
@@ -142,7 +142,7 @@ describe('E41 U5 effect pipeline creation', () => {
     }
     expect(fixture.pipelineLabels).toContain('vector-studio/e41-effect-composite-v0-clip-4x');
     expect(scene.shaderModulesCreated).toBe(without.scene.shaderModulesCreated + 1 + 3 + 2);
-    expect(scene.pipelinesCreated).toBe(without.scene.pipelinesCreated + 5 + 3 + 2);
+    expect(scene.pipelinesCreated).toBe(without.scene.pipelinesCreated + 8 + 3 + 2);
     creation.dispose();
     without.creation.dispose();
     expect(accounting.snapshot().live).toBe(0);
@@ -168,7 +168,7 @@ describe('E41 U5 effect pipeline creation', () => {
     // composite's clip variant and its shifted form.
     expect(scene.shaderModulesCreated).toBe(without.scene.shaderModulesCreated + 1 + 11 + 2);
     expect(scene.pipelinesCreated).toBe(
-      without.scene.pipelinesCreated + 5 + 1 + 4 + 36 + 4 + 2 + 2,
+      without.scene.pipelinesCreated + 8 + 1 + 4 + 36 + 4 + 2 + 2,
     );
     const labels = fixture.pipelineLabels.filter((label) => label.endsWith('+shift-v0'));
     expect(labels).toHaveLength(48);

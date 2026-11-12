@@ -1,3 +1,4 @@
+import { hasVisibleFill } from './fills.js';
 import type { DocumentV8, Frame, NodeV8, PathData } from '@vector-studio/model';
 import {
   apply,
@@ -28,6 +29,22 @@ import type { PagePoint } from './types.js';
 // A `symbol` is hit as a frame; an `instance` (MVP M7 contract, section 4.3) is hit as a frame
 // on its source's background and border and wherever a node of its expansion, read from the
 // editor's expansion cache, would be hit inside its content clip, and the hit names the instance.
+
+/**
+ * V-31 contract, V31-S2: whether `id` is effectively locked, that is it or a container above it
+ * (below the page) has `locked: true`. An unknown ID is not locked.
+ */
+export function isLocked(document: DocumentV8, id: string): boolean {
+  const node = document.nodes[id];
+  if (node === undefined) return false;
+  if (node.locked === true) return true;
+  return ancestors(documentTree(document), id).some((parent) => parent.locked === true);
+}
+
+/** Whether any of `ids` is effectively locked (V31-E2). */
+export function anyLocked(document: DocumentV8, ids: readonly string[]): boolean {
+  return ids.some((id) => isLocked(document, id));
+}
 
 /** Frame-local path geometry for a custom node (its extension's `toScene`), or null. */
 export type CustomGeometry = (node: NodeV8) => PathData | null;
@@ -312,44 +329,72 @@ export function hitsNode(
   zoom: number,
   custom: CustomGeometry,
 ): boolean {
-  if (!node.visible) return false;
-  if (isContainer(node)) return false;
+  return hitPart(node, parentPoint, zoom, custom) !== null;
+}
+
+/** The part of a hit leaf: its fill area (a text node's box) or its stroke (V-39 contract, E6). */
+export type HitPart = 'fill' | 'stroke';
+
+/**
+ * As `hitsNode`, telling which part is hit. With `paint` false (hit testing) the fill wins where
+ * both are and the stroke has the 4 CSS px tolerance; with `paint` true (the eyedropper, V-39
+ * contract, E6) the part drawn on top wins: the stroke within half its width, else the fill.
+ */
+export function hitPart(
+  node: NodeV8,
+  parentPoint: PagePoint,
+  zoom: number,
+  custom: CustomGeometry,
+  paint = false,
+): HitPart | null {
+  if (!node.visible) return null;
+  if (isContainer(node)) return null;
   // An instance is hit through its expansion in `visitHits` (M7 contract, section 4.3).
-  if (node.type === 'instance') return false;
+  if (node.type === 'instance') return null;
   // Into the unrotated frame: a rigid map, so distances are unchanged (M1 contract, section 6).
   const point = intoFrame(node, parentPoint);
   // Text is hit in its rotated frame box as a filled rectangle, or within the stroke tolerance
   // of its edge, with no layout (M6a contract, section 7, M6a-Q7).
   if (node.type === 'text') {
-    return (
-      insideBox(point, node.frame) || nearOutline(point, [rectangleOutline(node.frame)], 4 / zoom)
-    );
+    if (insideBox(point, node.frame)) return 'fill';
+    if (paint) return null;
+    return nearOutline(point, [rectangleOutline(node.frame)], 4 / zoom) ? 'stroke' : null;
   }
-  const radius = Math.max((node.stroke?.width ?? 0) / 2, 4 / zoom);
+  const width = node.stroke?.width ?? 0;
+  const radius = paint ? width / 2 : Math.max(width / 2, 4 / zoom);
   const tolerance = 0.25 / zoom;
+  let inFill: () => boolean;
+  let lines: () => Polyline[];
   if (node.type === 'rectangle') {
     const radii = clampedRadii(node.cornerRadii, node.frame.width, node.frame.height);
-    if (radii.every((r) => r === 0)) {
-      if (node.fill !== null && insideBox(point, node.frame)) return true;
-      return nearOutline(point, [rectangleOutline(node.frame)], radius);
-    }
-    if (node.fill !== null && insideRounded(point, node.frame, radii)) return true;
-    return nearOutline(point, [roundedOutline(node.frame, radii, tolerance)], radius);
+    const square = radii.every((r) => r === 0);
+    inFill = () =>
+      square ? insideBox(point, node.frame) : insideRounded(point, node.frame, radii);
+    lines = () =>
+      square ? [rectangleOutline(node.frame)] : [roundedOutline(node.frame, radii, tolerance)];
+  } else if (node.type === 'ellipse') {
+    inFill = () => insideEllipse(point, node.frame);
+    lines = () => [ellipseOutline(node.frame, tolerance)];
+  } else if (node.type === 'line') {
+    // Review: in paint mode a line without a drawn stroke paints nothing.
+    if (paint && (node.stroke === null || radius <= 0)) return null;
+    const { lines: segments, triangles } = lineOutline(node);
+    if (triangles.some((triangle) => insideFill(point, [triangle], false))) return 'stroke';
+    return nearOutline(point, [...segments, ...triangles], radius) ? 'stroke' : null;
+  } else {
+    const geometry = node.type === 'path' ? node.path : custom(node);
+    if (geometry === null) return null;
+    const flat = flatten(geometry, node.frame, node.type === 'path', tolerance);
+    inFill = () => insideFill(point, flat, geometry.fillRule === 'evenodd');
+    lines = () => flat;
   }
-  if (node.type === 'ellipse') {
-    if (node.fill !== null && insideEllipse(point, node.frame)) return true;
-    return nearOutline(point, [ellipseOutline(node.frame, tolerance)], radius);
+  const hasFill = 'fills' in node && hasVisibleFill(node.fills);
+  if (paint) {
+    if (node.stroke !== null && radius > 0 && nearOutline(point, lines(), radius)) return 'stroke';
+    return hasFill && inFill() ? 'fill' : null;
   }
-  if (node.type === 'line') {
-    const { lines, triangles } = lineOutline(node);
-    if (triangles.some((triangle) => insideFill(point, [triangle], false))) return true;
-    return nearOutline(point, [...lines, ...triangles], radius);
-  }
-  const geometry = node.type === 'path' ? node.path : custom(node);
-  if (geometry === null) return false;
-  const lines = flatten(geometry, node.frame, node.type === 'path', tolerance);
-  if (node.fill !== null && insideFill(point, lines, geometry.fillRule === 'evenodd')) return true;
-  return nearOutline(point, lines, radius);
+  if (hasFill && inFill()) return 'fill';
+  return nearOutline(point, lines(), radius) ? 'stroke' : null;
 }
 
 /** Whether `point`, in a mask group's local space, is inside its source's fill region. */
@@ -374,6 +419,19 @@ function expansionTree(expansion: Expansion): TreeView {
 }
 
 /**
+ * What a hit painted (V-39 contract, E6): the node whose paint shows there (an instance's source
+ * for its background and border), the part, and the point in that node's frame unit box.
+ */
+export type PaintHit = Readonly<{ node: NodeV8; part: HitPart; unit: PagePoint }>;
+
+function unitOf(x: number, y: number, frame: Frame): PagePoint {
+  return {
+    x: frame.width === 0 ? 0 : x / frame.width,
+    y: frame.height === 0 ? 0 : y / frame.height,
+  };
+}
+
+/**
  * Visits the nodes of `page` hit at `point` in reverse paint order, at any depth (M1 contract,
  * section 6): leaves, and frames and symbols on their background or border; never a group, a
  * mask group or a mask source. An instance is visited as a frame with its source's fill and
@@ -387,8 +445,9 @@ function visitHits(
   point: PagePoint,
   zoom: number,
   custom: CustomGeometry,
-  take: (id: string) => boolean,
+  take: (id: string, hit: PaintHit) => boolean,
   expansions: ExpansionCache,
+  paint = false,
 ): void {
   const tree = documentTree(document);
   // The tree depth is bounded by 256 (M1-S3), and through an expansion by M7-S5, so the
@@ -402,10 +461,19 @@ function visitHits(
     clip: Clip,
   ): boolean => {
     const node = view.node(id);
-    if (node === undefined || !node.visible) return false;
-    const hit = () => clip() && take(owner ?? id);
+    // V31-E1: a locked node is skipped with its subtree, as a hidden one; inside an expansion
+    // only the instance's own lock (checked when the walk reached it) counts (V31-S2). The
+    // eyedropper's paint walk samples locked nodes too (V39-E6).
+    if (node === undefined || !node.visible || (!paint && owner === null && node.locked === true)) {
+      return false;
+    }
+    const hit = (painted: NodeV8, part: HitPart, unit: PagePoint) =>
+      clip() && take(owner ?? id, { node: painted, part, unit });
     if (!isContainer(node) && node.type !== 'instance') {
-      return hitsNode(node, parentPoint, zoom, custom) && hit();
+      const part = hitPart(node, parentPoint, zoom, custom, paint);
+      if (part === null) return false;
+      const p = intoFrame(node, parentPoint);
+      return hit(node, part, unitOf(p.x - node.frame.x, p.y - node.frame.y, node.frame));
     }
     const local = apply(
       invertRigid(localTransform(node.frame, node.rotation)),
@@ -439,6 +507,7 @@ function visitHits(
     // A frame paints its background, its children inside its rect, then its border; an
     // instance paints its source's background and border around its expansion.
     let fill: boolean;
+    let painted: NodeV8 = node;
     let stroke: Extract<NodeV8, { type: 'frame' }>['stroke'];
     let content: readonly string[] = [];
     let within = view;
@@ -446,8 +515,9 @@ function visitHits(
     const inside = insideBox(local, box);
     if (node.type === 'instance') {
       const source = tree.node(node.symbol);
-      fill = source?.type === 'symbol' && source.fill !== null;
+      fill = source?.type === 'symbol' && hasVisibleFill(source.fills);
       stroke = source?.type === 'symbol' ? source.stroke : null;
+      if (source !== undefined) painted = source;
       // An instance's content is always clipped to its box, so outside it nothing inside hits.
       const result = inside ? expansions.expand(document, node.id) : null;
       if (result !== null && result.ok) {
@@ -456,13 +526,20 @@ function visitHits(
         as = owner ?? node.id;
       }
     } else {
-      fill = node.fill !== null;
+      fill = hasVisibleFill(node.fills);
       stroke = node.stroke;
       content = node.children;
     }
+    const unit = unitOf(local.x, local.y, node.frame);
     if (stroke !== null) {
-      const radius = Math.max(stroke.width / 2, 4 / zoom);
-      if (nearOutline(local, [rectangleOutline(box)], radius) && hit()) return true;
+      const radius = paint ? stroke.width / 2 : Math.max(stroke.width / 2, 4 / zoom);
+      if (
+        radius > 0 &&
+        nearOutline(local, [rectangleOutline(box)], radius) &&
+        hit(painted, 'stroke', unit)
+      ) {
+        return true;
+      }
     }
     if (
       children(
@@ -475,7 +552,7 @@ function visitHits(
     ) {
       return true;
     }
-    return fill && inside && hit();
+    return fill && inside && hit(painted, 'fill', unit);
   };
   const roots = tree.page(page)?.children ?? [];
   for (let i = roots.length - 1; i >= 0; i -= 1) {
@@ -539,6 +616,40 @@ export function hitsAt(
     expansions,
   );
   return [...found];
+}
+
+/**
+ * The topmost painted part of `page` at `point` (V-39 contract, E6): the walk of `deepestHit`
+ * with the paint rule of `hitPart` (strokes within half their width, no tolerance), reaching
+ * into instance expansions; `accept` can pass over a hit (one that paints nothing). Null when
+ * nothing is painted there.
+ */
+export function paintHitAt(
+  document: DocumentV8,
+  page: string,
+  point: PagePoint,
+  zoom: number,
+  custom: CustomGeometry,
+  expansions: ExpansionCache = new ExpansionCache(),
+  accept: (hit: PaintHit) => boolean = () => true,
+): PaintHit | null {
+  let found: PaintHit | null = null;
+  visitHits(
+    document,
+    page,
+    point,
+    zoom,
+    custom,
+    (_id, hit) => {
+      // A hit whose part paints nothing (a null stroke) lets the walk go on below it.
+      if (!accept(hit)) return false;
+      found = hit;
+      return true;
+    },
+    expansions,
+    true,
+  );
+  return found;
 }
 
 /**
@@ -614,9 +725,11 @@ export function marqueeHits(
 ): string[] {
   const tree = documentTree(document);
   const lookup = (id: string) => tree.node(id);
+  if (scope !== null && isLocked(document, scope)) return [];
   return childrenOf(tree, scope ?? page).filter((id) => {
     const node = tree.node(id);
-    if (node === undefined || !node.visible) return false;
+    // V31-E1: candidates are never effectively locked (the scope's own chain is checked above).
+    if (node === undefined || !node.visible || node.locked === true) return false;
     // A page child with rotation 0 uses the frame itself, bit-identical with P5; a scope's
     // child is in its parent's space, so it uses its page-space bounds.
     // A path uses the box of its curve (V-26), which is inside its frame.

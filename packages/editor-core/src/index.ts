@@ -7,8 +7,23 @@ export {
   DEFAULT_SHAPE_STROKE,
 } from './edits.js';
 export { createCounterIdSource } from './ids.js';
+export {
+  MAX_GRID_LINES,
+  layoutGridLines,
+  type LayoutGridBand,
+  type LayoutGridGeometry,
+  type LayoutGridLine,
+} from './layout-grid.js';
 export { starExtension, type StarCreateArgs } from './star.js';
 export { extensionCommand, type ExtensionCommandBuilder } from './extension-command.js';
+export {
+  isSvgText,
+  svgToFragment,
+  type SvgImport,
+  type SvgImportOptions,
+  type SvgTextMeasure,
+  type SvgTextRun,
+} from './svg-import.js';
 export type * from './types.js';
 
 // MVP M8 contract, M8-T1 (M8-Q2 (a)): every `model` and `contracts` type in the reach of this
@@ -18,7 +33,11 @@ export type * from './types.js';
 // built declarations and fails when a reached name is missing here.
 export type {
   Arrow,
+  BindingKey,
+  BindingRef,
+  Bindings,
   Color,
+  ColorStyle,
   Constraint,
   Constraints,
   ContainerNodeV8,
@@ -26,8 +45,13 @@ export type {
   CustomNodeV6,
   CustomNodeV8,
   Dash,
+  BackgroundBlurEffect,
   DropShadowEffect,
   Effect,
+  BandLayoutGrid,
+  Guide,
+  LayoutGrid,
+  UniformLayoutGrid,
   DocumentErrorCode,
   DocumentV8,
   EllipseNodeV6,
@@ -42,6 +66,7 @@ export type {
   GradientStop,
   GroupNode,
   GroupNodeV8,
+  InnerShadowEffect,
   InstanceNodeV5,
   InstanceNodeV8,
   JsonValue,
@@ -51,7 +76,16 @@ export type {
   LineNodeV8,
   ModelErrorCode,
   NodeBaseV2,
+  NodeBindings,
   NodeEffects,
+  NodeFills,
+  BlendMode,
+  ContainerBlend,
+  ContainerBlendMode,
+  Fill,
+  LeafBlend,
+  NodeLock,
+  NodeLayoutGrids,
   NodeV8,
   PageV1,
   PageV2,
@@ -76,6 +110,9 @@ export type {
   TextNodeV8,
   TextOverride,
   TextRun,
+  Variable,
+  VariableMode,
+  VariableSet,
 } from '@vector-studio/model';
 export type {
   CameraApplyResult,
@@ -95,6 +132,7 @@ export type {
   SceneClip,
   SceneColor,
   SceneDash,
+  SceneBlendMode,
   SceneEffect,
   SceneFillRule,
   SceneGradient,

@@ -217,6 +217,7 @@ describe('M6a-A06: createText', () => {
       align: 'left',
       letterSpacing: 0,
       lineHeight: 1.2,
+      blendMode: 'normal',
       effects: [],
     });
   });

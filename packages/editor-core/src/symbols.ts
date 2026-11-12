@@ -1,4 +1,12 @@
-import type { DocumentV8, InstanceNodeV8, NodeV8, SymbolNodeV8 } from '@vector-studio/model';
+import {
+  BINDING_KEYS,
+  type BindingKey,
+  type BindingRef,
+  type DocumentV8,
+  type InstanceNodeV8,
+  type NodeV8,
+  type SymbolNodeV8,
+} from '@vector-studio/model';
 import { Draft, fail, type Failure } from './draft.js';
 import {
   drawIds,
@@ -78,12 +86,34 @@ function detach(draft: Draft, document: DocumentV8, planned: Plan, ids: readonly
       visible: instance.visible,
       type: 'frame',
       children: children.map((child) => copyOf.get(child)!),
-      fill: source.fill,
+      // V35-S4: the source's fills, and the instance's own mode.
+      fills: source.fills,
       stroke: source.stroke,
       // The effects the instance draws with (E41-S10): its own, or else its source's.
       effects: instance.effects.length > 0 ? instance.effects : source.effects,
+      blendMode: instance.blendMode,
+      // V31-S3: detach keeps the instance's lock, as it keeps `visible`.
+      ...(instance.locked === true ? { locked: true } : {}),
+      // V-38 contract, V38-S2: the source's layout grids.
+      ...(source.layoutGrids === undefined ? {} : { layoutGrids: source.layoutGrids }),
+      // V39-E4: the frame carries the source's paint bindings and the instance's own; the
+      // draft drops those that no longer hold (an opacity binding unless the product equals it).
+      ...detachedBindings(source, instance),
     });
   });
+}
+
+/** The bindings of a detached instance's frame, in V39-S7 order, or none. */
+export function detachedBindings(
+  source: SymbolNodeV8,
+  instance: InstanceNodeV8,
+): { bindings?: Partial<Record<BindingKey, BindingRef>> } {
+  const out: Partial<Record<BindingKey, BindingRef>> = {};
+  for (const key of BINDING_KEYS) {
+    const ref = instance.bindings?.[key] ?? source.bindings?.[key];
+    if (ref !== undefined) out[key] = ref;
+  }
+  return Object.keys(out).length === 0 ? {} : { bindings: out };
 }
 
 /**

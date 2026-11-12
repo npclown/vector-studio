@@ -1382,7 +1382,8 @@ describe('M2-A10 EditorCanvas clipboard events (section 6)', () => {
     const missing = clipboardEvent(null, false);
     canvas.fire('paste', missing.event);
     expect(empty.state.prevented).toBe(true);
-    expect(empty.state.read).toEqual(['text/plain']);
+    // V33-P2: outside text edit mode `image/svg+xml` is read too, after `text/plain`.
+    expect(empty.state.read).toEqual(['text/plain', 'image/svg+xml']);
     expect(missing.state.prevented).toBe(true);
     expect(pastes).toEqual([
       { type: 'paste', text: '' },

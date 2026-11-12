@@ -1222,7 +1222,10 @@ describe('M1-A07 clip depth and tree depth', () => {
         ...(parent === undefined ? {} : { parent }),
       });
     }
-    expect(nodeOf(target, parent!)).toMatchObject({ children: [], fill: DEFAULT_FRAME_FILL });
+    expect(nodeOf(target, parent!)).toMatchObject({
+      children: [],
+      fills: [{ paint: DEFAULT_FRAME_FILL }],
+    });
     expectFailure(
       target,
       { type: 'createFrame', frame: f(0, 0, 10, 10), parent: parent! },

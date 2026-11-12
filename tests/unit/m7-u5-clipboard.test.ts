@@ -63,6 +63,10 @@ const f = (x: number, y: number, width: number, height: number): Frame => ({
   height,
 });
 
+/** V35-S1: the fills a v7 `fill` stands for. */
+const fillsOf = (paint: unknown) =>
+  paint === null ? [] : [{ paint, visible: true, opacity: 1, blendMode: 'normal' }];
+
 function base(id: string, parent: string, frame: Frame) {
   return {
     id,
@@ -81,20 +85,23 @@ const rect = (id: string, parent: string, frame: Frame, fill = BLUE) => ({
   ...base(id, parent, frame),
   type: 'rectangle',
   cornerRadii: [0, 0, 0, 0],
-  fill,
+  fills: fillsOf(fill),
   stroke: null,
+  blendMode: 'normal',
 });
 const container = (type: string, id: string, parent: string, children: string[], frame: Frame) => ({
   ...base(id, parent, frame),
   type,
   children,
-  ...(type === 'frame' || type === 'symbol' ? { fill: RED, stroke: null } : {}),
+  ...(type === 'frame' || type === 'symbol' ? { fills: fillsOf(RED), stroke: null } : {}),
+  blendMode: 'passThrough',
 });
 const instance = (id: string, parent: string, frame: Frame, symbol: string) => ({
   ...base(id, parent, frame),
   type: 'instance',
   symbol,
   textOverrides: {},
+  blendMode: 'passThrough',
 });
 
 /**
@@ -518,8 +525,9 @@ describe('fragment parse order (M7 contract, section 6)', () => {
       type: 'custom',
       customType: 'ext.star',
       data: { innerRatio: 0.5, points },
-      fill: null,
+      fills: [],
       stroke: null,
+      blendMode: 'normal',
     });
     const body = bodyOf(I_FRAGMENT);
     body.sourceNodes.S!.children = ['r', 'b'];
@@ -607,7 +615,7 @@ describe('paste of an instance alone (M7-Q9 (a))', () => {
 
   it.each<[string, (value: Json) => void]>([
     ['its size', (value) => (value.nodes.S!.frame = f(10, 10, 41, 20))],
-    ['its fill', (value) => (value.nodes.S!.fill = BLUE)],
+    ['its fill', (value) => (value.nodes.S!.fills = fillsOf(BLUE))],
     [
       'its stroke',
       (value) =>
@@ -683,7 +691,11 @@ describe('paste of an instance alone (M7-Q9 (a))', () => {
     expect(nodeOf(target, 'n1')).toMatchObject({ type: 'instance', symbol: 'S' });
     ok(target, { type: 'setNodeProps', id: 'S', props: { fill: BLUE } });
     expect(ok(target, { type: 'paste' })).toEqual(['n2']);
-    expect(nodeOf(target, 'n2')).toMatchObject({ type: 'frame', children: ['n3'], fill: RED });
+    expect(nodeOf(target, 'n2')).toMatchObject({
+      type: 'frame',
+      children: ['n3'],
+      fills: [{ paint: RED }],
+    });
   });
 });
 
@@ -703,10 +715,10 @@ describe('the clipboard generation (section 6)', () => {
     copied(target, ['I']);
     // The same text stays in the clipboard, but the load changed the generation.
     const changed = small();
-    changed.nodes.S!.fill = BLUE;
+    changed.nodes.S!.fills = fillsOf(BLUE);
     ok(target, { type: 'loadDocument', document: changed });
     const [detached] = ok(target, { type: 'paste' });
-    expect(nodeOf(target, detached!)).toMatchObject({ type: 'frame', fill: RED });
+    expect(nodeOf(target, detached!)).toMatchObject({ type: 'frame', fills: [{ paint: RED }] });
     ok(target, { type: 'loadDocument', document: small() });
     const [linked] = ok(target, { type: 'paste' });
     expect(nodeOf(target, linked!)).toMatchObject({ type: 'instance', symbol: 'S' });
@@ -938,8 +950,9 @@ describe('expansion validity and caps through paste (M7-X3, section 4.1)', () =>
       type: 'custom',
       customType: 'ext.wide',
       data: {},
-      fill: null,
+      fills: [],
       stroke: null,
+      blendMode: 'normal',
     };
     let drawn = 0;
     const custom = {
@@ -970,7 +983,7 @@ describe('expansion validity and caps through paste (M7-X3, section 4.1)', () =>
       children.push(`r-${n}`);
       nodes[`r-${n}`] = rect(`r-${n}`, 's', f(0, 0, 10, 10));
     }
-    nodes.s = { ...container('symbol', 's', 'p-1', children, f(0, 0, 10, 10)), fill: null };
+    nodes.s = { ...container('symbol', 's', 'p-1', children, f(0, 0, 10, 10)), fills: [] };
     const pages = perPage.map((count, k) => {
       const page = `p-${k + 1}`;
       const ids = Array.from({ length: count }, (_, n) => `i-${k + 1}-${n + 1}`);
@@ -1004,7 +1017,7 @@ describe('expansion validity and caps through paste (M7-X3, section 4.1)', () =>
   ) {
     const children = Array.from({ length: rects }, (_, k) => `c${k}`);
     const sourceNodes: Json['nodes'] = {
-      s: { ...container('symbol', 's', '', children, f(0, 0, 10, 10)), fill: null },
+      s: { ...container('symbol', 's', '', children, f(0, 0, 10, 10)), fills: [] },
     };
     for (const id of children) sourceNodes[id] = rect(id, 's', f(0, 0, 1, 1));
     const nodes: Json['nodes'] = {};
@@ -1144,7 +1157,10 @@ describe('rule (1) review follow-ups (B1, S1, S2)', () => {
   function dragged() {
     const value = reused();
     value.pages[0]!.children.push('T');
-    value.nodes.T = { ...container('symbol', 'T', 'p', [], f(300, 300, 30, 30)), fill: GREEN };
+    value.nodes.T = {
+      ...container('symbol', 'T', 'p', [], f(300, 300, 30, 30)),
+      fills: fillsOf(GREEN),
+    };
     const target = own(value);
     ok(target, { type: 'setSnapping', enabled: false });
     const pointer = (kind: 'pointerdown' | 'pointermove' | 'pointerup', x: number) =>
@@ -1165,7 +1181,7 @@ describe('rule (1) review follow-ups (B1, S1, S2)', () => {
     pointer('pointerdown', 315);
     pointer('pointermove', 325);
     pointer('pointerup', 325);
-    expect(nodeOf(target, 'node-3')).toMatchObject({ type: 'symbol', fill: GREEN });
+    expect(nodeOf(target, 'node-3')).toMatchObject({ type: 'symbol', fills: [{ paint: GREEN }] });
   }
 
   it('G1: an undo across an Alt-drag that drew a carried ID does not link', () => {
@@ -1189,7 +1205,7 @@ describe('rule (1) review follow-ups (B1, S1, S2)', () => {
     for (let k = 0; k < 3; k += 1) ok(target, { type: 'undo' });
     copied(target, ['I']);
     for (let k = 0; k < 3; k += 1) ok(target, { type: 'redo' });
-    expect(nodeOf(target, 'node-3')).toMatchObject({ fill: GREEN });
+    expect(nodeOf(target, 'node-3')).toMatchObject({ fills: [{ paint: GREEN }] });
     const [id] = ok(target, { type: 'paste' });
     expect(nodeOf(target, id!).type).toBe('frame');
   });
@@ -1260,9 +1276,9 @@ describe('rule (1) review follow-ups (B1, S1, S2)', () => {
     const target = own();
     copied(target, ['I']);
     const body = bodyOf(clipboard(target)!);
-    body.sourceNodes.S!.fill = BLUE;
+    body.sourceNodes.S!.fills = fillsOf(BLUE);
     const [id] = ok(target, { type: 'paste', text: marked(body) });
-    expect(nodeOf(target, id!)).toMatchObject({ type: 'frame', fill: BLUE });
+    expect(nodeOf(target, id!)).toMatchObject({ type: 'frame', fills: [{ paint: BLUE }] });
     // The current clipboard itself still links.
     const [linked] = ok(target, { type: 'paste' });
     expect(nodeOf(target, linked!)).toMatchObject({ type: 'instance', symbol: 'S' });

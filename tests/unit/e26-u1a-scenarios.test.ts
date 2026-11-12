@@ -105,7 +105,7 @@ describe('E26-U1a scenarios', () => {
       expect(node.frame.y + node.frame.height / 2).toBeCloseTo(y, 9);
       expect(node.opacity).toBe(0.5 + 0.25 * (index % 3));
       expect('stroke' in node ? node.stroke : null).toBeNull();
-      expect('fill' in node ? node.fill : null).toEqual({
+      expect('fills' in node ? node.fills[0]?.paint : null).toEqual({
         r: 0.2 + 0.6 * p1Q(index, 0),
         g: 0.2 + 0.6 * p1Q(index, 1),
         b: 0.2 + 0.6 * p1Q(index, 2),

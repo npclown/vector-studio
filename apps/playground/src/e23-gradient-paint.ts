@@ -58,8 +58,15 @@ const parameters = new URLSearchParams(window.location.search);
 const samples = parameters.get('samples') === '1' ? 1 : 4;
 const groups = parameters.get('groups') === 'isolated' ? 'isolated' : 'flat';
 const isolateUnit = parameters.get('isolate') === '1';
-/** E41 U5: `effects=v0` draws node effects (with `groups=isolated`). */
-const effects = parameters.get('effects') === 'v0' && groups === 'isolated' ? 'v0' : 'none';
+/**
+ * E41 U5: `effects=v0` draws node effects (with `groups=isolated`); V-36 (V36-S4): `effects=v1`
+ * also accepts inner shadows and background blur.
+ */
+const effectsParameter = parameters.get('effects');
+const effects =
+  (effectsParameter === 'v0' || effectsParameter === 'v1') && groups === 'isolated'
+    ? effectsParameter
+    : 'none';
 /** E41-A05: `effectcontent=1` composites effect roots' content only, for the oracle. */
 const effectContent = parameters.get('effectcontent') === '1';
 const tileParameter = parameters.get('tile');
@@ -317,7 +324,7 @@ async function start() {
     paints,
     ...(paints === 'image' ? { imageSource } : {}),
     groups,
-    ...(effects === 'v0' ? { effects } : {}),
+    ...(effects !== 'none' ? { effects } : {}),
     ...(isolateUnit ? { isolateUnitOpacityForTesting: true } : {}),
     ...(text === 'atlas' ? { text, glyphRaster } : {}),
     ...(pagesParameter === null ? {} : { textAtlasPagesForTesting: Number(pagesParameter) }),

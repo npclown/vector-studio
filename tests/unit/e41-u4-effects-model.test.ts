@@ -156,7 +156,8 @@ describe('E41-A01 schema v7 effects (E41-S1 to E41-S3)', () => {
     ['an object', {}, at('')],
     ['nine effects', Array(9).fill(SHADOW), at('')],
     ['a non-object effect', [5], at('/0')],
-    ['an unknown kind', [{ ...SHADOW, kind: 'innerShadow' }], at('/0/kind')],
+    // `innerShadow` is a v8 kind since V-36 (V36-S1); its v7 refusal is in v36-u2-model.test.ts.
+    ['an unknown kind', [{ ...SHADOW, kind: 'outerGlow' }], at('/0/kind')],
     ['a missing kind', [{ visible: true, radius: 1 }], at('/0/kind')],
     ['a second layer blur', [BLUR, SHADOW, BLUR], at('/2')],
     ['a shadow key on a blur', [{ ...BLUR, color: black }], at('/0/color')],

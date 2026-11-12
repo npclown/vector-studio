@@ -1,8 +1,13 @@
+import { BINDING_KEYS } from './bindings.js';
 import type {
+  Color,
+  VariableSet,
   Dash,
   DocumentV8,
   Effect,
+  Fill,
   JsonValue,
+  LayoutGrid,
   NodeV6,
   NodeV8,
   Paint,
@@ -99,9 +104,12 @@ function compareCodeUnits(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-/** E41-S2 key order: `kind`, then a shadow's `visible, color, offsetX, offsetY, radius`. */
+/**
+ * E41-S2 and V36-S1 key order: `kind`, then a blur's `visible, radius` or a shadow's
+ * `visible, color, offsetX, offsetY, radius`.
+ */
 function effect(value: Effect): Ordered {
-  if (value.kind === 'layerBlur') {
+  if (value.kind === 'layerBlur' || value.kind === 'backgroundBlur') {
     return { kind: value.kind, visible: value.visible, radius: value.radius };
   }
   return {
@@ -114,9 +122,90 @@ function effect(value: Effect): Ordered {
   };
 }
 
-/** A v8 node (v7's shape so far): the v6 fields, then `effects` (E41-S1). */
+/** V35-S2 key order: `paint, visible, opacity, blendMode`. */
+function fill(value: Fill): Ordered {
+  return {
+    paint: paint(value.paint),
+    visible: value.visible,
+    opacity: value.opacity,
+    blendMode: value.blendMode,
+  };
+}
+
+/**
+ * A v8 node: the v6 fields with `fills` in `fill`'s place (V35-S2), then `layoutGrids` (V38-S2),
+ * `blendMode` (V35-S2), `effects` (E41-S1), `locked` only when true (V31-S1), then `bindings`
+ * when present (V39-S7).
+ */
 function nodeV8(value: NodeV8): Ordered {
-  return { ...nodeV6(value), effects: value.effects.map(effect) };
+  const fills = 'fills' in value ? value.fills : null;
+  const v6 = nodeV6({ ...value, fill: null } as unknown as NodeV6);
+  const ordered: Ordered = {};
+  for (const [key, field] of Object.entries(v6)) {
+    if (key === 'fill') ordered.fills = (fills ?? []).map(fill);
+    else ordered[key] = field;
+  }
+  // V38-S2: `layoutGrids` after `stroke`, before `effects`; an empty list is not written.
+  const grids =
+    (value.type === 'frame' || value.type === 'symbol') && (value.layoutGrids?.length ?? 0) > 0
+      ? { layoutGrids: value.layoutGrids!.map(layoutGrid) }
+      : {};
+  const node: Ordered = {
+    ...ordered,
+    ...grids,
+    blendMode: value.blendMode,
+    effects: value.effects.map(effect),
+  };
+  if (value.locked === true) node.locked = true;
+  // V39-S7: `bindings` last, keys in BINDING_KEYS order, each `{ style }` or `{ variable }`.
+  if (value.bindings !== undefined) {
+    const bindings: Ordered = {};
+    for (const key of BINDING_KEYS) {
+      const ref = value.bindings[key];
+      if (ref === undefined) continue;
+      bindings[key] = 'style' in ref ? { style: ref.style } : { variable: ref.variable };
+    }
+    node.bindings = bindings;
+  }
+  return node;
+}
+
+/** V39-S7: `modes` (`id`, `name`), `mode`, `items` (`id`, `name`, `type`, `values`). */
+function variableSet(value: VariableSet): Ordered {
+  return {
+    modes: value.modes.map((mode) => ({ id: mode.id, name: mode.name })),
+    mode: value.mode,
+    items: value.items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      type: item.type,
+      values: Object.fromEntries(
+        Object.keys(item.values)
+          .sort(compareCodeUnits)
+          .map((key) => {
+            const entry = (item.values as Readonly<Record<string, Color | number>>)[key]!;
+            return [key, typeof entry === 'number' ? entry : color(entry)];
+          }),
+      ),
+    })),
+  };
+}
+
+function layoutGrid(value: LayoutGrid): Ordered {
+  const color = { r: value.color.r, g: value.color.g, b: value.color.b, a: value.color.a };
+  if (value.type === 'grid') {
+    return { type: value.type, size: value.size, color, visible: value.visible };
+  }
+  return {
+    type: value.type,
+    count: value.count,
+    align: value.align,
+    size: value.size,
+    gutter: value.gutter,
+    offset: value.offset,
+    color,
+    visible: value.visible,
+  };
 }
 
 function nodeV6(value: NodeV6): Ordered {
@@ -201,10 +290,24 @@ export function orderedDocument(document: DocumentV8): Ordered {
   return {
     schemaVersion: document.schemaVersion,
     id: document.id,
+    ...(document.colorStyles === undefined
+      ? {}
+      : {
+          colorStyles: document.colorStyles.map((style) => ({
+            id: style.id,
+            name: style.name,
+            paint: paint(style.paint),
+          })),
+        }),
+    ...(document.variables === undefined ? {} : { variables: variableSet(document.variables) }),
     pages: document.pages.map((page) => ({
       id: page.id,
       name: page.name,
       children: [...page.children],
+      // V38-S1: an empty list is not written.
+      ...((page.guides?.length ?? 0) > 0
+        ? { guides: page.guides!.map((guide) => ({ axis: guide.axis, value: guide.value })) }
+        : {}),
     })),
     nodes: Object.fromEntries(
       Object.keys(document.nodes)
@@ -224,7 +327,9 @@ export function orderedDocument(document: DocumentV8): Ordered {
  * `textOverrides` (its keys in code unit order, each value `{ runs }`), a text
  * node's in the base order followed by `runs` (each `text`, `family`, `size`, `color`),
  * `sizing`, `align`, `letterSpacing`, `lineHeight`. Every node ends with `effects`, each effect in
- * the E41-S2 key order.
+ * the E41-S2 key order, then its V-39 `bindings` if any. A v8 node holds `fills` (each `paint`,
+ * `visible`, `opacity`, `blendMode`) where v7 held `fill`, and `blendMode` before `effects`
+ * (V35-S2). The V-39 `colorStyles` and `variables` follow the document `id` when present (V39-S7).
  */
 export function serializeDocument(document: DocumentV8): string {
   return `${JSON.stringify(orderedDocument(document), null, 2)}\n`;

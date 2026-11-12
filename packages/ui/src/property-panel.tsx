@@ -7,6 +7,7 @@ import {
   type Command,
   type Constraints,
   type DocumentV8,
+  type Effect,
   type KeyBinding,
   type NodeV8,
   type TextEditState,
@@ -17,10 +18,12 @@ import { colorHex, parseNumber, type Common } from './appearance-model.js';
 import { booleanActions } from './boolean-model.js';
 import {
   addEffectCommand,
+  effectKindCommand,
   effectColorCommand,
   effectLabel,
   effectNumberCommand,
   effectRows,
+  kindOptions,
   effectOpacityCommand,
   isMaskSource,
   opacityText,
@@ -30,6 +33,24 @@ import {
   type EffectRow,
 } from './effects-model.js';
 import { withShortcut } from './editor-toolbar-model.js';
+import {
+  GRID_ALIGNS,
+  GRID_NUMBER_LABELS,
+  GRID_TYPES,
+  addGridCommand,
+  gridAlignCommand,
+  gridColorCommand,
+  gridNumberCommand,
+  gridNumberKeys,
+  gridNumberText,
+  gridOpacityCommand,
+  gridOpacityText,
+  gridTypeCommand,
+  layoutGridTarget,
+  removeGridCommand,
+  toggleGridCommand,
+  type GridHolder,
+} from './layout-grid-model.js';
 import { AppearancePanel } from './appearance-panel.js';
 import { ColorWell, Swatches } from './color-controls.js';
 import { Choice, Row, TextField } from './fields.js';
@@ -441,6 +462,8 @@ function SymbolSection({
   );
 }
 
+type Kind = Effect['kind'];
+
 const EFFECT_FIELDS: readonly Readonly<{ key: EffectNumberKey; label: string; shadow: boolean }>[] =
   [
     { key: 'offsetX', label: 'X', shadow: true },
@@ -452,15 +475,18 @@ const EFFECT_FIELDS: readonly Readonly<{ key: EffectNumberKey; label: string; sh
 function EffectRowFields({
   nodes,
   row,
+  offered,
   disabled,
   run,
 }: {
   nodes: readonly NodeV8[];
   row: EffectRow;
+  offered: readonly Kind[];
   disabled: boolean;
   run: Run;
 }) {
   const name = `Effect ${row.index + 1}`;
+  const kinds = kindOptions(row, offered);
   const box = useRef<HTMLInputElement>(null);
   // Set on every render: a refused toggle lets the browser clear the mark while the state
   // stays 'mixed'.
@@ -485,18 +511,29 @@ function EffectRowFields({
       data-kind={row.kind}
       style={{ ...ROW_STYLE, marginBottom: 4 }}
     >
-      <label>
-        <input
-          ref={box}
-          type="checkbox"
-          aria-label={`${name} visible`}
-          data-testid={`effect-${row.index}-visible`}
-          checked={row.visible.state === 'one' && row.visible.value}
-          disabled={disabled}
-          onChange={() => void run(toggleEffectCommand(nodes, row))}
-        />{' '}
-        {effectLabel(row.kind)}
-      </label>
+      <input
+        ref={box}
+        type="checkbox"
+        aria-label={`${name} visible`}
+        data-testid={`effect-${row.index}-visible`}
+        checked={row.visible.state === 'one' && row.visible.value}
+        disabled={disabled}
+        onChange={() => void run(toggleEffectCommand(nodes, row))}
+      />
+      <select
+        aria-label={`${name} kind`}
+        data-testid={`effect-${row.index}-kind`}
+        value={row.kind}
+        disabled={disabled || kinds.length < 2}
+        onChange={(event) => void run(effectKindCommand(nodes, row, event.target.value as Kind))}
+      >
+        {row.kind === 'mixed' && <option value="mixed">{effectLabel('mixed')}</option>}
+        {(kinds.length === 0 && row.kind !== 'mixed' ? [row.kind] : kinds).map((kind) => (
+          <option key={kind} value={kind}>
+            {effectLabel(kind)}
+          </option>
+        ))}
+      </select>
       {row.shadow && (
         <>
           <TextField
@@ -556,11 +593,19 @@ function EffectRowFields({
   );
 }
 
+/** The add buttons' test IDs (V-36 contract, section 6). */
+const ADD_TEST_IDS: Readonly<Record<Kind, string>> = {
+  dropShadow: 'effects-add-shadow',
+  innerShadow: 'effects-add-inner-shadow',
+  layerBlur: 'effects-add-blur',
+  backgroundBlur: 'effects-add-background-blur',
+};
+
 /**
- * E41-U7 (E41 contract, section 6): add a drop shadow or a layer blur to each selected node, and
- * per effect index a visible toggle, colour, X, Y, blur and remove, "mixed" where the selected
- * nodes differ. A mask source's effects do not render (section 3): the section shows them
- * disabled with a note.
+ * E41-U7 (E41 contract, section 6) and V-36 (section 6): add each kind the host projects to each
+ * selected node, and per effect index a visible toggle, a kind select within the row's family,
+ * colour, X, Y, blur and remove, "mixed" where the selected nodes differ. A mask source's
+ * effects do not render (section 3): the section shows them disabled with a note.
  */
 function EffectsSection({
   document,
@@ -573,25 +618,25 @@ function EffectsSection({
 }) {
   const masked = nodes.some((node) => isMaskSource(document, node));
   const rows = effectRows(nodes);
+  // The kinds the host projects (V-36 contract, section 6). Background blur joins the list when
+  // the renderer draws it (V-36 U3).
+  const offered = useEditorQuery({ type: 'effectKinds' }).filter(
+    (kind) => kind !== 'backgroundBlur',
+  );
   return (
     <Section legend="Effects">
       <Row>
-        <button
-          type="button"
-          data-testid="effects-add-shadow"
-          disabled={masked}
-          onClick={() => void run(addEffectCommand(nodes, 'dropShadow'))}
-        >
-          + Drop shadow
-        </button>
-        <button
-          type="button"
-          data-testid="effects-add-blur"
-          disabled={masked}
-          onClick={() => void run(addEffectCommand(nodes, 'layerBlur'))}
-        >
-          + Layer blur
-        </button>
+        {offered.map((kind) => (
+          <button
+            key={kind}
+            type="button"
+            data-testid={ADD_TEST_IDS[kind]}
+            disabled={masked}
+            onClick={() => void run(addEffectCommand(nodes, kind))}
+          >
+            + {effectLabel(kind)}
+          </button>
+        ))}
       </Row>
       {masked && (
         <p data-testid="effects-mask-note" style={{ margin: '4px 0', opacity: 0.7 }}>
@@ -599,8 +644,118 @@ function EffectsSection({
         </p>
       )}
       {rows.map((row) => (
-        <EffectRowFields key={row.index} nodes={nodes} row={row} disabled={masked} run={run} />
+        <EffectRowFields
+          key={row.index}
+          nodes={nodes}
+          row={row}
+          offered={offered}
+          disabled={masked}
+          run={run}
+        />
       ))}
+    </Section>
+  );
+}
+
+/**
+ * V-38 (contract, V38-U1): the layout grids of one selected frame or symbol: add a grid, columns
+ * or rows, and per grid a visible checkbox, type, colour, opacity, its numbers and remove; each
+ * edit is one `setNodeProps` of the whole list.
+ */
+function LayoutGridSection({ node, run }: { node: GridHolder; run: Run }) {
+  const grids = node.layoutGrids ?? [];
+  const send = (command: Command | null) => command !== null && run(command);
+  return (
+    <Section legend="Layout grid">
+      <Row>
+        {GRID_TYPES.map((type) => (
+          <button
+            key={type}
+            type="button"
+            data-testid={`layout-grid-add-${type}`}
+            onClick={() => void run(addGridCommand(node, type))}
+          >
+            + {type === 'grid' ? 'Grid' : type === 'columns' ? 'Columns' : 'Rows'}
+          </button>
+        ))}
+      </Row>
+      {grids.map((grid, index) => {
+        const name = `Layout grid ${index + 1}`;
+        const identity = `${node.id} ${index} ${JSON.stringify(grid)}`;
+        const colour = colorHex(grid.color);
+        return (
+          <div
+            key={index}
+            role="group"
+            aria-label={name}
+            data-testid={`layout-grid-${index}`}
+            data-type={grid.type}
+            style={{ ...ROW_STYLE, marginBottom: 4 }}
+          >
+            <input
+              type="checkbox"
+              aria-label={`${name} visible`}
+              data-testid={`layout-grid-${index}-visible`}
+              checked={grid.visible}
+              onChange={() => void send(toggleGridCommand(node, index))}
+            />
+            <Choice
+              label={`${name} type`}
+              value={grid.type}
+              options={GRID_TYPES}
+              onChange={(type) => void send(gridTypeCommand(node, index, type))}
+            />
+            {grid.type !== 'grid' && (
+              <Choice
+                label={`${name} alignment`}
+                value={grid.align}
+                options={GRID_ALIGNS}
+                onChange={(align) => void send(gridAlignCommand(node, index, align))}
+              />
+            )}
+            {gridNumberKeys(grid).map((key) => (
+              <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <span aria-hidden="true" style={{ opacity: 0.6 }}>
+                  {GRID_NUMBER_LABELS[key]}
+                </span>
+                <TextField
+                  identity={identity}
+                  label={`${name} ${GRID_NUMBER_LABELS[key].toLowerCase()}`}
+                  value={gridNumberText(grid, key)}
+                  commit={(text) => send(gridNumberCommand(node, index, key, text))}
+                />
+              </label>
+            ))}
+            <TextField
+              identity={identity}
+              label={`${name} colour`}
+              value={colour}
+              commit={(hex) => send(gridColorCommand(node, index, hex))}
+            />
+            <ColorWell
+              label={`${name} colour picker`}
+              testId={`layout-grid-${index}-colour-picker`}
+              value={colour}
+              commit={(hex) => send(gridColorCommand(node, index, hex))}
+            />
+            <TextField
+              identity={identity}
+              label={`${name} opacity`}
+              value={gridOpacityText(grid)}
+              commit={(text) => send(gridOpacityCommand(node, index, text))}
+            />
+            <button
+              type="button"
+              aria-label={`Remove ${name}`}
+              title={`Remove ${name.toLowerCase()}`}
+              data-testid={`layout-grid-${index}-remove`}
+              onClick={() => void run(removeGridCommand(node, index))}
+            >
+              −
+            </button>
+          </div>
+        );
+      })}
     </Section>
   );
 }
@@ -677,6 +832,7 @@ export function PropertySections() {
   };
   const constrained = constrainedNodes(document, nodes);
   const texts = textNodes(nodes);
+  const gridHolder = layoutGridTarget(nodes);
   return (
     <div style={{ fontSize: 13 }}>
       <TransformSection nodes={nodes} target={transformTarget(nodes, handles, page)} run={run} />
@@ -695,6 +851,7 @@ export function PropertySections() {
         />
       )}
       <EffectsSection document={document} nodes={nodes} run={run} />
+      {gridHolder !== null && <LayoutGridSection node={gridHolder} run={run} />}
       <BooleanSection document={document} selection={selection} keymap={keymap} run={run} />
       <SymbolSection
         document={document}

@@ -448,6 +448,14 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   }
 
   /**
+   * @internal Tests only (V-36 section 5.4): the current generation's drawn effect roots whose
+   * background blur was not drawn, one per root and frame.
+   */
+  getBackgroundBlurSkippedForTesting(): number {
+    return this.#primitiveScene?.backgroundBlurSkipped ?? 0;
+  }
+
+  /**
    * E41 section 5.3: whether this generation draws effects; false before initialization, for a
    * source that does not ask for them, or when the effect pipelines are unavailable.
    */

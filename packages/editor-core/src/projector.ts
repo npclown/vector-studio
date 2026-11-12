@@ -5,6 +5,7 @@ import type {
   RenderNodeSnapshot,
   RendererSceneSynchronization,
   SceneApplyResult,
+  SceneBlendMode,
   SceneEffect,
   SceneIdentity,
   SceneRejectionReason,
@@ -16,8 +17,10 @@ import type {
   TextLayoutResult,
 } from '@vector-studio/contracts';
 import type {
+  ContainerBlendMode,
   DocumentV8,
   Effect,
+  Fill,
   Frame,
   LineNodeV8,
   NodeV8,
@@ -26,6 +29,8 @@ import type {
   Stroke,
   TextNodeV8,
 } from '@vector-studio/model';
+import { fillDraws } from './fills.js';
+import { MAX_FILLS } from '@vector-studio/model';
 import { ExpansionCache, type Expansion, type ExpansionResult } from './expansion.js';
 import { localTransform } from './geometry.js';
 import { lineDashes, type LineDash } from './line-dash.js';
@@ -204,10 +209,6 @@ export function composePaint(paint: Paint, width: number, height: number): Scene
     stops: paint.stops.map((stop) => ({ offset: stop.offset, color: stop.color })),
     spread: paint.spread,
   };
-}
-
-function composeFill(fill: Paint | null, width: number, height: number): ScenePaint | null {
-  return fill === null ? null : composePaint(fill, width, height);
 }
 
 /**
@@ -535,24 +536,44 @@ export function textContent(node: TextNodeV8, layout: TextLayoutResult): TextCon
 }
 
 /**
- * E41-S5: the scene effects of a node's `effects`, its visible entries in list order with
- * `σ = radius / 2` (E41-S4), in node-local units, which are the node's scene-local units.
+ * Which node effects the projector emits (`EditorOptions.projectEffects`): `false` none, `true`
+ * E41's kinds (E41-S6), `'v1'` V-36's kinds too (V36-S5).
  */
-export function sceneEffects(effects: readonly Effect[]): readonly SceneEffect[] {
+export type EffectProjection = boolean | 'v1';
+
+/**
+ * E41-S5 and V36-S5: the scene effects of a node's `effects`, its visible entries in list order
+ * with `σ = radius / 2` (E41-S4), in node-local units, which are the node's scene-local units.
+ * Below `'v1'` the kinds V-36 adds are left out, so a host on `effects: 'v0'` keeps drawing the
+ * node.
+ */
+export function sceneEffects(
+  effects: readonly Effect[],
+  projection: EffectProjection = 'v1',
+): readonly SceneEffect[] {
   const out: SceneEffect[] = [];
   for (const effect of effects) {
     if (!effect.visible) continue;
-    out.push(
-      effect.kind === 'dropShadow'
-        ? {
-            kind: 'dropShadow',
-            color: effect.color,
-            offsetX: effect.offsetX,
-            offsetY: effect.offsetY,
-            sigma: effect.radius / 2,
-          }
-        : { kind: 'layerBlur', sigma: effect.radius / 2 },
-    );
+    const sigma = effect.radius / 2;
+    switch (effect.kind) {
+      case 'dropShadow':
+      case 'innerShadow':
+        if (effect.kind === 'innerShadow' && projection !== 'v1') continue;
+        out.push({
+          kind: effect.kind,
+          color: effect.color,
+          offsetX: effect.offsetX,
+          offsetY: effect.offsetY,
+          sigma,
+        });
+        break;
+      case 'layerBlur':
+        out.push({ kind: 'layerBlur', sigma });
+        break;
+      case 'backgroundBlur':
+        if (projection === 'v1') out.push({ kind: 'backgroundBlur', sigma });
+        break;
+    }
   }
   return out;
 }
@@ -564,25 +585,143 @@ export function sceneEffects(effects: readonly Effect[]): readonly SceneEffect[]
  */
 function effectField(
   effects: readonly Effect[],
-  emit: boolean,
+  emit: EffectProjection,
 ): { effects?: readonly SceneEffect[] } {
-  if (!emit) return {};
-  const scene = sceneEffects(effects);
+  if (emit === false) return {};
+  const scene = sceneEffects(effects, emit);
   return scene.length === 0 ? {} : { effects: scene };
 }
 
 /**
- * One leaf node's scene snapshot under the scene parent `parentId`, or null when it cannot be
- * projected (an unowned custom type, a text node without `layout`, or a container: containers
- * project through `projectPage`). A throwing `layout` propagates (M6c-P2).
+ * The `blendMode` field of a snapshot (V35-P4): present only when the projector emits blend
+ * modes and the mode is not the default of its kind (`passThrough` on a container, `normal` on a
+ * leaf), so a scene without blending is the same value as before V-35.
  */
-export function projectNode(
+function blendField(
+  mode: ContainerBlendMode,
+  container: boolean,
+  emit: boolean,
+): { blendMode?: SceneBlendMode } {
+  if (!emit || mode === (container ? 'passThrough' : 'normal')) return {};
+  return { blendMode: mode };
+}
+
+/**
+ * The `blendMode` field of a group, frame, symbol or instance container (V35-P3, P5): its mode,
+ * `normal` included, which isolates the container (V35-K3).
+ */
+function containerBlend(mode: ContainerBlendMode, emit: boolean): { blendMode?: SceneBlendMode } {
+  return blendField(mode, true, emit);
+}
+
+/** V35-P1: `paint` composed in the box `w × h` with its alpha multiplied by `opacity`. */
+export function composeFillPaint(fill: Fill, width: number, height: number): ScenePaint {
+  const paint = composePaint(fill.paint, width, height);
+  const opacity = fill.opacity;
+  if (opacity === 1) return paint;
+  if (!('kind' in paint)) return { ...paint, a: paint.a * opacity };
+  return {
+    ...paint,
+    stops: paint.stops.map((stop) => ({
+      offset: stop.offset,
+      color: { ...stop.color, a: stop.color.a * opacity },
+    })),
+  };
+}
+
+type LeafContent =
+  | Pick<Extract<RenderNodeSnapshot, { kind: 'path' }>, 'kind' | 'geometry' | 'style'>
+  | Pick<Extract<RenderNodeSnapshot, { kind: 'primitive' }>, 'kind' | 'geometry' | 'style'>;
+
+/**
+ * The geometry and style of a filled leaf (rectangle, ellipse, path, custom) with fill `fill`
+ * and stroke `stroke`, or null for an unowned custom type.
+ */
+function filledContent(
+  node: Extract<NodeV8, { type: 'rectangle' | 'ellipse' | 'path' | 'custom' }>,
+  custom: CustomProjection,
+  fill: ScenePaint | null,
+  stroke: Stroke | null,
+): LeafContent | null {
+  const { width, height } = node.frame;
+  switch (node.type) {
+    case 'rectangle': {
+      const radii = clampedRadii(node.cornerRadii, width, height);
+      // M4-P3: a stroke with a miter or bevel join or a dash draws as the M4-P4 outline.
+      if (!rectanglePrimitive(stroke, width, height)) {
+        return {
+          kind: 'path',
+          geometry: rectangleOutline(width, height, radii),
+          style: { fill, stroke: pathStroke(stroke, width, height) },
+        };
+      }
+      return {
+        kind: 'primitive',
+        geometry: { kind: 'rectangle', width, height, cornerRadii: radii },
+        style: { fill, stroke: primitiveStroke(stroke, width, height) },
+      };
+    }
+    case 'ellipse':
+      if (!ellipsePrimitive(stroke, width, height)) {
+        return {
+          kind: 'path',
+          geometry: ellipseOutline(width, height),
+          style: { fill, stroke: pathStroke(stroke, width, height) },
+        };
+      }
+      return {
+        kind: 'primitive',
+        geometry: { kind: 'ellipse', width, height },
+        style: { fill, stroke: primitiveStroke(stroke, width, height) },
+      };
+    case 'path':
+      // Unit-box points scale by the frame; stroke width stays in page units.
+      return {
+        kind: 'path',
+        geometry: pathGeometry(node.path, width, height),
+        style: { fill, stroke: pathStroke(stroke, width, height) },
+      };
+    case 'custom': {
+      const geometry = custom(node);
+      if (geometry === null) return null;
+      return {
+        kind: 'path',
+        geometry: pathGeometry(geometry, 1, 1),
+        style: { fill, stroke: pathStroke(stroke, width, height) },
+      };
+    }
+  }
+}
+
+/** The scene ID of fill `index` of an expanded leaf (V35-P2). */
+export function fillLeafId(nodeId: string, index: number): string {
+  return `${nodeId}\u0000fill${index}`;
+}
+
+/** The scene ID of the stroke leaf of an expanded leaf (V35-P2). */
+export function strokeLeafId(nodeId: string): string {
+  return `${nodeId}\u0000stroke`;
+}
+
+/** What a leaf projection emits: effects (E41-S6), blend modes (V35-P4), as a mask source. */
+export type LeafEmit = Readonly<{ effects: EffectProjection; blend: boolean; mask: boolean }>;
+
+/**
+ * The scene snapshots of leaf `node` under the scene parent `parentId`, its own node first, or
+ * null when it cannot be projected (an unowned custom type, or a text node without `layout`). A
+ * filled leaf projects as one leaf (V35-P1, and always as a mask source, P2b) or as a container
+ * holding one leaf per drawing fill and a stroke leaf (V35-P2). A throwing `layout` propagates
+ * (M6c-P2).
+ */
+export function projectLeaf(
   node: NodeV8,
   custom: CustomProjection,
-  parentId: string | null = null,
-  layout?: TextLayouter,
-  effects = false,
-): RenderNodeSnapshot | null {
+  parentId: string | null,
+  layout: TextLayouter | undefined,
+  emit: LeafEmit,
+): RenderNodeSnapshot[] | null {
+  const effects = !emit.mask && emit.effects;
+  const blend = !emit.mask && emit.blend;
   const base = {
     id: node.id,
     parentId,
@@ -594,73 +733,118 @@ export function projectNode(
   };
   const { width, height } = node.frame;
   switch (node.type) {
-    case 'rectangle': {
-      const radii = clampedRadii(node.cornerRadii, width, height);
-      const fill = composeFill(node.fill, width, height);
-      // M4-P3: a stroke with a miter or bevel join or a dash draws as the M4-P4 outline.
-      if (!rectanglePrimitive(node.stroke, width, height)) {
-        return {
-          ...base,
-          kind: 'path',
-          geometry: rectangleOutline(width, height, radii),
-          style: { fill, stroke: pathStroke(node.stroke, width, height) },
-        };
-      }
-      return {
-        ...base,
-        kind: 'primitive',
-        geometry: { kind: 'rectangle', width, height, cornerRadii: radii },
-        style: { fill, stroke: primitiveStroke(node.stroke, width, height) },
-      };
-    }
-    case 'ellipse': {
-      const fill = composeFill(node.fill, width, height);
-      if (!ellipsePrimitive(node.stroke, width, height)) {
-        return {
-          ...base,
-          kind: 'path',
-          geometry: ellipseOutline(width, height),
-          style: { fill, stroke: pathStroke(node.stroke, width, height) },
-        };
-      }
-      return {
-        ...base,
-        kind: 'primitive',
-        geometry: { kind: 'ellipse', width, height },
-        style: { fill, stroke: primitiveStroke(node.stroke, width, height) },
-      };
-    }
     case 'line':
-      return { ...base, kind: 'path', ...lineContent(node) };
-    case 'path':
-      // Unit-box points scale by the frame; stroke width stays in page units.
-      return {
-        ...base,
-        kind: 'path',
-        geometry: pathGeometry(node.path, width, height),
-        style: {
-          fill: composeFill(node.fill, width, height),
-          stroke: pathStroke(node.stroke, width, height),
+      return [
+        {
+          ...base,
+          ...blendField(node.blendMode, false, blend),
+          kind: 'path',
+          ...lineContent(node),
         },
-      };
-    case 'custom': {
-      const geometry = custom(node);
-      if (geometry === null) return null;
-      return {
-        ...base,
-        kind: 'path',
-        geometry: pathGeometry(geometry, 1, 1),
-        style: {
-          fill: composeFill(node.fill, width, height),
-          stroke: pathStroke(node.stroke, width, height),
-        },
-      };
-    }
+      ];
     case 'text':
-      return layout === undefined ? null : { ...base, ...textContent(node, layout(node)) };
+      return layout === undefined
+        ? null
+        : [
+            {
+              ...base,
+              ...blendField(node.blendMode, false, blend),
+              ...textContent(node, layout(node)),
+            },
+          ];
+    case 'rectangle':
+    case 'ellipse':
+    case 'path':
+    case 'custom': {
+      const drawing = node.fills.flatMap((fill, index) =>
+        fillDraws(fill) ? [{ fill, index }] : [],
+      );
+      if (emit.mask) {
+        // V35-P2b: the source's fill area only, as one leaf without a mode.
+        const first = drawing[0]?.fill;
+        const paint =
+          first !== undefined
+            ? composeFillPaint(first, width, height)
+            : node.fills[0] !== undefined
+              ? composePaint(node.fills[0].paint, width, height)
+              : null;
+        const content = filledContent(node, custom, paint, node.stroke);
+        return content === null ? null : [{ ...base, ...content }];
+      }
+      if (
+        drawing.length === 0 ||
+        (drawing.length === 1 && drawing[0]!.fill.blendMode === 'normal')
+      ) {
+        const first = drawing[0]?.fill;
+        const paint = first === undefined ? null : composeFillPaint(first, width, height);
+        const content = filledContent(node, custom, paint, node.stroke);
+        return content === null
+          ? null
+          : [{ ...base, ...blendField(node.blendMode, false, blend), ...content }];
+      }
+      // V35-P2: the node's own mode on the container, `normal` as pass-through.
+      const inner = { parentId: node.id, transform: IDENTITY_TRANSFORM, visible: true, opacity: 1 };
+      const leaves: RenderNodeSnapshot[] = [];
+      for (const { fill, index } of drawing) {
+        const content = filledContent(node, custom, composeFillPaint(fill, width, height), null);
+        if (content === null) return null;
+        leaves.push({
+          id: fillLeafId(node.id, index),
+          ...inner,
+          ...blendField(fill.blendMode, false, blend),
+          ...content,
+        });
+      }
+      if (node.stroke !== null) {
+        const content = filledContent(node, custom, null, node.stroke);
+        if (content === null) return null;
+        leaves.push({ id: strokeLeafId(node.id), ...inner, ...content });
+      }
+      return [
+        {
+          ...base,
+          ...(node.blendMode === 'normal' ? {} : blendField(node.blendMode, false, blend)),
+          kind: 'container',
+          children: leaves.map((leaf) => leaf.id),
+          clip: null,
+        },
+        ...leaves,
+      ];
+    }
     default:
       return null;
   }
+}
+
+/**
+ * A leaf snapshot of document node `id` under the expanded scene ID `scene`: its own node takes
+ * `scene`, its fill and stroke leaves (V35-P2) the same suffixes after `scene`.
+ */
+function expandedLeaf(snapshot: RenderNodeSnapshot, id: string, scene: string): RenderNodeSnapshot {
+  const map = (value: string) => (value.startsWith(id) ? scene + value.slice(id.length) : value);
+  if (snapshot.id === id) {
+    return snapshot.kind === 'container'
+      ? { ...snapshot, id: scene, children: snapshot.children.map(map) }
+      : { ...snapshot, id: scene };
+  }
+  return { ...snapshot, id: map(snapshot.id), parentId: scene };
+}
+
+/**
+ * One leaf node's own scene snapshot under the scene parent `parentId` (`projectLeaf`'s first),
+ * or null when it cannot be projected (an unowned custom type, a text node without `layout`, or
+ * a container: containers project through `projectPage`). A throwing `layout` propagates
+ * (M6c-P2).
+ */
+export function projectNode(
+  node: NodeV8,
+  custom: CustomProjection,
+  parentId: string | null = null,
+  layout?: TextLayouter,
+  effects = false,
+  blend = false,
+): RenderNodeSnapshot | null {
+  return projectLeaf(node, custom, parentId, layout, { effects, blend, mask: false })?.[0] ?? null;
 }
 
 type ContainerSnapshot = Extract<RenderNodeSnapshot, { kind: 'container' }>;
@@ -675,10 +859,13 @@ type FrameUnit = Readonly<{
   rotation: number;
   visible: boolean;
   opacity: number;
-  fill: Paint | null;
+  /** V35-P3: the background fills, bottom first; an instance's are its source's. */
+  fills: readonly Fill[];
   stroke: Stroke | null;
   /** E41-S5: the unit's effects, on its outer container; an instance's per E41-S10. */
   effects: readonly Effect[];
+  /** V35-P3: the mode of the outer container; an instance's own (V35-S4). */
+  blendMode: ContainerBlendMode;
 }>;
 
 /**
@@ -690,23 +877,27 @@ function frameSnapshots(
   node: FrameUnit,
   parentId: string | null,
   children: readonly string[],
-  effects: boolean,
+  effects: EffectProjection,
+  blend: boolean,
 ): RenderNodeSnapshot[] {
   const { width, height } = node.frame;
   const content = frameContentId(node.id);
   const inner = { transform: IDENTITY_TRANSFORM, visible: true, opacity: 1 };
   const rectangle = { kind: 'rectangle' as const, width, height, cornerRadii: ZERO_RADII };
-  const background: RenderNodeSnapshot | null =
-    node.fill === null
-      ? null
-      : {
-          id: frameBackgroundId(node.id),
-          parentId: content,
-          ...inner,
-          kind: 'primitive',
-          geometry: rectangle,
-          style: { fill: composePaint(node.fill, width, height), stroke: null },
-        };
+  // V35-P3: one background leaf per drawing fill, the first one under today's ID.
+  const backgrounds: RenderNodeSnapshot[] = [];
+  node.fills.forEach((fill, index) => {
+    if (!fillDraws(fill)) return;
+    backgrounds.push({
+      id: index === 0 ? frameBackgroundId(node.id) : `${frameBackgroundId(node.id)}${index}`,
+      parentId: content,
+      ...inner,
+      ...blendField(fill.blendMode, false, blend),
+      kind: 'primitive',
+      geometry: rectangle,
+      style: { fill: composeFillPaint(fill, width, height), stroke: null },
+    });
+  });
   // M4-P3: the border is a primitive as a rectangle is, else the M4-P4 outline with no fill.
   const border: RenderNodeSnapshot | null =
     node.stroke === null
@@ -736,6 +927,7 @@ function frameSnapshots(
       visible: node.visible,
       opacity: node.opacity,
       ...effectField(node.effects, effects),
+      ...containerBlend(node.blendMode, blend),
       kind: 'container',
       children: border === null ? [content] : [content, border.id],
       clip: null,
@@ -745,11 +937,11 @@ function frameSnapshots(
       parentId: node.id,
       ...inner,
       kind: 'container',
-      children: background === null ? [...children] : [background.id, ...children],
+      children: [...backgrounds.map((background) => background.id), ...children],
       clip: { kind: 'rect', x: 0, y: 0, width, height },
     },
   ];
-  if (background !== null) snapshots.push(background);
+  snapshots.push(...backgrounds);
   if (border !== null) snapshots.push(border);
   return snapshots;
 }
@@ -851,7 +1043,8 @@ function groupSnapshot(
   node: NodeV8,
   parentId: string | null,
   children: readonly string[],
-  effects: boolean,
+  effects: EffectProjection,
+  blend: boolean,
 ): RenderNodeSnapshot {
   return {
     id,
@@ -860,6 +1053,7 @@ function groupSnapshot(
     visible: node.visible,
     opacity: node.opacity,
     ...effectField(node.effects, effects),
+    ...containerBlend(node.blendMode, blend),
     kind: 'container',
     children,
     clip: node.type === 'maskGroup' ? { kind: 'mask' } : null,
@@ -884,15 +1078,18 @@ function projectExpanded(
   out: RenderNodeSnapshot[],
   layout: TextLayouter | undefined,
   textless: string[],
-  effects: boolean,
+  effects: EffectProjection,
+  blend: boolean,
 ): string[] {
   const walk = (ids: readonly string[], parentId: string, maskSource?: string): string[] => {
     const projected: string[] = [];
     for (const id of ids) {
       const node = expansion.nodes.get(id);
       if (node === undefined) continue;
-      // E41-S5: a mask source's effects are not projected; it draws only coverage.
-      const emit = effects && id !== maskSource;
+      // E41-S5, V35-P2b: a mask source's effects and mode are not projected; it draws only
+      // coverage.
+      const emit = id !== maskSource && effects;
+      const emitBlend = id !== maskSource && blend;
       const scene = expandedId(instance, id);
       const old = previous?.get(id);
       const at = out.length;
@@ -913,8 +1110,8 @@ function projectExpanded(
           reusedFrom(old, node, parentId, children, id === maskSource) ??
           keepEqual(
             node.type === 'frame'
-              ? frameSnapshots({ ...node, id: scene }, parentId, sceneChildren, emit)
-              : [groupSnapshot(scene, node, parentId, sceneChildren, emit)],
+              ? frameSnapshots({ ...node, id: scene }, parentId, sceneChildren, emit, emitBlend)
+              : [groupSnapshot(scene, node, parentId, sceneChildren, emit, emitBlend)],
             old?.snapshots,
           );
       } else {
@@ -922,12 +1119,19 @@ function projectExpanded(
         if (reuse !== null) {
           snapshots = reuse;
         } else {
-          const snapshot = projectNode(node, custom, parentId, layout, emit);
-          if (snapshot === null) {
+          const leaf = projectLeaf(node, custom, parentId, layout, {
+            effects,
+            blend,
+            mask: id === maskSource,
+          });
+          if (leaf === null) {
             if (node.type === 'text') textless.push(scene);
             continue;
           }
-          snapshots = keepEqual([{ ...snapshot, id: scene }], old?.snapshots);
+          snapshots = keepEqual(
+            leaf.map((snapshot) => expandedLeaf(snapshot, id, scene)),
+            old?.snapshots,
+          );
         }
       }
       next.set(id, {
@@ -965,7 +1169,8 @@ export function projectPage(
   expansions: ExpansionCache = new ExpansionCache(),
   scope?: ProjectionScope,
   layout?: TextLayouter,
-  effects = false,
+  effects: EffectProjection = false,
+  blend = false,
 ): PageProjection {
   const built = new Map<string, RenderNodeSnapshot>();
   const order: string[] = [];
@@ -1009,6 +1214,7 @@ export function projectPage(
       layout,
       missing,
       effects,
+      blend,
     );
     textless.push(...missing);
     // The instance's own frame nodes: its placement, the source's fill and stroke.
@@ -1021,16 +1227,19 @@ export function projectPage(
           visible: node.visible,
           // The effective opacity, instance × source (MVP M4 contract, M4-P6, M4-Q15 (a)).
           opacity: node.opacity * source.opacity,
-          fill: source.fill,
+          fills: source.fills,
           stroke: source.stroke,
           // E41-S10: the instance's own effects when it has any, else its source's.
           effects: node.effects.length > 0 ? node.effects : source.effects,
+          // V35-S4: the instance's own mode.
+          blendMode: node.blendMode,
         },
         parentId,
         roots,
-        effects && !masked,
+        !masked && effects,
+        blend && !masked,
       ),
-      entry?.snapshots.slice(0, 4),
+      entry?.snapshots.slice(0, 3 + MAX_FILLS),
     );
     return {
       node,
@@ -1047,8 +1256,10 @@ export function projectPage(
     for (const id of ids) {
       if (omit.has(id) || !Object.hasOwn(document.nodes, id)) continue;
       const node = document.nodes[id]!;
-      // E41-S5: a mask source's effects are not projected; it draws only coverage.
-      const emit = effects && id !== maskSource;
+      // E41-S5, V35-P2b: a mask source's effects and mode are not projected; it draws only
+      // coverage.
+      const emit = id !== maskSource && effects;
+      const emitBlend = id !== maskSource && blend;
       if (scope !== undefined && !scope.path.has(id)) {
         const held = memo?.get(id);
         if (holds(held, node, parentId, id === maskSource) && scope.held(id)) {
@@ -1079,8 +1290,11 @@ export function projectPage(
         const snapshots =
           reusedFrom(memo?.get(id), node, parentId, children, id === maskSource) ??
           (frameLike
-            ? keepEqual(frameSnapshots(node, parentId, children, emit), memo?.get(id)?.snapshots)
-            : [groupSnapshot(id, node, parentId, children, emit)]);
+            ? keepEqual(
+                frameSnapshots(node, parentId, children, emit, emitBlend),
+                memo?.get(id)?.snapshots,
+              )
+            : [groupSnapshot(id, node, parentId, children, emit, emitBlend)]);
         entry = { node, parentId, children, snapshots };
       } else if (node.type === 'instance') {
         const unit = instanceUnit(node, parentId, id === maskSource);
@@ -1091,15 +1305,19 @@ export function projectPage(
         units.push(id);
         entry = unit;
       } else {
-        const snapshot =
-          reusedFrom(memo?.get(id), node, parentId, null, id === maskSource)?.[0] ??
-          projectNode(node, custom, parentId, layout, emit);
-        if (snapshot === null) {
+        const old = memo?.get(id);
+        const reuse = reusedFrom(old, node, parentId, null, id === maskSource);
+        const leaf =
+          reuse ??
+          projectLeaf(node, custom, parentId, layout, { effects, blend, mask: id === maskSource });
+        if (leaf === null) {
           if (node.type === 'text') textless.push(id);
           continue;
         }
         units.push(id);
-        entry = { node, parentId, children: null, snapshots: [snapshot] };
+        // A rebuilt expanded leaf's fill and stroke leaves equal by value keep their objects.
+        const snapshots = reuse ?? (leaf.length === 1 ? leaf : keepEqual(leaf, old?.snapshots));
+        entry = { node, parentId, children: null, snapshots };
       }
       if (id === maskSource && entry.masked !== true) entry = { ...entry, masked: true };
       if (scope !== undefined && !scope.replaced.has(id)) scope.replaced.set(id, memo?.get(id));
@@ -1137,10 +1355,10 @@ export function projectPage(
  * node rebuilt equal by value keeps its previous object the same way (M7 contract, section 4.2).
  */
 function keepEqual(
-  snapshots: RenderNodeSnapshot[],
+  snapshots: readonly RenderNodeSnapshot[],
   previous: readonly RenderNodeSnapshot[] | undefined,
 ): RenderNodeSnapshot[] {
-  if (previous === undefined) return snapshots;
+  if (previous === undefined) return [...snapshots];
   return snapshots.map((snapshot) => {
     const old = previous.find((entry) => entry.id === snapshot.id);
     return old !== undefined && JSON.stringify(old) === JSON.stringify(snapshot) ? old : snapshot;
@@ -1174,7 +1392,8 @@ function sameSnapshot(held: RenderNodeSnapshot, next: RenderNodeSnapshot): boole
     held.transform.every((value, index) => value === next.transform[index]) &&
     sameStrings(held.children, next.children) &&
     sameClip(held.clip, next.clip) &&
-    sameEffects(held.effects, next.effects)
+    sameEffects(held.effects, next.effects) &&
+    held.blendMode === next.blendMode
   );
 }
 
@@ -1228,14 +1447,17 @@ export class SceneProjector {
   /** Whether `editor.text-unavailable` was raised for the current page (M6c-P3). */
   private textReported = false;
   /** E41-S6: whether snapshots carry node effects; fixed for the projector's life. */
-  private readonly effects: boolean;
+  private readonly effects: EffectProjection;
+  /** V35-P4: whether snapshots carry blend modes; fixed for the projector's life. */
+  private readonly blend: boolean;
 
   /**
    * `expansions` is the editor's one expansion cache, shared with its checks and hit testing
    * (M7 contract, M7-X4); by default the projector has its own. `layout` is the editor's text
    * layout cache; without it text projects nothing (M6c contract, M6c-P2 and P3). With
    * `effects`, snapshots carry node effects (E41 contract, E41-S5 and S6); off by default, so
-   * that a renderer on `effects: 'none'` never meets them.
+   * that a renderer on `effects: 'none'` never meets them. With `blend`, snapshots carry blend
+   * modes (V-35 contract, V35-P4), for a renderer on `blend: 'v0'`.
    */
   constructor(
     renderer: RendererSceneSynchronization,
@@ -1243,7 +1465,8 @@ export class SceneProjector {
     report: (event: DiagnosticEvent) => void,
     expansions: ExpansionCache = new ExpansionCache(),
     layout?: TextLayouter,
-    effects = false,
+    effects: EffectProjection = false,
+    blend = false,
   ) {
     this.renderer = renderer;
     this.custom = custom;
@@ -1251,6 +1474,7 @@ export class SceneProjector {
     this.expansions = expansions;
     this.layout = layout;
     this.effects = effects;
+    this.blend = blend;
   }
 
   get active(): boolean {
@@ -1849,6 +2073,7 @@ export class SceneProjector {
       scope,
       this.layout,
       this.effects,
+      this.blend,
     );
     this.noteTextless(projection.textless);
 
@@ -1941,6 +2166,7 @@ export class SceneProjector {
       undefined,
       this.layout,
       this.effects,
+      this.blend,
     );
     const expected = this.differences(oracle, this.goneFrom(oracle));
     const expectedMet = [...oracle.invalid].sort();
@@ -2028,6 +2254,7 @@ export class SceneProjector {
       undefined,
       this.layout,
       this.effects,
+      this.blend,
     );
     this.noteInvalid(new Set(projection.invalid), omit);
     this.noteTextless(projection.textless);

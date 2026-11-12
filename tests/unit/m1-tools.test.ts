@@ -149,7 +149,7 @@ describe('M1-A11 ellipse and frame tools', () => {
         type,
         frame: f(20, 10, 30, 30),
         rotation: 0,
-        fill,
+        fills: [{ paint: fill }],
         stroke: null,
       });
       expect(history(target)).toEqual({ undoDepth: 1, redoDepth: 0 });

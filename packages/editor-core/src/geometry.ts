@@ -101,9 +101,8 @@ export function rotatedBounds(node: Pick<NodeV8, 'frame' | 'rotation'>): Frame {
  * the node's own axes (P5 section 3.1 rules, zero-size axes give unit coordinate 0).
  */
 export function fitPoints(points: readonly number[], rotation: number) {
-  const own: number[] = [];
-  if (rotation === 0) own.push(...points);
-  else {
+  const own: number[] = rotation === 0 ? [...points] : [];
+  if (rotation !== 0) {
     for (let i = 0; i + 1 < points.length; i += 2) {
       const p = rotate(-rotation, points[i]!, points[i + 1]!);
       own.push(p.x, p.y);

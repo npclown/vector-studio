@@ -494,12 +494,18 @@ export function AppearancePanel({ layout = 'aside' }: AppearancePanelProps) {
           {fillTakers.length > 0 && (
             <fieldset>
               <legend>Fill</legend>
-              <PaintControls
-                prefix="Fill"
-                paints={fillTakers.map(fillOf)}
-                kinds={['none', 'solid', 'linear', 'radial']}
-                write={(fill) => commit({ fill })}
-              />
+              {fillTakers.some((node) => 'fills' in node && node.fills.length > 1) ? (
+                // A single-paint edit would replace every fill (V35-S5); the fill list arrives
+                // with V35-C2.
+                <p data-testid="fill-multiple">Multiple fills</p>
+              ) : (
+                <PaintControls
+                  prefix="Fill"
+                  paints={fillTakers.map(fillOf)}
+                  kinds={['none', 'solid', 'linear', 'radial']}
+                  write={(fill) => commit({ fill })}
+                />
+              )}
             </fieldset>
           )}
           {nodes.some((node) => idsTaking([node], 'stroke').length > 0) && (

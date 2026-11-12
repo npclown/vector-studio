@@ -18,7 +18,13 @@ import { nodePageCorners } from './m2-geometry';
 // one public command, so one undo step; the zoom and selection are session commands.
 
 /** One artboard: a top-level frame of the active page, front first. */
-export type Artboard = Readonly<{ id: string; name: string; frame: Frame }>;
+export type Artboard = Readonly<{
+  id: string;
+  name: string;
+  frame: Frame;
+  /** V-31: present when the frame is locked; its canvas label then selects nothing. */
+  locked?: true;
+}>;
 
 /** The active page's artboards (its top-level frames), front first like the layer tree. */
 export function artboardsOf(document: DocumentV8, page: string): readonly Artboard[] {
@@ -26,7 +32,9 @@ export function artboardsOf(document: DocumentV8, page: string): readonly Artboa
   const boards: Artboard[] = [];
   for (const id of [...children].reverse()) {
     const node = document.nodes[id];
-    if (node?.type === 'frame') boards.push({ id, name: node.name, frame: node.frame });
+    if (node?.type !== 'frame') continue;
+    const board = { id, name: node.name, frame: node.frame };
+    boards.push(node.locked === true ? { ...board, locked: true } : board);
   }
   return boards;
 }
@@ -210,6 +218,8 @@ export function ArtboardLabels() {
             // The label never takes focus from the canvas, so the canvas shortcuts keep working.
             onMouseDown={(event) => event.preventDefault()}
             onClick={(event) => {
+              // V31-E1: a locked artboard is not picked on the canvas (the layer tree still can).
+              if (board.locked === true) return;
               execute({
                 type: 'setSelection',
                 ids: artboardClickIds(selection, board.id, toggles(event)),

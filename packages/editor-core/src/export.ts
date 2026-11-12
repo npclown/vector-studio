@@ -2,6 +2,7 @@ import type {
   PathStroke,
   RenderNodeSnapshot,
   SceneAffine,
+  SceneBlendMode,
   SceneClip,
   ScenePaint,
   ScenePathGeometry,
@@ -39,7 +40,12 @@ export type ExportSource = Readonly<{
 
 /** V30-S3: a scene node as an export node, primitives turned into paths. */
 function exportNode(node: RenderNodeSnapshot, transform: SceneAffine): ExportNode | null {
-  const base = { id: node.id, transform, opacity: node.opacity };
+  const base = {
+    id: node.id,
+    transform,
+    opacity: node.opacity,
+    ...(node.blendMode === undefined ? {} : { blendMode: node.blendMode }),
+  };
   switch (node.kind) {
     case 'container':
       return { ...base, kind: 'container', children: node.children, clip: node.clip };
@@ -124,6 +130,9 @@ export function buildExportScene(
     source.expansions,
     undefined,
     source.layout,
+    // V35-E1: export carries the blend modes whatever the host's renderer draws.
+    false,
+    true,
   );
   // Paint order is document pre-order over the projected units (V30-S2).
   const order = new Map(projection.units.map((id, index) => [id, index]));
@@ -308,6 +317,19 @@ class SvgWriter {
     return node.opacity < 1 ? ` opacity="${svgNumber(node.opacity)}"` : '';
   }
 
+  /**
+   * V35-E2: `mix-blend-mode` for a mode other than `normal`, and `isolation: isolate` on a
+   * container that is an isolated layer (any mode but `passThrough`).
+   */
+  private blend(node: ExportNode): string {
+    const mode = node.blendMode;
+    if (mode === undefined || mode === 'passThrough') return '';
+    const parts: string[] = [];
+    if (mode !== 'normal') parts.push(`mix-blend-mode: ${cssBlendMode(mode)}`);
+    if (node.kind === 'container') parts.push('isolation: isolate');
+    return parts.length === 0 ? '' : ` style="${parts.join('; ')}"`;
+  }
+
   /** The `clip-path` attribute of a container, or null when the clip covers nothing. */
   private clip(clip: SceneClip, children: readonly string[]): string | null {
     if (clip === null) return '';
@@ -359,7 +381,7 @@ class SvgWriter {
   node(id: string): string {
     const node = this.scene.nodes.get(id);
     if (node === undefined || !(node.opacity > 0)) return '';
-    const head = `${matrixAttribute(node.transform)}${this.opacity(node)}`;
+    const head = `${matrixAttribute(node.transform)}${this.opacity(node)}${this.blend(node)}`;
     switch (node.kind) {
       case 'container': {
         const clip = this.clip(node.clip, node.children);
@@ -392,6 +414,11 @@ class SvgWriter {
       `${defs}${body}</svg>\n`
     );
   }
+}
+
+/** The CSS name of a blend mode: `colorDodge` → `color-dodge` (V35-E2). */
+export function cssBlendMode(mode: SceneBlendMode): string {
+  return mode.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
 }
 
 /** V30-S5: the SVG text of an export scene. */

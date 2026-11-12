@@ -274,6 +274,20 @@ export type LayerEffectRecord = Readonly<{
   shadows: readonly Readonly<{ color: SceneColor; dx: number; dy: number; sigmaPx: number }>[];
   /** The layer blur's σ in device pixels, or null. */
   blurSigmaPx: number | null;
+  /** V-36 contract, V36-K2: inner shadows in list order, as `shadows`; absent when none. */
+  innerShadows?: readonly Readonly<{
+    color: SceneColor;
+    dx: number;
+    dy: number;
+    sigmaPx: number;
+  }>[];
+  /** V36 section 5: the background blur's σ in device pixels, clamped; absent without one. */
+  backgroundBlur?: Readonly<{ sigmaPx: number }>;
+  /**
+   * V36-K1b: the sides where `bound` is cut short of the root's content (bit 1 left, 2 top,
+   * 4 right, 8 bottom); `harden` reads `L` clamped there. Absent when 0 or without inner shadows.
+   */
+  innerClamp?: number;
   /** A leaf root's opacity, which its draws in `L` keep; 1 for a container root. */
   contentOpacity: number;
 }>;

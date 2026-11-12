@@ -4,6 +4,7 @@ import type {
   ExportScene,
   PathStroke,
   SceneAffine,
+  SceneBlendMode,
   SceneGradient,
   ScenePaint,
   ScenePathGeometry,
@@ -28,6 +29,11 @@ export type ExportPngOptions = Readonly<{
   /** In (0, 16]; default 1. */
   scale?: number;
 }>;
+
+/** The Canvas 2D (CSS) name of a blend mode: `colorDodge` → `color-dodge` (V35-E3). */
+function cssBlendMode(mode: SceneBlendMode): string {
+  return mode.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+}
 
 type Context = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 type Surface = HTMLCanvasElement | OffscreenCanvas;
@@ -164,11 +170,14 @@ class Painter {
     return { surface, context };
   }
 
-  /** Paints `layer` onto `context` at device scale, with `alpha`. */
-  composite(context: Context, layer: Surface, alpha: number): void {
+  /** Paints `layer` onto `context` at device scale, with `alpha` and blend mode `mode` (V35-E3). */
+  composite(context: Context, layer: Surface, alpha: number, mode?: SceneBlendMode): void {
     context.save();
     context.setTransform(1, 0, 0, 1, 0, 0);
     context.globalAlpha = alpha;
+    if (mode !== undefined && mode !== 'normal' && mode !== 'passThrough') {
+      context.globalCompositeOperation = cssBlendMode(mode) as GlobalCompositeOperation;
+    }
     context.drawImage(layer, 0, 0);
     context.restore();
   }
@@ -280,11 +289,13 @@ class Painter {
     const node = this.scene.nodes.get(id);
     if (node === undefined || !(node.opacity > 0)) return;
     const m = multiply(parent, node.transform);
-    // Isolated opacity (E25-K1, and the P3 joint draw of a leaf): one layer, composited once.
-    if (node.opacity < 1) {
+    // Isolated opacity (E25-K1, and the P3 joint draw of a leaf), a blend root or an isolating
+    // container (V35-E3): one layer, composited once with the node's opacity and mode.
+    const mode = node.blendMode;
+    if (node.opacity < 1 || (mode !== undefined && mode !== 'passThrough')) {
       const { surface, context: layer } = this.layer();
       this.draw(layer, node, m);
-      this.composite(context, surface, node.opacity);
+      this.composite(context, surface, node.opacity, mode);
       return;
     }
     this.draw(context, node, m);
