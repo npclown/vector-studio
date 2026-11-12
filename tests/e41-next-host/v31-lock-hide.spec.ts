@@ -39,7 +39,7 @@ async function snapshot(page: Page) {
     const s = (window as unknown as { __p5Host: Hook }).__p5Host.editor.getSnapshot();
     return {
       selection: [...s.selection],
-      nodes: s.document.nodes as Record<string, { locked?: boolean; visible: boolean }>,
+      nodes: s.document.nodes,
       undoDepth: s.history.undoDepth,
     };
   });
