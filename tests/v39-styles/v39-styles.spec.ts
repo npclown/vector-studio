@@ -1,5 +1,5 @@
 import type { Command, DocumentV8, Editor, NodeV8 } from '@vector-studio/editor-core';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 // V-39 contract (docs/plans/viz-v39-styles-variables-contract.md), V39-A07: the Local styles
 // panel (U4), the style menus (U2) and the number bind buttons (U3) in the studio on the
@@ -13,6 +13,16 @@ const RED = { r: 1, g: 0, b: 0, a: 1 };
 async function open(page: Page) {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
+  // Branded Chrome and Edge have the EyeDropper API, whose screen-pick buttons widen the colour
+  // rows; a headless Chromium may not, so a stub gives the smoke run the same rows.
+  await page.addInitScript(() => {
+    const scope = window as unknown as { EyeDropper?: unknown };
+    scope.EyeDropper ??= class {
+      open() {
+        return Promise.reject(new DOMException('aborted', 'AbortError'));
+      }
+    };
+  });
   await page.goto('/?test=1&layout=studio');
   await page.waitForFunction(
     () => (window as unknown as { __p5Host?: Hook }).__p5Host !== undefined,
@@ -42,6 +52,25 @@ async function docOf(page: Page): Promise<DocumentV8> {
 
 async function node(page: Page, id: string): Promise<NodeV8> {
   return (await docOf(page)).nodes[id]!;
+}
+
+/**
+ * The element at `locator`'s centre is the locator's element or inside it: nothing (the scrolling
+ * right column on a headed run) covers a menu item before the click.
+ */
+async function expectOnTop(locator: Locator) {
+  await expect(locator).toBeVisible();
+  // '' when the item is on top, else what covers it and where, for a headed failure's report.
+  const cover = await locator.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const hit = document.elementFromPoint(x, y);
+    if (hit !== null && element.contains(hit)) return '';
+    const name = hit === null ? 'nothing' : `${hit.tagName} ${hit.className} ${hit.id}`;
+    return `${name} at (${x}, ${y}); item ${JSON.stringify(rect)}`;
+  });
+  expect(cover).toBe('');
 }
 
 /** The centre pixel of a 1x PNG export of the selection. */
@@ -113,6 +142,7 @@ test('V39-A07 styles and variables: panel, style menu, bind buttons, modes', asy
   await expect(panel).toBeHidden();
   await page.getByTestId('fill-bind').click();
   await expect(page.getByTestId('fill-menu')).toBeVisible();
+  await expectOnTop(page.getByTestId('fill-option-1'));
   await page.getByTestId('fill-option-1').click();
   await expect(page.getByTestId('fill-binding')).toHaveText('Brand');
   await expect(page.getByLabel('Fill colour', { exact: true })).toHaveCount(0);
@@ -162,6 +192,7 @@ test('V39-A07 styles and variables: panel, style menu, bind buttons, modes', asy
   });
   await ok(page, { type: 'setSelection', ids: [text!] });
   await page.getByTestId('text-colour-bind').click();
+  await expectOnTop(page.getByTestId('text-colour-option-1'));
   await page.getByTestId('text-colour-option-1').click();
   await expect(page.getByTestId('text-colour-binding')).toHaveText('Brand');
   expect((await node(page, text!)).bindings).toEqual({ text: { style: expect.any(String) } });
@@ -187,6 +218,7 @@ test('V39-A07 styles and variables: panel, style menu, bind buttons, modes', asy
   await page.getByTestId('stroke-width-bind').click();
   await page.getByTestId('stroke-width-option-1').click();
   await page.getByTestId('corner-radius-bind').click();
+  await expectOnTop(page.getByTestId('corner-radius-option-1'));
   await page.getByTestId('corner-radius-option-1').click();
   expect(await node(page, box!)).toMatchObject({
     stroke: { width: 0.5 },

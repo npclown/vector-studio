@@ -1,5 +1,13 @@
 import type { BindingKey, Command, NodeV8, Paint } from '@vector-studio/react';
-import { useEffect, useId, useRef, useState, type FocusEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FocusEvent,
+} from 'react';
 import {
   bindCommand,
   bindingState,
@@ -31,6 +39,29 @@ function Swatch({ css }: { css: string | null }) {
   return css === null ? null : (
     <span aria-hidden="true" style={{ ...SWATCH_STYLE, background: css }} />
   );
+}
+
+/** The menu's largest height, in CSS px. */
+const MENU_HEIGHT = 280;
+
+/**
+ * Where an open menu sits: fixed to the viewport under its button's right edge, or above the
+ * button when the space below is short and the space above is larger. Fixed positioning lets the
+ * menu escape a scrolling panel (`overflow: auto` clips an absolute child, and the panel then
+ * takes the menu's clicks).
+ */
+export function menuPlacement(
+  button: Readonly<{ top: number; bottom: number; right: number }>,
+  viewport: Readonly<{ width: number; height: number }>,
+): CSSProperties {
+  const below = viewport.height - button.bottom;
+  const up = below < MENU_HEIGHT + 8 && button.top > below;
+  return {
+    position: 'fixed',
+    right: Math.max(0, viewport.width - button.right),
+    ...(up ? { bottom: viewport.height - button.top } : { top: button.bottom }),
+    maxHeight: Math.max(80, Math.min(MENU_HEIGHT, (up ? button.top : below) - 8)),
+  };
 }
 
 function labelText(label: BindingLabel): string {
@@ -101,6 +132,23 @@ export function BindMenu({
   const box = useRef<HTMLSpanElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const buttonId = useId();
+  const [place, setPlace] = useState<CSSProperties | null>(null);
+  // Places the open menu from its button, again on any scroll or resize while it is open.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const update = () => {
+      const rect = trigger.current?.getBoundingClientRect();
+      if (rect === undefined) return;
+      setPlace(menuPlacement(rect, { width: window.innerWidth, height: window.innerHeight }));
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [open]);
   /** Closes the menu and gives focus back to its button, so keyboard users keep their place. */
   const close = () => {
     setOpen(false);
@@ -171,12 +219,10 @@ export function BindMenu({
           aria-labelledby={buttonId}
           data-testid={`${testId}-menu`}
           style={{
-            position: 'absolute',
-            top: '100%',
-            right: 0,
-            zIndex: 10,
+            // Before the first measurement (and in server markup) it sits under the button.
+            ...(place ?? { position: 'absolute', top: '100%', right: 0, maxHeight: MENU_HEIGHT }),
+            zIndex: 1000,
             minWidth: 180,
-            maxHeight: 280,
             overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column',

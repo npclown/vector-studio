@@ -6,6 +6,7 @@ import {
   type Editor,
 } from '@vector-studio/editor-core';
 import { AppearancePanel, EditorProvider, StylesPanel } from '@vector-studio/ui';
+import { menuPlacement } from '../../packages/ui/src/style-controls.js';
 import { createElement, type ComponentType } from 'react';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -175,5 +176,30 @@ describe('V39-A07 markup', () => {
     const mixed = markup(target, () => createElement(AppearancePanel, { layout: 'section' }));
     expect(mixed).toMatch(/data-state="mixed"[^>]*>Mixed/u);
     expect(mixed).toContain('aria-label="Fill colour"');
+  });
+});
+
+describe('V39-A07 menu placement', () => {
+  const viewport = { width: 1280, height: 900 };
+  it('fixes the menu under its button, right edges aligned, so a scrolling panel never clips it', () => {
+    expect(menuPlacement({ top: 100, bottom: 116, right: 1211 }, viewport)).toEqual({
+      position: 'fixed',
+      right: 69,
+      top: 116,
+      maxHeight: 280,
+    });
+  });
+
+  it('opens upward when the space below is short and the space above is larger', () => {
+    expect(menuPlacement({ top: 800, bottom: 816, right: 1300 }, viewport)).toEqual({
+      position: 'fixed',
+      right: 0,
+      bottom: 100,
+      maxHeight: 280,
+    });
+    // Short below but shorter above: stays below, its height cut to the space.
+    expect(
+      menuPlacement({ top: 100, bottom: 116, right: 600 }, { width: 1280, height: 300 }),
+    ).toEqual({ position: 'fixed', right: 680, top: 116, maxHeight: 176 });
   });
 });
