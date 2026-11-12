@@ -31,10 +31,11 @@ export type EditorRendererOptions = Readonly<
 /**
  * The service options every editor renderer gets: rect and mask clips (P4), gradient paints
  * (E23), isolated groups (E25), atlas text (E28) with the given glyph raster port and node
- * effects (E41-U7, `effects: 'v0'`), so the editor's projected scene draws instead of being
- * isolated as `editor.renderer-unsupported`. A renderer on 'v0' also draws scenes without
- * effects exactly as on 'none' (E41-A06), so an editor that does not project effects
- * (`EditorOptions.projectEffects` off) draws as before.
+ * effects (E41-U7, and V-36's inner shadow and background blur: `effects: 'v1'`), so the
+ * editor's projected scene draws instead of being isolated as `editor.renderer-unsupported`. A
+ * renderer on 'v1' draws E41's kinds exactly as on 'v0' (V36-A05) and scenes without effects
+ * exactly as on 'none' (E41-A06), so an editor that projects fewer kinds
+ * (`EditorOptions.projectEffects` `true` or off) draws as before.
  */
 export function editorRendererOptions(glyphRaster: EditorGlyphRaster): EditorRendererOptions {
   return {
@@ -42,7 +43,7 @@ export function editorRendererOptions(glyphRaster: EditorGlyphRaster): EditorRen
     paints: 'gradient',
     groups: 'isolated',
     text: 'atlas',
-    effects: 'v0',
+    effects: 'v1',
     glyphRaster,
   };
 }

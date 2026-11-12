@@ -46,6 +46,15 @@ type Props = Readonly<{
 
 type ToScreen = (x: number, y: number) => [number, number];
 
+/** `#rrggbb` of a colour's straight channels. */
+function colorHex(color: Readonly<{ r: number; g: number; b: number }>): string {
+  const byte = (v: number) =>
+    Math.round(Math.min(1, Math.max(0, v)) * 255)
+      .toString(16)
+      .padStart(2, '0');
+  return `#${byte(color.r)}${byte(color.g)}${byte(color.b)}`;
+}
+
 function ToolShape({
   overlay,
   cursor,
@@ -72,6 +81,38 @@ function ToolShape({
         stroke="#1e78ff"
         strokeDasharray="4 2"
       />
+    );
+  }
+  if (overlay.kind === 'eyedropper') {
+    // V-39 contract, E7: a swatch of the sampled colour beside the pointer, and its hex.
+    const [x, y] = toScreen(overlay.point.x, overlay.point.y);
+    const hex = overlay.color === null ? null : colorHex(overlay.color);
+    return (
+      <g data-testid="eyedropper-loupe" data-color={hex ?? ''}>
+        <circle cx={x + 18} cy={y - 18} r={13} fill="#fff" stroke="#000" strokeOpacity={0.4} />
+        <circle
+          cx={x + 18}
+          cy={y - 18}
+          r={10}
+          fill={hex ?? 'transparent'}
+          fillOpacity={overlay.color?.a ?? 0}
+          stroke={hex === null ? '#999' : 'none'}
+          strokeDasharray={hex === null ? '2 2' : undefined}
+        />
+        {hex === null ? null : (
+          <text
+            x={x + 34}
+            y={y - 14}
+            fontSize={11}
+            fill="#fff"
+            stroke="#000"
+            strokeWidth={3}
+            paintOrder="stroke"
+          >
+            {hex.toUpperCase()}
+          </text>
+        )}
+      </g>
     );
   }
   const preview = penPreview(overlay.anchors, cursor, toScreen);

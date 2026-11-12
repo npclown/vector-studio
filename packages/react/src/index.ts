@@ -32,6 +32,16 @@ export {
 // V-30 export contract, section 3: a PNG of the page or of some nodes.
 export { exportPng, type ExportPngOptions } from './export-image.js';
 
+// V-33 SVG import contract, V33-P3 and U1: SVG files imported as editable nodes.
+export {
+  importSvgFiles,
+  isSvgFile,
+  SVG_FILE_OFFSET,
+  type ImportSvgFilesOptions,
+  type SvgFileImport,
+  type SvgFileLike,
+} from './import-svg.js';
+
 // MVP M8 contract, M8-T2: the one value re-export of `editor-core`, a pure builder with no state,
 // so an extension's UI types its commands without importing `editor-core`.
 export {
@@ -52,8 +62,12 @@ export {
 export type {
   AlignEdge,
   Arrow,
+  BindingKey,
+  BindingRef,
+  Bindings,
   CameraApplyResult,
   Color,
+  ColorStyle,
   Command,
   CommandResult,
   Constraint,
@@ -64,8 +78,17 @@ export type {
   CustomNodeV6,
   CustomNodeV8,
   Dash,
+  BackgroundBlurEffect,
   DropShadowEffect,
   Effect,
+  BandLayoutGrid,
+  Guide,
+  LayoutGrid,
+  LayoutGridBand,
+  LayoutGridGeometry,
+  LayoutGridLine,
+  UniformLayoutGrid,
+  InnerShadowEffect,
   DiagnosticEvent,
   DistributeAxis,
   DocumentChangeCause,
@@ -111,6 +134,7 @@ export type {
   ModelErrorCode,
   Modifiers,
   NodeBaseV2,
+  NodeBindings,
   NodeEffects,
   NodeFills,
   BlendMode,
@@ -119,6 +143,7 @@ export type {
   Fill,
   LeafBlend,
   NodeLock,
+  NodeLayoutGrids,
   NodeProps,
   NodeV8,
   PagePoint,
@@ -193,6 +218,10 @@ export type {
   StrokeJoin,
   StrokePatch,
   StyleProps,
+  SvgImport,
+  SvgImportOptions,
+  SvgTextMeasure,
+  SvgTextRun,
   SymbolNodeV6,
   SymbolNodeV8,
   TextAffinity,
@@ -217,5 +246,8 @@ export type {
   ToolId,
   ToolName,
   ToolOverlay,
+  Variable,
+  VariableMode,
+  VariableSet,
   ViewportSize,
 } from '@vector-studio/editor-core';

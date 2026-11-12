@@ -252,6 +252,8 @@ export function booleanNodes(
       fills,
       stroke,
       blendMode: base.blendMode === 'passThrough' ? 'normal' : base.blendMode,
+      // V39-E4: the result carries the base's bindings; the draft drops those that fail.
+      ...(base.bindings === undefined ? {} : { bindings: base.bindings }),
     };
     const draft = new Draft(document);
     for (const input of inputs) draft.remove(input.id);

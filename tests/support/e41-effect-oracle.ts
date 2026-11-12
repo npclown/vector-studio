@@ -1,5 +1,6 @@
 // E41 contract (docs/plans/d9-e41-boolean-effects-contract.md), section 5.1 with K4: the CPU
-// oracle of an effect root's result `R₁ = L₁ over Sₙ over … over S₁` (then the layer blur),
+// oracle of an effect root's result `R₁ = L₁ over Sₙ over … over S₁` (then the layer blur;
+// V-36 section 4.1 adds inner shadows over `L₁` before it),
 // from its content `L` (premultiplied, carrying the leaf root's content opacity c). Each blur
 // downsamples its whole source by 2 per level (box) while K4 needs it, blurs at σ / 2^k with
 // ⌈3 σ / 2^k⌉ taps per side (at most 32), normalized over the taps, and is sampled bilinearly;
@@ -22,6 +23,8 @@ export type OracleShadow = Readonly<{
 }>;
 export type OracleEffect = Readonly<{
   shadows: readonly OracleShadow[];
+  /** V-36 contract, section 4.1: inner shadows over the content, in list order. */
+  innerShadows?: readonly OracleShadow[];
   blurSigmaPx: number | null;
   contentOpacity: number;
 }>;
@@ -153,6 +156,30 @@ export function effectOracle(
     const keep = 1 - l[3]!;
     for (let k = 0; k < 4; k += 1) r.data[at + k] = l[k]! + r.data[at + k]! * keep;
   });
+  // V36 section 4.1: Iⱼ = colorⱼ × h(p) × (1 − (G ∗ h)(p − offsetⱼ)), h = min(127 α(L) / c, 1).
+  if ((effect.innerShadows ?? []).length > 0) {
+    const hard = oracleImage(content);
+    for (let i = 0; i < content.width * content.height; i += 1) {
+      const h = Math.min((127 * content.data[i * 4 + 3]!) / c, 1);
+      hard.data.set([h, h, h, h], i * 4);
+    }
+    for (const shadow of effect.innerShadows ?? []) {
+      const { level, scale } =
+        shadow.sigmaPx > 0 ? blurred(hard, shadow.sigmaPx) : { level: hard, scale: 1 };
+      const a = shadow.color.a;
+      const color = [shadow.color.r * a, shadow.color.g * a, shadow.color.b * a, a];
+      each((x, y, at) => {
+        const b = oracleBilinear(
+          level,
+          (x + 0.5 - shadow.dx) / scale,
+          (y + 0.5 - shadow.dy) / scale,
+        )[3]!;
+        const inner = color.map((v) => v * (1 - Math.min(b, 1)) * oracleTexel(hard, x, y)[3]!);
+        const keep = 1 - inner[3]!;
+        for (let k = 0; k < 4; k += 1) r.data[at + k] = inner[k]! + r.data[at + k]! * keep;
+      });
+    }
+  }
   if (effect.blurSigmaPx === null || !(effect.blurSigmaPx > 0)) return r;
   const { level, scale } = blurred(r, effect.blurSigmaPx);
   const out = oracleImage(result);

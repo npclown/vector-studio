@@ -968,7 +968,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
                   parent: layerPlan!.indexOf(layer.parent),
                   draws: Object.freeze(layered?.layers[index] ?? []),
                   meshDraws: Object.freeze(meshByLayer.get(index) ?? []),
-                  ...effectRecordOf(layerPlan!.effects.get(layer)),
+                  ...effectRecordOf(layerPlan!.effects.get(layer), layerPlan!.bounds.get(layer)!),
                 }),
               ),
             ),
@@ -3181,14 +3181,33 @@ function compositeClipStates(
 }
 
 /** E41: the packet record of a drawn effect root, spread into its layer entry. */
-function effectRecordOf(effect: EffectLayer | undefined): { effect?: LayerEffectRecord } {
+function effectRecordOf(
+  effect: EffectLayer | undefined,
+  bound: DeviceRect,
+): { effect?: LayerEffectRecord } {
   if (effect === undefined) return {};
+  // V36-K1b: the sides where `L` (the layer bound) is cut short of the uncut source bound.
+  const uncut = effect.uncut;
+  const innerClamp =
+    uncut === undefined
+      ? 0
+      : (bound.x > uncut.x ? 1 : 0) |
+        (bound.y > uncut.y ? 2 : 0) |
+        (bound.x + bound.width < uncut.x + uncut.width ? 4 : 0) |
+        (bound.y + bound.height < uncut.y + uncut.height ? 8 : 0);
   return {
     effect: Object.freeze({
       source: effect.source,
       output: effect.output,
       shadows: effect.effects.shadows,
       blurSigmaPx: effect.effects.blurSigmaPx,
+      ...(effect.effects.innerShadows === undefined
+        ? {}
+        : { innerShadows: effect.effects.innerShadows }),
+      ...(effect.effects.backgroundBlur === undefined
+        ? {}
+        : { backgroundBlur: effect.effects.backgroundBlur }),
+      ...(innerClamp === 0 ? {} : { innerClamp }),
       contentOpacity: effect.contentOpacity,
     }),
   };

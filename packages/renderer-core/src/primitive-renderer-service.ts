@@ -66,9 +66,10 @@ export type PrimitiveRendererServiceOptions = Readonly<{
    * effect root as a layer with its effect bounds and budget (U4b). It needs `groups:
    * 'isolated'`. Until a backend draws the effect passes (U5), effect roots draw their content
    * without effects (section 5.3). Default 'none': a node with effects is reported as
-   * `unsupported-feature`, and nothing else changes.
+   * `unsupported-feature`, and nothing else changes. V-36 contract, V36-S4: 'v1' also accepts
+   * inner shadows and background blur, with the same needs.
    */
-  effects?: 'none' | 'v0';
+  effects?: 'none' | 'v0' | 'v1';
   /**
    * @internal Tests only (E25-A05): with `groups: 'isolated'`, every visible container with
    * opacity 1 is drawn as a layer too, so its layer variants can be compared with the main pass.
@@ -116,7 +117,7 @@ export class PrimitiveRendererService
   public readonly requiresLayerPipeline: boolean;
   /** E28 contract, E28-S3: true exactly when the `text` option is 'atlas'; read at attach. */
   public readonly requiresTextPipeline: boolean;
-  /** E41 contract, U5: true exactly when the `effects` option is 'v0'; read at attach. */
+  /** E41 contract, U5: true exactly when the `effects` option is 'v0' or 'v1'; read at attach. */
   public readonly requiresEffectPipeline: boolean;
 
   public constructor(
@@ -160,11 +161,11 @@ export class PrimitiveRendererService
       throw new TypeError("isolateUnitOpacityForTesting needs groups: 'isolated'.");
     }
     const effects = options.effects ?? 'none';
-    if (effects !== 'none' && effects !== 'v0') {
-      throw new TypeError("effects must be 'none' or 'v0'.");
+    if (effects !== 'none' && effects !== 'v0' && effects !== 'v1') {
+      throw new TypeError("effects must be 'none', 'v0' or 'v1'.");
     }
-    if (effects === 'v0' && groups !== 'isolated') {
-      throw new TypeError("effects: 'v0' needs groups: 'isolated'.");
+    if (effects !== 'none' && groups !== 'isolated') {
+      throw new TypeError(`effects: '${effects}' needs groups: 'isolated'.`);
     }
     const text = options.text ?? 'none';
     if (text !== 'none' && text !== 'atlas') {
@@ -200,7 +201,7 @@ export class PrimitiveRendererService
     this.requiresClipPipeline = clips !== 'none';
     this.requiresPaintPipeline = paints === 'gradient';
     this.requiresLayerPipeline = groups === 'isolated';
-    this.requiresEffectPipeline = effects === 'v0';
+    this.requiresEffectPipeline = effects !== 'none';
     const anyPort = port !== undefined || strokePort !== undefined;
     this.requiresMeshPipeline = anyPort;
     // P3 V3 section a with the B2 section 9.1 amendment (S4): path nodes are supported when a

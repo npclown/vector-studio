@@ -74,6 +74,7 @@ describe('M8-A10 toolbar row 1: tools (M8-L1)', () => {
       'path',
       'pencil',
       'text',
+      'eyedropper',
     ]);
     expect(Object.isFrozen(BUILT_IN_TOOLS)).toBe(true);
     expect(toolbarTools(editor().query({ type: 'extensions' }))).toEqual([
@@ -343,6 +344,7 @@ describe('M8-A10 toolbar rows markup (M8-L1, M8-Q10 (a))', () => {
       ['tool-path', false, 'false'],
       ['tool-pencil', false, 'false'],
       ['tool-text', false, 'false'],
+      ['tool-eyedropper', false, 'false'],
       ['tool-aaa.ext', false, 'false'],
       ['tool-test.ui.alpha', false, 'true'],
       ['tool-test.ui.draw', false, 'false'],

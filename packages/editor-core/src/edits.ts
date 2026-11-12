@@ -1,6 +1,7 @@
 import {
   MAX_TREE_DEPTH,
   normalizeRotation,
+  validateGuides,
   validateNode,
   type DocumentV8,
   type Fill,
@@ -23,6 +24,7 @@ import { booleanNodes } from './boolean-command.js';
 import { paste } from './clipboard.js';
 import { addEffect, removeEffect, setEffect } from './effect-commands.js';
 import { addFill, moveFill, removeFill, setFill } from './fill-commands.js';
+import { tableCommand } from './table-commands.js';
 import { Draft, fail, type Failure } from './draft.js';
 import { defaultBlendMode, paintFill } from './fills.js';
 import { ExpansionCache, expansionFailure } from './expansion.js';
@@ -188,10 +190,11 @@ const PROPS: Readonly<Record<NodeV8['type'], readonly string[]>> = {
   custom: [...COMMON_PROPS, 'fill', 'fills', 'stroke', 'data'],
   group: COMMON_PROPS,
   maskGroup: COMMON_PROPS,
-  frame: [...COMMON_PROPS, 'fill', 'fills', 'stroke'],
+  // V-38 contract, V38-C2: a frame's or symbol's `layoutGrids`.
+  frame: [...COMMON_PROPS, 'fill', 'fills', 'stroke', 'layoutGrids'],
   // M7 contract: a symbol has a frame's props (section 1.2), an instance only the common ones
   // (section 5.1; its opacity any in `[0, 1]` since M4-U3, M4 contract, section 5).
-  symbol: [...COMMON_PROPS, 'fill', 'fills', 'stroke'],
+  symbol: [...COMMON_PROPS, 'fill', 'fills', 'stroke', 'layoutGrids'],
   instance: COMMON_PROPS,
   // M6a contract, section 6.1: a text node takes the common props only; its own props are
   // `setTextProps`'s.
@@ -385,6 +388,22 @@ export function applyEdit(
       return removeFill(document, command, context, custom, finish);
     case 'moveFill':
       return moveFill(document, command, context, custom, finish);
+    case 'createColorStyle':
+    case 'updateColorStyle':
+    case 'removeColorStyle':
+    case 'createVariable':
+    case 'updateVariable':
+    case 'removeVariable':
+    case 'addVariableMode':
+    case 'renameVariableMode':
+    case 'removeVariableMode':
+    case 'setVariableMode':
+    case 'bindProperty':
+      return tableCommand(document, command, context, finish, (node) =>
+        node.type === 'line' || node.type === 'path' || node.type === 'custom'
+          ? DEFAULT_PATH_STROKE
+          : DEFAULT_SHAPE_STROKE,
+      );
     case 'createSymbol':
       return createSymbol(document, command, context, finish);
     case 'createInstance':
@@ -496,6 +515,31 @@ export function applyEdit(
       const draft = new Draft(document);
       const pages = [...document.pages];
       pages[index] = { ...pages[index]!, name: command.name };
+      draft.setPages(pages);
+      return success(finish(draft), draft, []);
+    }
+    case 'setGuides': {
+      // V-38 contract, V38-C1: replaces a page's guides; equal guides change nothing.
+      const id = command.page;
+      if (typeof id !== 'string') return fail('editor.invalid-command', '/page');
+      const index = document.pages.findIndex((entry) => entry.id === id);
+      if (index < 0) return fail('editor.unknown-page');
+      const result = validateGuides(command.guides);
+      if (!result.ok) return fail(result.code, `/guides${result.path}`);
+      const page = document.pages[index]!;
+      const before = page.guides ?? [];
+      const same =
+        before.length === result.guides.length &&
+        before.every(
+          (guide, at) =>
+            guide.axis === result.guides[at]!.axis && guide.value === result.guides[at]!.value,
+        );
+      if (same) return { ok: true, document, touched: [], created: [] };
+      const draft = new Draft(document);
+      const pages = [...document.pages];
+      const { guides: _drop, ...rest } = page;
+      void _drop;
+      pages[index] = result.guides.length === 0 ? rest : { ...rest, guides: result.guides };
       draft.setPages(pages);
       return success(finish(draft), draft, []);
     }

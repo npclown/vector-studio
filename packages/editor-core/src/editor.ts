@@ -10,6 +10,7 @@ import {
   validateAnyDocument,
   type Color,
   type DocumentV8,
+  type Effect,
   type ParseResult,
   type TextNodeV8,
 } from '@vector-studio/model';
@@ -21,6 +22,7 @@ import {
   pasteTargetOf,
 } from './clipboard.js';
 import { buildExportScene, exportSceneToSvg } from './export.js';
+import { isSvgText, svgToFragment, type SvgTextRun } from './svg-import.js';
 import { ExpansionCache, expansionFailure } from './expansion.js';
 import {
   applyEdit,
@@ -39,6 +41,7 @@ import {
   type RegisteredTool,
 } from './extensions.js';
 import { boundsOf, isLocked } from './hit-test.js';
+import { createEyedropperTool, sampleColor } from './eyedropper.js';
 import { createCounterIdSource } from './ids.js';
 import {
   allAnchors,
@@ -56,7 +59,7 @@ import {
   validateLayer,
   type CanonicalBinding,
 } from './keymap.js';
-import { SceneProjector } from './projector.js';
+import { SceneProjector, type EffectProjection } from './projector.js';
 import { TextLayoutCache, layoutRequest, type TextLayouter } from './text.js';
 import { emptySplit, probeNow, textProbe, type RelayoutSplit } from './text-probe.js';
 import {
@@ -175,9 +178,11 @@ export type EditorOptions = Readonly<{
   /**
    * E41 contract, E41-S6: when true, the scene the editor projects to an attached renderer
    * carries node effects (drop shadows, layer blur), which needs a renderer on `effects: 'v0'`.
-   * Defaults to false: effects stay in the document and are not drawn.
+   * `'v1'` (V-36 contract, V36-S5) adds inner shadows and background blur and needs a renderer
+   * on `effects: 'v1'`; under `true` those kinds are left out of the scene. Defaults to false:
+   * effects stay in the document and are not drawn.
    */
-  projectEffects?: boolean;
+  projectEffects?: boolean | 'v1';
   /**
    * V-35 contract, V35-P4: when true, the scene the editor projects to an attached renderer
    * carries blend modes, which needs a renderer on `blend: 'v0'`. Defaults to false: every node
@@ -381,6 +386,7 @@ const DOCUMENT_COMMANDS = new Set([
   'removePage',
   'renamePage',
   'movePage',
+  'setGuides',
   'rotateNodes',
   'alignNodes',
   'distributeNodes',
@@ -399,6 +405,18 @@ const DOCUMENT_COMMANDS = new Set([
   'setTextStyle',
   'setTextProps',
   'refitText',
+  // V-39 contract, section 3.
+  'createColorStyle',
+  'updateColorStyle',
+  'removeColorStyle',
+  'createVariable',
+  'updateVariable',
+  'removeVariable',
+  'addVariableMode',
+  'renameVariableMode',
+  'removeVariableMode',
+  'setVariableMode',
+  'bindProperty',
 ]);
 
 /**
@@ -493,6 +511,8 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.boolean-failed',
   'editor.effect-limit',
   'editor.fill-limit',
+  'editor.invalid-svg',
+  'editor.empty-svg',
 ]);
 
 /**
@@ -731,6 +751,15 @@ function normalizeSelection(
   return unique.filter((id) => !ancestors(tree, id).some((node) => listed.has(node.id)));
 }
 
+/** The `effectKinds` query (V-36 contract, section 6), in panel order. */
+const EFFECT_KINDS_V0: readonly Effect['kind'][] = Object.freeze(['dropShadow', 'layerBlur']);
+const EFFECT_KINDS_V1: readonly Effect['kind'][] = Object.freeze([
+  'dropShadow',
+  'innerShadow',
+  'layerBlur',
+  'backgroundBlur',
+]);
+
 class EditorCore implements Editor {
   private document: DocumentV8;
   private activePage: string;
@@ -768,6 +797,9 @@ class EditorCore implements Editor {
   private snap: SnapOverlay | null = null;
   private snapKey = 'null';
   private snapping = true;
+  /** V-38 contract, V38-C3: the host's rulers and guides, and layout grids. */
+  private rulersVisible = false;
+  private layoutGridsVisible = true;
   /** The entered container of the active page (M2 contract, section 5), or null. */
   private scope: string | null = null;
   /**
@@ -821,6 +853,8 @@ class EditorCore implements Editor {
   private textStyle: TextStyle;
   /** V-40: the polygon tool's side count. */
   private polygonSides: number = POLYGON_SIDES.default;
+  /** The eyedropper's last pick (V-39 contract, E7). */
+  private pickedColor: Color | null = null;
   /**
    * The caret model of the last layout edit mode read, rebuilt when the cached layout object
    * changes (a text change, or a generation change dropping the cache).
@@ -861,7 +895,7 @@ class EditorCore implements Editor {
   readonly textLayouts: TextLayoutCache | null;
   private readonly layout: TextLayouter | undefined;
   /** E41-S6: whether the projector emits node effects (`EditorOptions.projectEffects`). */
-  private readonly projectEffects: boolean;
+  private readonly projectEffects: EffectProjection;
   /** V35-P4: whether the projector emits blend modes (`EditorOptions.projectBlend`). */
   private readonly projectBlend: boolean;
 
@@ -965,7 +999,10 @@ class EditorCore implements Editor {
     if (!result.ok) throw new Error(`createEditor: ${result.code} at ${result.path}`);
     this.document = deepFreeze(result.document);
     this.activePage = this.document.pages[0]!.id;
-    this.projectEffects = options.projectEffects === true;
+    this.projectEffects =
+      options.projectEffects === true || options.projectEffects === 'v1'
+        ? options.projectEffects
+        : false;
     this.projectBlend = options.projectBlend === true;
     this.snapshot = this.buildSnapshot();
     this.tools.set(
@@ -1003,6 +1040,16 @@ class EditorCore implements Editor {
     this.tools.set(
       'text',
       createTextTool((node) => this.extensions.geometry(node), this.expansions, this.textSupport),
+    );
+    this.tools.set(
+      'eyedropper',
+      createEyedropperTool(
+        (point) => this.sampleColorAt(point),
+        (color) => {
+          this.pickedColor = deepFreeze({ ...color });
+          this.refresh({ type: 'session', field: 'pickedColor' });
+        },
+      ),
     );
     const isActive = () => this.gestureState !== null;
     // While composing, the public gesture API is inert (M6b contract, section 7.1): `begin`
@@ -1279,7 +1326,11 @@ class EditorCore implements Editor {
     if (command.type === 'paste') {
       const source = pasteSource(command, this.clipboard);
       if (typeof source !== 'string') return source;
-      if (!this.isFragmentSource(command, source)) return this.pastePlainText(command, source);
+      if (!this.isFragmentSource(command, source)) {
+        // V-33 (V33-P1): unmarked SVG text imports as nodes instead of creating a text node.
+        if (isSvgText(source)) return this.pasteSvg(command, source);
+        return this.pastePlainText(command, source);
+      }
     }
     if (DOCUMENT_COMMANDS.has(command.type)) {
       // A host command during a drag would leave the gesture's base stale, so it applies to the
@@ -1496,6 +1547,18 @@ class EditorCore implements Editor {
         if (!layer.ok) return failure('editor.invalid-keymap', `/bindings${layer.path}`);
         this.hostLayer = layer.bindings;
         if (this.updateKeymap()) this.refresh({ type: 'session', field: 'keymap' });
+        return { ok: true, ids: [] };
+      }
+      case 'setRulersVisible':
+      case 'setLayoutGridsVisible': {
+        if (typeof command.visible !== 'boolean') {
+          return failure('editor.invalid-command', '/visible');
+        }
+        const field = command.type === 'setRulersVisible' ? 'rulersVisible' : 'layoutGridsVisible';
+        if (command.visible !== this[field]) {
+          this[field] = command.visible;
+          this.refresh({ type: 'session', field });
+        }
         return { ok: true, ids: [] };
       }
       case 'setSnapping': {
@@ -1721,6 +1784,12 @@ class EditorCore implements Editor {
           return this.snap;
         case 'snapping':
           return this.snapping;
+        case 'rulersVisible':
+          return this.rulersVisible;
+        case 'layoutGridsVisible':
+          return this.layoutGridsVisible;
+        case 'effectKinds':
+          return this.projectEffects === 'v1' ? EFFECT_KINDS_V1 : EFFECT_KINDS_V0;
         case 'scope':
           return this.scope;
         case 'clipboard':
@@ -1764,6 +1833,13 @@ class EditorCore implements Editor {
           if (scene === null) return null;
           return query.type === 'exportScene' ? scene : exportSceneToSvg(scene);
         }
+        case 'sampleColor': {
+          const point: unknown = query.point;
+          if (!isPoint(point)) return null;
+          return this.sampleColorAt(point);
+        }
+        case 'pickedColor':
+          return this.pickedColor;
       }
     })();
     return value as QueryResult<Q>;
@@ -2076,6 +2152,11 @@ class EditorCore implements Editor {
         return this.run({ type: 'zoomTo', target: 'selection' });
       case 'zoomTo100':
         return this.run({ type: 'zoomTo', target: 'actual' });
+      // V-38 contract, V38-C4.
+      case 'toggleRulers':
+        return this.run({ type: 'setRulersVisible', visible: !this.rulersVisible });
+      case 'toggleLayoutGrids':
+        return this.run({ type: 'setLayoutGridsVisible', visible: !this.layoutGridsVisible });
       // The in-memory clipboard (section 6); the dispatch leaves an empty-selection copy or
       // cut unconsumed before it gets here.
       case 'copy':
@@ -3335,6 +3416,44 @@ class EditorCore implements Editor {
   }
 
   /**
+   * `paste` of unmarked SVG text outside text edit mode (V-33 contract, V33-P1): `svgToFragment`
+   * with the layout port as its measure and the text style family as its default family, then
+   * the fragment paste centred on `pointer`, else `at`, else the viewport centre
+   * (`editor.no-viewport-size` without one). An SVG with text and no port fails with
+   * `editor.no-text-layout`; conversion failures are `editor.invalid-svg` and
+   * `editor.empty-svg`.
+   */
+  private pasteSvg(command: Extract<Command, { type: 'paste' }>, source: string): CommandResult {
+    const centre = command.pointer ?? command.at ?? this.viewportCentre();
+    if (centre === null) return failure('editor.no-viewport-size');
+    const layouts = this.textLayouts;
+    const converted = svgToFragment(source, {
+      defaultFamily: this.textStyle.family,
+      ...(layouts === null
+        ? {}
+        : {
+            layout: (runs: readonly SvgTextRun[]) => {
+              const result = layouts.layoutRequest({
+                runs,
+                width: null,
+                align: 'left',
+                letterSpacing: 0,
+                lineHeight: TEXT_LINE_HEIGHT,
+              });
+              return {
+                width: result.width,
+                height: result.height,
+                baseline: result.lines[0]?.baseline ?? 0,
+              };
+            },
+          }),
+    });
+    if (!converted.ok) return converted;
+    if (converted.hasText && layouts === null) return failure('editor.no-text-layout');
+    return this.run({ type: 'paste', text: converted.fragment, at: centre });
+  }
+
+  /**
    * `paste` of unmarked text outside text edit mode (M6b contract, sections 9.3 and 9.4): the
    * text normalized (section 9.1), empty `editor.unsupported-clipboard`; without a port
    * `editor.no-text-layout`; then one `createText` of an `autoWidth` node in the text tool
@@ -3593,6 +3712,19 @@ class EditorCore implements Editor {
     }
   }
 
+  /** E6 at the current zoom on the active page; frozen, null over nothing. */
+  private sampleColorAt(point: PagePoint): Color | null {
+    const color = sampleColor(
+      this.document,
+      this.activePage,
+      point,
+      this.viewport.zoom,
+      (node) => this.extensions.geometry(node),
+      this.expansions,
+    );
+    return color === null ? null : deepFreeze(color);
+  }
+
   /** Tool overlays change without a document change; hosts learn of it through the snapshot. */
   private refreshOverlay(): void {
     const overlay = this.tools.get(this.tool)?.overlay() ?? null;
@@ -3616,11 +3748,14 @@ class EditorCore implements Editor {
       keymap: this.keymap,
       snap: this.snap,
       snapping: this.snapping,
+      rulersVisible: this.rulersVisible,
+      layoutGridsVisible: this.layoutGridsVisible,
       scope: this.scope,
       pathEdit: this.pathEdit,
       textEdit: this.textEdit,
       textStyle: this.textStyle,
       polygonSides: this.polygonSides,
+      pickedColor: this.pickedColor,
       history: { undoDepth: this.undoStack.length, redoDepth: this.redoStack.length },
     });
   }

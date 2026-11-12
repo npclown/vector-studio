@@ -30,6 +30,7 @@ import {
   type Expansion,
 } from './expansion.js';
 import { deepFreeze } from './freeze.js';
+import { detachedBindings } from './symbols.js';
 import { remappedOverrides } from './instance-text.js';
 import { contentCorners } from './content-box.js';
 import { boundsOfPoints, IDENTITY, relocate } from './geometry.js';
@@ -47,6 +48,9 @@ import {
   type TreeView,
 } from './tree.js';
 import type { DocumentCommand } from './types.js';
+
+/** The schema version that first has a frame or symbol `layoutGrids` (V38-S2). */
+const LAYOUT_GRIDS_SINCE = 8;
 
 // The clipboard fragment (MVP M2 contract, section 6; MVP M7 contract, section 6): `copy`
 // serializes subtrees as marked text, `paste` parses it with the model's JSON and node rules plus
@@ -297,6 +301,9 @@ function readFields(
     // Below schema v7 a node has no `effects`, which the v6 to v7 migration adds empty (E41-S1).
     const effectsWritten = schemaVersion < 7 && isRecord(raw) && Object.hasOwn(raw, 'effects');
     if (schemaVersion < 7 && isRecord(candidate)) candidate = { ...candidate, effects: [] };
+    // Below LAYOUT_GRIDS_SINCE a frame or symbol has no `layoutGrids` key (V38-S2).
+    const gridsWritten =
+      schemaVersion < LAYOUT_GRIDS_SINCE && isRecord(raw) && Object.hasOwn(raw, 'layoutGrids');
     if (older) {
       const rest = { ...(candidate as Record<string, unknown>) };
       delete rest.textOverrides;
@@ -325,6 +332,16 @@ function readFields(
     if (!result.ok) return fail(result.code, mapPath(name, key, result.path));
     // As an older document reads it, `effects` is an unknown key there.
     if (effectsWritten) return fail('document.invalid-field', mapPath(name, key, '/effects'));
+    if (gridsWritten) return fail('document.invalid-field', mapPath(name, key, '/layoutGrids'));
+    // Below schema v8 an effect kind V-36 adds is unknown, as a v7 document reads it (V36-S2).
+    if (schemaVersion < 8) {
+      const index = result.node.effects.findIndex(
+        (effect) => effect.kind === 'innerShadow' || effect.kind === 'backgroundBlur',
+      );
+      if (index >= 0) {
+        return fail('document.invalid-field', mapPath(name, key, `/effects/${index}/kind`));
+      }
+    }
     if (result.node.id !== key) return fail('document.invalid-field', mapPath(name, key, '/id'));
     read.push([key, result.node]);
   }
@@ -946,6 +963,10 @@ export function paste(
           stroke: how.source.stroke,
           // E41-S10: the effects the instance drew with, its own or else its source's.
           effects: node.effects.length > 0 ? node.effects : how.source.effects,
+          // V-38 contract, V38-S2: the source's layout grids.
+          ...(how.source.layoutGrids === undefined ? {} : { layoutGrids: how.source.layoutGrids }),
+          // V39-E4: as `detachInstances`, the source's paint bindings and the instance's own.
+          ...detachedBindings(how.source, node as InstanceNodeV8),
         });
       }
       // A root's mapped placement and a detached frame are validated again; the rest is as the
