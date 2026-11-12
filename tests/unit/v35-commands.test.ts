@@ -38,10 +38,11 @@ function node(id: string, parent: string, type: string, extra: Json = {}): Json 
     visible: true,
     type,
     ...(type === 'rectangle' ? { cornerRadii: [0, 0, 0, 0] } : {}),
-    ...(['rectangle', 'ellipse', 'frame'].includes(type)
+    ...(['rectangle', 'ellipse', 'frame', 'symbol'].includes(type)
       ? { fills: [fill(red)], stroke: null }
       : {}),
-    ...(['group', 'maskGroup', 'frame'].includes(type) ? { children: [] } : {}),
+    ...(['group', 'maskGroup', 'frame', 'symbol'].includes(type) ? { children: [] } : {}),
+    ...(type === 'instance' ? { textOverrides: {} } : {}),
     blendMode: container ? 'passThrough' : 'normal',
     effects: [],
     ...extra,
@@ -336,6 +337,94 @@ describe('V35-P6 the isolation count', () => {
       'editor.isolation-depth',
       '/nodes/r/parent',
     );
+  });
+});
+
+/** 32 nested groups in `normal` mode (each isolates) holding `inner`, which sits at count 32. */
+function deep(inner: Json[]): Json[] {
+  const nodes: Json[] = [];
+  let parent = 'p';
+  const first = inner.find((n) => n.parent === 'g31')!.id as string;
+  for (let i = 0; i < 32; i += 1) {
+    nodes.push(
+      node(`g${i}`, parent, 'group', {
+        children: [i < 31 ? `g${i + 1}` : first],
+        blendMode: 'normal',
+      }),
+    );
+    parent = `g${i}`;
+  }
+  return [...nodes, ...inner];
+}
+
+const blur = { kind: 'layerBlur', visible: true, radius: 4 };
+
+describe('V35-P6 fills, effects, instances and loading', () => {
+  it('refuses a fill with a mode, and expanded fills at opacity below 1, at count 32', () => {
+    const target = createEditor({ document: doc(deep([node('r', 'g31', 'rectangle')])) });
+    const path = '/nodes/r/parent';
+    fails(
+      target,
+      { type: 'setFill', ids: ['r'], index: 0, patch: { blendMode: 'multiply' } },
+      'editor.isolation-depth',
+      path,
+    );
+    ok(target, { type: 'addFill', ids: ['r'] });
+    fails(
+      target,
+      { type: 'setStyle', ids: ['r'], style: { opacity: 0.5 } },
+      'editor.isolation-depth',
+      path,
+    );
+    fails(
+      target,
+      { type: 'addEffect', ids: ['r'], kind: 'layerBlur' },
+      'editor.isolation-depth',
+      path,
+    );
+  });
+
+  it('fails loadDocument for a frame background mode, and an instance’s inherited effects', () => {
+    const target = createEditor({ document: doc([node('a', 'p', 'rectangle')]) });
+    const load = (nodes: Json[]) =>
+      target.execute({ type: 'loadDocument', document: JSON.parse(JSON.stringify(doc(nodes))) });
+    expect(
+      load(deep([node('f', 'g31', 'frame', { fills: [fill(red, { blendMode: 'multiply' })] })])),
+    ).toEqual({ ok: false, code: 'editor.isolation-depth', path: '/nodes/f/parent' });
+    expect(load(deep([node('f', 'g31', 'frame')]))).toMatchObject({ ok: true });
+    const source = node('s', 'p', 'symbol', { children: ['sr'], effects: [blur] });
+    expect(
+      load([
+        ...deep([node('i', 'g31', 'instance', { symbol: 's' })]),
+        source,
+        node('sr', 's', 'rectangle'),
+      ]),
+    ).toEqual({ ok: false, code: 'editor.isolation-depth', path: '/nodes/i/parent' });
+  });
+});
+
+describe('V35-S4 instances', () => {
+  const instanceDoc = () =>
+    doc([
+      node('s', 'p', 'symbol', { children: ['r'], fills: [fill(blue)] }),
+      node('r', 's', 'rectangle', { fills: [fill(red), fill(blue, { blendMode: 'multiply' })] }),
+      node('i', 'p', 'instance', { symbol: 's', blendMode: 'screen' }),
+    ]);
+
+  it('exports an instance’s expanded fills and its own mode', () => {
+    const target = createEditor({ document: instanceDoc() });
+    const svg = target.query({ type: 'exportSvg', ids: ['i'] } as never) as unknown as string;
+    expect(svg).toContain('mix-blend-mode: screen');
+    expect(svg).toContain('mix-blend-mode: multiply');
+  });
+
+  it('detach makes a frame with the source’s fills and the instance’s mode', () => {
+    const target = createEditor({ document: instanceDoc() });
+    ok(target, { type: 'detachInstances', ids: ['i'] });
+    const detached = target.query({ type: 'node', id: 'i' }) as unknown as Json;
+    expect(detached.type).toBe('frame');
+    expect(detached.fills).toEqual([fill(blue)]);
+    expect(detached.blendMode).toBe('screen');
   });
 });
 

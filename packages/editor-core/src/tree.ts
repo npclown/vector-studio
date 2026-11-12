@@ -8,7 +8,7 @@ import {
   type PageV2,
   type SymbolNodeV8,
 } from '@vector-studio/model';
-import { leafSceneCount } from './fills.js';
+import { fillDraws, leafSceneCount } from './fills.js';
 import { IDENTITY, localTransform, multiply, type Matrix } from './geometry.js';
 
 // Tree queries over a v2 document (M1 contract, M1-S3). The model bounds the tree depth by 256,
@@ -293,21 +293,35 @@ export function effectiveOpacity(tree: TreeView, node: NodeV8): number {
   return source?.type === 'symbol' ? node.opacity * source.opacity : node.opacity;
 }
 
+/** The effects a node draws: an instance's own when it has any, else its source's (E41-S10). */
+function drawnEffects(tree: TreeView, node: NodeV8): NodeV8['effects'] {
+  if (node.type !== 'instance' || node.effects.length > 0) return node.effects;
+  const source = tree.node(node.symbol);
+  return source?.type === 'symbol' ? source.effects : node.effects;
+}
+
+/** Whether a drawing fill of `node` has a mode other than `normal`, a layer of its own (K3). */
+export function hasBlendedFill(node: NodeV8): boolean {
+  return (
+    'fills' in node && node.fills.some((fill) => fillDraws(fill) && fill.blendMode !== 'normal')
+  );
+}
+
 /**
  * Whether `node` draws as an isolated layer, counted conservatively on the document (V-35
  * contract, V35-P6): opacity below 1 (an instance's effective opacity), visible effects at
- * opacity above 0 (E41), a container or instance mode other than `passThrough`, a leaf mode
- * other than `normal`, or a leaf whose fills expand (two or more, or one non-normal) at opacity
- * below 1 or with effects.
+ * opacity above 0 (E41; an instance's inherited effects included), a container or instance mode
+ * other than `passThrough`, a leaf mode other than `normal`, a leaf with a non-normal drawing
+ * fill, or a leaf whose fills expand (two or more) at opacity below 1.
  */
 export function isolates(tree: TreeView, node: NodeV8): boolean {
   const opacity = effectiveOpacity(tree, node);
-  const effects = node.effects.some((effect) => effect.visible);
+  const effects = drawnEffects(tree, node).some((effect) => effect.visible);
   if (effects && opacity > 0) return true;
   if (isContainer(node) || node.type === 'instance') {
     return opacity < 1 || node.blendMode !== 'passThrough';
   }
-  if (node.blendMode !== 'normal') return true;
+  if (node.blendMode !== 'normal' || hasBlendedFill(node)) return true;
   return opacity < 1 && 'fills' in node && leafSceneCount(node) > 1;
 }
 
@@ -341,6 +355,11 @@ function sourceIsolationLevels(tree: TreeView, source: string): SourceIsolationL
     if (level > node) node = level;
     if (entry.type !== 'group' && entry.type !== 'maskGroup' && isolates(tree, entry)) {
       if (level > unit) unit = level;
+    }
+    // A background fill with a mode sits inside its frame's unit, a level lower when it isolates.
+    if (isContainer(entry) && hasBlendedFill(entry)) {
+      const inner = level + (isolates(tree, entry) ? 1 : 0);
+      if (inner > unit) unit = inner;
     }
     if (isContainer(entry)) {
       const next = isolates(tree, entry) ? level + 1 : level;
@@ -379,6 +398,11 @@ export function isolationBreaks(
   // A frame unit or a leaf that is a layer puts its content one level below it (V35-P6).
   const layered = node.type !== 'group' && node.type !== 'maskGroup' && isolates(tree, node);
   if (layered && count > MAX_ISOLATED_UNIT_COUNT) return true;
+  // A frame's or symbol's background fill with a mode is a leaf layer inside its unit (V35-P6).
+  if (isContainer(node) && hasBlendedFill(node)) {
+    const level = count + (isolates(tree, node) ? 1 : 0);
+    if (level > MAX_ISOLATED_UNIT_COUNT) return true;
+  }
   if (node.type !== 'instance') return false;
   const levels = levelsOf(node.symbol);
   const below = count + (isolates(tree, node) ? 1 : 0);
@@ -450,8 +474,9 @@ export function documentIsolationViolation(document: DocumentV8): string | null 
  * The first node a change from `base` to `document` makes break the isolation rule (section
  * 4.3), or null. Only these can: the subtrees of the nodes the change created, reparented or
  * retyped, of an instance whose source changed, of a container or instance whose opacity it
- * lowered from 1, and of a node it made isolate (a mode, effects or fills, V35-P6), and every instance of each source that holds such a node or is one. Reported
- * in `pages` order then page-tree pre-order.
+ * lowered from 1, of a node it made isolate or gave a fill with a mode (V35-P6), and every
+ * instance of each source that holds such a node or is one. Reported in `pages` order then
+ * page-tree pre-order.
  */
 export function isolationViolation(
   base: DocumentV8,
@@ -473,7 +498,8 @@ export function isolationViolation(
       ((isContainer(node) || node.type === 'instance') &&
         before.opacity === 1 &&
         node.opacity < 1) ||
-      (!isolates(baseTree, before) && isolates(tree, node))
+      (!isolates(baseTree, before) && isolates(tree, node)) ||
+      (!hasBlendedFill(before) && hasBlendedFill(node))
     ) {
       changed.push(id);
     }
