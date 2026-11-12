@@ -1,0 +1,679 @@
+{
+  "ready": {
+    "supported": true,
+    "reason": null,
+    "adapter": {
+      "architecture": "swiftshader",
+      "description": "",
+      "vendor": "google"
+    },
+    "wasmSha256": "1d7cd698a49e23100842defe75ca1a934842c57218b6cd109a2c9a8676fa2788",
+    "samples": 4,
+    "dpr": 2,
+    "groups": "flat",
+    "isolateUnit": false,
+    "tile": null,
+    "text": "none",
+    "paints": "image"
+  },
+  "dpr": 2,
+  "rows": [
+    {
+      "fixture": "G1",
+      "probes": 71878,
+      "worst": 0.5000000000000284,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G2",
+      "probes": 72045,
+      "worst": 0.4983798982459007,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G3",
+      "probes": 69136,
+      "worst": 0.7966656891192301,
+      "packet": {
+        "generation": 1,
+        "analytic": [],
+        "mesh": [
+          {
+            "position": 0,
+            "clipState": 0,
+            "triangles": 42,
+            "gradient": 1,
+            "strokeGradient": 2
+          },
+          {
+            "position": 0,
+            "clipState": 0,
+            "triangles": 274,
+            "gradient": 2,
+            "strokeGradient": 0
+          }
+        ],
+        "paint": {
+          "records": 2,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G4",
+      "probes": 69677,
+      "worst": 0.4875000000000682,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 3,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 3,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G5",
+      "probes": 71211,
+      "worst": 0.5,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 2,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 2,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G6",
+      "probes": 69609,
+      "worst": 0.9684817500775011,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 1,
+            "paint": true
+          },
+          {
+            "count": 1,
+            "clipState": 2,
+            "paint": true
+          }
+        ],
+        "mesh": [
+          {
+            "position": 1,
+            "clipState": 1,
+            "triangles": 58,
+            "gradient": 3,
+            "strokeGradient": 4
+          },
+          {
+            "position": 1,
+            "clipState": 1,
+            "triangles": 376,
+            "gradient": 4,
+            "strokeGradient": 0
+          }
+        ],
+        "paint": {
+          "records": 4,
+          "builds": 0
+        },
+        "clipStates": 2,
+        "maskLevels": 1,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G7 rotate-15 zoom 0.25 camera 0",
+      "probes": 72381,
+      "worst": 0.49867416567551004,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G7 rotate-15 zoom 0.25 camera 1",
+      "probes": 72384,
+      "worst": 0.4999894064149579,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G7 rotate-15 zoom 1 camera 0",
+      "probes": 71629,
+      "worst": 0.5000394204056278,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G7 rotate-15 zoom 1 camera 1",
+      "probes": 71628,
+      "worst": 0.49992378149022443,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G7 rotate-15 zoom 8 camera 0",
+      "probes": 72633,
+      "worst": 0.49999046616261467,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G7 rotate-15 zoom 8 camera 1",
+      "probes": 72633,
+      "worst": 0.5000227059578322,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G7 shear-x-0.25 zoom 0.25 camera 0",
+      "probes": 72365,
+      "worst": 0.4937500000000057,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G7 shear-x-0.25 zoom 0.25 camera 1",
+      "probes": 72365,
+      "worst": 0.4987499999999443,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G7 shear-x-0.25 zoom 1 camera 0",
+      "probes": 71565,
+      "worst": 0.4984375000000014,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G7 shear-x-0.25 zoom 1 camera 1",
+      "probes": 71565,
+      "worst": 0.49968750000000384,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G7 shear-x-0.25 zoom 8 camera 0",
+      "probes": 72633,
+      "worst": 0.49980468750001705,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G7 shear-x-0.25 zoom 8 camera 1",
+      "probes": 72633,
+      "worst": 0.49996093749999204,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G7 scale-2-0.5 zoom 0.25 camera 0",
+      "probes": 72248,
+      "worst": 0.48750000000001137,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G7 scale-2-0.5 zoom 0.25 camera 1",
+      "probes": 72337,
+      "worst": 0.49749999999997385,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G7 scale-2-0.5 zoom 1 camera 0",
+      "probes": 71610,
+      "worst": 0.49687500000001705,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G7 scale-2-0.5 zoom 1 camera 1",
+      "probes": 71610,
+      "worst": 0.4993750000000148,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G7 scale-2-0.5 zoom 8 camera 0",
+      "probes": 72633,
+      "worst": 0.4996093749999915,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G7 scale-2-0.5 zoom 8 camera 1",
+      "probes": 72633,
+      "worst": 0.4992968750000273,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 1,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 1,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    },
+    {
+      "fixture": "G8",
+      "probes": 69669,
+      "worst": 0.4937500000000057,
+      "packet": {
+        "generation": 1,
+        "analytic": [
+          {
+            "count": 2,
+            "clipState": 0,
+            "paint": true
+          }
+        ],
+        "mesh": [],
+        "paint": {
+          "records": 2,
+          "builds": 0
+        },
+        "clipStates": 0,
+        "maskLevels": 0,
+        "clipNotices": 0,
+        "layers": null,
+        "text": null
+      }
+    }
+  ],
+  "diagnostics": [],
+  "pageErrors": [],
+  "failures": []
+}

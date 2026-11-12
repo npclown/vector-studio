@@ -26,5 +26,5 @@ Contract: [viz-v32-image-contract.md](../../plans/viz-v32-image-contract.md), se
 ## Regression (V32-A09, software part)
 
 - `tests/gpu/e23-gradient-paint.spec.ts` on the same SwiftShader setup: 11/11 passed. A03 and A04 now run under `paints: 'gradient'` and `'image'`, and a byte-identity check renders every G fixture in both modes with no difference.
-- `pnpm test:e41-swiftshader`: 6/6 passed on the commit before review r1 (`7d356bd5`); r1 changed only the image store and tests.
+- `pnpm test:e41-swiftshader`: 6/6 passed on the commit before review r1 (`7d356bd5`); r1 changed the image store, its notice limit, the residency `fits` check and tests, none of which an E41 scene without image paints reaches.
 - The first run found that the E23 page's frame-source wrapper did not pass the service's `imageSource` to the backend; the page now forwards it (the hosts attach the service itself, which carries it).

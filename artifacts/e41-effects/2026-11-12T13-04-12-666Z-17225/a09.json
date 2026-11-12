@@ -1,0 +1,33 @@
+{
+  "rows": {
+    "baseline": {
+      "live": 3,
+      "liveBytes": 3276801
+    },
+    "effects": {
+      "created": 25,
+      "peakLiveBytes": 4457961
+    },
+    "resized": {
+      "resizedBaseline": {
+        "live": 3,
+        "liveBytes": 32000001
+      },
+      "resizedEffects": {
+        "live": 3,
+        "liveBytes": 32000001
+      },
+      "resizedRemoved": {
+        "live": 3,
+        "liveBytes": 32000001
+      }
+    },
+    "sameFrame": true,
+    "afterRecovery": {
+      "live": 3,
+      "liveBytes": 32000001
+    },
+    "disposedLive": 0
+  },
+  "failures": []
+}

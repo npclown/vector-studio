@@ -1,0 +1,47 @@
+{
+  "rows": {
+    "over": {
+      "rgb": [
+        255,
+        255,
+        255
+      ],
+      "effectPasses": 0
+    },
+    "overAgain": {
+      "rgb": [
+        255,
+        255,
+        255
+      ],
+      "effectPasses": 0
+    },
+    "under": {
+      "rgb": [
+        127,
+        127,
+        127
+      ],
+      "effectPasses": 2
+    },
+    "overOnceMore": {
+      "rgb": [
+        255,
+        255,
+        255
+      ],
+      "effectPasses": 2
+    },
+    "notices": {
+      "start": 0,
+      "afterOver": 1,
+      "afterReturn": 2
+    },
+    "inside": [
+      255,
+      0,
+      0
+    ]
+  },
+  "failures": []
+}

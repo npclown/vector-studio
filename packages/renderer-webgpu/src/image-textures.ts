@@ -257,11 +257,18 @@ export class ImageTextureStore {
    * V32-K3: the port's notification makes its keys requestable again, so a pending key draws once
    * ready and a failed one is retried (reported again only in a new generation).
    */
+  // The listener only clears `#waiting`; the service's own listener schedules the frame through
+  // the backend's frame scheduler, never synchronously, so that frame requests the keys again.
+  // A port whose `subscribe` throws gives no notifications: its keys stay waiting.
   #subscribe(): void {
     if (this.#unsubscribe !== null || this.#port === null) return;
-    this.#unsubscribe = this.#port.subscribe((keys) => {
-      for (const key of keys) this.#waiting.delete(key);
-    });
+    try {
+      this.#unsubscribe = this.#port.subscribe((keys) => {
+        for (const key of keys) this.#waiting.delete(key);
+      });
+    } catch {
+      this.#unsubscribe = () => {};
+    }
   }
 
   public get residentBytes(): number {

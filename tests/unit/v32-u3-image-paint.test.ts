@@ -454,7 +454,10 @@ describe('V32-K7 per-draw image binding', () => {
 
   it('never requests the image of a mask source (V32-S2)', async () => {
     const { creation, run, requests } = await imageScene(
-      new Map([['k1', ready(2, 2)]]),
+      new Map([
+        ['k1', ready(2, 2)],
+        ['k2', ready(2, 2)],
+      ]),
       'supported',
     );
     const mask = {
@@ -470,9 +473,10 @@ describe('V32-K7 per-draw image binding', () => {
     run([
       mask,
       { ...box('source', 0, image('k1')), parentId: 'm' },
-      { ...box('content', 0, red), parentId: 'm' },
+      { ...box('content', 0, image('k2')), parentId: 'm' },
     ]);
-    expect(requests).toEqual([]);
+    // The content's image is requested, so the scene did draw image paints; the source's is not.
+    expect(requests).toEqual(['k2']);
     creation.dispose();
   });
 
