@@ -19,9 +19,9 @@ import { projectPage } from '../../packages/editor-core/src/projector.js';
 // headed E26 harness runs them (tests/e26/e26-harness.spec.ts, `E26_SCENARIOS=e41`).
 
 describe('E41-U7c e41-cards', () => {
-  it('is 50 card groups at schema 7, each with a shadow, every tenth with a layer blur', () => {
+  it('is 50 card groups at schema 8, each with a shadow, every tenth with a layer blur', () => {
     const document = generateE41CardsDocument();
-    expect(document.schemaVersion).toBe(7);
+    expect(document.schemaVersion).toBe(8);
     const loaded = loadScenarioDocument('e41-cards');
     const page = loaded.document.pages[0]!;
     expect(page.children).toHaveLength(E41_CARDS.count);
@@ -86,7 +86,7 @@ describe('E41-U7c e41-cards', () => {
       frameCeilingMs: 16.7,
     });
     const configuration = e26Configuration(view, 2, 5, loaded);
-    expect(configuration.schemaVersion).toBe(7);
+    expect(configuration.schemaVersion).toBe(8);
     expect(configuration.drawnLeaves).toBe(150);
     const camera = configuration.camera;
     for (let t = 0; t < E26_DRIVERS.thetaPeriodMs; t += 10) {

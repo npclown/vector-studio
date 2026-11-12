@@ -1,7 +1,7 @@
 // Document schemas (P5 editor-slice plan, section 3; MVP M1 contract, section 2). The model imports
 // nothing, so these types mirror the matching `contracts` scene fields instead of importing them.
-// Schema v7 (E41 contract, section 3) is the document the model returns and writes; the v1 to
-// v6 types describe the input of `migrateV1toV2` to `migrateV6toV7` only.
+// Schema v8 (2026-11-12, v7's shape so far) is the document the model returns and writes; the v1
+// to v7 types describe the input of `migrateV1toV2` to `migrateV7toV8` only.
 
 export type JsonValue =
   null | boolean | number | string | readonly JsonValue[] | { readonly [key: string]: JsonValue };
@@ -430,4 +430,41 @@ export type DocumentV7 = Readonly<{
   /** One or more pages. */
   pages: readonly PageV7[];
   nodes: Readonly<Record<string, NodeV7>>;
+}>;
+
+// Document schema v8 (2026-11-12, the Figma gap-list items V-31 to V-40): introduced as v7's shape
+// so the ten items can each add their fields to one unreleased version instead of bumping it in
+// turn. The v7 to v8 migration changes only `schemaVersion` until an item adds a field.
+
+export type RectangleNodeV8 = RectangleNodeV6 & NodeEffects;
+export type EllipseNodeV8 = EllipseNodeV6 & NodeEffects;
+export type LineNodeV8 = LineNodeV6 & NodeEffects;
+export type PathNodeV8 = PathNodeV6 & NodeEffects;
+export type CustomNodeV8 = CustomNodeV6 & NodeEffects;
+export type TextNodeV8 = TextNode & NodeEffects;
+export type InstanceNodeV8 = InstanceNodeV5 & NodeEffects;
+export type GroupNodeV8 = GroupNode & NodeEffects;
+export type FrameNodeV8 = FrameNodeV6 & NodeEffects;
+export type SymbolNodeV8 = SymbolNodeV6 & NodeEffects;
+
+export type LeafNodeV8 =
+  | RectangleNodeV8
+  | EllipseNodeV8
+  | LineNodeV8
+  | PathNodeV8
+  | CustomNodeV8
+  | TextNodeV8
+  | InstanceNodeV8;
+export type ContainerNodeV8 = GroupNodeV8 | FrameNodeV8 | SymbolNodeV8;
+export type NodeV8 = LeafNodeV8 | ContainerNodeV8;
+export type NodeTypeV8 = NodeV8['type'];
+
+export type PageV8 = PageV6;
+
+export type DocumentV8 = Readonly<{
+  schemaVersion: 8;
+  id: string;
+  /** One or more pages. */
+  pages: readonly PageV8[];
+  nodes: Readonly<Record<string, NodeV8>>;
 }>;

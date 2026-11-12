@@ -10,7 +10,7 @@ import {
   SCENE_MAX_EFFECTS,
   SCENE_MAX_ISOLATION_DEPTH,
 } from '@vector-studio/contracts';
-import { validateDocument, type DocumentV7, type Effect } from '@vector-studio/model';
+import { validateDocument, type DocumentV8, type Effect } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import { createEditor } from '../../packages/editor-core/src/index.js';
 import {
@@ -332,9 +332,9 @@ const docRect = (id: string, parent: string, effects: Effect[]) => ({
   stroke: null,
 });
 
-function document(maskChildren = ['s', 'c']): DocumentV7 {
+function document(maskChildren = ['s', 'c']): DocumentV8 {
   const value = {
-    schemaVersion: 7,
+    schemaVersion: 8,
     id: 'd',
     pages: [{ id: 'p', name: 'P', children: ['g', 'm', 'f', 'h'] }],
     nodes: {
@@ -359,7 +359,7 @@ function document(maskChildren = ['s', 'c']): DocumentV7 {
 }
 
 const noCustom = () => null;
-const project = (doc: DocumentV7, effects: boolean, memo?: ProjectionMemo) =>
+const project = (doc: DocumentV8, effects: boolean, memo?: ProjectionMemo) =>
   projectPage(
     doc,
     doc.pages[0]!.id,
@@ -405,11 +405,11 @@ describe('E41-S4 and S5 projector effects', () => {
     expect(first.nodes.get('c')!.effects).toEqual([SCENE_SHADOW]);
     // Swap the mask group's children; the child node objects stay the same.
     const before = document();
-    const swapped: DocumentV7 = {
+    const swapped: DocumentV8 = {
       ...before,
       nodes: {
         ...before.nodes,
-        m: { ...before.nodes.m!, children: ['c', 's'] } as DocumentV7['nodes'][string],
+        m: { ...before.nodes.m!, children: ['c', 's'] } as DocumentV8['nodes'][string],
       },
     };
     const second = project(swapped, true, memo);
@@ -441,7 +441,7 @@ describe('E41-S4 and S5 projector effects', () => {
 });
 
 describe('E41-S10 an instance draws with its own effects, or else its source’s', () => {
-  const symbols = (instance: Effect[], source: Effect[]): DocumentV7 => {
+  const symbols = (instance: Effect[], source: Effect[]): DocumentV8 => {
     const text = readFileSync(
       path.join(root, 'tests/fixtures/m4-appearance/migrated/symbols.v6.json'),
       'utf8',

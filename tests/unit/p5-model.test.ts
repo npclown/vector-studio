@@ -8,7 +8,7 @@ import {
   serializeDocument,
   validateAnyDocument,
   validateNode,
-  type DocumentV7,
+  type DocumentV8,
   type ParseResult,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
@@ -37,7 +37,7 @@ async function migratedFixture(name: string): Promise<string> {
   return v7Text(await readFile(path.join(migrated, `${name}.v6.json`), 'utf8'));
 }
 
-function parsed(text: string): DocumentV7 {
+function parsed(text: string): DocumentV8 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;

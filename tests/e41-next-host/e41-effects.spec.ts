@@ -1,4 +1,4 @@
-import type { Command, Editor, NodeV7 } from '@vector-studio/editor-core';
+import type { Command, Editor, NodeV8 } from '@vector-studio/editor-core';
 import { expect, test, type Page } from '@playwright/test';
 
 // E41 contract (docs/plans/d9-e41-boolean-effects-contract.md), E41-A12, the effects half (U7):
@@ -45,7 +45,7 @@ async function ok(page: Page, command: Command): Promise<readonly string[]> {
   return result.ids;
 }
 
-async function node(page: Page, id: string): Promise<NodeV7> {
+async function node(page: Page, id: string): Promise<NodeV8> {
   return page.evaluate(
     (key) =>
       (window as unknown as { __p5Host: Hook }).__p5Host.editor.getSnapshot().document.nodes[key]!,

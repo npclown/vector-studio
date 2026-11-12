@@ -9,6 +9,7 @@ import {
   migrateV4toV5,
   migrateV5toV6,
   migrateV6toV7,
+  migrateV7toV8,
   parseDocument,
   parseEnvelope,
   serializeDocument,
@@ -19,7 +20,7 @@ import {
   validateNode,
   type DocumentV1,
   type DocumentV2,
-  type DocumentV7,
+  type DocumentV8,
   type EnvelopeResult,
   type FragmentTreeResult,
   type ParseResult,
@@ -55,7 +56,7 @@ async function readV7(file: string): Promise<string> {
   return v7Text(await read(file));
 }
 
-function parsed(text: string): DocumentV7 {
+function parsed(text: string): DocumentV8 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -146,10 +147,10 @@ type Loose = {
   nodes: Record<string, unknown>;
 };
 
-/** A document at `version`; at v7 each node without `effects` gains `effects: []` (E41-S1). */
-function document(nodes: Record<string, unknown>, children: string[], version = 7): Loose {
+/** A document at `version`; from v7 each node without `effects` gains `effects: []` (E41-S1). */
+function document(nodes: Record<string, unknown>, children: string[], version = 8): Loose {
   const at =
-    version === 7
+    version >= 7
       ? Object.fromEntries(
           Object.entries(nodes).map(([key, node]) => [
             key,
@@ -220,7 +221,8 @@ describe('M7-A01 migration v2 to v3', () => {
       const v4 = migrated.ok ? migrateV3toV4(migrated.document) : migrated;
       const v5 = v4.ok ? migrateV4toV5(v4.document) : v4;
       const v6Result = v5.ok ? migrateV5toV6(v5.document) : v5;
-      const latest = v6Result.ok ? migrateV6toV7(v6Result.document) : v6Result;
+      const v7Result = v6Result.ok ? migrateV6toV7(v6Result.document) : v6Result;
+      const latest = v7Result.ok ? migrateV7toV8(v7Result.document) : v7Result;
       expect(latest.ok && serializeDocument(latest.document)).toBe(serializeDocument(parsed(v3)));
       // Only the version changes (M7-Q12 (a)); the M3 host fixture is not in canonical text form.
       expect(JSON.parse(v3)).toEqual({ ...(JSON.parse(v2) as object), schemaVersion: 3 });
@@ -292,14 +294,14 @@ describe('M7-A01 migration v2 to v3', () => {
     ];
     for (const result of all)
       expect(result.ok && result.document).toEqual(all[6]!.ok && all[6]!.document);
-    expect(all[6]!.ok && all[6]!.document.schemaVersion).toBe(7);
+    expect(all[6]!.ok && all[6]!.document.schemaVersion).toBe(8);
   });
 
   it.each(['p5-model', 'm1-model', 'm7-symbols'])(
-    'fails the %s unsupported-version fixture at schemaVersion 8 (since E41-U4)',
+    'fails the %s unsupported-version fixture at schemaVersion 9 (since the v8 scaffold)',
     async (dir) => {
       const text = await read(`${dir}/malformed/unsupported-version.json`);
-      expect((JSON.parse(text) as { schemaVersion: number }).schemaVersion).toBe(8);
+      expect((JSON.parse(text) as { schemaVersion: number }).schemaVersion).toBe(9);
       expect(failure(parseDocument(text))).toEqual({
         code: 'document.unsupported-version',
         path: '/schemaVersion',
@@ -307,11 +309,11 @@ describe('M7-A01 migration v2 to v3', () => {
     },
   );
 
-  it('fails the M5 document-unsupported-version envelope at schemaVersion 8', async () => {
+  it('fails the M5 document-unsupported-version envelope at schemaVersion 9', async () => {
     const text = await read('m5-persistence/malformed/document-unsupported-version.json');
     expect(
       (JSON.parse(text) as { document: { schemaVersion: number } }).document.schemaVersion,
-    ).toBe(8);
+    ).toBe(9);
     expect(failure(parseEnvelope(text))).toEqual({
       code: 'document.unsupported-version',
       path: '/document/schemaVersion',
@@ -378,13 +380,13 @@ describe('M7-A01 round trip and serialize order (section 7)', () => {
     // The order holds for an in-memory value built in another key order.
     const value = parsed(text);
     const { symbol: source, ...rest } = value.nodes.i1 as Extract<
-      DocumentV7['nodes'][string],
+      DocumentV8['nodes'][string],
       { type: 'instance' }
     >;
     const shuffled = {
       ...value,
       nodes: { ...value.nodes, i1: { symbol: source, ...rest } },
-    } as DocumentV7;
+    } as DocumentV8;
     expect(serializeDocument(shuffled)).toBe(text);
   });
 });

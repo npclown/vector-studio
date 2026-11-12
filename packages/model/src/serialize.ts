@@ -1,10 +1,10 @@
 import type {
   Dash,
-  DocumentV7,
+  DocumentV8,
   Effect,
   JsonValue,
   NodeV6,
-  NodeV7,
+  NodeV8,
   Paint,
   Stroke,
   TextRun,
@@ -115,7 +115,7 @@ function effect(value: Effect): Ordered {
 }
 
 /** A v7 node: the v6 fields, then `effects` (E41-S1). */
-function nodeV7(value: NodeV7): Ordered {
+function nodeV7(value: NodeV8): Ordered {
   return { ...nodeV6(value), effects: value.effects.map(effect) };
 }
 
@@ -197,7 +197,7 @@ function nodeV6(value: NodeV6): Ordered {
  * The document as a plain object in canonical key order, for `serializeDocument` and the
  * persistence envelope (MVP M5 contract, M5-E3). Not exported from the package.
  */
-export function orderedDocument(document: DocumentV7): Ordered {
+export function orderedDocument(document: DocumentV8): Ordered {
   return {
     schemaVersion: document.schemaVersion,
     id: document.id,
@@ -215,7 +215,7 @@ export function orderedDocument(document: DocumentV7): Ordered {
 }
 
 /**
- * Emits canonical schema v7 JSON (M1 contract, section 2.1; M7 contract, section 2.1; M6a
+ * Emits canonical schema v8 JSON (M1 contract, section 2.1; M7 contract, section 2.1; M6a
  * contract, sections 2 and 9; M4 contract, section 2; E41 contract, section 3): two-space indentation, fixed key order and
  * a final newline. A paint is written as a colour (`r, g, b, a`) or a gradient (`kind`,
  * `transform`, `stops`, each `offset`, `color`, then `spread`), a stroke as `color`, `width`,
@@ -226,6 +226,6 @@ export function orderedDocument(document: DocumentV7): Ordered {
  * `sizing`, `align`, `letterSpacing`, `lineHeight`. Every node ends with `effects`, each effect in
  * the E41-S2 key order.
  */
-export function serializeDocument(document: DocumentV7): string {
+export function serializeDocument(document: DocumentV8): string {
   return `${JSON.stringify(orderedDocument(document), null, 2)}\n`;
 }

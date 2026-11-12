@@ -9,9 +9,9 @@ import {
   isValidId,
   validateAnyDocument,
   type Color,
-  type DocumentV7,
+  type DocumentV8,
   type ParseResult,
-  type TextNodeV7,
+  type TextNodeV8,
 } from '@vector-studio/model';
 import {
   copyFragment,
@@ -188,7 +188,7 @@ export type EditorOptions = Readonly<{
    * document, the active page and the first point; null (or no function, the default) keeps the
    * command's default stroke (black). A throw or a value that is not a colour counts as null.
    */
-  drawStrokeColor?: (document: DocumentV7, page: string, point: PagePoint) => Color | null;
+  drawStrokeColor?: (document: DocumentV8, page: string, point: PagePoint) => Color | null;
 }>;
 
 /** A tool receives input and acts only through the editor's commands and the gesture API. */
@@ -248,8 +248,8 @@ export interface GestureControl {
 }
 
 type HistoryEntry = Readonly<{
-  before: DocumentV7;
-  after: DocumentV7;
+  before: DocumentV8;
+  after: DocumentV8;
   touched: readonly string[];
   /**
    * For the scene projector only (E26-U4): the IDs whose node object differs between `before`
@@ -292,7 +292,7 @@ type TextStepKind = 'insert' | 'replace' | 'backward' | 'forward' | 'own';
 type TextMerge = Readonly<{ entry: HistoryEntry; kind: 'insert' | 'backward' | 'forward' }>;
 
 type Gesture = {
-  base: DocumentV7;
+  base: DocumentV8;
   touched: Set<string>;
   updated: boolean;
   /** The selection when the gesture began, restored on cancel (M2 contract, section 2). */
@@ -472,7 +472,7 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
  * A frozen copy of an extension command's result, or null when it is not a `CommandResult`
  * with a known code and, on success, IDs of nodes in `document`.
  */
-function extensionResult(value: unknown, document: DocumentV7): CommandResult | null {
+function extensionResult(value: unknown, document: DocumentV8): CommandResult | null {
   if (typeof value !== 'object' || value === null) return null;
   const record = value as Record<string, unknown>;
   if (record.ok === true) {
@@ -635,12 +635,12 @@ function structuredCopy(overlay: SnapOverlay): SnapOverlay {
 
 const clampZoom = (zoom: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom));
 
-function nodeIn(document: DocumentV7, id: string) {
+function nodeIn(document: DocumentV8, id: string) {
   return Object.hasOwn(document.nodes, id) ? document.nodes[id] : undefined;
 }
 
 /** Whether node `id` differs between two documents; a node in only one of them differs. */
-function nodeDiffers(a: DocumentV7, b: DocumentV7, id: string): boolean {
+function nodeDiffers(a: DocumentV8, b: DocumentV8, id: string): boolean {
   const x = nodeIn(a, id);
   const y = nodeIn(b, id);
   if (x === y) return false;
@@ -648,7 +648,7 @@ function nodeDiffers(a: DocumentV7, b: DocumentV7, id: string): boolean {
 }
 
 /** Whether two documents have the same pages, children orders included. */
-function samePages(a: DocumentV7, b: DocumentV7): boolean {
+function samePages(a: DocumentV8, b: DocumentV8): boolean {
   return a.pages === b.pages || JSON.stringify(a.pages) === JSON.stringify(b.pages);
 }
 
@@ -660,9 +660,9 @@ function sorted(ids: Iterable<string>): string[] {
 }
 
 /** Validated by the caller like any initial document, so a bad ID source fails at creation. */
-function emptyDocument(ids: IdSource): DocumentV7 {
+function emptyDocument(ids: IdSource): DocumentV8 {
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
     id: ids(),
     pages: [{ id: ids(), name: 'Page 1', children: [] }],
     nodes: {},
@@ -693,7 +693,7 @@ function freezeTextEdit(next: TextEditState): TextEditState {
  * whose ancestor is also listed is dropped (the ancestor wins).
  */
 function normalizeSelection(
-  document: DocumentV7,
+  document: DocumentV8,
   page: string,
   ids: readonly string[],
 ): string[] | null {
@@ -705,7 +705,7 @@ function normalizeSelection(
 }
 
 class EditorCore implements Editor {
-  private document: DocumentV7;
+  private document: DocumentV8;
   private activePage: string;
   private revision = 0;
   private selection: readonly string[] = Object.freeze([]);
@@ -839,7 +839,7 @@ class EditorCore implements Editor {
    * IDs that the document they draw on holds (or that are invalid), so an ID `drawnOn` does not
    * hold was taken (M7 contract, section 6).
    */
-  private static taken(returned: readonly string[], drawnOn: DocumentV7): string[] {
+  private static taken(returned: readonly string[], drawnOn: DocumentV8): string[] {
     return returned.filter(
       (id) =>
         isValidId(id) &&
@@ -855,7 +855,7 @@ class EditorCore implements Editor {
   }
 
   /** Runs one gesture step drawing on `drawnOn`, recording the IDs it accepted. */
-  private gestureStep<T>(gesture: Gesture, drawnOn: DocumentV7, step: () => T): T {
+  private gestureStep<T>(gesture: Gesture, drawnOn: DocumentV8, step: () => T): T {
     this.drawing = [];
     const result = step();
     gesture.accepted.push(...EditorCore.taken(this.drawing, drawnOn));
@@ -2383,7 +2383,7 @@ class EditorCore implements Editor {
   }
 
   private changeDocument(
-    document: DocumentV7,
+    document: DocumentV8,
     cause: DocumentChangeCause,
     touched: Iterable<string>,
     projected?: Iterable<string>,
@@ -2542,7 +2542,7 @@ class EditorCore implements Editor {
    * After a document change from `previous` (null for a load, which always ends it), the anchor
    * selection is kept when the path's structure is unchanged, else cleared.
    */
-  private syncPathEdit(previous?: DocumentV7 | null): void {
+  private syncPathEdit(previous?: DocumentV8 | null): void {
     const edit = this.pathEdit;
     if (edit === null) return;
     const node = editablePath(this.document, this.activePage, edit.id);
@@ -2701,7 +2701,7 @@ class EditorCore implements Editor {
   }
 
   /** Text node `node` of the live document over its cached layout, or null without a port. */
-  private nodeTextTarget(node: TextNodeV7): TextEditTarget | null {
+  private nodeTextTarget(node: TextNodeV8): TextEditTarget | null {
     const cache = this.textLayouts;
     if (cache === null) return null;
     const model = this.caretModel(cache.layout(node), () => layoutRequest(node));
@@ -3055,7 +3055,7 @@ class EditorCore implements Editor {
     if (id === null) {
       next = { ...record.edit, composition: { start: 0, end: 0 } };
     } else {
-      const node = document.nodes[id] as TextNodeV7;
+      const node = document.nodes[id] as TextNodeV8;
       const model = this.caretModel(this.textLayouts!.layout(node), () => layoutRequest(node));
       const end = record.start + text.length;
       next = {
@@ -3085,7 +3085,7 @@ class EditorCore implements Editor {
    * changed. A document equal to the live one changes only the state.
    */
   private changeTextGestureDocument(
-    document: DocumentV7,
+    document: DocumentV8,
     cause: DocumentChangeCause,
     touched: readonly string[],
     edit: TextEditState,
@@ -3464,7 +3464,7 @@ class EditorCore implements Editor {
    * page or container of the active page. After a document change from `previous` (null for a
    * load, which always ends it) the caret is clamped and moved down to stops (section 4.1).
    */
-  private syncTextEdit(previous?: DocumentV7 | null): void {
+  private syncTextEdit(previous?: DocumentV8 | null): void {
     const edit = this.textEdit;
     if (edit === null) return;
     const selection = this.selection;

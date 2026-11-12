@@ -18,7 +18,7 @@ import {
   validateFragmentTree,
   validateNode as validateNodeV7,
   type DocumentV5,
-  type DocumentV7,
+  type DocumentV8,
   type PathData,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
@@ -79,7 +79,7 @@ const DASHED = {
 type Loose = Record<string, unknown>;
 type Json = { schemaVersion: number; id: string; pages: Loose[]; nodes: Record<string, Loose> };
 
-function parsed(text: string): DocumentV7 {
+function parsed(text: string): DocumentV8 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -133,7 +133,7 @@ function everyEntryPoint(value: Json): Failed[] {
     pick(validateAnyDocument(value)),
     { code: envelope.code, path: envelope.path.replace(/^\/document/, '') },
   ];
-  if (value.schemaVersion === 7) {
+  if (value.schemaVersion === 8) {
     results.push(pick(validateDocument(value)), pick(validateFragmentTree(value)));
   }
   return results;
@@ -517,7 +517,7 @@ describe('M4-A02 migration v5 to v6, versions and round trips (section 2.1)', ()
     expect(Object.keys(r1.stroke.dash)).toEqual(['pattern', 'phase']);
     // An in-memory value in other key orders serializes to the same text.
     const value = parsed(APPEARANCE);
-    const node = value.nodes.r1 as Extract<DocumentV7['nodes'][string], { type: 'rectangle' }>;
+    const node = value.nodes.r1 as Extract<DocumentV8['nodes'][string], { type: 'rectangle' }>;
     const fill = node.fill as Extract<typeof node.fill, { kind: string }>;
     const stroke = node.stroke!;
     const shuffled = {
@@ -542,7 +542,7 @@ describe('M4-A02 migration v5 to v6, versions and round trips (section 2.1)', ()
           },
         },
       },
-    } as DocumentV7;
+    } as DocumentV8;
     expect(serializeDocument(shuffled)).toBe(APPEARANCE);
   });
 
@@ -576,18 +576,18 @@ describe('M4-A02 migration v5 to v6, versions and round trips (section 2.1)', ()
     expect(types.has('text') && types.has('instance') && types.has('group')).toBe(true);
   });
 
-  it('accepts versions 1 to 7, validateDocument only 7, and fails 8', () => {
+  it('accepts versions 1 to 8, validateDocument only 8, and fails 9', () => {
     const v7 = JSON.parse(APPEARANCE) as Json;
     expect(validateDocument(v7).ok).toBe(true);
     expect(validateAnyDocument(v6Value(v7)).ok).toBe(true);
     const v5 = JSON.parse(read('m7-symbols/migrated/shapes.v5.json')) as Json;
     expect(validateAnyDocument(v5).ok).toBe(true);
     const unsupported = { ok: false, code: 'document.unsupported-version', path: '/schemaVersion' };
-    for (const version of [1, 2, 3, 4, 5, 6, 8]) {
+    for (const version of [1, 2, 3, 4, 5, 6, 7, 9]) {
       expect(validateDocument({ ...v7, schemaVersion: version })).toEqual(unsupported);
       expect(validateFragmentTree({ ...v7, schemaVersion: version })).toEqual(unsupported);
     }
-    expect(parseDocument(JSON.stringify({ ...v7, schemaVersion: 8 }))).toEqual(unsupported);
+    expect(parseDocument(JSON.stringify({ ...v7, schemaVersion: 9 }))).toEqual(unsupported);
   });
 
   it.each([
@@ -596,9 +596,9 @@ describe('M4-A02 migration v5 to v6, versions and round trips (section 2.1)', ()
     'm7-symbols/malformed/unsupported-version.json',
     'm6-text/malformed/unsupported-version.json',
     'm4-appearance/malformed/unsupported-version.json',
-  ])('fails %s at schemaVersion 8', (file) => {
+  ])('fails %s at schemaVersion 9', (file) => {
     const text = read(file);
-    expect((JSON.parse(text) as Json).schemaVersion).toBe(8);
+    expect((JSON.parse(text) as Json).schemaVersion).toBe(9);
     expect(parseDocument(text)).toEqual({
       ok: false,
       code: 'document.unsupported-version',
@@ -607,10 +607,10 @@ describe('M4-A02 migration v5 to v6, versions and round trips (section 2.1)', ()
   });
 
   it.each(['document-unsupported-version', 'order-5-6'])(
-    'holds document schemaVersion 8 in the M5 envelope %s',
+    'holds document schemaVersion 9 in the M5 envelope %s',
     (name) => {
       const value = JSON.parse(read(`m5-persistence/malformed/${name}.json`)) as { document: Json };
-      expect(value.document.schemaVersion).toBe(8);
+      expect(value.document.schemaVersion).toBe(9);
     },
   );
 
@@ -778,12 +778,12 @@ describe('M4-A03 fragments at v6, older fragments migrated (section 7)', () => {
       nodes: {},
     });
 
-  it('writes the literal fragment text with a gradient and a dash at schema v7', () => {
+  it('writes the literal fragment text with a gradient and a dash at schema v8', () => {
     const { target } = counted();
     ok(target, { type: 'copy', ids: ['r1'] });
     expect(target.query({ type: 'clipboard' })).toBe(
       MARKER +
-        '{"fragmentVersion":2,"schemaVersion":7,"roots":["r1"],"nodes":{"r1":{"id":"r1",' +
+        '{"fragmentVersion":2,"schemaVersion":8,"roots":["r1"],"nodes":{"r1":{"id":"r1",' +
         '"name":"r1","parent":"","frame":{"x":20,"y":20,"width":200,"height":120},' +
         '"rotation":0,"constraints":{"horizontal":"start","vertical":"start"},"opacity":1,' +
         '"visible":true,"type":"rectangle","cornerRadii":[8,0,8,0],"fill":{"kind":"linear",' +
@@ -1031,10 +1031,10 @@ describe('M4-A03 fragments at v6, older fragments migrated (section 7)', () => {
     expect(other.drawn()).toBe(0);
   });
 
-  it('rejects schema v8 fragments and a fragment version 1 above schema v2', () => {
+  it('rejects schema v9 fragments and a fragment version 1 above schema v2', () => {
     const { target } = empty();
     const unsupported = { ok: false, code: 'document.unsupported-version', path: '/schemaVersion' };
-    expect(target.execute({ type: 'paste', text: fragmentAt(rect('r', ''), 8) })).toEqual(
+    expect(target.execute({ type: 'paste', text: fragmentAt(rect('r', ''), 9) })).toEqual(
       unsupported,
     );
     expect(

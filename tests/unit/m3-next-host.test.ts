@@ -21,7 +21,7 @@ import {
   validateAnyDocument,
   validateDocument,
   type DocumentV2,
-  type DocumentV7,
+  type DocumentV8,
 } from '../../packages/model/src/index.js';
 import { RecordingRenderer } from '../support/p5-recording-renderer.js';
 import { v7Value } from '../support/schema-v7.js';
@@ -97,7 +97,7 @@ function pathsDocument(
     verbs: Extract<Command, { type: 'createPath' }>['verbs'];
     points: readonly number[];
   }>[],
-): DocumentV7 {
+): DocumentV8 {
   const target = createEditor({ ids: createCounterIdSource('p') });
   for (const entry of paths) ok(target, { type: 'createPath', ...entry });
   return target.query({ type: 'document' });

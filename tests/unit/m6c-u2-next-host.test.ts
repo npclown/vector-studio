@@ -23,7 +23,7 @@ import {
   parseDocument,
   serializeDocument,
   validateAnyDocument,
-  type DocumentV7,
+  type DocumentV8,
 } from '../../packages/model/src/index.js';
 import { v7Text } from '../support/schema-v7.js';
 import type * as RouteModule from '../../apps/next-host/app/m6c-text-gpu.json/route.js';
@@ -51,7 +51,7 @@ const GPU_TEXT = readFileSync(
   path.join(root, 'tests/fixtures/m6-text/gpu/text-gpu.v6.json'),
   'utf8',
 );
-const GPU = JSON.parse(GPU_TEXT) as DocumentV7;
+const GPU = JSON.parse(GPU_TEXT) as DocumentV8;
 const M6A_TEXT = JSON.parse(
   readFileSync(path.join(root, 'tests/fixtures/m6-text/text.v4.json'), 'utf8'),
 ) as unknown;

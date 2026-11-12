@@ -2,8 +2,8 @@ import type {
   Editor,
   EditorSnapshot,
   HistoryState,
-  NodeV7,
-  PageV7,
+  NodeV8,
+  PageV8,
   Query,
   QueryResult,
   RenderCamera,
@@ -186,7 +186,7 @@ export function createQueryStore<Q extends Query>(
 export const snapshotSelectors = Object.freeze({
   selection: (snapshot: EditorSnapshot): readonly string[] => snapshot.selection,
   activePage: (snapshot: EditorSnapshot): string => snapshot.activePage,
-  pages: (snapshot: EditorSnapshot): readonly PageV7[] => snapshot.document.pages,
+  pages: (snapshot: EditorSnapshot): readonly PageV8[] => snapshot.document.pages,
   tool: (snapshot: EditorSnapshot): ToolId => snapshot.tool,
   history: (snapshot: EditorSnapshot): HistoryState => snapshot.history,
   snapping: (snapshot: EditorSnapshot): boolean => snapshot.snapping,
@@ -207,7 +207,7 @@ export function historyEqual(previous: HistoryState, next: HistoryState): boolea
  * The selector of `useNode(id)` (M8-H1): `snapshot.document.nodes[id]`, or null when the
  * document has no own node `id` (so `constructor` is null too).
  */
-export function nodeSelector(id: string): (snapshot: EditorSnapshot) => NodeV7 | null {
+export function nodeSelector(id: string): (snapshot: EditorSnapshot) => NodeV8 | null {
   return (snapshot) =>
     Object.hasOwn(snapshot.document.nodes, id) ? (snapshot.document.nodes[id] ?? null) : null;
 }
