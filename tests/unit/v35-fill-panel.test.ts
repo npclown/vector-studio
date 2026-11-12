@@ -34,6 +34,7 @@ import {
   replaceFillsCommand,
   rowPrefix,
   setFillCommand,
+  singleFillCommand,
 } from '../../packages/ui/src/fill-model.js';
 
 const red = { r: 1, g: 0, b: 0, a: 1 };
@@ -85,6 +86,50 @@ describe('V35-C2 fill view', () => {
     expect(fillView(fillHolders(nodesOf(target, [a, b])))).toEqual({ state: 'mixed' });
     expect(fillView(fillHolders(nodesOf(target, [a])))).toMatchObject({ state: 'list' });
     expect(fillView([])).toEqual({ state: 'list', fills: [] });
+  });
+
+  it('is single when fills differ but each holder has at most one', () => {
+    const target = editor();
+    const a = rect(target);
+    const b = rect(target, 40);
+    ok(target, { type: 'setStyle', ids: [a], style: { fill: red } });
+    ok(target, { type: 'setStyle', ids: [b], style: { fill: blue } });
+    expect(fillView(fillHolders(nodesOf(target, [a, b])))).toEqual({ state: 'single' });
+    ok(target, { type: 'setStyle', ids: [b], style: { fill: null } });
+    expect(fillView(fillHolders(nodesOf(target, [a, b])))).toEqual({ state: 'single' });
+  });
+
+  it("a single edit keeps each one fill's opacity and mode, or replaces through setStyle", () => {
+    const target = editor();
+    const a = rect(target);
+    const b = rect(target, 40);
+    ok(target, { type: 'setStyle', ids: [a], style: { fill: red } });
+    ok(target, { type: 'setStyle', ids: [b], style: { fill: blue } });
+    const patch = { opacity: 0.5, blendMode: 'multiply' } as const;
+    ok(target, { type: 'setFill', ids: [a, b], index: 0, patch });
+    const holders = () => fillHolders(nodesOf(target, [a, b]));
+    const depth = () => target.query({ type: 'history' }).undoDepth;
+    const start = depth();
+    const edit = singleFillCommand(holders(), green);
+    expect(edit).toMatchObject({ type: 'setFill', index: 0, patch: { paint: green } });
+    ok(target, edit);
+    expect(holders().map((node) => node.fills)).toEqual([
+      [{ paint: green, visible: true, ...patch }],
+      [{ paint: green, visible: true, ...patch }],
+    ]);
+    ok(target, { type: 'setStyle', ids: [b], style: { fill: null } });
+    const replace = singleFillCommand(holders(), red);
+    expect(replace).toEqual({ type: 'setStyle', ids: [a, b], style: { fill: red } });
+    ok(target, replace);
+    expect(holders().map((node) => node.fills)).toEqual([
+      [{ paint: red, visible: true, opacity: 1, blendMode: 'normal' }],
+      [{ paint: red, visible: true, opacity: 1, blendMode: 'normal' }],
+    ]);
+    expect(singleFillCommand(holders(), null)).toMatchObject({
+      type: 'setStyle',
+      style: { fill: null },
+    });
+    expect(depth()).toBe(start + 3);
   });
 
   it('skips nodes that take no fills (a line)', () => {

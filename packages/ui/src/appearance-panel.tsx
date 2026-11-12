@@ -63,6 +63,7 @@ import {
   replaceFillsCommand,
   rowPrefix,
   setFillCommand,
+  singleFillCommand,
 } from './fill-model.js';
 import { countRender } from './render-probe.js';
 import { RowBinding, type Binder, type BindRun } from './style-controls.js';
@@ -631,13 +632,7 @@ function FillSection({
           prefix="Fill"
           paints={holders.map((node) => node.fills.at(-1)?.paint ?? null)}
           kinds={['none', 'solid', 'linear', 'radial']}
-          // Each node's one fill takes the paint (its opacity and mode kept); a node without a
-          // fill, or "none", goes through `setStyle { fill }`.
-          write={(paint) =>
-            paint !== null && holders.every((node) => node.fills.length === 1)
-              ? run(setFillCommand(holders, 0, { paint }))
-              : commit({ fill: paint })
-          }
+          write={(paint) => run(singleFillCommand(holders, paint))}
           binder={binder}
           nodes={holders}
         />

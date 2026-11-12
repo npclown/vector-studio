@@ -89,6 +89,20 @@ export const removeFillCommand = (nodes: readonly { id: string }[], index: numbe
 });
 
 /**
+ * The command a `single` view's paint edit sends: when every holder has exactly one fill, a
+ * `setFill` of that fill's paint (its visibility, opacity and mode kept); otherwise (a holder
+ * without a fill, or the paint `none`) one `setStyle { fill }`, which makes each node's fills one
+ * default fill of that paint (opacity 1, `normal`, visible) or none.
+ */
+export const singleFillCommand = (
+  holders: readonly ({ id: string } & Pick<NodeV8 & { fills: readonly Fill[] }, 'fills'>)[],
+  paint: Paint | null,
+): Command =>
+  paint !== null && holders.every((node) => node.fills.length === 1)
+    ? setFillCommand(holders, 0, { paint })
+    : { type: 'setStyle', ids: ids(holders), style: { fill: paint } };
+
+/**
  * The command that moves the row at display position `position` one place `up` or down, or null
  * at the end of the list (up is toward the top, a higher model index).
  */

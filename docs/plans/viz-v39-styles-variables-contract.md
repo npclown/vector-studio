@@ -92,7 +92,7 @@ Each is one `DocumentCommand` and one undo step through an edit draft; a command
 
 ## 4. Sibling items
 
-- **Multiple fills.** `fill` binds the single `fill` field. If the multiple-fills item adds a fill list, binding list entries is that item's follow-up; until then a node with a list cannot carry the `fill` binding (E4 drops it).
+- **Multiple fills.** `fill` binds the single `fill` field. If the multiple-fills item adds a fill list, binding list entries is that item's follow-up; until then a node with a list cannot carry the `fill` binding (E4 drops it). *Superseded by V-35 (#580): the `fill` binding holds the top fill's paint (see the record in section 12).*
 - **Images.** A style paint is never an image. E6 returns null for an image paint (no pixel decoding).
 - **Lock and hide.** E6 samples locked nodes; hidden nodes are skipped as by the hit test.
 - **Auto layout.** If stroke width enters a layout, resync changes it through the draft, so that item's relayout in the draft applies.
@@ -173,4 +173,5 @@ Done 2026-11-12. Merged: contract #572 (a62c28c), eyedropper V39-U-b #575 (75535
 - **Disclosures:**
   - The headed menu failure did not reproduce headless. The spec now checks that each clicked menu item is the top element at its centre, and stubs `EyeDropper` (`??=`, so branded browsers keep the real API) so that headless colour rows match branded ones.
   - After V-35 (#580) a `fill` binding writes the top fill. A row with more than one fill shows main's "Multiple fills" note and no Style button, until V-35's fill list lands.
+  - With V-35's fill list (U5, merged with V-39 on 2026-11-12) the top Fill row carries the Style and bind control, and a node with a fill list carries the `fill` binding on its top fill (lower fills are kept); a mixed selection where each node has at most one fill shows one Fill row with the control, and fills that differ with a node holding two or more show "Mixed" without it.
   - "Create style" is two commands and two undo steps.
