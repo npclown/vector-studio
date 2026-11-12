@@ -1,6 +1,6 @@
 # V-40 contract: pencil and polygon tools
 
-Status: IN REVIEW 2026-11-12 (implemented in #570; headed check owed), Full tier (a new built-in tool name, a session command and a snapshot field). Visualization-track item [V-40](d9-visualization-track.md#status-index). Requested by the user on 2026-11-12 as item 10 of the Figma gap list ("1~10번까지 다 진행해줘"). Questions V40-Q1 to V40-Q4 (section 6) are adopted as recommended under the user's standing instruction of 2026-10-24 (추천안 자동 채택, recommended option auto-adopted).
+Status: DONE 2026-11-12 (#570, `8b0d021`; headed check in section 9), Full tier (a new built-in tool name, a session command and a snapshot field). Visualization-track item [V-40](d9-visualization-track.md#status-index). Requested by the user on 2026-11-12 as item 10 of the Figma gap list ("1~10번까지 다 진행해줘"). Questions V40-Q1 to V40-Q4 (section 6) are adopted as recommended under the user's standing instruction of 2026-10-24 (추천안 자동 채택, recommended option auto-adopted).
 
 The contract and the implementation were reviewed together by one independent review (section 8), written the same day as the user's request.
 
@@ -74,3 +74,11 @@ Round 2 (2026-11-12, fix commit reviewed): NOT READY on loops of 8 to 13 samples
 Round 3 (2026-11-12): NOT READY: the round-2 window, measured along the noisy samples, mostly stopped smoothing ±1.5 to 2 px jitter (46 to 85 cubics for a stroke the round-1 code fitted with 4 to 7), and the jitter test passed with smoothing off. Applied: the window is bounded by the straight-line span of its ends (step 4), and the jitter test now uses seeded ±2 px noise at 1 and 2 px spacing on a line, an S-curve and a circle, requiring the smoothing to remove at least 40 % of the RMS error and the fit to stay within 8 cubics of the clean stroke (it fails with smoothing off).
 
 Round 4 (2026-11-12): READY WITH FOLLOW-UPS. Jitter of ±1 to ±2 px now fits with 1 to 6 cubics at zoom 1 (the round-3 test fails on the round-2 code); sparse loops keep at least 0.915 of their width; the preview moves only within 4 samples of the tip. Known limits, recorded here rather than tuned further: (S1) at a hairpin or spike tip the window reaches its 8-sample cap, so a 10° spike with 40 px legs loses 4 to 8 px of tip before fitting, and a dense shading zigzag 4 to 16 px tall keeps 0.54 to 0.66 of its height; a tested variant that also bounded each end to 6 px of the sample cut this but lost jitter smoothing, so it was not taken. (S2) the half-diagonal fallback is a hard switch: an in-place scribble just over the threshold can come out about half the size of one just under it. (S3) small dense closed loops (radius 3 to 6 CSS px) shrink to 0.56 to 0.79 of their width; from radius 8 they keep about 0.88. (N3) a tiny closed zigzag whose samples all lie within the fit tolerance of its start makes no path. These are follow-up candidates for a pencil smoothing setting (section 7).
+
+## 9. Record
+
+Merged 2026-11-12 as #570 (`8b0d021`). Headed on the main PC at `8b0d021` (Chrome, relayed by the coordinator):
+
+- `playwright.m8-next-host.config.ts`: 36/36 PASS (toolbar with the two new tools).
+- `playwright.m2-next-host.config.ts`: 8/10; the two failures are M2-A13 section 7 "every default chord" in Chrome and Edge, whose spec did not press Shift+P (this item) nor the four E41 boolean chords Mod+Alt+U/S/I/X (#558). Both spec gaps are fixed on V-31's branch (#576), not here.
+- Manual: polygon triangle, pentagon by ArrowUp during the drag, hexagon by the Sides field; pencil smooth stroke and a closed loop; Ctrl+Z removes the last shape. Every shape drew.
