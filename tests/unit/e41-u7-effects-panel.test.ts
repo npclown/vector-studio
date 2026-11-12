@@ -218,4 +218,17 @@ describe('E41-U7 host wiring (E41-S6)', () => {
     );
     expect(webgpu).toMatch(/effects: 'v0',/u);
   });
+
+  it('V-35 (V35-P4, V35-K2): next-host projects blend modes; the editor renderer runs on blend v0', () => {
+    const host = readFileSync(
+      new URL('../../apps/next-host/src/m6a-text-host.ts', import.meta.url),
+      'utf8',
+    );
+    expect(host).toMatch(/projectBlend: true,/u);
+    const webgpu = readFileSync(
+      new URL('../../packages/webgpu-host/src/index.ts', import.meta.url),
+      'utf8',
+    );
+    expect(webgpu).toMatch(/blend: 'v0',/u);
+  });
 });

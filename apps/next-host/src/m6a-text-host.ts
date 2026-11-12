@@ -69,6 +69,8 @@ export function composeHost(options: HostCompositionOptions): HostComposition {
       adoptIntoFrames: options.adoptIntoFrames === true,
       // E41-U7 (E41-S6): node effects reach the renderer, which runs on `effects: 'v0'`.
       projectEffects: true,
+      // V-35 (V35-P4, V35-K2): blend modes reach the renderer, which runs on `blend: 'v0'`.
+      projectBlend: true,
       ...(options.drawStrokeColor === undefined
         ? {}
         : { drawStrokeColor: options.drawStrokeColor }),
