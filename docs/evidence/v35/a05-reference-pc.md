@@ -4,7 +4,7 @@ Contract: [viz-v35-fills-blend-contract.md](../../plans/viz-v35-fills-blend-cont
 
 ## Runs
 
-The runs used the reference PC with a GTX 1660 SUPER (`nvidia/turing`), headed Chrome and Edge (`pnpm test:gpu tests/gpu/v35-blend.spec.ts`, then the same with `VS_GPU_EDGE=1 --project edge`), after `pnpm build`.
+The runs used the reference PC with a GTX 1660 SUPER (`nvidia/turing`), headed Chrome 157.0.8103.51 and Edge 157.0.4341.46, after `pnpm build`. Run 1 was `pnpm test:gpu tests/gpu/v35-blend.spec.ts tests/gpu/e41-effects.spec.ts`, then the same with `VS_GPU_EDGE=1 ... --project edge`; run 2 was the v35 spec alone. The JSON records carry no browser, version or commit field; the browser is the folder name (`chrome/`, `edge/`) and the commit is the run's. Each test writes into a folder named by its worker process, so run 1's records sit in three timestamped folders per browser and run 2's in one. Chrome's and Edge's records are byte-identical in both runs. The SwiftShader result after the amendment (7 of 7, worst 2/255) is reported in #595's description, with no committed record.
 
 | Run | Commit | Chrome | Edge | Records |
 | --- | --- | --- | --- | --- |
@@ -37,7 +37,7 @@ The oracle now records `slack` for each blend composite: the largest change of i
 - softLight, color, overlay and hue get up to about 0.3 to 1.3/255 more.
 - colorBurn gets about 1.8 more, and colorDodge about 4 more.
 
-Two reviews checked the model: round 1 READY WITH FOLLOW-UPS, which led to backdrop-only slack and kept K4 strict; round 2 READY. The model is first order and errs strict where it simplifies. On SwiftShader the amended spec passes 7 of 7, with worst values unchanged (2/255 at most).
+Two reviews checked the model: round 1 READY WITH FOLLOW-UPS, which led to backdrop-only slack and kept K4 strict; round 2 READY. The model is first order and errs strict where it simplifies. On SwiftShader the amended spec passes 7 of 7, with worst values unchanged (2/255 at most; #595's description, no committed record).
 
 ## Run 2: results
 
@@ -57,5 +57,5 @@ Every A05 case passes in both browsers at 1x and 4x, with `failures` empty. Each
 The tightest pixel is R3/R4 [90, 280]: it is allowed 3.27 and differs by 3, a margin of about 0.27/255.
 
 - **A06.** The bytes are identical without a blend root, with no split, at 1x and 4x.
-- **A07.** Eight mode, opacity and paint edits cost 0 port calls and 0 geometry builds. Splits per frame equal the packet's tile passes.
-- **K4 stencil.** Across a split, the worst difference is 0 away from the root and 1 under it. That is 1 split per frame in the main pass, and 12 in 64 px tiles at 4x.
+- **A07.** Eight mode, opacity and paint edits cost 0 port calls and 0 geometry builds. Splits per frame equal the packet's tile passes in every case with a capture (the production-usage variants record none).
+- **K4 stencil.** Across a split, the worst difference is 0 away from the root and 1 under it. That is 1 split per frame in the main pass, and 12 in 64 px tiles, at 1x and at 4x.
