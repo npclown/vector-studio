@@ -163,7 +163,8 @@ type ImageSourceResult =
 ## 11. Record
 
 - **U3 scope (2026-11-12).** U3 (#578) brings forward from U2 the scene types and their validation (V32-S1 to S3), the port type (V32-P1) and the two diagnostic codes, since the renderer needs them; A02 is U3's. U2 keeps the model, projector, commands, clipboard and SVG export.
-- (U5 fills the rest.)
+- **U2 and U4 (2026-11-12).** Merged together in #591 (`4534b546`) at the coordinator's request. Reference PC headed run on `fb9073ba` (Chrome 157.0.8103.51, Edge 157.0.4341.46): `v32-image-flow` 4/4 (A07 PNG, A08), with the m8-next-host, e41-booleans, v31-lock-hide, v35-next-host and v37-next-host regressions passing.
+- **U5 (2026-11-12).** Exit record [docs/evidence/v32/exit-2026-11-12.md](../evidence/v32/exit-2026-11-12.md): A01 to A10 PASS, with the disclosures listed there.
 
 ## 12. Review rounds
 
