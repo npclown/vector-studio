@@ -7,6 +7,12 @@ import {
   type Modifiers,
   type PagePoint,
 } from '@vector-studio/editor-core';
+import {
+  isImageFile,
+  placeImageFiles,
+  raiseImageNotice,
+  type ImageFileLike,
+} from './image-input.js';
 import { importSvgFiles, isSvgFile, type SvgFileLike } from './import-svg.js';
 import type { BeforeInputLike, TextInputHost } from './text-input.js';
 
@@ -16,6 +22,8 @@ import type { BeforeInputLike, TextInputHost } from './text-input.js';
 // `ime` from `keyCode` 229 and honours `passThrough`; a press that leaves text edit mode set keeps
 // focus on the textarea; the blur listeners run the M6b-H2 edit-mode end (text-input.ts).
 // M6b-U8 (section 9): a DOM paste carries `pointer`, the last hover point over the canvas.
+// V-32 (image contract, V32-H2, H3): pasted and dropped image files become image rectangles, and
+// Ctrl or Cmd+Shift+K opens the Place image picker from the keydown, outside the editor keymap.
 
 /** Pixels per line for a wheel event in line mode (M2-I1). */
 export const WHEEL_LINE_PX = 16;
@@ -73,12 +81,20 @@ export type KeyLike = ModifierKeys &
     preventDefault(): void;
   }>;
 
+/**
+ * A pasted or dropped file as the canvas reads it: the DOM `File` has every member; an SVG file
+ * is read with `text` (V33-P2) and an image file with `arrayBuffer` and `size` (V32-H2).
+ */
+export type DroppedFile = Readonly<{ name: string; type: string }> &
+  Partial<Pick<SvgFileLike, 'text'>> &
+  Partial<Pick<ImageFileLike, 'size' | 'arrayBuffer'>>;
+
 /** The `clipboardData` of a DOM `copy`, `cut` or `paste` event, as the canvas uses it. */
 export type ClipboardDataLike = Readonly<{
   getData(format: string): string;
   setData(format: string, data: string): void;
-  /** The pasted files (V33-P2); absent in older fakes. */
-  files?: ArrayLike<SvgFileLike>;
+  /** The pasted files (V33-P2, V32-H2); absent in older fakes. */
+  files?: ArrayLike<DroppedFile>;
 }>;
 
 /** A DOM `dragover` or `drop` on the canvas, as the import uses it (V33-P3). */
@@ -87,7 +103,7 @@ export type DragEventLike = Readonly<{
   clientY: number;
   dataTransfer: Readonly<{
     types: ArrayLike<string>;
-    files: ArrayLike<SvgFileLike>;
+    files: ArrayLike<DroppedFile>;
     dropEffect: string;
   }> | null;
   preventDefault(): void;
@@ -106,6 +122,16 @@ export type ClipboardWriter = Readonly<{ writeText?: unknown }>;
  * writes nothing: that would overwrite what the user copied in another app.
  */
 const CLIPBOARD_ACTIONS: ReadonlySet<string> = new Set(['copy', 'cut']);
+
+/** Whether a file can be read as bytes (a DOM `File`; older fakes carry only `text`). */
+function hasBytes(file: DroppedFile): file is DroppedFile & ImageFileLike {
+  return typeof file.arrayBuffer === 'function' && typeof file.size === 'number';
+}
+
+/** The file as an SVG file (V33), or undefined when it is not one or cannot be read as text. */
+function svgFileOf(file: DroppedFile): SvgFileLike | undefined {
+  return isSvgFile(file) && typeof file.text === 'function' ? (file as SvgFileLike) : undefined;
+}
 
 function modifiersOf(event: ModifierKeys): Modifiers {
   return { shift: event.shiftKey, alt: event.altKey, meta: event.metaKey, ctrl: event.ctrlKey };
@@ -134,6 +160,11 @@ export class CanvasInput {
    * `pointercancel`, a lost pointer capture, a reset, or unmount.
    */
   onPressChange: ((pressed: boolean) => void) | null = null;
+  /**
+   * V32-H3: what Ctrl or Cmd+Shift+K runs, when the host sets one: it opens the image picker, so
+   * it runs inside the keydown's user activation. The key never reaches the editor keymap.
+   */
+  placeImage: (() => void) | null = null;
 
   /**
    * `height` is the canvas height in CSS px, the size of a wheel page; `canvas` returns the
@@ -300,6 +331,21 @@ export class CanvasInput {
   }
 
   keyDown(event: KeyLike): void {
+    // V32-H3: the Place image shortcut, from this handler so the picker opens inside the user
+    // activation; not in text edit mode, where the key belongs to the text.
+    if (
+      this.placeImage !== null &&
+      event.shiftKey &&
+      (event.ctrlKey || event.metaKey) &&
+      !event.altKey &&
+      !event.isComposing &&
+      event.code === 'KeyK' &&
+      this.editor.getSnapshot().textEdit === null
+    ) {
+      event.preventDefault();
+      if (!event.repeat) this.placeImage();
+      return;
+    }
     const keydown = {
       kind: 'keydown',
       key: event.key,
@@ -381,9 +427,23 @@ export class CanvasInput {
       !text.startsWith('vector-studio/fragment')
     ) {
       const svg = data.getData('image/svg+xml');
-      const file = Array.from(data.files ?? []).find(isSvgFile);
+      const file = Array.from(data.files ?? [])
+        .map(svgFileOf)
+        .find((entry) => entry !== undefined);
       if (svg !== '') text = svg;
-      else if (file !== undefined) {
+      else if (file === undefined) {
+        // V32-H2: image files, taken now (the event's data is gone after the handler), before
+        // the text; the command runs once they are hashed. Text edit mode never gets here.
+        const images = Array.from(data.files ?? []).filter(
+          (entry): entry is DroppedFile & ImageFileLike => isImageFile(entry) && hasBytes(entry),
+        );
+        if (images.length > 0) {
+          void placeImageFiles(this.editor, images, pointer === null ? {} : { at: pointer }).catch(
+            () => undefined,
+          );
+          return;
+        }
+      } else {
         void file.text().then(
           (body) => {
             // A file read that ends after edit mode began is dropped (V33-P2).
@@ -411,21 +471,39 @@ export class CanvasInput {
   }
 
   /**
-   * V33-P3: the SVG files of a drop, imported at the drop point (page space by the camera at drop
-   * time), each later file 16 page units further; resolves when every file is imported.
+   * V33-P3, V32-H2: the files of a drop. SVG files are imported at the drop point (page space by
+   * the camera at drop time), each later file 16 page units further; image files become image
+   * rectangles at the drop point, each later one 20 units further; any other file is skipped
+   * with the notice `editor.image-unsupported-file`. Resolves, when every file is handled, to the
+   * outcome of each SVG file, then the outcome of the image placement when there was one.
    */
-  drop(event: DragEventLike): Promise<unknown> {
+  async drop(event: DragEventLike): Promise<unknown> {
     const transfer = event.dataTransfer;
-    if (transfer === null || !Array.from(transfer.types).includes('Files')) {
-      return Promise.resolve([]);
-    }
+    if (transfer === null || !Array.from(transfer.types).includes('Files')) return [];
     // Every file drop is prevented, so the browser never opens a dropped file (V33-P3).
     event.preventDefault();
-    const files = transfer.files;
-    if (!Array.from(files).some(isSvgFile)) return Promise.resolve([]);
+    const files = Array.from(transfer.files);
+    const svgs = files.map(svgFileOf).filter((entry) => entry !== undefined);
     const canvas = this.canvas();
     const at = canvas === null ? undefined : this.toPage(canvas, event.clientX, event.clientY);
-    return importSvgFiles(this.editor, files, at === undefined ? {} : { at });
+    const out: unknown[] = [];
+    if (svgs.length > 0) {
+      out.push(...(await importSvgFiles(this.editor, svgs, at === undefined ? {} : { at })));
+    }
+    const images = files.filter(
+      (file): file is DroppedFile & ImageFileLike =>
+        !isSvgFile(file) && isImageFile(file) && hasBytes(file),
+    );
+    if (images.length > 0) {
+      out.push(await placeImageFiles(this.editor, images, at === undefined ? {} : { at }));
+    }
+    raiseImageNotice(
+      this.editor,
+      files
+        .filter((file) => !isSvgFile(file) && !images.includes(file as never))
+        .map((f) => f.name),
+    );
+    return out;
   }
 
   keyUp(event: KeyLike): void {

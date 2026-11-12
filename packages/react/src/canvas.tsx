@@ -15,6 +15,7 @@ import {
   type KeyLike,
 } from './canvas-input.js';
 import { useEditor } from './context.js';
+import { placeImagesFromPicker } from './image-input.js';
 import { MIN_INPUT_FONT_PX, TextInputHost, createMessageScheduler } from './text-input.js';
 
 // P5-U6 (P5 plan, section 6): a headless canvas. It renders a <canvas> and turns pointer and key
@@ -28,6 +29,8 @@ import { MIN_INPUT_FONT_PX, TextInputHost, createMessageScheduler } from './text
 // M6b-U7 (MVP M6b contract, section 6): the hidden textarea beside the canvas (M6b-H1), one
 // focus target with it (M6b-H2), its `beforeinput` and composition mapping, reset and forced end
 // (M6b-H3 to H5) in text-input.ts.
+// V-32 (image contract, V32-H2, H3): pasted and dropped image files, and the Place image
+// shortcut (Ctrl or Cmd+Shift+K), which opens the file picker from the keydown handler.
 
 /** What a host factory returns: the renderer to attach, and how to release it. */
 export type RendererHandle = Readonly<{
@@ -60,6 +63,11 @@ export type EditorCanvasProps = Readonly<{
    * on a lost pointer capture, a blur reset, and unmount.
    */
   onPressChange?: (pressed: boolean) => void;
+  /**
+   * V32-H3: whether Ctrl or Cmd+Shift+K on the canvas opens the image file picker and places the
+   * chosen files (`placeImagesFromPicker`). Default true; false leaves the key to the host.
+   */
+  placeImageShortcut?: boolean;
   /**
    * V-37 section 6.3: called after the editor handled a double-click, with its page point, so the
    * host reads the selection the double-click left (the property panel's instance focus).
@@ -130,6 +138,7 @@ export function EditorCanvas({
   style,
   children,
   onPressChange,
+  placeImageShortcut = true,
   onCanvasDoubleClick,
 }: EditorCanvasProps) {
   const editor = useEditor();
@@ -169,6 +178,16 @@ export function EditorCanvas({
       input.onPressChange = null;
     };
   }, [input]);
+
+  useEffect(() => {
+    // V32-H3: set from an effect so a render alone touches no browser global.
+    input.placeImage = placeImageShortcut
+      ? () => void placeImagesFromPicker(editor).catch(() => undefined)
+      : null;
+    return () => {
+      input.placeImage = null;
+    };
+  }, [editor, input, placeImageShortcut]);
 
   useEffect(() => syncViewportSize(editor, width, height), [editor, width, height]);
 

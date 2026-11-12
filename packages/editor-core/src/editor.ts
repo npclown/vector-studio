@@ -191,6 +191,14 @@ export type EditorOptions = Readonly<{
    */
   projectBlend?: boolean;
   /**
+   * V-32 contract, V32-S4: when true, the scene the editor projects to an attached renderer
+   * carries image fills as image paints, which needs a renderer on `paints: 'image'` and an
+   * `imageSource`. Defaults to false: an image fill projects as no fill, and the editor raises
+   * `editor.renderer-unsupported` (`unsupported-feature`) naming those nodes once per renderer
+   * attachment and page. Export always draws images.
+   */
+  projectImages?: boolean;
+  /**
    * V-25 slice 4: when true, the drawing tools create a node in the innermost frame under the
    * press point (inside the scope when it holds the point), and a select-tool move that ends with
    * the pointer over a frame moves the dragged nodes into it, or out of their frame onto the
@@ -426,6 +434,10 @@ const DOCUMENT_COMMANDS = new Set([
   'setTextStyle',
   'setTextProps',
   'refitText',
+  // V-32 contract, V32-E2.
+  'insertImages',
+  'setImageFill',
+  'setImagePaint',
   // V-39 contract, section 3.
   'createColorStyle',
   'updateColorStyle',
@@ -532,6 +544,9 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.boolean-failed',
   'editor.effect-limit',
   'editor.fill-limit',
+  'editor.image-invalid',
+  'editor.image-too-large',
+  'editor.image-no-target',
   'editor.invalid-svg',
   'editor.empty-svg',
 ]);
@@ -919,6 +934,10 @@ class EditorCore implements Editor {
   private readonly projectEffects: EffectProjection;
   /** V35-P4: whether the projector emits blend modes (`EditorOptions.projectBlend`). */
   private readonly projectBlend: boolean;
+  /** V32-S4: whether the projector emits image paints (`EditorOptions.projectImages`). */
+  private readonly projectImages: boolean;
+  /** V-25 slice 4: `EditorOptions.adoptIntoFrames`, which `insertImages` follows (V32-E2). */
+  private readonly adoptIntoFrames: boolean;
 
   /**
    * The IDs of `returned` that a draw on `drawnOn` accepted: `drawIds` and `freshId` skip only
@@ -1025,6 +1044,8 @@ class EditorCore implements Editor {
         ? options.projectEffects
         : false;
     this.projectBlend = options.projectBlend === true;
+    this.projectImages = options.projectImages === true;
+    this.adoptIntoFrames = options.adoptIntoFrames === true;
     this.snapshot = this.buildSnapshot();
     this.tools.set(
       'select',
@@ -1353,6 +1374,12 @@ class EditorCore implements Editor {
         return this.pastePlainText(command, source);
       }
     }
+    // V32-E2: `insertImages` without `at` centres the first rectangle on the viewport centre.
+    if (command.type === 'insertImages' && command.at === undefined) {
+      const centre = this.viewportCentre();
+      if (centre === null) return failure('editor.no-viewport-size');
+      command = { ...command, at: centre };
+    }
     if (DOCUMENT_COMMANDS.has(command.type)) {
       // A host command during a drag would leave the gesture's base stale, so it applies to the
       // pre-gesture document and, only if it succeeds, cancels the drag first.
@@ -1371,7 +1398,8 @@ class EditorCore implements Editor {
       this.interrupt();
       // E41-B3: the boolean result becomes the selection, and undo restores the inputs'. A
       // result on another page than the active one is not selectable (`normalizeSelection`).
-      const selects = command.type === 'booleanNodes';
+      // V32-E2: the inserted rectangles become the selection, and undo restores the old one.
+      const selects = command.type === 'booleanNodes' || command.type === 'insertImages';
       const selected = selects
         ? (normalizeSelection(result.document, this.activePage, result.created) ?? [])
         : result.created;
@@ -1761,6 +1789,7 @@ class EditorCore implements Editor {
       selection: this.selection,
       expansions: this.expansions,
       layout: this.layout,
+      adoptIntoFrames: this.adoptIntoFrames,
     };
   }
 
@@ -1907,6 +1936,7 @@ class EditorCore implements Editor {
       this.layout,
       this.projectEffects,
       this.projectBlend,
+      this.projectImages,
     );
     this.projector = projector;
     this.renderer = renderer;

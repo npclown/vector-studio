@@ -521,9 +521,26 @@ export type BlendMode =
   | 'luminosity';
 export type ContainerBlendMode = BlendMode | 'passThrough';
 
+/** V-32 (V32-M3): how an image paint fits its node. */
+export type ImageScaleMode = 'fill' | 'fit' | 'stretch' | 'tile';
+
+/**
+ * V-32 (V32-M3): an image as a fill paint. `image` names an entry of the document's `images`;
+ * `scale` is finite in `[0.01, 100]`, used by `tile` and stored for every mode.
+ */
+export type ImagePaint = Readonly<{
+  kind: 'image';
+  image: string;
+  scaleMode: ImageScaleMode;
+  scale: number;
+}>;
+
+/** V-32 (V32-M3): the paint of a fill slot; strokes keep `Paint`. */
+export type FillPaint = Paint | ImagePaint;
+
 /** V35-S2: one fill of a node, painted bottom first; `opacity` in `[0, 1]`. */
 export type Fill = Readonly<{
-  paint: Paint;
+  paint: FillPaint;
   visible: boolean;
   opacity: number;
   blendMode: BlendMode;
@@ -670,6 +687,21 @@ export type NodeTypeV8 = NodeV8['type'];
 /** A page with its optional guides (V38-S1); absent means none. */
 export type PageV8 = PageV6 & Readonly<{ guides?: readonly Guide[] }>;
 
+/** V-32 contract (docs/plans/viz-v32-image-contract.md), V32-M1: an image asset's format. */
+export type ImageMimeType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+
+/**
+ * V32-M1: one image of the document's `images` table, keyed by the lowercase hex SHA-256 of its
+ * decoded bytes. `width` and `height` are the natural size after EXIF orientation; `data` is
+ * standard base64 with padding.
+ */
+export type ImageAsset = Readonly<{
+  mimeType: ImageMimeType;
+  width: number;
+  height: number;
+  data: string;
+}>;
+
 export type DocumentV8 = Readonly<{
   schemaVersion: 8;
   id: string;
@@ -680,6 +712,11 @@ export type DocumentV8 = Readonly<{
   /** One or more pages. */
   pages: readonly PageV8[];
   nodes: Readonly<Record<string, NodeV8>>;
+  /**
+   * V32-M1: the image table; absent means none (`{}`), and parsing keeps it absent when the JSON
+   * has none. Serialize omits an empty table.
+   */
+  images?: Readonly<Record<string, ImageAsset>>;
 }>;
 
 // V-39 contract (docs/plans/viz-v39-styles-variables-contract.md), section 2: colour styles,

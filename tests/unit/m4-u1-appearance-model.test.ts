@@ -564,10 +564,14 @@ describe('M4-A02 migration v5 to v6, versions and round trips (section 2.1)', ()
     ]);
     const kinds = new Set(paints.map((paint) => ('kind' in paint ? paint.kind : 'color')));
     expect(kinds).toEqual(new Set(['color', 'linear', 'radial']));
-    const spreads = new Set(paints.flatMap((paint) => ('kind' in paint ? [paint.spread] : [])));
+    const spreads = new Set(
+      paints.flatMap((paint) => ('kind' in paint && paint.kind !== 'image' ? [paint.spread] : [])),
+    );
     expect(spreads).toEqual(new Set(['pad', 'reflect', 'repeat']));
     const counts = new Set(
-      paints.flatMap((paint) => ('kind' in paint ? [paint.stops.length] : [])),
+      paints.flatMap((paint) =>
+        'kind' in paint && paint.kind !== 'image' ? [paint.stops.length] : [],
+      ),
     );
     expect([...counts].sort((a, b) => a - b)).toEqual([1, 2, 3, 16]);
     const strokes = Object.values(value.nodes).flatMap((node) =>

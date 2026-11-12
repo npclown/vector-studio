@@ -106,12 +106,15 @@ export function Choice<T extends string>({
   value,
   options,
   disabled = false,
+  format,
   onChange,
 }: {
   label: string;
   value: T | null;
   options: readonly T[];
   disabled?: boolean;
+  /** The text of an option; default the value itself. */
+  format?: (value: T) => string;
   onChange: (value: T) => void;
 }) {
   return (
@@ -129,7 +132,7 @@ export function Choice<T extends string>({
       )}
       {options.map((option) => (
         <option key={option} value={option}>
-          {option}
+          {format === undefined ? option : format(option)}
         </option>
       ))}
     </select>

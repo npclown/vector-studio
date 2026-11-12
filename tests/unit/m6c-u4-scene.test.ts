@@ -540,7 +540,7 @@ describe('M6c-U4 host raster log (src/renderer-options.ts, review S2)', () => {
     expect(host).toMatch(
       /const servicePort = options\.wrapGlyphRaster\?\.\(glyphRaster\) \?\? glyphRaster;/u,
     );
-    expect(host).toMatch(/\.\.\.editorRendererOptions\(servicePort\)/u);
+    expect(host).toMatch(/\.\.\.editorRendererOptions\(servicePort, options\.imageSource\)/u);
     expect(source).toMatch(
       /if \(!testing\) return port;\s+rasterLog = createGlyphRasterLog\(port\);\s+return rasterLog\.port;/u,
     );
