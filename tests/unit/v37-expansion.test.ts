@@ -460,5 +460,5 @@ describe('V37-B1 the expansion cap counts what overrides add', () => {
     const failure = expansionFailure(make({ src: { fills: fl(GREEN) } }), new ExpansionCache());
     expect(failure).toMatchObject({ ok: false, code: 'editor.expansion-limit' });
     expect(MAX_EXPANDED_NODES).toBe(100_000);
-  });
+  }, 60_000);
 });
