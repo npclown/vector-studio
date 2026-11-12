@@ -1,0 +1,56 @@
+{
+  "adapter": {
+    "architecture": "turing",
+    "description": "",
+    "vendor": "nvidia"
+  },
+  "rows": [
+    {
+      "fixture": "G10 background blur radius 20 on a multiply leaf, 50 % amber fill",
+      "tolerance": 3,
+      "worst": 0.934992514482694,
+      "at": [
+        161,
+        70
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 62,
+        "expected": 61.065007485517306,
+        "alpha": 0,
+        "lane": 0
+      },
+      "modeChanged": 21601,
+      "blurChanged": 21601,
+      "frames": 2,
+      "blendSplits": 2,
+      "blendComposites": 2,
+      "backgroundBlurSkipped": 0,
+      "blendPipelineAvailable": true
+    },
+    {
+      "fixture": "G10b background blur radius 16 on a screen leaf at opacity 0.6 with a drop shadow",
+      "tolerance": 3,
+      "worst": 1.1182725575053496,
+      "at": [
+        419,
+        258
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 73,
+        "expected": 74.11827255750535,
+        "alpha": 0,
+        "lane": 0
+      },
+      "modeChanged": 18437,
+      "blurChanged": 17601,
+      "frames": 2,
+      "blendSplits": 2,
+      "blendComposites": 2,
+      "backgroundBlurSkipped": 0,
+      "blendPipelineAvailable": true
+    }
+  ],
+  "errors": []
+}
