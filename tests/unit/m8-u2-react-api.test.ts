@@ -154,11 +154,21 @@ describe('M8-A02 react re-exports the editor-core types and one value (M8-T2, T3
       'EditorProvider',
       // V-33 (SVG import contract, V33-P3).
       'SVG_FILE_OFFSET',
+      // V-32 (image contract, V32-H1 to H3).
+      'createImageSource',
       // V-30 (export contract, section 3).
       'exportPng',
       'extensionCommand',
+      'imageAssetFromBlob',
       'importSvgFiles',
+      'isImageFile',
       'isSvgFile',
+      'pickImageFiles',
+      'placeImageFiles',
+      'placeImagesFromPicker',
+      'raiseImageNotice',
+      'readImageHeader',
+      'subscribeImageNotices',
       'useActivePage',
       'useEditor',
       'useEditorCommands',

@@ -91,6 +91,21 @@ const PATHS: Readonly<Record<string, ReactNode>> = {
       fillRule="evenodd"
     />
   ),
+  // V-32: an image fill's layer row mark, and the Place image button.
+  image: (
+    <>
+      <rect x="1.5" y="2.5" width="13" height="11" rx="1.25" />
+      <circle cx="5.5" cy="6" r="1.25" />
+      <path d="M2 12.5 L6 8.5 L9 11.5 L11 9.5 L14 12.5" />
+    </>
+  ),
+  'place-image': (
+    <>
+      <rect x="1.5" y="2.5" width="13" height="11" rx="1.25" />
+      <circle cx="5.5" cy="6" r="1.25" />
+      <path d="M2 12.5 L6 8.5 L9 11.5 L11 9.5 L14 12.5" />
+    </>
+  ),
   // V-31: the layer row's visibility and lock buttons.
   eye: (
     <>

@@ -27,6 +27,7 @@ import {
   E41_SCENARIOS,
   V35_SCENARIOS,
   e41CardsMoveSelection,
+  nodeDrawBounds,
   E26_TYPICAL_VISIBLE,
   e26Configuration,
   editDragOffset,
@@ -584,7 +585,7 @@ function moveTarget(document: E26Loaded) {
   const cards = document.pageId === 'cards-page' ? e41CardsMoveSelection() : null;
   const selection: { group: string; ids: readonly string[] } =
     cards ?? m1A13MoveSelection(generated);
-  const box = document.bounds.get(cards?.pressed ?? selection.ids[0]!);
+  const box = nodeDrawBounds(document.bounds, cards?.pressed ?? selection.ids[0]!);
   if (box === null || box === undefined) throw new Error('the pressed leaf has no draw bounds');
   const page = generated.pages[0]!.children as readonly string[];
   return {

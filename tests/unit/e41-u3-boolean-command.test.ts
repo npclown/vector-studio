@@ -265,7 +265,9 @@ describe('E41-A03 booleanNodes: result node (B1, B2)', () => {
 function gradientPoint(target: Editor, id: string, p: { x: number; y: number }) {
   const n = node(target, id);
   const paint = 'fills' in n ? n.fills[0]?.paint : undefined;
-  if (paint === undefined || !('kind' in paint)) throw new Error('no gradient');
+  if (paint === undefined || !('kind' in paint) || paint.kind === 'image') {
+    throw new Error('no gradient');
+  }
   const unit = multiply(localTransform(n.frame, n.rotation), [
     n.frame.width,
     0,

@@ -1,7 +1,10 @@
 import {
   BINDING_KEYS,
+  MAX_IMAGE_TABLE_BYTES,
   MAX_TREE_DEPTH,
   bindingHolds,
+  imageDataBytes,
+  isImagePaint,
   tablesOf,
   validateNode,
   type BindingTables,
@@ -11,6 +14,7 @@ import {
   type NodeOverride,
   type Frame,
   type LayoutFields,
+  type ImageAsset,
   type NodeV8,
   type PageV8,
   type SymbolNodeV8,
@@ -97,8 +101,12 @@ export class Draft implements WritableTree {
   /** V-39: the colour styles and variables (V39-S1, S2), carried over and replaceable. */
   private tableState: BindingTables;
 
+  /** V-32: the image table (V32-M1), carried and replaceable; absent means none. */
+  private imageState: Readonly<Record<string, ImageAsset>> | undefined;
+
   constructor(base: DocumentV8) {
     this.base = base;
+    this.imageState = base.images;
     this.nodes = new Map(Object.entries(base.nodes));
     this.pages = [...base.pages];
     this.tableState = tablesOf(base);
@@ -115,6 +123,16 @@ export class Draft implements WritableTree {
       ...(tables.colorStyles === undefined ? {} : { colorStyles: tables.colorStyles }),
       ...(tables.variables === undefined ? {} : { variables: tables.variables }),
     };
+  }
+
+  /** The draft's image table (V32-M1), undefined when it has none. */
+  get images(): Readonly<Record<string, ImageAsset>> | undefined {
+    return this.imageState;
+  }
+
+  /** Replaces the image table (V32-E1); undefined removes it. `finish` checks and prunes it. */
+  setImages(images: Readonly<Record<string, ImageAsset>> | undefined): void {
+    this.imageState = images;
   }
 
   /** The IDs of every node, for the V-39 resync. */
@@ -254,6 +272,52 @@ export class Draft implements WritableTree {
       if (rejected !== null) return fail(rejected.code, nodePath(id, rejected.path));
     }
     this.unchecked.clear();
+    return this.finishImages();
+  }
+
+  /**
+   * V32-M4: every image paint of a touched node names an entry of the table (`editor.image-invalid`
+   * at the paint's `/image`); then, when a touched node of the base or the draft had an image
+   * paint, the entries no node names are dropped (a full scan, and an emptied table leaves the
+   * key absent); the table's decoded total must then be within the limit
+   * (`editor.image-too-large`, measured after pruning).
+   */
+  private finishImages(): DocumentV8 | Failure {
+    let held = false;
+    for (const id of this.touched) {
+      const node = this.nodes.get(id);
+      const before = Object.hasOwn(this.base.nodes, id) ? this.base.nodes[id] : undefined;
+      if (hasImagePaint(before)) held = true;
+      if (node === undefined || !('fills' in node)) continue;
+      for (const [index, fill] of node.fills.entries()) {
+        if (!isImagePaint(fill.paint)) continue;
+        held = true;
+        if (this.imageState === undefined || !Object.hasOwn(this.imageState, fill.paint.image)) {
+          return fail('editor.image-invalid', nodePath(id, `/fills/${index}/paint/image`));
+        }
+      }
+    }
+    // A command that changed the table (a paste merging entries) prunes as well.
+    if ((held || this.imageState !== this.base.images) && this.imageState !== undefined) {
+      const named = new Set<string>();
+      for (const node of this.nodes.values()) {
+        if (!('fills' in node)) continue;
+        for (const fill of node.fills) if (isImagePaint(fill.paint)) named.add(fill.paint.image);
+      }
+      const keys = Object.keys(this.imageState);
+      const kept = keys.filter((key) => named.has(key));
+      if (kept.length !== keys.length) {
+        this.imageState =
+          kept.length === 0
+            ? undefined
+            : Object.fromEntries(kept.map((key) => [key, this.imageState![key]!]));
+      }
+    }
+    if (this.imageState !== undefined && this.imageState !== this.base.images) {
+      let total = 0;
+      for (const asset of Object.values(this.imageState)) total += imageDataBytes(asset.data);
+      if (total > MAX_IMAGE_TABLE_BYTES) return fail('editor.image-too-large', '/images');
+    }
     return this.document();
   }
 
@@ -291,6 +355,8 @@ export class Draft implements WritableTree {
       pages: this.pages,
       // fromEntries defines own properties, so a "__proto__" ID stays data.
       nodes: Object.fromEntries(this.nodes),
+      // V32-M4: the image table is carried; `finish` checks and prunes it.
+      ...(this.imageState === undefined ? {} : { images: this.imageState }),
     });
   }
 
@@ -639,6 +705,13 @@ export function withSizing(node: NodeV8, sizing: LayoutFields['layoutSizing']): 
     copy.layoutSizing = sizing;
   }
   return copy;
+}
+
+/** Whether a node has a fill with an image paint. */
+function hasImagePaint(node: NodeV8 | undefined): boolean {
+  return (
+    node !== undefined && 'fills' in node && node.fills.some((fill) => isImagePaint(fill.paint))
+  );
 }
 
 const isSymbol = (node: NodeV8 | undefined): node is SymbolNodeV8 => node?.type === 'symbol';

@@ -2,17 +2,17 @@ import type {
   Command,
   DocumentV8,
   Effect,
+  FillPaint,
   InstanceNodeV8,
   NodeOverride,
   NodeV8,
-  Paint,
   Stroke,
   SymbolNodeV8,
   SymbolSetNode,
 } from '@vector-studio/react';
 import {
   colorHex,
-  isGradient,
+  isSolid,
   numberText,
   parseHex,
   parseNumber,
@@ -331,15 +331,17 @@ export const overrideCommand = (id: string, layer: string, props: NodeOverride):
   props,
 });
 
-/** The fill field's text: `#rrggbb` for a solid fill, '' for none, null for a gradient. */
-export function fillText(paint: Paint | null): string | null {
+/**
+ * The fill field's text: `#rrggbb` for a solid fill, '' for none, null for a gradient or an
+ * image (V-32).
+ */
+export function fillText(paint: FillPaint | null): string | null {
   if (paint === null) return '';
-  return isGradient(paint) ? null : colorHex(paint);
+  return isSolid(paint) ? colorHex(paint) : null;
 }
 
-/** The alpha of a solid paint, 1 for none or a gradient. */
-const alphaOf = (paint: Paint | null): number =>
-  paint === null || isGradient(paint) ? 1 : (paint as { a: number }).a;
+/** The alpha of a solid paint, 1 for none, a gradient or an image. */
+const alphaOf = (paint: FillPaint | null): number => (isSolid(paint) ? paint.a : 1);
 
 /**
  * A fill field's commit, as the property panel's `fill` writes (V-35): the text replaces the
@@ -348,7 +350,7 @@ const alphaOf = (paint: Paint | null): number =>
 export function fillOverrideCommand(
   id: string,
   layer: string,
-  shown: Paint | null,
+  shown: FillPaint | null,
   text: string,
 ): Command | null {
   if (text.trim() === '') return overrideCommand(id, layer, { fills: [] });

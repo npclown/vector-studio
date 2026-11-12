@@ -2,8 +2,12 @@ import type {
   Color,
   Command,
   CornerRadii,
+  FillPaint,
   Gradient,
   GradientSpread,
+  ImageAsset,
+  ImagePaint,
+  ImageScaleMode,
   NodeV8,
   Paint,
   Stroke,
@@ -27,7 +31,8 @@ import type {
 export type Common<T> =
   Readonly<{ state: 'none' }> | Readonly<{ state: 'one'; value: T }> | Readonly<{ state: 'mixed' }>;
 
-export type PaintKind = 'none' | 'solid' | 'linear' | 'radial';
+/** V-32: an image fill is its own kind, not a gradient (V32-H3). */
+export type PaintKind = 'none' | 'solid' | 'linear' | 'radial' | 'image';
 
 /** Section 8: the most stops the panel keeps, `MAX_GRADIENT_STOPS` (M4-S2). */
 export const PANEL_MAX_STOPS = 16;
@@ -78,20 +83,36 @@ export function common<T>(
 
 /**
  * A node's fill paint: its top fill's (V-35 fills are bottom first), or null (none, or a type
- * without fills).
+ * without fills). V-32: an image paint is not a `Paint`; `fillOf` reads it as no colour, and
+ * `fillPaintOf` returns it.
  */
-export const fillOf = (node: NodeV8): Paint | null =>
+export const fillOf = (node: NodeV8): Paint | null => {
+  const paint = fillPaintOf(node);
+  return paint === null || isImagePaint(paint) ? null : paint;
+};
+
+/** V-32: a node's top fill paint including an image paint, or null. */
+export const fillPaintOf = (node: NodeV8): FillPaint | null =>
   'fills' in node && FILL_TYPES.has(node.type) ? (node.fills.at(-1)?.paint ?? null) : null;
+
+/** V-32: whether a fill paint is an image paint. */
+export const isImagePaint = (paint: FillPaint | null): paint is ImagePaint =>
+  paint !== null && 'kind' in paint && paint.kind === 'image';
+
+/** V-32: whether a fill paint is a solid colour. */
+export const isSolid = (paint: FillPaint | null): paint is Color =>
+  paint !== null && !('kind' in paint);
 
 /** A node's stroke, or null. */
 export const strokeOf = (node: NodeV8): Stroke | null =>
   'stroke' in node && STROKE_TYPES.has(node.type) ? node.stroke : null;
 
-export const isGradient = (paint: Paint | null): paint is Gradient =>
-  paint !== null && 'kind' in paint;
+export const isGradient = (paint: FillPaint | null): paint is Gradient =>
+  paint !== null && 'kind' in paint && paint.kind !== 'image';
 
-export function paintKind(paint: Paint | null): PaintKind {
+export function paintKind(paint: FillPaint | null): PaintKind {
   if (paint === null) return 'none';
+  if (isImagePaint(paint)) return 'image';
   return isGradient(paint) ? paint.kind : 'solid';
 }
 
@@ -100,7 +121,7 @@ export function paintKind(paint: Paint | null): PaintKind {
  * starts from: one committed value is written to every node (one `setStyle` command), so a field
  * edit across different gradients writes the lead's gradient with the field changed.
  */
-export function leadGradient(paints: readonly (Paint | null)[]): Gradient | null {
+export function leadGradient(paints: readonly (FillPaint | null)[]): Gradient | null {
   for (const paint of paints) if (isGradient(paint)) return paint;
   return null;
 }
@@ -108,8 +129,8 @@ export function leadGradient(paints: readonly (Paint | null)[]): Gradient | null
 const BLACK: Color = { r: 0, g: 0, b: 0, a: 1 };
 
 /** A paint's representative colour: the solid colour, or the first stop's. */
-export function leadColor(paint: Paint | null): Color | null {
-  if (paint === null) return null;
+export function leadColor(paint: FillPaint | null): Color | null {
+  if (paint === null || isImagePaint(paint)) return null;
   return isGradient(paint) ? paint.stops[0]!.color : paint;
 }
 
@@ -146,14 +167,15 @@ export const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
  * linear at angle 0 or the radial preset. Between gradient kinds the stops and spread are kept
  * and the kind's default transform is written. A gradient to solid keeps its first stop's colour.
  */
-export function paintForKind(kind: PaintKind, current: Paint | null): Paint | null {
-  if (kind === 'none') return null;
+export function paintForKind(kind: PaintKind, current: FillPaint | null): Paint | null {
+  // An image needs a file: the panel opens the chooser (`setImageFill`) instead of writing one.
+  if (kind === 'none' || kind === 'image') return null;
   if (kind === 'solid') return leadColor(current) ?? BLACK;
   const transform = kind === 'linear' ? linearTransform(0) : RADIAL_TRANSFORM;
   if (isGradient(current)) {
     return { kind, transform, stops: current.stops, spread: current.spread };
   }
-  const color = current ?? BLACK;
+  const color = isImagePaint(current) ? BLACK : (current ?? BLACK);
   return {
     kind,
     transform,
@@ -240,9 +262,9 @@ export const PANEL_SWATCHES: readonly string[] = Object.freeze([
  * first solid paint (opaque when there is none, so an empty fill becomes visible), or null when
  * `hex` is not `#rrggbb`.
  */
-export function solidFromHex(hex: string, paints: readonly (Paint | null)[]): Color | null {
-  const first = paints.find((paint) => paint !== null && !isGradient(paint));
-  const alpha = first !== undefined && first !== null && !isGradient(first) ? first.a : 1;
+export function solidFromHex(hex: string, paints: readonly (FillPaint | null)[]): Color | null {
+  const first = paints.find(isSolid);
+  const alpha = first === undefined ? 1 : first.a;
   return parseHex(hex, alpha);
 }
 
@@ -330,3 +352,64 @@ export function idsTaking(nodes: readonly NodeV8[], key: keyof StyleProps): stri
 export function numberText(value: number): string {
   return String(Number(value.toFixed(6)));
 }
+
+// ---------------------------------------------------------------------------------------------
+// V-32 (image contract, V32-H3): the fill section's image kind.
+
+/** The scale modes of an image fill, in the select's order (V32-M5). */
+export const IMAGE_SCALE_MODES: readonly ImageScaleMode[] = ['fill', 'fit', 'stretch', 'tile'];
+
+/** The select's text for a scale mode. */
+export const IMAGE_SCALE_MODE_LABELS: Readonly<Record<ImageScaleMode, string>> = Object.freeze({
+  fill: 'Fill',
+  fit: 'Fit',
+  stretch: 'Stretch',
+  tile: 'Tile',
+});
+
+/** The tile scale field's range in percent (the model's scale `0.01` to `100`). */
+const TILE_PERCENT_MIN = 1;
+const TILE_PERCENT_MAX = 10_000;
+
+/** The first selected node's image paint: the lead an image field edit starts from, or null. */
+export function leadImage(paints: readonly (FillPaint | null)[]): ImagePaint | null {
+  return paints.find(isImagePaint) ?? null;
+}
+
+/**
+ * The thumbnail source of image `key` in the document's table as a `Blob`, or null when the table
+ * lacks the key or its data is not base64. The panel shows it through a per-key object URL that it
+ * revokes, so a 32 MiB image is not written into the DOM as a `data:` string.
+ */
+export function imageThumbnailBlob(
+  images: Readonly<Record<string, ImageAsset>> | undefined,
+  key: string,
+): Blob | null {
+  if (images === undefined || !Object.hasOwn(images, key)) return null;
+  const asset = images[key]!;
+  try {
+    const binary = atob(asset.data);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return new Blob([bytes], { type: asset.mimeType });
+  } catch {
+    return null;
+  }
+}
+
+/** The `setImagePaint` of a scale mode choice over `ids` (V32-E2). */
+export function imageModeCommand(ids: readonly string[], scaleMode: ImageScaleMode): Command {
+  return { type: 'setImagePaint', ids: [...ids], scaleMode };
+}
+
+/**
+ * The `setImagePaint` of a tile scale field edit over `ids`: `text` is a percentage (100 is the
+ * image's own size), 1 to 10000; null when it cannot be one (the field is marked invalid).
+ */
+export function tileScaleCommand(ids: readonly string[], text: string): Command | null {
+  const percent = parseNumber(text, TILE_PERCENT_MIN, TILE_PERCENT_MAX);
+  return percent === null ? null : { type: 'setImagePaint', ids: [...ids], scale: percent / 100 };
+}
+
+/** A tile scale (1 is the image's own size) as the field shows it, in percent. */
+export const tileScaleText = (scale: number): string => numberText(scale * 100);
