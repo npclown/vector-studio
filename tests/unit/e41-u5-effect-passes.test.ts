@@ -23,16 +23,23 @@ function image(rect: DeviceRect): Image {
   return { ...rect, data: new Float64Array(rect.width * rect.height * 4) };
 }
 
-/** A texel at absolute coordinates of an image, transparent outside it. */
-function texel(source: Image, x: number, y: number): number[] {
-  const lx = x - source.x;
-  const ly = y - source.y;
+/**
+ * A texel at absolute coordinates of an image, transparent outside it, or on the sides of the
+ * V36-K3 edge mask (1 left, 2 top, 4 right, 8 bottom) the nearest texel of the image.
+ */
+function texel(source: Image, x: number, y: number, clamp = 0): number[] {
+  let lx = x - source.x;
+  let ly = y - source.y;
+  if (clamp & 1) lx = Math.max(lx, 0);
+  if (clamp & 2) ly = Math.max(ly, 0);
+  if (clamp & 4) lx = Math.min(lx, source.width - 1);
+  if (clamp & 8) ly = Math.min(ly, source.height - 1);
   if (lx < 0 || ly < 0 || lx >= source.width || ly >= source.height) return [0, 0, 0, 0];
   const at = (ly * source.width + lx) * 4;
   return [...source.data.subarray(at, at + 4)];
 }
 
-function bilinear(source: Image, px: number, py: number): number[] {
+function bilinear(source: Image, px: number, py: number, clamp = 0): number[] {
   const bx = px - 0.5;
   const by = py - 0.5;
   const cx = Math.floor(bx);
@@ -41,8 +48,8 @@ function bilinear(source: Image, px: number, py: number): number[] {
   const wy = by - cy;
   const mix = (a: number[], b: number[], t: number) =>
     a.map((value, i) => value + (b[i]! - value) * t);
-  const top = mix(texel(source, cx, cy), texel(source, cx + 1, cy), wx);
-  const bottom = mix(texel(source, cx, cy + 1), texel(source, cx + 1, cy + 1), wx);
+  const top = mix(texel(source, cx, cy, clamp), texel(source, cx + 1, cy, clamp), wx);
+  const bottom = mix(texel(source, cx, cy + 1, clamp), texel(source, cx + 1, cy + 1, clamp), wx);
   return mix(top, bottom, wy);
 }
 
@@ -71,6 +78,7 @@ function runPlan(
       data: crop(backing, pass.srcSize[0], pass.srcSize[1]),
     };
     if (pass.clear) target.data.fill(0);
+    const clamp = pass.edge;
     const written = new Float64Array(target.data);
     for (let row = 0; row < pass.height; row += 1) {
       for (let column = 0; column < pass.width; column += 1) {
@@ -86,7 +94,7 @@ function runPlan(
               [0, 1],
               [1, 1],
             ] as const) {
-              texel(source, 2 * x + dx, 2 * y + dy).forEach((v, i) => (sum[i]! += v / 4));
+              texel(source, 2 * x + dx, 2 * y + dy, clamp).forEach((v, i) => (sum[i]! += v / 4));
             }
             value = sum;
             break;
@@ -96,7 +104,7 @@ function runPlan(
             let total = 0;
             for (let tap = -pass.radius; tap <= pass.radius; tap += 1) {
               const weight = Math.exp(-(tap * tap) / (2 * pass.sigma * pass.sigma));
-              texel(source, x + tap * pass.dir[0], y + tap * pass.dir[1]).forEach(
+              texel(source, x + tap * pass.dir[0], y + tap * pass.dir[1], clamp).forEach(
                 (v, i) => (sum[i]! += weight * v),
               );
               total += weight;
@@ -105,7 +113,12 @@ function runPlan(
             break;
           }
           case 'upsample':
-            value = bilinear(source, (x + 0.5) / pass.levelScale, (y + 0.5) / pass.levelScale);
+            value = bilinear(
+              source,
+              (x + 0.5) / pass.levelScale,
+              (y + 0.5) / pass.levelScale,
+              clamp,
+            );
             break;
           case 'tint': {
             const alpha = bilinear(
@@ -117,12 +130,35 @@ function runPlan(
             break;
           }
           case 'merge':
-            value = texel(source, x, y).map((v) => Math.min(v * pass.contentScale, 1));
+            value = texel(source, x, y, clamp).map((v) => Math.min(v * pass.contentScale, 1));
             break;
+          case 'harden': {
+            const alpha = Math.min(texel(source, x, y, clamp)[3]! * pass.contentScale, 1);
+            value = [alpha, alpha, alpha, alpha];
+            break;
+          }
+          case 'innerTint': {
+            const alpha = bilinear(
+              source,
+              (x + 0.5 - pass.offset[0]) / pass.levelScale,
+              (y + 0.5 - pass.offset[1]) / pass.levelScale,
+              clamp,
+            )[3]!;
+            value = pass.color.map((c) => c * (1 - Math.min(alpha * pass.contentScale, 1)));
+            break;
+          }
+          case 'coverage': {
+            const alpha = Math.min(texel(source, x, y, clamp)[3]! * pass.contentScale, 1);
+            value = [alpha, alpha, alpha, alpha];
+            break;
+          }
         }
         // Pixel (column, row) of the attachment.
         const at = (row * target.width + column) * 4;
-        if (pass.kind === 'tint' || pass.kind === 'merge') {
+        if (pass.kind === 'coverage') {
+          // dst × src.a.
+          for (let i = 0; i < 4; i += 1) written[at + i] = written[at + i]! * value[3]!;
+        } else if (pass.kind === 'tint' || pass.kind === 'merge') {
           const keep = 1 - value[3]!;
           for (let i = 0; i < 4; i += 1) written[at + i] = value[i]! + written[at + i]! * keep;
         } else {
@@ -436,5 +472,191 @@ describe('E41-U5 effect pass plan against section 5.1', () => {
     expect(view.getFloat32(76, true)).toBe(0.5);
     expect(effectPipelineKey('bgra8unorm', 'tint').renderStateKey).toContain('source-over');
     expect(effectPipelineKey('bgra8unorm', 'blur').renderStateKey).toContain('replace');
+  });
+});
+
+// V-36 contract (docs/plans/viz-v36-inner-shadow-background-blur-contract.md), V36-K1b, K2 and
+// K3: inner shadows (harden, blur, innerTint, coverage, merge) against section 4.1, the cut
+// sides and the edge mask.
+describe('V36 inner shadow passes against section 4.1', () => {
+  const red = { r: 1, g: 0.1, b: 0.1, a: 0.8 };
+  const cases: [string, DeviceRect, Partial<LayerEffectRecord>][] = [
+    [
+      'one inner shadow, integer offset',
+      { x: 36, y: 26, width: 32, height: 26 },
+      { innerShadows: [{ color: black, dx: 2, dy: 3, sigmaPx: 2 }] },
+    ],
+    [
+      'σ 0 at a fractional offset, leaf root at c = 0.5',
+      content,
+      { innerShadows: [{ color: red, dx: -1.5, dy: 2.25, sigmaPx: 0 }], contentOpacity: 0.5 },
+    ],
+    [
+      'an offset past the shape (full colour inside)',
+      content,
+      { innerShadows: [{ color: red, dx: 0, dy: 400, sigmaPx: 3 }] },
+    ],
+    [
+      'two inner shadows over a drop shadow, then a layer blur',
+      { x: 24, y: 14, width: 60, height: 52 },
+      {
+        shadows: [{ color: black, dx: 3, dy: 3, sigmaPx: 4 }],
+        innerShadows: [
+          { color: black, dx: 0, dy: 4, sigmaPx: 2 },
+          { color: red, dx: -3, dy: -1, sigmaPx: 1.5 },
+        ],
+        blurSigmaPx: 1.5,
+        contentOpacity: 0.75,
+      },
+    ],
+    [
+      'downsampled σ (two levels)',
+      { x: 30, y: 20, width: 44, height: 38 },
+      { innerShadows: [{ color: black, dx: 1.25, dy: -2.5, sigmaPx: 23 }] },
+    ],
+  ];
+  it.each(cases)('%s', (_, result, partial) => {
+    const effect = record({ output: result, ...partial });
+    const l = contentImage(content, effect.contentOpacity);
+    const plan = planEffectPasses(content, result, effect);
+    const actual = runPlan(plan.passes, l, result, plan.scratch);
+    expect(maxDifference(actual, effectOracle(l, result, effect))).toBeLessThan(1e-9);
+  });
+
+  it('gives a translucent interior an edge-only shadow (hardened coverage)', () => {
+    const result = content;
+    const effect = record({ innerShadows: [{ color: black, dx: 0, dy: 3, sigmaPx: 0 }] });
+    const l = contentImage(content, 1);
+    const plan = planEffectPasses(content, result, effect);
+    const actual = runPlan(plan.passes, l, result, plan.scratch);
+    // Deep inside the 60 %-alpha ring's interior (the inner square), R equals L there.
+    const at = (10 * content.width + 12) * 4;
+    expect([...actual.data.subarray(at, at + 4)]).toEqual([...l.data.subarray(at, at + 4)]);
+  });
+
+  it('reads L clamped on cut sides (K1b): no band along a cut edge', () => {
+    // A layer that is solid everywhere, cut at its top by the target: the true content goes on.
+    const cut: DeviceRect = { x: 0, y: 0, width: 30, height: 20 };
+    const l = image(cut);
+    for (let i = 0; i < cut.width * cut.height; i += 1) l.data.set([0.2, 0.4, 0.6, 1], i * 4);
+    const shadow = { color: black, dx: 0, dy: 5, sigmaPx: 2 };
+    const clamped = planEffectPasses(
+      cut,
+      cut,
+      record({ source: cut, output: cut, innerShadows: [shadow], innerClamp: 2 }),
+    );
+    const actual = runPlan(clamped.passes, l, cut, clamped.scratch);
+    // The oracle on the uncut layer (taller above): rows near the top see no edge.
+    const tall: DeviceRect = { x: 0, y: -40, width: 30, height: 60 };
+    const uncut = image(tall);
+    for (let i = 0; i < tall.width * tall.height; i += 1) uncut.data.set([0.2, 0.4, 0.6, 1], i * 4);
+    const expected = effectOracle(uncut, cut, record({ innerShadows: [shadow] }));
+    const top = (column: number, data: Float64Array) => [
+      ...data.subarray(column * 4, column * 4 + 4),
+    ];
+    expect(top(15, actual.data)).toEqual([0.2, 0.4, 0.6, 1]);
+    expect(maxDifference(actual, expected)).toBeLessThan(1e-9);
+    // Without the mask the cut reads as an edge and darkens the top rows.
+    const unmasked = planEffectPasses(
+      cut,
+      cut,
+      record({ source: cut, output: cut, innerShadows: [shadow] }),
+    );
+    const banded = runPlan(unmasked.passes, l, cut, unmasked.scratch);
+    expect(top(15, banded.data)[3]!).toBe(1);
+    expect(top(15, banded.data)[0]!).toBeLessThan(0.15);
+  });
+
+  it('plans harden, blur, innerTint, coverage and merge after the content', () => {
+    const plan = planEffectPasses(
+      content,
+      content,
+      record({
+        shadows: [{ color: black, dx: 1, dy: 1, sigmaPx: 0 }],
+        innerShadows: [{ color: black, dx: 0, dy: 2, sigmaPx: 3 }],
+        innerClamp: 5,
+      }),
+    );
+    expect(plan.passes.map((pass) => pass.kind)).toEqual([
+      'tint',
+      'merge',
+      'harden',
+      'blur',
+      'blur',
+      'innerTint',
+      'coverage',
+      'merge',
+    ]);
+    const [, , harden, horizontal, vertical, tint, coverage, merge] = plan.passes;
+    expect(harden!.target).toBe('scratch1');
+    expect(harden!.edge).toBe(5);
+    expect(harden!.contentScale).toBe(127);
+    expect(horizontal!.source).toBe('scratch1');
+    // The harden region is exactly what the horizontal pass reads.
+    expect([harden!.dstOrigin, harden!.width, harden!.height]).toEqual([
+      horizontal!.srcOrigin,
+      ...horizontal!.srcSize,
+    ]);
+    expect(tint!.source).toBe(vertical!.target);
+    expect(tint!.target).not.toBe(vertical!.target);
+    expect(tint!.contentScale).toBe(1);
+    expect(coverage!.source).toBe('content');
+    expect(coverage!.target).toBe(tint!.target);
+    expect(coverage!.contentScale).toBe(127);
+    expect([merge!.source, merge!.target, merge!.contentScale]).toEqual([
+      tint!.target,
+      'result',
+      1,
+    ]);
+    for (const pass of plan.passes.filter((entry) => entry.target !== 'result')) {
+      expect(pass.width).toBeLessThanOrEqual(plan.scratch.width);
+      expect(pass.height).toBeLessThanOrEqual(plan.scratch.height);
+    }
+    expect(plan.passes.filter((pass) => pass.kind !== 'harden').every((p) => p.edge === 0)).toBe(
+      true,
+    );
+  });
+
+  it('packs the edge mask and keys the coverage blend', () => {
+    expect(EFFECT_SHADER).toContain('fn hardenMain');
+    expect(EFFECT_SHADER).toContain('fn innerTintMain');
+    expect(EFFECT_SHADER).toContain('fn coverageMain');
+    const plan = planEffectPasses(
+      content,
+      content,
+      record({ innerShadows: [{ color: black, dx: 0, dy: 1, sigmaPx: 0 }] }),
+    );
+    const pass = plan.passes.find((entry) => entry.kind === 'coverage')!;
+    const view = (bytes: Uint8Array) => new DataView(bytes.buffer);
+    expect(view(packEffectPassRecord(pass)).getInt32(56, true)).toBe(0);
+    expect(view(packEffectPassRecord({ ...pass, edge: 15 })).getInt32(56, true)).toBe(15);
+    expect(effectPipelineKey('bgra8unorm', 'coverage').renderStateKey).toContain(
+      'destination-times-source-alpha',
+    );
+    expect(effectPipelineKey('bgra8unorm', 'harden').renderStateKey).toContain('replace');
+    expect(effectPipelineKey('bgra8unorm', 'innerTint').renderStateKey).toContain('replace');
+    expect(effectPipelineKey('bgra8unorm', 'blur').shaderKey).toBe('e41-effect-v1#blur');
+  });
+
+  it('clamps texels on the masked sides only', () => {
+    const source: Image = image({ x: 0, y: 0, width: 2, height: 1 });
+    source.data.set([0.5, 0, 0, 1, 0, 0.5, 0, 1]);
+    const wide = { x: -2, y: 0, width: 6, height: 1 };
+    const passes = planEffectPasses(
+      { x: 0, y: 0, width: 2, height: 1 },
+      wide,
+      record({ source: { x: 0, y: 0, width: 2, height: 1 } }),
+    ).passes;
+    const run = (edge: number) =>
+      runPlan(
+        passes.map((pass) => ({ ...pass, edge })),
+        source,
+        wide,
+        { width: 0, height: 0 },
+      ).data;
+    expect([...run(15).subarray(0, 4)]).toEqual([0.5, 0, 0, 1]);
+    expect([...run(15).subarray(20, 24)]).toEqual([0, 0.5, 0, 1]);
+    expect([...run(1).subarray(20, 24)]).toEqual([0, 0, 0, 0]);
+    expect([...run(4).subarray(0, 4)]).toEqual([0, 0, 0, 0]);
   });
 });

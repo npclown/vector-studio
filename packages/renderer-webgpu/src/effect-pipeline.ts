@@ -18,29 +18,54 @@ import type { PrimitiveTargetFormat } from './primitive-pipeline.js';
 // (`planEffectPasses`) and the module only loads texels. A texel outside a source's region
 // reads transparent black, as section 5.1's Gaussian has outside the layer.
 
-export const EFFECT_SHADER_KEY = 'e41-effect-v0';
+// V-36 contract, V36-K3: v1 adds the `harden`, `innerTint` and `coverage` passes and the
+// per-side edge mask.
+export const EFFECT_SHADER_KEY = 'e41-effect-v1';
 export const EFFECT_LAYOUT_KEY = 'e41-effect-v0';
 const EFFECT_VERTEX_LAYOUT_KEY = 'none-3-v0';
 const EFFECT_REPLACE_STATE_KEY = 'replace/no-depth/no-cull/triangle-list-v1';
 const EFFECT_OVER_STATE_KEY = 'premultiplied-source-over/no-depth/no-cull/triangle-list-v1';
+const EFFECT_MULTIPLY_STATE_KEY =
+  'destination-times-source-alpha/no-depth/no-cull/triangle-list-v1';
 export const EFFECT_BINDINGS = Object.freeze({ source: 0, record: 1 });
 /** One pass record; see `packEffectPassRecord`. */
 export const EFFECT_PASS_RECORD_SIZE = 80;
 
 const FRAGMENT_VISIBILITY = 0x2;
 
-export type EffectPassKind = 'downsample' | 'blur' | 'upsample' | 'tint' | 'merge';
+export type EffectPassKind =
+  'downsample' | 'blur' | 'upsample' | 'tint' | 'merge' | 'harden' | 'innerTint' | 'coverage';
 export const EFFECT_PASS_KINDS: readonly EffectPassKind[] = Object.freeze([
   'downsample',
   'blur',
   'upsample',
   'tint',
   'merge',
+  'harden',
+  'innerTint',
+  'coverage',
 ]);
 /** The passes that blend over their attachment; the others replace it. */
 export function effectPassBlends(kind: EffectPassKind): boolean {
-  return kind === 'tint' || kind === 'merge';
+  return kind === 'tint' || kind === 'merge' || kind === 'coverage';
 }
+/** V36-K2: `coverage` multiplies its attachment by its output alpha (`dst × src.a`). */
+function effectPassBlend(kind: EffectPassKind): GPUBlendState | undefined {
+  if (kind === 'coverage') {
+    const multiply = { srcFactor: 'zero', dstFactor: 'src-alpha', operation: 'add' } as const;
+    return { color: multiply, alpha: multiply };
+  }
+  if (!effectPassBlends(kind)) return undefined;
+  const over = { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' } as const;
+  return { color: over, alpha: over };
+}
+/**
+ * V36-K3: how a pass reads texels outside its source region, a mask of the sides that read the
+ * nearest texel of the region (1 left, 2 top, 4 right, 8 bottom); 0 reads transparent (E41).
+ */
+export const EFFECT_EDGE_CLAMP_ALL = 15;
+/** V-36 section 4.1: Figma's `hardAlpha` gain; any alpha ≥ 1/127 covers fully. */
+export const EFFECT_HARD_ALPHA_GAIN = 127;
 
 /**
  * The effect module. Record fields, in pixels of the level each names: `srcOrigin` and
@@ -48,7 +73,9 @@ export function effectPassBlends(kind: EffectPassKind): boolean {
  * coordinate of the attachment's texel 0; `dir`, the blur axis; `offset`, a shadow's device
  * offset at level 0; `radius` and `sigma`, the blur's taps per side and σ at the source level;
  * `levelScale`, 2^k for a sample of level k at level-0 pixels; `contentScale`, 1/c for a leaf
- * root's content opacity c (section 5.2); `color`, a shadow's premultiplied colour.
+ * root's content opacity c (section 5.2); `color`, a shadow's premultiplied colour; `edge`, the
+ * sides on which a texel outside the source region reads the region's nearest texel instead
+ * of transparent (V36-K3; 0 for every E41 pass).
  */
 export const EFFECT_SHADER = /* wgsl */ `
 struct EffectPass {
@@ -61,7 +88,8 @@ struct EffectPass {
   levelScale: f32,
   sigma: f32,
   contentScale: f32,
-  padding: vec2f,
+  edge: i32,
+  padding: f32,
   color: vec4f,
 };
 
@@ -81,7 +109,11 @@ fn effectVertexMain(@builtin(vertex_index) vertexIndex: u32) -> EffectOutput {
 }
 
 fn sourceTexel(texel: vec2i) -> vec4f {
-  let local = texel - effect.srcOrigin;
+  var local = texel - effect.srcOrigin;
+  if ((effect.edge & 1) != 0) { local.x = max(local.x, 0); }
+  if ((effect.edge & 2) != 0) { local.y = max(local.y, 0); }
+  if ((effect.edge & 4) != 0) { local.x = min(local.x, effect.srcSize.x - 1); }
+  if ((effect.edge & 8) != 0) { local.y = min(local.y, effect.srcSize.y - 1); }
   if (any(local < vec2i(0)) || any(local >= effect.srcSize)) {
     return vec4f(0.0);
   }
@@ -143,6 +175,27 @@ fn tintMain(input: EffectOutput) -> @location(0) vec4f {
 fn mergeMain(input: EffectOutput) -> @location(0) vec4f {
   return min(sourceTexel(destinationTexel(input.position)) * effect.contentScale, vec4f(1.0));
 }
+
+// V36-K2: the hardened coverage h = min(gain × α / c, 1) of the source, in every channel.
+@fragment
+fn hardenMain(input: EffectOutput) -> @location(0) vec4f {
+  return vec4f(min(sourceTexel(destinationTexel(input.position)).a * effect.contentScale, 1.0));
+}
+
+// V36-K2: an inner shadow's colour where the offset, blurred coverage is absent.
+@fragment
+fn innerTintMain(input: EffectOutput) -> @location(0) vec4f {
+  let pixel = vec2f(destinationTexel(input.position)) + 0.5 - effect.offset;
+  let alpha = sourceBilinear(pixel / effect.levelScale).a;
+  return effect.color * (1.0 - min(alpha * effect.contentScale, 1.0));
+}
+
+// V36-K2: the source's coverage, which the blend multiplies into the attachment.
+@fragment
+fn coverageMain(input: EffectOutput) -> @location(0) vec4f {
+  let alpha = min(sourceTexel(destinationTexel(input.position)).a * effect.contentScale, 1.0);
+  return vec4f(alpha);
+}
 `;
 
 export function effectFragmentEntryPoint(kind: EffectPassKind): string {
@@ -180,7 +233,12 @@ export function effectPipelineKey(
     layoutKey: EFFECT_LAYOUT_KEY,
     vertexLayoutKey: EFFECT_VERTEX_LAYOUT_KEY,
     targetFormat,
-    renderStateKey: effectPassBlends(kind) ? EFFECT_OVER_STATE_KEY : EFFECT_REPLACE_STATE_KEY,
+    renderStateKey:
+      kind === 'coverage'
+        ? EFFECT_MULTIPLY_STATE_KEY
+        : effectPassBlends(kind)
+          ? EFFECT_OVER_STATE_KEY
+          : EFFECT_REPLACE_STATE_KEY,
     sampleCount: 1,
   });
 }
@@ -192,7 +250,7 @@ export function createEffectPipelineDescriptor(
   targetFormat: PrimitiveTargetFormat,
   kind: EffectPassKind,
 ): GPURenderPipelineDescriptor {
-  const over = { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' } as const;
+  const blend = effectPassBlend(kind);
   return {
     label: `vector-studio/e41-effect-${kind}`,
     layout,
@@ -203,7 +261,7 @@ export function createEffectPipelineDescriptor(
       targets: [
         {
           format: targetFormat,
-          ...(effectPassBlends(kind) ? { blend: { color: over, alpha: over } } : {}),
+          ...(blend === undefined ? {} : { blend }),
           writeMask: 0xf,
         },
       ],
@@ -236,6 +294,8 @@ export type EffectPass = Readonly<{
   sigma: number;
   levelScale: number;
   contentScale: number;
+  /** V36-K3's side mask; 0 for every E41 pass. */
+  edge: number;
   /** Premultiplied. */
   color: readonly [number, number, number, number];
 }>;
@@ -302,23 +362,7 @@ export function planEffectPasses(
     offset: Point,
   ): Readonly<{ surface: EffectSurface; region: Region; scale: number }> | null => {
     if (!(sigmaPx >= EFFECT_SIGMA_EPSILON_PX)) return null;
-    const levels = blurLevels(sigmaPx);
-    const scale = 2 ** levels;
-    const sigma = sigmaPx / scale;
-    const radius = Math.min(Math.ceil(3 * sigma), E41_BLUR_TAPS_MAX);
-    const sampled = sampledRegion(result, offset, scale);
-    // The level-k texels the horizontal pass reads.
-    const needed: Region = {
-      x0: sampled.x0 - radius,
-      y0: sampled.y0 - radius,
-      x1: sampled.x1 + radius,
-      y1: sampled.y1 + radius,
-    };
-    const chain: Region[] = [needed];
-    for (let level = levels - 1; level >= 1; level -= 1) {
-      const above = chain[0]!;
-      chain.unshift({ x0: 2 * above.x0, y0: 2 * above.y0, x1: 2 * above.x1, y1: 2 * above.y1 });
-    }
+    const { levels, scale, sigma, radius, sampled, chain } = blurChain(result, sigmaPx, offset);
     let current = from;
     for (let level = 1; level <= levels; level += 1) {
       const region = chain[level - 1]!;
@@ -375,6 +419,41 @@ export function planEffectPasses(
     });
   }
   push({ ...passOf('merge', contentSurface, 'result', resultSurface.region), contentScale });
+  // V36-K2: each inner shadow, over the merged content: harden `α(L)` into scratch1 over the
+  // region its first reader reads (with K1b's clamped sides), blur it at the offset, tint where
+  // it is absent into the other scratch texture, keep that where `L` covers, merge it over `R`.
+  const hardScale = EFFECT_HARD_ALPHA_GAIN * contentScale;
+  for (const shadow of effect.innerShadows ?? []) {
+    const offset: Point = [shadow.dx, shadow.dy];
+    const region = blurReadRegion(result, shadow.sigmaPx, offset);
+    push({
+      ...passOf('harden', contentSurface, 'scratch1', region),
+      contentScale: hardScale,
+      edge: effect.innerClamp ?? 0,
+    });
+    const hard = { surface: 'scratch1' as const, region };
+    const blurred = blur(hard, shadow.sigmaPx, offset) ?? { ...hard, scale: 1 };
+    const tinted: EffectSurface = blurred.surface === 'scratch0' ? 'scratch1' : 'scratch0';
+    const a = shadow.color.a;
+    push({
+      ...passOf('innerTint', blurred, tinted, resultSurface.region),
+      offset,
+      levelScale: blurred.scale,
+      color: [shadow.color.r * a, shadow.color.g * a, shadow.color.b * a, a],
+    });
+    push({
+      ...passOf('coverage', contentSurface, tinted, resultSurface.region),
+      contentScale: hardScale,
+    });
+    push(
+      passOf(
+        'merge',
+        { surface: tinted, region: resultSurface.region },
+        'result',
+        resultSurface.region,
+      ),
+    );
+  }
   if (effect.blurSigmaPx !== null && effect.blurSigmaPx >= EFFECT_SIGMA_EPSILON_PX) {
     const sigmaPx = effect.blurSigmaPx;
     const levels = blurLevels(sigmaPx);
@@ -411,6 +490,62 @@ export function planEffectPasses(
     passes: Object.freeze(passes),
     scratch: Object.freeze({ width: scratchWidth, height: scratchHeight }),
   });
+}
+
+/**
+ * E41-K4's chain for a blur of `sigmaPx` whose result is sampled over `result` at `offset`:
+ * its levels, σ and taps at the last level, the sampled region there, and the region of each
+ * level from 1 that its downsample writes (`chain[k − 1]` for level k; the last entry is the
+ * region the horizontal pass reads).
+ */
+function blurChain(
+  result: DeviceRect,
+  sigmaPx: number,
+  offset: Point,
+): Readonly<{
+  levels: number;
+  scale: number;
+  sigma: number;
+  radius: number;
+  sampled: Region;
+  chain: readonly Region[];
+}> {
+  const levels = blurLevels(sigmaPx);
+  const scale = 2 ** levels;
+  const sigma = sigmaPx / scale;
+  const radius = Math.min(Math.ceil(3 * sigma), E41_BLUR_TAPS_MAX);
+  const sampled = sampledRegion(result, offset, scale);
+  // The level-k texels the horizontal pass reads.
+  const needed: Region = {
+    x0: sampled.x0 - radius,
+    y0: sampled.y0 - radius,
+    x1: sampled.x1 + radius,
+    y1: sampled.y1 + radius,
+  };
+  const chain: Region[] = [needed];
+  for (let level = levels - 1; level >= 1; level -= 1) {
+    const above = chain[0]!;
+    chain.unshift({ x0: 2 * above.x0, y0: 2 * above.y0, x1: 2 * above.x1, y1: 2 * above.y1 });
+  }
+  return { levels, scale, sigma, radius, sampled, chain };
+}
+
+/**
+ * V36-K2: the level-0 region the first reader of a blur's source reads: the first downsample
+ * (2 × 2 blocks over its region), else the horizontal blur, else (σ below epsilon) the
+ * bilinear samples themselves.
+ */
+export function blurReadRegion(
+  result: DeviceRect,
+  sigmaPx: number,
+  offset: readonly [number, number],
+): Readonly<{ x0: number; y0: number; x1: number; y1: number }> {
+  if (!(sigmaPx >= EFFECT_SIGMA_EPSILON_PX)) return sampledRegion(result, offset, 1);
+  const { levels, chain } = blurChain(result, sigmaPx, offset);
+  const first = chain[0]!;
+  return levels === 0
+    ? first
+    : { x0: 2 * first.x0, y0: 2 * first.y0, x1: 2 * first.x1, y1: 2 * first.y1 };
 }
 
 function surfaceOf(
@@ -458,6 +593,7 @@ function passOf(
     sigma: 0,
     levelScale: 1,
     contentScale: 1,
+    edge: 0,
     color: NO_COLOR,
   };
 }
@@ -480,6 +616,7 @@ export function packEffectPassRecord(pass: EffectPass): Uint8Array {
   view.setFloat32(44, pass.levelScale, true);
   view.setFloat32(48, pass.sigma, true);
   view.setFloat32(52, pass.contentScale, true);
+  view.setInt32(56, pass.edge, true);
   pass.color.forEach((value, index) => view.setFloat32(64 + index * 4, value, true));
   return bytes;
 }
