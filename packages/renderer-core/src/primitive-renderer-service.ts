@@ -2,6 +2,7 @@ import type {
   CameraApplyResult,
   FillMeshPort,
   GlyphRasterPort,
+  ImageSourcePort,
   RenderCamera,
   RenderCameraState,
   RenderChangeSet,
@@ -51,9 +52,12 @@ export type PrimitiveRendererServiceOptions = Readonly<{
   /**
    * E23 contract, U3: 'gradient' accepts gradient paints (E23-S3) and draws them through the
    * paint pipeline variants, which the backend then creates. Default 'solid': a gradient paint
-   * is reported as `unsupported-feature`, and nothing else changes.
+   * is reported as `unsupported-feature`, and nothing else changes. V-32 (V32-S3): 'image' also
+   * accepts image fill paints, drawn from `imageSource`.
    */
-  paints?: 'solid' | 'gradient';
+  paints?: 'solid' | 'gradient' | 'image';
+  /** V-32 contract (V32-P1): the image source port; required by `paints: 'image'`. */
+  imageSource?: ImageSourcePort;
   /**
    * E25 contract, E25-S1: 'isolated' accepts container opacity other than 1 and draws each
    * visible container with 0 < opacity < 1 as an isolated layer, through the layer pipeline,
@@ -118,6 +122,9 @@ export class PrimitiveRendererService
   public readonly requiresTextPipeline: boolean;
   /** E41 contract, U5: true exactly when the `effects` option is 'v0'; read at attach. */
   public readonly requiresEffectPipeline: boolean;
+  /** V-32 (V32-P1): the image source port under `paints: 'image'`; read at attach. */
+  public readonly imageSource?: ImageSourcePort;
+  #unsubscribeImages: (() => void) | null = null;
 
   public constructor(
     invalidationTarget: RendererInvalidationTarget,
@@ -144,8 +151,14 @@ export class PrimitiveRendererService
       throw new TypeError("clips must be 'none', 'rect' or 'all'.");
     }
     const paints = options.paints ?? 'solid';
-    if (paints !== 'solid' && paints !== 'gradient') {
-      throw new TypeError("paints must be 'solid' or 'gradient'.");
+    if (paints !== 'solid' && paints !== 'gradient' && paints !== 'image') {
+      throw new TypeError("paints must be 'solid', 'gradient' or 'image'.");
+    }
+    // V-32 (V32-P2): image paints need the image source port.
+    const imageSource = options.imageSource;
+    if (imageSource !== undefined) assertImageSourcePort(imageSource);
+    if (paints === 'image' && imageSource === undefined) {
+      throw new TypeError("paints: 'image' needs an imageSource port.");
     }
     const groups = options.groups ?? 'flat';
     if (groups !== 'flat' && groups !== 'isolated') {
@@ -198,7 +211,12 @@ export class PrimitiveRendererService
     this.#invalidationTarget = invalidationTarget;
     this.requiresTextPipeline = text === 'atlas';
     this.requiresClipPipeline = clips !== 'none';
-    this.requiresPaintPipeline = paints === 'gradient';
+    this.requiresPaintPipeline = paints === 'gradient' || paints === 'image';
+    if (paints === 'image') {
+      this.imageSource = imageSource!;
+      // V32-K3: a key that became ready or failed is drawn (or reported) on the next frame.
+      this.#unsubscribeImages = imageSource!.subscribe(() => this.#invalidate('scene'));
+    }
     this.requiresLayerPipeline = groups === 'isolated';
     this.requiresEffectPipeline = effects === 'v0';
     const anyPort = port !== undefined || strokePort !== undefined;
@@ -342,6 +360,12 @@ export class PrimitiveRendererService
   public dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
+    try {
+      this.#unsubscribeImages?.();
+    } catch {
+      // A port's unsubscribe failure does not stop disposal.
+    }
+    this.#unsubscribeImages = null;
     this.#source.dispose();
     this.#mirror.dispose();
   }
@@ -352,6 +376,19 @@ export class PrimitiveRendererService
     } catch {
       // CPU publication is authoritative even if an injected target rejects invalidation.
     }
+  }
+}
+
+/** V32-P1: a malformed image port is a host programming error. */
+function assertImageSourcePort(port: ImageSourcePort): void {
+  if (
+    typeof port !== 'object' ||
+    port === null ||
+    port.portVersion !== 0 ||
+    typeof port.request !== 'function' ||
+    typeof port.subscribe !== 'function'
+  ) {
+    throw new TypeError('imageSource must be an ImageSourcePort with portVersion 0.');
   }
 }
 

@@ -55,6 +55,7 @@
     "test:e26": "playwright test --config playwright.e26.config.ts",
     "test:e41-next-host": "playwright test --config playwright.e41-studio.config.ts",
     "test:e41-swiftshader": "playwright test --config playwright.e41-swiftshader.config.ts",
+    "test:v32-swiftshader": "playwright test --config playwright.v32-swiftshader.config.ts",
     "test:v20-count": "playwright test --config playwright.v20-count.config.ts",
     "test:v21-count": "playwright test --config playwright.v21-count.config.ts",
     "measure:m8-n3": "node tooling/m8-n3-measure.mjs",

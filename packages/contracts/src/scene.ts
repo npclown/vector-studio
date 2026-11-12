@@ -14,13 +14,42 @@ export type SceneGradient = Readonly<{
   stops: readonly SceneGradientStop[];
   spread: SceneGradientSpread;
 }>;
-/** A solid colour or one gradient (E23-S1). */
-export type ScenePaint = SceneColor | SceneGradient;
+/**
+ * V-32 contract (docs/plans/viz-v32-image-contract.md), V32-K1: per image axis, `extend` clamps to
+ * the edge texel, `decal` is transparent outside [0, 1], `repeat` tiles.
+ */
+export type SceneImageWrap = 'extend' | 'decal' | 'repeat';
+/**
+ * V-32 contract, section 3: an image paint. `image` is the document's image key, resolved through
+ * the renderer's `ImageSourcePort`; `transform` maps image space [0, 1]² to the node's local space
+ * (as `SceneGradient.transform`). Valid in fill slots only (V32-S2).
+ */
+export type SceneImagePaint = Readonly<{
+  kind: 'image';
+  image: string;
+  transform: SceneAffine;
+  wrapX: SceneImageWrap;
+  wrapY: SceneImageWrap;
+}>;
+/** V32-S1: the longest image key. */
+export const SCENE_MAX_IMAGE_KEY = 128;
+/** V32-P1: the largest side of a ready image, in pixels. */
+export const SCENE_IMAGE_MAX_SIDE = 4096;
+/** A solid colour, one gradient (E23-S1) or one image (V32-S1). */
+export type ScenePaint = SceneColor | SceneGradient | SceneImagePaint;
 /** E23-S2: more stops is `unsupported-feature`. */
 export const SCENE_MAX_GRADIENT_STOPS = 16;
-/** E23-S1: a gradient paint carries `kind`; a solid colour does not. */
+/** E23-S1: a gradient paint carries `kind` 'linear' or 'radial'; a solid colour no `kind`. */
 export function isSceneGradient(paint: ScenePaint): paint is SceneGradient {
-  return 'kind' in paint;
+  return 'kind' in paint && paint.kind !== 'image';
+}
+/** V32-S1: an image paint carries `kind: 'image'`. */
+export function isSceneImagePaint(paint: ScenePaint): paint is SceneImagePaint {
+  return 'kind' in paint && paint.kind === 'image';
+}
+/** A paint without `kind`: a solid colour. */
+export function isSceneColor(paint: ScenePaint): paint is SceneColor {
+  return !('kind' in paint);
 }
 export type SceneIdentity = Readonly<{ documentId: string; pageId: string }>;
 export type SceneVersion = Readonly<{ identity: SceneIdentity; revision: number }>;

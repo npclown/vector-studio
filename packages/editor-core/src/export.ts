@@ -7,7 +7,7 @@ import type {
   ScenePathGeometry,
   SceneTextRun,
 } from '@vector-studio/contracts';
-import { isSceneGradient } from '@vector-studio/contracts';
+import { isSceneGradient, isSceneImagePaint } from '@vector-studio/contracts';
 import type { DocumentV8, Frame } from '@vector-studio/model';
 import type { ExpansionCache } from './expansion.js';
 import { apply, boundsOfPoints, multiply } from './geometry.js';
@@ -278,7 +278,7 @@ class SvgWriter {
 
   /** ` fill="…"` (and opacity) for `paint` on attribute `name` ('fill' or 'stroke'). */
   private paint(name: 'fill' | 'stroke', paint: ScenePaint | null): string {
-    if (paint === null) return ` ${name}="none"`;
+    if (paint === null || isSceneImagePaint(paint)) return ` ${name}="none"`;
     if (!isSceneGradient(paint)) {
       const alpha = Math.min(1, Math.max(0, paint.a));
       return alpha >= 1

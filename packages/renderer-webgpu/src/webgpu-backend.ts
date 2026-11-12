@@ -853,6 +853,11 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
                 ...(this.#meshPipelineRequired ? { meshPipeline: true } : {}),
                 ...(this.#clipPipelineRequired ? { clipPipeline: true } : {}),
                 ...(this.#paintPipelineRequired ? { paintPipeline: true } : {}),
+                // V-32 (V32-P1): the source's image port, for the paint variants' textures.
+                ...(this.#paintPipelineRequired &&
+                this.#primitiveFrameSource?.imageSource !== undefined
+                  ? { imageSource: this.#primitiveFrameSource.imageSource }
+                  : {}),
                 ...(this.#layerPipelineRequired ? { layerPipeline: true } : {}),
                 ...(this.#textPipelineRequired ? { textPipeline: true } : {}),
                 ...(this.#effectPipelineRequired ? { effectPipeline: true } : {}),
@@ -1471,6 +1476,26 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
               );
             }
             this.#gpuMeasureCount += 1;
+          }
+        }
+        // V-32 (V32-K3, K5): image notices of the frame's texture store.
+        const imageNotices = scene.takeImageNotices?.() ?? [];
+        if (this.#generation === generation) {
+          for (const notice of imageNotices.slice(0, NOTICES_PER_PACKET)) {
+            this.#emit(
+              notice.kind === 'unavailable'
+                ? DIAGNOSTIC_CODES.IMAGE_UNAVAILABLE
+                : DIAGNOSTIC_CODES.IMAGE_RESOURCE_LIMIT,
+              notice.kind === 'unavailable'
+                ? 'An image could not be obtained; its image paint is not drawn.'
+                : 'An image does not fit the image texture budget; its image paint is not drawn.',
+              'warning',
+              generation,
+              Object.freeze({
+                image: notice.key,
+                ...(notice.reason === undefined ? {} : { reason: notice.reason }),
+              }),
+            );
           }
         }
         // E28-D1: a page that could not be created leaves text undrawn for the generation.
