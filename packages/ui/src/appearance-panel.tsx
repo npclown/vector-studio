@@ -1,6 +1,10 @@
 import {
   useEditorCommands,
   useEditorSelector,
+  type BlendMode,
+  type Command,
+  type ContainerBlendMode,
+  type Fill,
   type NodeV8,
   type Paint,
   type Gradient,
@@ -15,7 +19,6 @@ import {
   common,
   dashPatch,
   dashText,
-  fillOf,
   idsTaking,
   isGradient,
   leadGradient,
@@ -42,7 +45,29 @@ import {
 } from './appearance-model.js';
 import { ColorWell, Swatches } from './color-controls.js';
 import { Choice, Row, TextField } from './fields.js';
+import {
+  addFillCommand,
+  BLEND_GROUPS,
+  blendCommand,
+  blendCommon,
+  blendLabel,
+  fillHolders,
+  fillView,
+  modelIndex,
+  moveFillCommand,
+  offersPassThrough,
+  PANEL_MAX_FILLS,
+  parsePercent,
+  percentText,
+  removeFillCommand,
+  replaceFillsCommand,
+  rowPrefix,
+  setFillCommand,
+  singleFillCommand,
+} from './fill-model.js';
 import { countRender } from './render-probe.js';
+import { RowBinding, type Binder, type BindRun } from './style-controls.js';
+import { bindingState, tablesOfDocument } from './styles-model.js';
 
 // MVP M8 contract, M8-R1 (M8-U5): the M4 appearance panel, moved from next-host's
 // `src/m4-appearance-panel.tsx` with its behavior, roles, names and test IDs unchanged (M8-Q11
@@ -70,12 +95,22 @@ function PaintControls({
   paints,
   kinds,
   write,
+  binder,
+  nodes,
 }: {
-  prefix: 'Fill' | 'Stroke';
+  /** 'Fill', 'Stroke', or a fill row's 'Fill 2' and so on (labels use it, test IDs its slug). */
+  prefix: string;
   /** The paints of the nodes the controls write. */
   paints: readonly (Paint | null)[];
   kinds: readonly PaintKind[];
   write: (paint: Paint | null) => boolean;
+  /**
+   * The style and variable binder (V-39 U2); absent for a lower fill row, since a `fill` binding
+   * holds the top fill's paint (V-35 with V-39).
+   */
+  binder?: Binder;
+  /** The nodes the controls write, in `paints` order (V-39 U2). */
+  nodes: readonly NodeV8[];
 }) {
   const kindValue = useMemo(() => {
     const values = new Set(paints.map(paintKind));
@@ -85,12 +120,16 @@ function PaintControls({
     const values = new Set(paints.map(read));
     return values.size === 1 ? [...values][0]! : null;
   };
-  const lower = prefix.toLowerCase();
+  const lower = prefix.toLowerCase().replaceAll(' ', '-');
   const lead = leadGradient(paints);
   const kind = kindValue;
   const hexValue = sameText((paint) =>
     paint === null || isGradient(paint) ? null : colorHex(paint),
   );
+  const bindingKey = prefix.startsWith('Fill') ? 'fill' : 'stroke';
+  // U2: a row bound to one style or variable shows it in place of the hex and alpha fields.
+  const bound =
+    binder !== undefined && bindingState(binder.tables, nodes, bindingKey).state === 'one';
   return (
     <>
       <Row>
@@ -103,6 +142,16 @@ function PaintControls({
             void write(paintForKind(next, first));
           }}
         />
+        {binder !== undefined && (
+          <RowBinding
+            binder={binder}
+            nodes={nodes}
+            bindingKey={bindingKey}
+            label={`${prefix} style`}
+            testId={lower}
+            paint={paints.find((paint) => paint !== null) ?? null}
+          />
+        )}
       </Row>
       {kind === 'solid' && (
         <Row>
@@ -115,31 +164,35 @@ function PaintControls({
               return color !== null && write(color);
             }}
           />
-          <TextField
-            label={`${prefix} colour`}
-            value={hexValue}
-            commit={(text) => {
-              const first = paints.find((paint) => paint !== null && !isGradient(paint));
-              const alpha =
-                first !== undefined && first !== null && !isGradient(first) ? first.a : 1;
-              const color = parseHex(text, alpha);
-              if (color === null) return false;
-              return write(color);
-            }}
-          />
-          <TextField
-            label={`${prefix} alpha`}
-            value={sameText((paint) =>
-              paint === null || isGradient(paint) ? null : numberText(paint.a),
-            )}
-            commit={(text) => {
-              const a = parseNumber(text, 0, 1);
-              const first = paints.find((paint) => paint !== null && !isGradient(paint));
-              if (a === null || first === undefined || first === null || isGradient(first))
-                return false;
-              return write({ ...first, a });
-            }}
-          />
+          {!bound && (
+            <>
+              <TextField
+                label={`${prefix} colour`}
+                value={hexValue}
+                commit={(text) => {
+                  const first = paints.find((paint) => paint !== null && !isGradient(paint));
+                  const alpha =
+                    first !== undefined && first !== null && !isGradient(first) ? first.a : 1;
+                  const color = parseHex(text, alpha);
+                  if (color === null) return false;
+                  return write(color);
+                }}
+              />
+              <TextField
+                label={`${prefix} alpha`}
+                value={sameText((paint) =>
+                  paint === null || isGradient(paint) ? null : numberText(paint.a),
+                )}
+                commit={(text) => {
+                  const a = parseNumber(text, 0, 1);
+                  const first = paints.find((paint) => paint !== null && !isGradient(paint));
+                  if (a === null || first === undefined || first === null || isGradient(first))
+                    return false;
+                  return write({ ...first, a });
+                }}
+              />
+            </>
+          )}
         </Row>
       )}
       {!paints.some(isGradient) && (
@@ -154,7 +207,13 @@ function PaintControls({
         />
       )}
       {(kind === 'linear' || kind === 'radial') && lead !== null && (
-        <GradientControls prefix={prefix} lower={lower} lead={lead} paints={paints} write={write} />
+        <GradientControls
+          prefix={prefix}
+          lower={prefix.toLowerCase()}
+          lead={lead}
+          paints={paints}
+          write={write}
+        />
       )}
     </>
   );
@@ -261,7 +320,15 @@ function GradientControls({
 }
 
 /** The stroke controls (section 8): on and off, paint, width, cap, join, miter limit and dash. */
-function StrokeControls({ nodes, commit }: { nodes: readonly NodeV8[]; commit: Commit }) {
+function StrokeControls({
+  nodes,
+  commit,
+  binder,
+}: {
+  nodes: readonly NodeV8[];
+  commit: Commit;
+  binder: Binder;
+}) {
   const takers = nodes.filter((node) => idsTaking([node], 'stroke').length > 0);
   const stroked = takers.filter((node) => strokeOf(node) !== null);
   const strokes = stroked.map((node) => strokeOf(node)!);
@@ -299,6 +366,8 @@ function StrokeControls({ nodes, commit }: { nodes: readonly NodeV8[]; commit: C
             paints={strokes.map((stroke) => stroke.color)}
             kinds={['solid', 'linear', 'radial']}
             write={(paint) => paint !== null && patch({ color: paint })}
+            binder={binder}
+            nodes={stroked}
           />
           <Row>
             <TextField
@@ -309,6 +378,13 @@ function StrokeControls({ nodes, commit }: { nodes: readonly NodeV8[]; commit: C
                 if (width === null) return false;
                 return patch({ width });
               }}
+            />
+            <RowBinding
+              binder={binder}
+              nodes={stroked}
+              bindingKey="strokeWidth"
+              label="Stroke width variable"
+              testId="stroke-width"
             />
             <Choice
               label="Stroke cap"
@@ -359,8 +435,245 @@ function StrokeControls({ nodes, commit }: { nodes: readonly NodeV8[]; commit: C
   );
 }
 
+/** A blend-mode menu (V35-C3): optgroups in Figma's order; a mixed value shows a disabled "mixed". */
+function BlendSelect({
+  label,
+  value,
+  passThrough,
+  testId,
+  onChange,
+}: {
+  label: string;
+  /** The shared mode, or null when mixed. */
+  value: ContainerBlendMode | null;
+  /** Whether `Pass through` is offered (containers only). */
+  passThrough: boolean;
+  testId?: string;
+  onChange: (mode: ContainerBlendMode) => void;
+}) {
+  return (
+    <select
+      aria-label={label}
+      data-testid={testId}
+      data-mixed={value === null ? 'true' : undefined}
+      value={value ?? ''}
+      onChange={(event) => onChange(event.currentTarget.value as ContainerBlendMode)}
+    >
+      {value === null && (
+        <option value="" disabled>
+          mixed
+        </option>
+      )}
+      {passThrough && <option value="passThrough">{blendLabel('passThrough')}</option>}
+      {BLEND_GROUPS.map((group) =>
+        group.label === 'Normal' ? (
+          <option key={group.label} value="normal">
+            {blendLabel('normal')}
+          </option>
+        ) : (
+          <optgroup key={group.label} label={group.label}>
+            {group.modes.map((mode) => (
+              <option key={mode} value={mode}>
+                {blendLabel(mode)}
+              </option>
+            ))}
+          </optgroup>
+        ),
+      )}
+    </select>
+  );
+}
+
+/**
+ * One row of the fill list (V35-C2): visibility, paint (swatch and editor), opacity in percent,
+ * blend mode, move up and down, and remove. `position` is the display position, 0 on top.
+ */
+function FillRow({
+  nodes,
+  fills,
+  position,
+  run,
+  binder,
+}: {
+  nodes: readonly NodeV8[];
+  fills: readonly Fill[];
+  position: number;
+  run: (command: Command | null) => boolean;
+  binder?: Binder;
+}) {
+  const index = modelIndex(fills.length, position);
+  const fill = fills[index]!;
+  const prefix = rowPrefix(position);
+  const lower = prefix.toLowerCase();
+  return (
+    <div role="group" aria-label={`Fill ${position + 1}`} data-testid={`fill-row-${position}`}>
+      <Row>
+        <label>
+          <input
+            type="checkbox"
+            aria-label={`${prefix} visible`}
+            data-testid={`fill-${position}-visible`}
+            checked={fill.visible}
+            onChange={() => void run(setFillCommand(nodes, index, { visible: !fill.visible }))}
+          />{' '}
+          visible
+        </label>
+        <TextField
+          label={`${prefix} opacity`}
+          value={percentText(fill.opacity)}
+          commit={(text) => {
+            const opacity = parsePercent(text);
+            return opacity !== null && run(setFillCommand(nodes, index, { opacity }));
+          }}
+        />
+        <span>%</span>
+        <BlendSelect
+          label={`${prefix} blend mode`}
+          testId={`fill-${position}-blend`}
+          value={fill.blendMode}
+          passThrough={false}
+          onChange={(mode) =>
+            void run(setFillCommand(nodes, index, { blendMode: mode as BlendMode }))
+          }
+        />
+        <button
+          type="button"
+          aria-label={`Move ${lower} up`}
+          data-testid={`fill-${position}-up`}
+          disabled={position === 0}
+          onClick={() => void run(moveFillCommand(nodes, fills.length, position, 'up'))}
+        >
+          ↑
+        </button>
+        <button
+          type="button"
+          aria-label={`Move ${lower} down`}
+          data-testid={`fill-${position}-down`}
+          disabled={position === fills.length - 1}
+          onClick={() => void run(moveFillCommand(nodes, fills.length, position, 'down'))}
+        >
+          ↓
+        </button>
+        <button
+          type="button"
+          aria-label={`Remove ${lower}`}
+          data-testid={`fill-${position}-remove`}
+          onClick={() => void run(removeFillCommand(nodes, index))}
+        >
+          −
+        </button>
+      </Row>
+      <PaintControls
+        prefix={prefix}
+        paints={[fill.paint]}
+        kinds={['none', 'solid', 'linear', 'radial']}
+        // "none" removes the fill (a fill always has a paint); any other kind patches its paint.
+        write={(paint) =>
+          run(
+            paint === null
+              ? removeFillCommand(nodes, index)
+              : setFillCommand(nodes, index, { paint }),
+          )
+        }
+        nodes={nodes}
+        {...(binder === undefined ? {} : { binder })}
+      />
+    </div>
+  );
+}
+
+/**
+ * The Fill section (V35-C2): the fills top first, with `+` to add and a row each; "Mixed" when
+ * the selected nodes' fills differ, where `+` replaces every selected node's fills by one fill.
+ * A node with no fill keeps the single "none" paint control, which makes its first fill.
+ */
+function FillSection({
+  nodes,
+  run,
+  commit,
+  binder,
+}: {
+  nodes: readonly NodeV8[];
+  run: (command: Command | null) => boolean;
+  commit: Commit;
+  binder: Binder;
+}) {
+  const holders = fillHolders(nodes);
+  const view = fillView(holders);
+  const full = view.state === 'list' && view.fills.length >= PANEL_MAX_FILLS;
+  return (
+    <fieldset>
+      <legend>Fill</legend>
+      <Row>
+        <button
+          type="button"
+          aria-label="Add fill"
+          title={view.state === 'mixed' ? 'Replace the fills by one fill' : 'Add a fill'}
+          aria-description={
+            view.state === 'mixed' ? "Replaces every selected node's fills by one fill" : undefined
+          }
+          data-testid="fill-add"
+          disabled={full}
+          onClick={() =>
+            void run(
+              view.state === 'mixed' ? replaceFillsCommand(holders) : addFillCommand(holders),
+            )
+          }
+        >
+          +
+        </button>
+      </Row>
+      {view.state === 'mixed' ? (
+        <p data-testid="fill-mixed" style={{ margin: '4px 0' }}>
+          Mixed <small>(+ replaces the fills by one fill)</small>
+        </p>
+      ) : view.state === 'single' ? (
+        <PaintControls
+          prefix="Fill"
+          paints={holders.map((node) => node.fills.at(-1)?.paint ?? null)}
+          kinds={['none', 'solid', 'linear', 'radial']}
+          write={(paint) => run(singleFillCommand(holders, paint))}
+          binder={binder}
+          nodes={holders}
+        />
+      ) : view.fills.length === 0 ? (
+        <PaintControls
+          prefix="Fill"
+          paints={[null]}
+          kinds={['none', 'solid', 'linear', 'radial']}
+          write={(fill) => commit({ fill })}
+          binder={binder}
+          nodes={holders}
+        />
+      ) : (
+        [...view.fills].reverse().map((_, position) => (
+          <FillRow
+            key={position}
+            nodes={holders}
+            fills={view.fills}
+            position={position}
+            run={run}
+            // V-39: the top row binds the `fill` binding (the top fill's paint).
+            {...(position === 0 ? { binder } : {})}
+          />
+        ))
+      )}
+    </fieldset>
+  );
+}
+
 /** Opacity as a slider that commits on its `change` event only (no live preview, M4-Q13 (a)). */
-function OpacitySlider({ value, commit }: { value: Common<number>; commit: Commit }) {
+function OpacitySlider({
+  value,
+  commit,
+  binder,
+  nodes,
+}: {
+  value: Common<number>;
+  commit: Commit;
+  binder: Binder;
+  nodes: readonly NodeV8[];
+}) {
   const slider = useRef<HTMLInputElement>(null);
   const shown = value.state === 'one' ? value.value : 1;
   const latest = useRef(commit);
@@ -395,13 +708,28 @@ function OpacitySlider({ value, commit }: { value: Common<number>; commit: Commi
       <output aria-label="Opacity value">
         {value.state === 'mixed' ? 'mixed' : numberText(shown)}
       </output>
+      <RowBinding
+        binder={binder}
+        nodes={nodes}
+        bindingKey="opacity"
+        label="Opacity variable"
+        testId="opacity"
+      />
     </Row>
   );
 }
 
 const CORNERS = ['top left', 'top right', 'bottom right', 'bottom left'] as const;
 
-function RadiiControls({ nodes, commit }: { nodes: readonly NodeV8[]; commit: Commit }) {
+function RadiiControls({
+  nodes,
+  commit,
+  binder,
+}: {
+  nodes: readonly NodeV8[];
+  commit: Commit;
+  binder: Binder;
+}) {
   const [linked, setLinked] = useState(true);
   const rectangles = nodes.filter((node) => node.type === 'rectangle');
   const lead = rectangles[0]!.cornerRadii;
@@ -432,6 +760,13 @@ function RadiiControls({ nodes, commit }: { nodes: readonly NodeV8[]; commit: Co
             />
           );
         })}
+        <RowBinding
+          binder={binder}
+          nodes={rectangles}
+          bindingKey="cornerRadius"
+          label="Corner radius variable"
+          testId="corner-radius"
+        />
       </Row>
     </fieldset>
   );
@@ -479,6 +814,20 @@ export function AppearancePanel({ layout = 'aside' }: AppearancePanelProps) {
     setStatus(result.ok ? '' : `${result.code} ${result.path ?? ''}`.trimEnd());
     return result.ok;
   };
+  const tables = useMemo(() => tablesOfDocument(content), [content]);
+  const run: BindRun = (command) => {
+    const result = execute(command);
+    setStatus(result.ok ? '' : `${result.code} ${result.path ?? ''}`.trimEnd());
+    return result.ok ? { ok: true, ids: result.ids } : { ok: false, ids: [] };
+  };
+  const binder: Binder = { tables, run };
+  const runCommand = (command: Command | null): boolean => {
+    if (command === null) return false;
+    const result = execute(command);
+    setStatus(result.ok ? '' : `${result.code} ${result.path ?? ''}`.trimEnd());
+    return result.ok;
+  };
+  const blend = blendCommon(nodes);
   const fillTakers = nodes.filter((node) => idsTaking([node], 'fill').length > 0);
   const opacity = common(nodes, 'opacity', (node) => node.opacity);
   return (
@@ -492,31 +841,26 @@ export function AppearancePanel({ layout = 'aside' }: AppearancePanelProps) {
       ) : (
         <>
           {fillTakers.length > 0 && (
-            <fieldset>
-              <legend>Fill</legend>
-              {fillTakers.some((node) => 'fills' in node && node.fills.length > 1) ? (
-                // A single-paint edit would replace every fill (V35-S5); the fill list arrives
-                // with V35-C2.
-                <p data-testid="fill-multiple">Multiple fills</p>
-              ) : (
-                <PaintControls
-                  prefix="Fill"
-                  paints={fillTakers.map(fillOf)}
-                  kinds={['none', 'solid', 'linear', 'radial']}
-                  write={(fill) => commit({ fill })}
-                />
-              )}
-            </fieldset>
+            <FillSection nodes={nodes} run={runCommand} commit={commit} binder={binder} />
           )}
           {nodes.some((node) => idsTaking([node], 'stroke').length > 0) && (
-            <StrokeControls nodes={nodes} commit={commit} />
+            <StrokeControls nodes={nodes} commit={commit} binder={binder} />
           )}
           <fieldset>
             <legend>Layer</legend>
-            <OpacitySlider value={opacity} commit={commit} />
+            <OpacitySlider value={opacity} commit={commit} binder={binder} nodes={nodes} />
+            <Row>
+              <BlendSelect
+                label="Blend mode"
+                testId="layer-blend"
+                value={blend.state === 'one' ? blend.value : null}
+                passThrough={offersPassThrough(nodes)}
+                onChange={(mode) => void runCommand(blendCommand(nodes, mode))}
+              />
+            </Row>
           </fieldset>
           {nodes.some((node) => node.type === 'rectangle') && (
-            <RadiiControls nodes={nodes} commit={commit} />
+            <RadiiControls nodes={nodes} commit={commit} binder={binder} />
           )}
         </>
       )}

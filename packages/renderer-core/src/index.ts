@@ -36,7 +36,7 @@ export type {
   PathMeshStatistics,
 } from './path-mesh-pipeline.js';
 export { MESH_RESOURCE_ORDER, MESH_STRIDES } from './path-mesh-packet.js';
-export type { GradientPaintRecord } from './paint-records.js';
+export type { GradientPaintRecord, GradientRecord, ImagePaintRecord } from './paint-records.js';
 export {
   E25_LAYER_BYTES_MAX,
   E25_LAYER_TILE_SIZE,
@@ -54,6 +54,18 @@ export {
 } from './effect-plan.js';
 export type { EffectBudgetNotice } from './effect-plan.js';
 export {
+  V35_BLEND_ROOTS_MAX,
+  blendResourceLimitDiagnostic,
+  planBackdropSplits,
+} from './backdrop-plan.js';
+export type {
+  BackdropLayer,
+  BackdropSplit,
+  BlendResourceNotice,
+  BlendResourceReason,
+} from './backdrop-plan.js';
+export type { BlendRootMode } from './layer-plan.js';
+export {
   E28_ATLAS_PAGES_MAX,
   E28_ATLAS_PAGE_SIZE,
   E28_RASTER_CAP,
@@ -67,3 +79,10 @@ export {
   textNoticeDiagnostic,
 } from './text-atlas.js';
 export type { TextClear, TextNotice, TextUpload } from './text-atlas.js';
+export {
+  IMAGE_TEXTURE_BUDGET_BYTES,
+  ImageResidency,
+  buildImageMips,
+  imageMipBytes,
+  type ImageMipLevel,
+} from './image-textures.js';

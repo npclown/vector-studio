@@ -14,6 +14,8 @@ import type {
   SceneGradient,
   SceneGradientStop,
   SceneIdentity,
+  SceneImagePaint,
+  SceneImageWrap,
   ScenePaint,
   ScenePathGeometry,
   ScenePathVerb,
@@ -28,7 +30,9 @@ import {
   SCENE_MAX_DASH_ENTRIES,
   SCENE_MAX_EFFECTS,
   SCENE_MAX_GRADIENT_STOPS,
+  SCENE_MAX_IMAGE_KEY,
   SCENE_MAX_ISOLATION_DEPTH,
+  isSceneImagePaint,
   SCENE_TEXT_MAX_CLUSTER_UNITS,
   SCENE_TEXT_MAX_CLUSTERS,
   SCENE_TEXT_MAX_RUNS,
@@ -47,9 +51,10 @@ export type PathNodeSupport = 'supported' | 'unsupported';
 export type ClipSupport = 'supported' | 'rect' | 'unsupported';
 /**
  * E23 contract, E23-S3: whether the renderer draws gradient paints. Under 'solid' a node with
- * any gradient paint is reported as `unsupported-feature`.
+ * any gradient paint is reported as `unsupported-feature`. V-32 (V32-S3): 'image' draws gradients
+ * and image paints; under 'solid' or 'gradient' an image paint is `unsupported-feature`.
  */
-export type PaintSupport = 'solid' | 'gradient';
+export type PaintSupport = 'solid' | 'gradient' | 'image';
 /**
  * E24 contract, E24-S3: whether the renderer dashes path strokes. Unless 'supported', a node
  * with a non-null dash on a stroke of width > 0 is reported as `unsupported-feature`.
@@ -305,14 +310,26 @@ function hasUnsupportedClipGraph(
 }
 
 /**
- * E25-S2 with E41-S7: whether a node is an isolating node, a visible container with
- * 0 < opacity < 1, or a visible effect root of any kind (non-empty `effects`, opacity > 0). A
- * container counts toward its descendants' isolation depth; a leaf effect root draws one layer
- * of its own, so it may have at most SCENE_MAX_ISOLATION_DEPTH - 1 isolating proper ancestors.
+ * E25-S2 with E41-S7 and V35-K3: whether a node is an isolating node, a visible container with
+ * 0 < opacity < 1, a visible effect root of any kind (non-empty `effects`, opacity > 0), a
+ * visible blend root of any kind (mode outside `normal` and `passThrough`, opacity > 0) or a
+ * visible container with mode `normal` and opacity > 0 (an isolating container). A
+ * container counts toward its descendants' isolation depth; a leaf effect or blend root draws one
+ * layer of its own, so it may have at most SCENE_MAX_ISOLATION_DEPTH - 1 isolating proper ancestors.
  */
 export function isIsolating(node: RenderNodeSnapshot): boolean {
   if (!node.visible || !(node.opacity > 0)) return false;
   if (node.effects !== undefined && node.effects.length > 0) return true;
+  // V35-K3 (amending E25-S2): a blend root of any kind, and a container whose mode is `normal`
+  // (an isolating container, at any opacity above 0).
+  const mode = node.blendMode;
+  if (
+    mode !== undefined &&
+    mode !== 'passThrough' &&
+    (mode !== 'normal' || node.kind === 'container')
+  ) {
+    return true;
+  }
   return node.kind === 'container' && node.opacity < 1;
 }
 
@@ -537,7 +554,14 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
 function paintsSupported(paints: readonly (ScenePaint | null)[], support: PathSupport): boolean {
   for (const paint of paints) {
     if (paint === null || !('kind' in paint)) continue;
-    if (support.paints !== 'gradient' || paint.stops.length > SCENE_MAX_GRADIENT_STOPS) {
+    if (paint.kind === 'image') {
+      if (support.paints !== 'image') return false;
+      continue;
+    }
+    if (
+      (support.paints !== 'gradient' && support.paints !== 'image') ||
+      paint.stops.length > SCENE_MAX_GRADIENT_STOPS
+    ) {
       return false;
     }
   }
@@ -736,7 +760,7 @@ function copyPathStroke(value: unknown): PathStroke | null {
   const fields = ['color', 'width', 'cap', 'join', 'miterLimit'];
   if (!hasExactFields(value, hasDash ? [...fields, 'dash'] : fields)) return null;
   const record = value as Record<string, unknown>;
-  const color = copyPaint(record.color);
+  const color = copyStrokePaint(record.color);
   const width = copyNonnegativeNumber(record.width);
   const cap =
     record.cap === 'butt' || record.cap === 'round' || record.cap === 'square' ? record.cap : null;
@@ -804,14 +828,57 @@ function copyStyle(value: unknown): PrimitiveStyle | null {
 function copyStroke(value: unknown): SceneStroke | null {
   if (!hasExactFields(value, ['color', 'width'])) return null;
   const record = value as Record<string, unknown>;
-  const color = copyPaint(record.color);
+  const color = copyStrokePaint(record.color);
   const width = copyNonnegativeNumber(record.width);
   return color === null || width === null ? null : Object.freeze({ color, width });
 }
 
-/** E23-S1: exactly r, g, b, a is a solid colour; exactly the gradient fields is a gradient. */
+/**
+ * E23-S1: exactly r, g, b, a is a solid colour; exactly the gradient fields is a gradient;
+ * V32-S1: `kind: 'image'` with exactly the image fields is an image paint.
+ */
 function copyPaint(value: unknown): ScenePaint | null {
-  return isRecord(value) && Object.hasOwn(value, 'kind') ? copyGradient(value) : copyColor(value);
+  if (!isRecord(value) || !Object.hasOwn(value, 'kind')) return copyColor(value);
+  return value.kind === 'image' ? copyImagePaint(value) : copyGradient(value);
+}
+
+/** V32-S2: an image paint in a stroke slot is `invalid-value`. */
+function copyStrokePaint(value: unknown): ScenePaint | null {
+  const paint = copyPaint(value);
+  return paint !== null && isSceneImagePaint(paint) ? null : paint;
+}
+
+/**
+ * V32-S1: exactly `kind`, `image`, `transform`, `wrapX`, `wrapY`; `image` 1 to SCENE_MAX_IMAGE_KEY printable
+ * ASCII characters, `transform` finite with a finite binary64 inverse (as E23-S2).
+ */
+function copyImagePaint(value: unknown): SceneImagePaint | null {
+  if (!hasExactFields(value, ['kind', 'image', 'transform', 'wrapX', 'wrapY'])) return null;
+  const record = value as Record<string, unknown>;
+  const image =
+    typeof record.image === 'string' &&
+    record.image.length > 0 &&
+    record.image.length <= SCENE_MAX_IMAGE_KEY &&
+    /^[\x20-\x7e]+$/.test(record.image)
+      ? record.image
+      : null;
+  const wrapX = copyImageWrap(record.wrapX);
+  const wrapY = copyImageWrap(record.wrapY);
+  const transform = copyTuple(record.transform, 6, copyFiniteNumber) as SceneAffine | null;
+  if (
+    image === null ||
+    wrapX === null ||
+    wrapY === null ||
+    transform === null ||
+    !hasFiniteInverse(transform)
+  ) {
+    return null;
+  }
+  return Object.freeze({ kind: 'image' as const, image, transform, wrapX, wrapY });
+}
+
+function copyImageWrap(value: unknown): SceneImageWrap | null {
+  return value === 'extend' || value === 'decal' || value === 'repeat' ? value : null;
 }
 
 /**
@@ -1260,6 +1327,16 @@ function nullablePaintEquals(left: ScenePaint | null, right: ScenePaint | null):
 function paintEquals(left: ScenePaint, right: ScenePaint): boolean {
   if (!('kind' in left) || !('kind' in right)) {
     return !('kind' in left) && !('kind' in right) && colorEquals(left, right);
+  }
+  if (left.kind === 'image' || right.kind === 'image') {
+    return (
+      left.kind === 'image' &&
+      right.kind === 'image' &&
+      left.image === right.image &&
+      left.wrapX === right.wrapX &&
+      left.wrapY === right.wrapY &&
+      arraysEqual(left.transform, right.transform)
+    );
   }
   return (
     left.kind === right.kind &&

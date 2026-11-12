@@ -8,6 +8,7 @@ import type {
   Fill,
   JsonValue,
   LayoutGrid,
+  LayoutFields,
   NodeV6,
   NodeOverride,
   NodeV8,
@@ -136,8 +137,8 @@ function fill(value: Fill): Ordered {
 
 /**
  * A v8 node: the v6 fields with `fills` in `fill`'s place (V35-S2), then `layoutGrids` (V38-S2),
- * `blendMode` (V35-S2), `effects` (E41-S1), `locked` only when true (V31-S1), then `bindings`
- * when present (V39-S7).
+ * `blendMode` (V35-S2), `effects` (E41-S1), `autoLayout` and `layoutSizing` when present
+ * (V34-S4), `locked` only when true (V31-S1), then `bindings` when present (V39-S7).
  */
 function nodeV8(value: NodeV8): Ordered {
   const fills = 'fills' in value ? value.fills : null;
@@ -158,6 +159,24 @@ function nodeV8(value: NodeV8): Ordered {
     blendMode: value.blendMode,
     effects: value.effects.map(effect),
   };
+  // V-34 (contract, V34-S4): the optional layout keys after `effects`, only when present.
+  const layout = value as NodeV8 & LayoutFields;
+  if (layout.autoLayout !== undefined) {
+    const a = layout.autoLayout;
+    node.autoLayout = {
+      direction: a.direction,
+      gap: a.gap,
+      padding: [...a.padding],
+      primaryAlign: a.primaryAlign,
+      counterAlign: a.counterAlign,
+    };
+  }
+  if (layout.layoutSizing !== undefined) {
+    node.layoutSizing = {
+      horizontal: layout.layoutSizing.horizontal,
+      vertical: layout.layoutSizing.vertical,
+    };
+  }
   if (value.locked === true) node.locked = true;
   // V39-S7: `bindings` last, keys in BINDING_KEYS order, each `{ style }` or `{ variable }`.
   if (value.bindings !== undefined) {

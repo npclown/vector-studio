@@ -11,7 +11,8 @@ import { invert, transformPoint, type Affine } from './p4-clip-oracle.js';
 
 export type Premultiplied = readonly [number, number, number, number];
 
-const isGradient = (paint: ScenePaint): paint is SceneGradient => 'kind' in paint;
+const isGradient = (paint: ScenePaint): paint is SceneGradient =>
+  'kind' in paint && paint.kind !== 'image';
 
 const premultiply = (color: SceneColor): Premultiplied => [
   color.r * color.a,
@@ -48,7 +49,8 @@ export function stopLookup(stops: SceneGradient['stops'], t: number): Premultipl
 
 /** E23-K1 to K3: a paint's premultiplied value at local point `(x, y)` of its node. */
 export function paintAt(paint: ScenePaint, x: number, y: number): Premultiplied {
-  if (!isGradient(paint)) return premultiply(paint);
+  if (!('kind' in paint)) return premultiply(paint);
+  if (!isGradient(paint)) throw new TypeError('The E23 oracle has no image paints.');
   const [gx, gy] = transformPoint(invert(paint.transform), x, y);
   const t = paint.kind === 'radial' ? Math.hypot(gx, gy) : gx;
   return stopLookup(paint.stops, spread(t, paint.spread));

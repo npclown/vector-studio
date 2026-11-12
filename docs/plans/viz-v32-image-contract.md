@@ -83,7 +83,7 @@ type ImageSourceResult =
 
 - **V32-K1 value.** At pixel centre `p`, `u = G · (p / (zoom · DPR) − (origin − camera))` with `G` the E23 record map built from the paint's `transform`. Per axis, `extend` clamps to the edge texel, `decal` makes the paint transparent when that coordinate is outside `[0, 1]`, and `repeat` wraps; the sampler addressing is clamp-to-edge unless both axes repeat (a mixed pair wraps the repeating coordinate with `u − floor(u)` before the sample). The sample is bilinear within a level and linear between levels (trilinear), premultiplied, encoded sRGB, and replaces the constant colour in every E23-K4 formula (P1 analytic, P3 mesh, ST-U7 joint, clip and layer variants).
 - **V32-K2 level of detail.** With `J` the linear part of `G` divided by `zoom · DPR` (image units per pixel, columns `∂u/∂x`, `∂u/∂y`) and the texture `W × H` with `L` levels: `ρ = max(‖(W·J₀₀, H·J₁₀)‖, ‖(W·J₀₁, H·J₁₁)‖)`, `λ = clamp(log2 ρ, 0, L − 1)`, sampled with `textureSampleLevel`, which is legal in the non-uniform control flow of the paint block.
-- **V32-K3 pending and failed.** A pending image contributes nothing that frame; the service invalidates with reason `scene` when the port notifies. A failed image contributes nothing and raises `render.image-unavailable` (warning) once per key per renderer generation. The renderer draws no placeholder.
+- **V32-K3 pending and failed.** A pending image contributes nothing that frame and is not requested again until the port notifies its key (one request per state change, A05); the service invalidates with reason `scene` when the port notifies. A key refused by the budget is requested again only once its bytes would be admitted. A failed image contributes nothing and raises `render.image-unavailable` (warning) once per key per renderer generation; it is requested again when the port notifies its key. Notices past the backend's per-frame limit are kept for the next frame. The renderer draws no placeholder.
 
 ### 4.2 Textures
 
@@ -94,7 +94,7 @@ type ImageSourceResult =
 
 - **V32-K6 one paint variant.** The E23 paint modules gain the image branch (record kind 2) and three bindings in group 2 (texture, clamp sampler, repeat sampler); their keys become `+paint-v1` and the layout `e23-paint-v1`, and every variant built from them (clip, E25 layer, shifted layer, E39 covers) follows. Base and clip modules, their keys and the E3-recorded `MESH_FILL_SHADER` are unchanged; the gradient arithmetic of `paintValue` is unchanged. If the paint variants fail to build, gradient and image draws fail closed with `render.paint-unavailable`, as in E23.
 - **V32-K7 binding.** Group 2 is created per (paint table buffers, texture view) and cached on the table state; a draw binds the group of its image texture (the 1 × 1 transparent texture when it has no image, or its image is pending, failed or refused). An analytic run carries the image key of its primitives' fill (`PrimitiveDraw.image`); a primitive with an image fill closes the run when its key differs from the run's, and a mesh draw's image is its fill record's key. Every encoder path that binds group 2 (main pass, layer and shifted layer passes, E39 covers, the E10 capture) binds per draw; the E10 count pass has no group 2 and is unchanged.
-- **V32-K8 record.** An image record uses the E23 record layout: header (2, `wrapX` and `wrapY` codes, levels), the map `G` built exactly as for a gradient, and the bound texture's `W`, `H`, `L` in the first offset lanes. A record with a non-finite binary32 lane contributes nothing (E23-K8).
+- **V32-K8 record.** An image record uses the E23 record layout: header lanes (2, `wrapX` code, levels, `wrapY` code), the map `G` built exactly as for a gradient, and the bound texture's `W`, `H`, `L` in the first offset lanes. A record with a non-finite binary32 lane contributes nothing (E23-K8).
 - **V32-K9 invalidation.** Changing an image paint's mode, scale or key rewrites records and bindings only: 0 fill or stroke port calls, 0 geometry builds.
 
 ## 5. Editor
@@ -157,11 +157,13 @@ type ImageSourceResult =
 - A texture the renderer released whose pixels the port also evicted draws transparent for a moment when it comes back into view.
 - The port's `OffscreenCanvas` readback passes through a premultiplied canvas, so colours of nearly transparent pixels lose precision.
 - No colour management: the GPU draws the encoded bytes without ICC profiles, while PNG export through Canvas 2D and SVG viewers may apply them, so exports of images with profiles can differ slightly from the canvas.
+- A renderer with `paints: 'gradient'` creates a 1 × 1 texture and two samplers on its first gradient draw, since the shared group 2 layout binds them.
 - Backlog: crop mode, image strokes, image adjustments, decoding in a worker, a host asset store, SVG `<image>` import (the SVG import item may call `insertImages`).
 
 ## 11. Record
 
-(Filled by U5.)
+- **U3 scope (2026-11-12).** U3 (#578) brings forward from U2 the scene types and their validation (V32-S1 to S3), the port type (V32-P1) and the two diagnostic codes, since the renderer needs them; A02 is U3's. U2 keeps the model, projector, commands, clipboard and SVG export.
+- (U5 fills the rest.)
 
 ## 12. Review rounds
 

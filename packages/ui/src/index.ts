@@ -38,6 +38,8 @@ export type {
   BindingKey,
   BindingRef,
   Bindings,
+  AutoLayout,
+  AxisSizing,
   CameraApplyResult,
   CanvasSize,
   Color,
@@ -90,6 +92,7 @@ export type {
   FillRule,
   Frame,
   FrameNodeV6,
+  FrameLayout,
   FrameNodeV8,
   Gradient,
   GradientKind,
@@ -106,6 +109,7 @@ export type {
   JsonValue,
   KeyBinding,
   LayerBlurEffect,
+  LayoutSizing,
   LeafNodeV8,
   LineNodeV6,
   LineNodeV8,
@@ -123,6 +127,7 @@ export type {
   NodeLock,
   NodeLayoutGrids,
   NodeOverride,
+  NodeSizing,
   NodeProps,
   NodeV8,
   PagePoint,
@@ -176,6 +181,8 @@ export type {
   SceneGradientSpread,
   SceneGradientStop,
   SceneIdentity,
+  SceneImagePaint,
+  SceneImageWrap,
   SceneNodeBase,
   ScenePaint,
   ScenePathGeometry,
@@ -292,3 +299,6 @@ export {
   useInstanceFocus,
   type InstanceFocus,
 } from './instance-focus.js';
+
+// V-39 (styles and variables): the Local styles panel.
+export { StylesPanel } from './styles-panel.js';

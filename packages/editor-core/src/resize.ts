@@ -31,6 +31,11 @@ export interface WritableTree extends TreeView {
    * 6.3); a tree without it, such as an instance expansion (M7-T2), keeps the mapped frame.
    */
   markTextRefit?(id: string): void;
+  /**
+   * The edit draft's tree (V-34 contract, section 4.3): a resized auto-layout frame skips its
+   * constraints, since the layout pass places its children. Instance expansion leaves it unset.
+   */
+  readonly layoutAware?: boolean;
 }
 
 /**
@@ -457,8 +462,12 @@ export function applyConstraints(
   beforeHeight: number,
 ): void {
   const frame = tree.node(frameId);
+  if (!isFrameLike(frame)) return;
   // A set applies no constraints: resizing one resizes no variant (V-37 contract, section 2.1).
-  if (!isFrameLike(frame) || frame.type === 'symbolSet') return;
+  if (frame.type === 'symbolSet') return;
+  if (tree.layoutAware === true && (frame as { autoLayout?: unknown }).autoLayout !== undefined) {
+    return;
+  }
   const { width, height } = frame.frame;
   if (width === beforeWidth && height === beforeHeight) return;
   for (const id of frame.children) {

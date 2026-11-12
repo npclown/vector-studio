@@ -2,6 +2,8 @@ import type {
   GlyphRasterPort,
   GlyphRasterRequest,
   GlyphRasterResult,
+  ImageSourcePort,
+  ImageSourceResult,
   RenderCamera,
   RenderNodeSnapshot,
   RendererDiagnostic,
@@ -45,6 +47,9 @@ import { WebGpuBackend, createCanvasGlyphRaster } from '@vector-studio/renderer-
 // selects (T9), `pages=N` and `pagesize=S` set the service's atlas test options (T8), and
 // `placements`, `readCluster` and `rasterCost` are the M6c hand-off and the raster-cost
 // observation; tests/gpu/e28-text-atlas.spec.ts uses them.
+// V-32 contract, unit U3: `paints=image` sets the service's `paints: 'image'` with the page's
+// scripted image port, whose results `setImage`, `setImageStatus` and `notifyImages` set;
+// tests/gpu/v32-image-paint.spec.ts uses them.
 
 /** Served by the playground's Vite config from the local kernel build; see vite.config.mjs. */
 const WASM_URL = '/__vector-studio/geometry-kernel.wasm';
@@ -64,6 +69,13 @@ const effects =
     : 'none';
 /** E41-A05: `effectcontent=1` composites effect roots' content only, for the oracle. */
 const effectContent = parameters.get('effectcontent') === '1';
+/** V-35 U4: `blend=v0` draws blend modes (with `groups=isolated`). */
+const blend = parameters.get('blend') === 'v0' && groups === 'isolated' ? 'v0' : 'none';
+/**
+ * V35-A05: `capture=0` leaves the E10 frame-capture hook off, so the canvas has the production
+ * usage; `render` then reads the presented frame back through a 2D canvas.
+ */
+const frameCapture = parameters.get('capture') !== '0';
 const tileParameter = parameters.get('tile');
 const text = parameters.get('text') === 'atlas' ? 'atlas' : 'none';
 const canvasRaster = createCanvasGlyphRaster();
@@ -91,13 +103,36 @@ const fakeRaster: GlyphRasterPort = Object.freeze({
 });
 const glyphRaster = parameters.get('raster') === 'fake' ? fakeRaster : canvasRaster;
 const dpr = Number(parameters.get('dpr') ?? '1');
+const paints = parameters.get('paints') === 'image' ? 'image' : 'gradient';
+/** V-32 U3: the scripted image port's results by key, its requests and its listeners. */
+const imageResults = new Map<string, ImageSourceResult>();
+const imageRequests: string[] = [];
+const imageListeners = new Set<(images: readonly string[]) => void>();
+const imageSource: ImageSourcePort = Object.freeze({
+  portVersion: 0,
+  operationId: 'v32-u3/scripted',
+  request(image: string): ImageSourceResult {
+    imageRequests.push(image);
+    return imageResults.get(image) ?? { status: 'failed', reason: 'unknown-image' };
+  },
+  subscribe(listener: (images: readonly string[]) => void) {
+    imageListeners.add(listener);
+    return () => imageListeners.delete(listener);
+  },
+});
 /** CSS size of the canvas at load (the spec uses 512 × 320 at every DPR); `resize` changes it. */
 const CSS_SIZE = Object.freeze({ width: 512, height: 320 });
 
 export type E23PacketSummary = Readonly<{
   generation: number;
   /** Analytic draw runs (batches) in paint order, with their instance counts and clip states. */
-  analytic: readonly Readonly<{ count: number; clipState: number; paint: boolean }>[];
+  analytic: readonly Readonly<{
+    count: number;
+    clipState: number;
+    paint: boolean;
+    /** V-32: the run's image key; absent without one, so E23's run summaries are unchanged. */
+    image?: string;
+  }>[];
   /** Mesh draws in paint order: the analytic runs before each, and its clip state. */
   mesh: readonly Readonly<{
     position: number;
@@ -122,9 +157,13 @@ export type E23PacketSummary = Readonly<{
       meshDraws: number;
       /** E41: the effect record's output bound, null without one. */
       effectOutput: Readonly<{ x: number; y: number; width: number; height: number }> | null;
+      /** V-35: a blend root's mode, null without one. */
+      blend: string | null;
     }>[];
     composites: number;
     notices: readonly string[];
+    /** V35-K6: the blend notices' node ids. */
+    blendNotices: readonly string[];
   }> | null;
   /** E28: the text part, null without one. */
   text: Readonly<{ pageCount: number; draws: number; instances: number }> | null;
@@ -154,6 +193,12 @@ export type E23Counters = Readonly<{
   effectPasses: number;
   /** E41 section 5.3: whether this generation draws effects. */
   effectPipelineAvailable: boolean;
+  /** V35-K8: backdrop splits of the current generation so far. */
+  blendSplits: number;
+  /** V35-A05: blend composite draws so far, per variant. */
+  blendCompositeDraws: Readonly<Record<'plain' | 'clip' | 'shifted' | 'clip-shifted', number>>;
+  /** V35-K7: whether this generation draws blend roots with their mode. */
+  blendPipelineAvailable: boolean;
   /** E28: glyph raster port calls and bitmaps uploaded by acknowledged packets. */
   glyphRasterCalls: number;
   glyphUploads: number;
@@ -197,6 +242,7 @@ function summarize(packet: PrimitivePacket): E23PacketSummary {
       count: draw.count,
       clipState: draw.clipState ?? 0,
       paint: draw.paint === 'gradient',
+      ...(draw.image === undefined ? {} : { image: draw.image }),
     })),
     mesh: (packet.mesh?.draws ?? []).map((draw) => ({
       position: draw.position,
@@ -224,9 +270,11 @@ function summarize(packet: PrimitivePacket): E23PacketSummary {
               draws: layer.draws.length,
               meshDraws: layer.meshDraws.length,
               effectOutput: layer.effect?.output ?? null,
+              blend: layer.blend ?? null,
             })),
             composites: packet.layers.composites.length,
             notices: packet.layers.notices.map((notice) => notice.nodeId),
+            blendNotices: (packet.layers.blendNotices ?? []).map((notice) => notice.nodeId),
           },
     text:
       packet.text === undefined
@@ -255,7 +303,7 @@ document.body.append(canvas);
 const diagnostics: RendererDiagnostic[] = [];
 const backend = new WebGpuBackend({
   sampleCountForTesting: samples,
-  frameCaptureForTesting: true,
+  ...(frameCapture ? { frameCaptureForTesting: true } : {}),
   ...(tileParameter === null ? {} : { layerTileSizeForTesting: Number(tileParameter) }),
   ...(effectContent ? { effectContentForTesting: true } : {}),
 });
@@ -292,9 +340,11 @@ async function start() {
     strokeMesh: strokes,
     strokeMeshMemoryBytes: () => strokes.linearMemoryBytes(),
     clips: 'all',
-    paints: 'gradient',
+    paints,
+    ...(paints === 'image' ? { imageSource } : {}),
     groups,
     ...(effects !== 'none' ? { effects } : {}),
+    ...(blend === 'v0' ? { blend } : {}),
     ...(isolateUnit ? { isolateUnitOpacityForTesting: true } : {}),
     ...(text === 'atlas' ? { text, glyphRaster } : {}),
     ...(pagesParameter === null ? {} : { textAtlasPagesForTesting: Number(pagesParameter) }),
@@ -310,6 +360,8 @@ async function start() {
     requiresLayerPipeline: product.requiresLayerPipeline,
     requiresTextPipeline: product.requiresTextPipeline,
     requiresEffectPipeline: product.requiresEffectPipeline,
+    requiresBlendPipeline: product.requiresBlendPipeline,
+    ...(product.imageSource === undefined ? {} : { imageSource: product.imageSource }),
     prepare(target) {
       const packet = product.prepare(target);
       if (packet !== null) lastPacket = summarize(packet);
@@ -338,10 +390,55 @@ async function start() {
     isolateUnit,
     tile: tileParameter === null ? null : Number(tileParameter),
     text,
+    paints,
   };
 }
 
 const ready = start();
+
+/**
+ * V35-A05: with `capture=0` the canvas keeps its production usage, so the frame is read back by
+ * drawing the canvas into a 2D canvas instead of through the E10 capture hook. The canvas texture
+ * is readable only in the task that drew it, so the read runs in an animation-frame callback
+ * registered after the backend's, once a frame has been submitted in it.
+ */
+async function nextPresentedCanvas() {
+  for (let attempt = 0; attempt < 600; attempt += 1) {
+    const before = backend.getStatistics().framesSubmitted;
+    backend.invalidate({ reason: 'scene' });
+    const frame = await new Promise<ReturnType<typeof readPresentedCanvas> | null>((resolve) =>
+      requestAnimationFrame(() =>
+        resolve(backend.getStatistics().framesSubmitted > before ? readPresentedCanvas() : null),
+      ),
+    );
+    if (frame !== null) return frame;
+  }
+  throw new Error('No frame was submitted for the canvas readback.');
+}
+
+/** Draws the canvas into a 2D canvas and reads its pixels. */
+function readPresentedCanvas(): Readonly<{
+  width: number;
+  height: number;
+  sampleCount: number;
+  devicePixelRatio: number;
+  rgba: Uint8Array;
+}> {
+  const reader = document.createElement('canvas');
+  reader.width = canvas.width;
+  reader.height = canvas.height;
+  const context = reader.getContext('2d', { willReadFrequently: true });
+  if (context === null) throw new Error('No 2D context for the readback.');
+  context.drawImage(canvas, 0, 0);
+  const image = context.getImageData(0, 0, reader.width, reader.height);
+  return {
+    width: reader.width,
+    height: reader.height,
+    sampleCount: samples,
+    devicePixelRatio: dpr,
+    rgba: new Uint8Array(image.data.buffer),
+  };
+}
 
 /** Captures the next frame after the current state has had two frames to settle. */
 async function capture(): Promise<E23Frame> {
@@ -349,7 +446,9 @@ async function capture(): Promise<E23Frame> {
   await nextAnimationFrame();
   await nextAnimationFrame();
   // Generous: a software adapter can take seconds for a 2048 x 2048 frame with 20 masks.
-  const frame = await backend.captureFrameForTesting({ timeoutMs: 30_000 });
+  const frame = frameCapture
+    ? await backend.captureFrameForTesting({ timeoutMs: 30_000 })
+    : await nextPresentedCanvas();
   return {
     width: frame.width,
     height: frame.height,
@@ -372,6 +471,9 @@ function counters(): E23Counters {
     layerPasses: backend.getLayerPassesForTesting(),
     effectPasses: backend.getEffectPassesForTesting(),
     effectPipelineAvailable: backend.effectPipelineAvailable,
+    blendSplits: backend.getBlendSplitsForTesting(),
+    blendCompositeDraws: backend.getBlendCompositeDrawsForTesting(),
+    blendPipelineAvailable: backend.blendPipelineAvailable,
     glyphRasterCalls: service!.getGlyphRasterCallsForTesting(),
     glyphUploads: service!.getGlyphUploadsForTesting(),
     atlasEvictions: service!.getAtlasEvictionsForTesting(),
@@ -667,6 +769,25 @@ const api = {
       frameCalls: E28_RASTER_PER_FRAME,
       frameMs,
     };
+  },
+  /** V-32 U3: makes `key` ready with `width × height` straight RGBA8 pixels (base64). */
+  setImage(key: string, width: number, height: number, rgbaBase64: string) {
+    const pixels = Uint8Array.from(atob(rgbaBase64), (char) => char.charCodeAt(0));
+    imageResults.set(key, { status: 'ready', width, height, pixels });
+  },
+  /** V-32 U3: makes `key` pending, or failed with `decode-failed`. */
+  setImageStatus(key: string, status: 'pending' | 'failed') {
+    imageResults.set(key, status === 'pending' ? { status } : { status, reason: 'decode-failed' });
+  },
+  /** V-32 U3: tells the listeners on a task that `keys` changed (V32-P2). */
+  notifyImages(keys: readonly string[]) {
+    setTimeout(() => {
+      for (const listener of imageListeners) listener(keys);
+    }, 0);
+  },
+  /** V-32 U3: the keys the page's port was asked for, in order. */
+  imageRequests() {
+    return imageRequests.slice();
   },
   counters() {
     return counters();

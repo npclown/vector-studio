@@ -11,6 +11,7 @@ import {
   type Color,
   type DocumentV8,
   type Effect,
+  type Frame,
   type ParseResult,
   type TextNodeV8,
 } from '@vector-studio/model';
@@ -305,6 +306,15 @@ type TextStepKind = 'insert' | 'replace' | 'backward' | 'forward' | 'own';
  */
 type TextMerge = Readonly<{ entry: HistoryEntry; kind: 'insert' | 'backward' | 'forward' }>;
 
+/** Adds an update's V-34 placement targets and resizes to the gesture (section 4.1). */
+function collectLayoutMarks(gesture: Gesture, result: EditResult): void {
+  if (!result.ok) return;
+  result.placed?.forEach((id) => gesture.placed.add(id));
+  result.resized?.forEach(([id, frame]) => {
+    if (!gesture.resized.has(id)) gesture.resized.set(id, frame);
+  });
+}
+
 type Gesture = {
   base: DocumentV8;
   touched: Set<string>;
@@ -320,6 +330,9 @@ type Gesture = {
   accepted: string[];
   /** The composition when this is the text gesture (M6b contract, section 7.1), else null. */
   text: TextGesture | null;
+  /** V-34 section 4.1: placement targets and resizes of the updates, for the commit's pass. */
+  placed: Set<string>;
+  resized: Map<string, Frame>;
 };
 
 /**
@@ -375,6 +388,9 @@ const DOCUMENT_COMMANDS = new Set([
   'setFill',
   'removeFill',
   'moveFill',
+  'setLayout',
+  'addAutoLayout',
+  'removeAutoLayout',
   'ungroupNodes',
   'moveNodes',
   'createSymbol',
@@ -2114,6 +2130,18 @@ class EditorCore implements Editor {
         const op = (binding.args as { op: 'union' | 'subtract' | 'intersect' | 'exclude' }).op;
         return this.run({ type: 'booleanNodes', ids: selection, op });
       }
+      case 'addAutoLayout': {
+        // V-34 section 5: a wrapping frame becomes the selection.
+        if (selection.length === 0) return nothing;
+        const result = this.run({ type: 'addAutoLayout', ids: selection });
+        if (result.ok && result.ids.length > 0) {
+          this.run({ type: 'setSelection', ids: result.ids });
+        }
+        return result;
+      }
+      case 'removeAutoLayout':
+        if (selection.length === 0) return nothing;
+        return this.run({ type: 'removeAutoLayout', ids: selection });
       case 'ungroup': {
         // `ungroupNodes` takes one group; any other selection does nothing (still consumed).
         const node = selection.length === 1 ? this.document.nodes[selection[0]!] : undefined;
@@ -2351,6 +2379,8 @@ class EditorCore implements Editor {
       selection: this.selection,
       pathEdit: this.pathEdit,
       text,
+      placed: new Set(),
+      resized: new Map(),
     };
     return true;
   }
@@ -2395,6 +2425,7 @@ class EditorCore implements Editor {
       if (!result.ok) return result;
       document = result.document;
       result.touched.forEach((id) => touched.add(id));
+      collectLayoutMarks(gesture, result);
       created.push(...result.created);
     }
     // Nodes an earlier update or replace changed return to their pre-gesture state, so they are
@@ -2427,6 +2458,7 @@ class EditorCore implements Editor {
         ),
       );
       if (!sized.ok) return sized;
+      collectLayoutMarks(gesture, sized);
       document = sized.document;
       touched = sized.touched;
     }
@@ -2448,6 +2480,7 @@ class EditorCore implements Editor {
   private applyGestureResult(gesture: Gesture, result: EditResult): CommandResult {
     if (!result.ok) return result;
     result.touched.forEach((id) => gesture.touched.add(id));
+    collectLayoutMarks(gesture, result);
     gesture.updated = true;
     this.changeDocument(result.document, 'gesture-update', result.touched);
     return { ok: true, ids: result.created };
@@ -2488,6 +2521,7 @@ class EditorCore implements Editor {
       gesture.touched,
       this.extensions,
       this.expansions,
+      { placed: gesture.placed, resized: gesture.resized, layout: this.layout },
     );
     // A refit that fails the model's rules (binary64 overflow) leaves the live document as is.
     const after = refit.ok ? refit.document : this.document;

@@ -12,6 +12,8 @@ import type {
   TextLayoutResult,
 } from '@vector-studio/contracts';
 import type {
+  AutoLayout,
+  LayoutSizing,
   Arrow,
   BindingKey,
   BindingRef,
@@ -439,6 +441,23 @@ export type DocumentCommand =
   | Readonly<{ type: 'removeFill'; ids: readonly string[]; index: number }>
   /** Moves the fill at `from` to `to` on each listed node that has both indices. */
   | Readonly<{ type: 'moveFill'; ids: readonly string[]; from: number; to: number }>
+  /**
+   * V-34 contract, section 5: patches the auto layout of the listed frames that have it (`null`
+   * removes it) and the `layoutSizing` of every listed node, in one transaction.
+   */
+  | Readonly<{
+      type: 'setLayout';
+      ids: readonly string[];
+      autoLayout?: Partial<AutoLayout> | null;
+      layoutSizing?: Partial<LayoutSizing>;
+    }>
+  /**
+   * V-34 section 5: frames get an inferred auto layout; other nodes of one parent are wrapped in
+   * a new auto-layout frame (returns its ID).
+   */
+  | Readonly<{ type: 'addAutoLayout'; ids: readonly string[] }>
+  /** V-34 section 5: removes the auto layout of each listed frame that has it. */
+  | Readonly<{ type: 'removeAutoLayout'; ids: readonly string[] }>
   /** E41 contract, section 2: replaces sibling shapes by one path, the `op` of their areas. */
   | Readonly<{
       type: 'booleanNodes';

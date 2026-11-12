@@ -1,8 +1,9 @@
 import {
-  isSceneGradient,
+  isSceneColor,
   type SceneAffine,
   type SceneColor,
   type SceneGradient,
+  type SceneImagePaint,
   type ScenePaint,
 } from '@vector-studio/contracts';
 
@@ -13,7 +14,7 @@ import {
  * `offsets` and `colors` hold the stops; colours are premultiplied in binary64 and rounded once.
  * Plain values; unit U3 owns the GPU layout.
  */
-export type GradientPaintRecord = Readonly<{
+export type GradientRecord = Readonly<{
   kind: 'linear' | 'radial';
   spread: SceneGradient['spread'];
   map: readonly number[];
@@ -22,13 +23,33 @@ export type GradientPaintRecord = Readonly<{
   colors: readonly number[];
 }>;
 
+/**
+ * V-32 contract (docs/plans/viz-v32-image-contract.md), V32-K8: an image paint record. `map` is
+ * G = M⁻¹ · W⁻¹ · T(origin) as for a gradient, from a document point relative to the origin to
+ * image space [0, 1]². The backend binds the texture of `image` for the draw and writes the
+ * texture size into the record (V32-K2 LOD).
+ */
+export type ImagePaintRecord = Readonly<{
+  kind: 'image';
+  wrapX: SceneImagePaint['wrapX'];
+  wrapY: SceneImagePaint['wrapY'];
+  map: readonly number[];
+  image: string;
+}>;
+
+/** A paint record of the frame's table: a gradient (E23) or an image (V-32). */
+export type GradientPaintRecord = GradientRecord | ImagePaintRecord;
+
 /** A paint whose colour lanes the solid draw paths use: a gradient packs as transparent. */
 export const GRADIENT_COLOR_LANES: SceneColor = Object.freeze({ r: 0, g: 0, b: 0, a: 0 });
 
 /** The solid lanes of a paint: its colour, or transparent for a gradient (E23 U2). */
 export function paintColorLanes(paint: ScenePaint): SceneColor {
-  return isSceneGradient(paint) ? GRADIENT_COLOR_LANES : paint;
+  return isSceneColor(paint) ? paint : GRADIENT_COLOR_LANES;
 }
+
+/** A paint that needs a record: a gradient (E23) or an image (V-32). */
+export type RecordPaint = SceneGradient | SceneImagePaint;
 
 type Origin = Readonly<{ x: number; y: number }>;
 
@@ -37,7 +58,7 @@ type Origin = Readonly<{ x: number; y: number }>;
  * node's world affine and `origin` the packet origin the draw's frame is rebased to.
  */
 export function buildGradientRecord(
-  gradient: SceneGradient,
+  gradient: RecordPaint,
   world: SceneAffine,
   origin: Origin,
 ): GradientPaintRecord | null {
@@ -56,6 +77,15 @@ export function buildGradientRecord(
   if (inverse === null) return null;
   const map = compose(inverse, rebased).map(Math.fround);
   if (!map.every(Number.isFinite)) return null;
+  if (gradient.kind === 'image') {
+    return Object.freeze({
+      kind: 'image' as const,
+      wrapX: gradient.wrapX,
+      wrapY: gradient.wrapY,
+      map: Object.freeze(map),
+      image: gradient.image,
+    });
+  }
   const offsets = gradient.stops.map((stop) => Math.fround(stop.offset));
   const colors = gradient.stops.flatMap(({ color }) =>
     [color.r * color.a, color.g * color.a, color.b * color.a, color.a].map(Math.fround),
@@ -70,7 +100,7 @@ export function buildGradientRecord(
 }
 
 type CacheEntry = Readonly<{
-  gradient: SceneGradient;
+  gradient: RecordPaint;
   world: SceneAffine;
   origin: Origin;
   record: GradientPaintRecord | null;
@@ -95,7 +125,7 @@ export class GradientRecordTable {
   }
 
   /** The 1-based record index of a gradient paint, or 0 when it is out of binary32 range. */
-  public indexOf(key: string, gradient: SceneGradient, world: SceneAffine, origin: Origin): number {
+  public indexOf(key: string, gradient: RecordPaint, world: SceneAffine, origin: Origin): number {
     const record = this.recordOf(key, gradient, world, origin);
     return record === null ? 0 : this.add(record);
   }
@@ -112,7 +142,7 @@ export class GradientRecordTable {
    */
   public recordOf(
     key: string,
-    gradient: SceneGradient,
+    gradient: RecordPaint,
     world: SceneAffine,
     origin: Origin,
   ): GradientPaintRecord | null {
@@ -152,23 +182,33 @@ export class GradientRecordTable {
 }
 
 /** Value equality: the mirror copies nodes on every change, so identity is not stable. */
-function gradientEquals(left: SceneGradient, right: SceneGradient): boolean {
+function gradientEquals(left: RecordPaint, right: RecordPaint): boolean {
+  if (left === right) return true;
+  if (left.kind === 'image' || right.kind === 'image') {
+    return (
+      left.kind === 'image' &&
+      right.kind === 'image' &&
+      left.image === right.image &&
+      left.wrapX === right.wrapX &&
+      left.wrapY === right.wrapY &&
+      left.transform.every((lane, index) => lane === right.transform[index])
+    );
+  }
   return (
-    left === right ||
-    (left.kind === right.kind &&
-      left.spread === right.spread &&
-      left.transform.every((lane, index) => lane === right.transform[index]) &&
-      left.stops.length === right.stops.length &&
-      left.stops.every((stop, index) => {
-        const other = right.stops[index]!;
-        return (
-          stop.offset === other.offset &&
-          stop.color.r === other.color.r &&
-          stop.color.g === other.color.g &&
-          stop.color.b === other.color.b &&
-          stop.color.a === other.color.a
-        );
-      }))
+    left.kind === right.kind &&
+    left.spread === right.spread &&
+    left.transform.every((lane, index) => lane === right.transform[index]) &&
+    left.stops.length === right.stops.length &&
+    left.stops.every((stop, index) => {
+      const other = right.stops[index]!;
+      return (
+        stop.offset === other.offset &&
+        stop.color.r === other.color.r &&
+        stop.color.g === other.color.g &&
+        stop.color.b === other.color.b &&
+        stop.color.a === other.color.a
+      );
+    })
   );
 }
 

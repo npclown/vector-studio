@@ -9,6 +9,7 @@ import type {
 import { booleanActions } from './boolean-model.js';
 import { chordLabel, macKeymap, shortcutFor } from './editor-toolbar-model.js';
 import { combineAction } from './variant-model.js';
+import { autoLayoutMenuAction, runAddAutoLayout } from './layout-model.js';
 import { runAction, symbolActions, type ActionButton } from './toolbar-model.js';
 
 // V-25 slice 10 (editor UI usability): the pure parts of `CanvasContextMenu`, the canvas's right
@@ -191,6 +192,7 @@ export function contextMenuItems({ snapshot, point }: ContextMenuInput): Context
   const symbols = new Map(symbolActions(ids, types).map((button) => [button.testId, button]));
   const booleans = booleanActions(document, ids, keymap);
   const combine = combineAction(document, ids);
+  const layoutAction = autoLayoutMenuAction(nodes);
   const symbolItem = (id: string, label: string) =>
     item(id, label, null, fromButton(symbols.get(id)!));
   return [
@@ -253,6 +255,18 @@ export function contextMenuItems({ snapshot, point }: ContextMenuInput): Context
             item(`boolean-${action.op}`, action.label, action.shortcut, single(action.command)),
           ),
         ]),
+    // V-34 contract, section 6: add auto layout (a wrapping frame becomes the selection), or
+    // remove it when a selected frame has it.
+    [
+      item(
+        `auto-layout-${layoutAction.kind}`,
+        layoutAction.label,
+        shortcut(layoutAction.action),
+        layoutAction.kind === 'add'
+          ? (execute) => runAddAutoLayout(execute, ids)
+          : single({ type: 'removeAutoLayout', ids }),
+      ),
+    ],
     [
       // V31-U2: the `toggleVisible` and `toggleLocked` rules, one `setLayerState` (one step).
       item(

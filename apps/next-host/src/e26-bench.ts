@@ -45,8 +45,9 @@ type SceneApplyResult = ReturnType<RendererSceneSynchronization['applyChanges']>
 //     after the scene revision the key produced, as `pointerToWorkDoneMs` is.
 
 // E41-U7c: `doc=e41-cards`, the effects benchmark scene (E41 contract, section 5.6).
-export type BenchDocument = 'm1-a13' | 'stress' | 'm9-v2' | 'e41-cards';
-const BENCH_DOCUMENTS: readonly string[] = ['m1-a13', 'stress', 'm9-v2', 'e41-cards'];
+// V35-U5: `doc=v35-cards`, the fills and blend benchmark scene (V35-A10).
+export type BenchDocument = 'm1-a13' | 'stress' | 'm9-v2' | 'e41-cards' | 'v35-cards';
+const BENCH_DOCUMENTS: readonly string[] = ['m1-a13', 'stress', 'm9-v2', 'e41-cards', 'v35-cards'];
 
 export type BenchQuery = Readonly<{
   /** The scenario document to load, or null. */

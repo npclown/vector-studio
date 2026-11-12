@@ -128,6 +128,7 @@ describe("M6c-U2 next-host renderer options (text: 'atlas')", () => {
       groups: 'isolated',
       text: 'atlas',
       effects: 'v1',
+      blend: 'v0',
       glyphRaster: port,
     });
     const service = new PrimitiveRendererService(target, options.hostRendererOptions(port));

@@ -4,11 +4,11 @@ import { fileURLToPath } from 'node:url';
 import type { RenderNodeSnapshot } from '@vector-studio/contracts';
 import type { Command, Editor, EditorEvent } from '@vector-studio/editor-core';
 import {
+  parseDocument,
   parseEnvelope,
   serializeDocument,
   type DocumentV8,
   type Gradient,
-  type NodeV8,
   type Stroke,
 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
@@ -63,11 +63,14 @@ type Loose = Readonly<Record<string, unknown>>;
 type Box = readonly [number, number, number, number];
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const FIXTURE_TEXT = readFileSync(
-  path.join(root, 'tests/fixtures/m4-appearance/host.v6.json'),
-  'utf8',
+// The page loads the v6 file, which the editor migrates to v8 (V-35): the spec compares with the
+// migrated document and its canonical text, not with the v6 text.
+const parsedFixture = parseDocument(
+  readFileSync(path.join(root, 'tests/fixtures/m4-appearance/host.v6.json'), 'utf8'),
 );
-const FIXTURE = JSON.parse(FIXTURE_TEXT) as DocumentV8;
+if (!parsedFixture.ok) throw new Error(`host.v6.json: ${parsedFixture.code}`);
+const FIXTURE: DocumentV8 = parsedFixture.document;
+const FIXTURE_TEXT = serializeDocument(FIXTURE);
 
 const INTERIOR_TOLERANCE = 2;
 const EDGE_TOLERANCE = 4;
@@ -437,9 +440,10 @@ test('M4-A12: every panel control once, one undo step each', async ({ page }) =>
     await box(name).fill(value);
     await box(name).press('Tab');
   };
-  const fill = (value: Loose) => value.fill;
+  // V-35: a node's fill is its top fill's paint (`fills` is bottom first), or null without one.
+  const fill = (value: Loose) => (value.fills as { paint: unknown }[]).at(-1)?.paint ?? null;
   const stroke = (value: Loose) => value.stroke;
-  const grad = (value: Loose) => value.fill as Gradient;
+  const grad = (value: Loose) => fill(value) as Gradient;
   const strokeOf = (value: Loose) => value.stroke as Stroke;
   const strokeGrad = (value: Loose) => (value.stroke as Stroke).color as Gradient;
 
@@ -718,11 +722,12 @@ test('M4-A12: every panel control once, one undo step each', async ({ page }) =>
   );
   await step('stroke off', () => checkbox.click(), stroke, null);
 
-  // A mixed selection: h1 (fill none) and h2 (radial) show the fill type as mixed; the edited
-  // value replaces both in one step.
+  // A mixed selection: h1 (no fill) and h2 (radial) each hold at most one fill, so the panel keeps
+  // M4's one Fill row (V35-C2) and shows the fill type as mixed; the edited value replaces both in
+  // one step.
   await run(page, { type: 'setSelection', ids: ['h1', 'h2'] });
   await expect(select('Fill type')).toHaveAttribute('data-mixed', 'true');
-  const h2 = FIXTURE.nodes.h2 as NodeV8 & { fill: Gradient };
+  const h2Stops = (fill(FIXTURE.nodes.h2 as unknown as Loose) as Gradient).stops;
   await step(
     'mixed fill type',
     () =>
@@ -733,11 +738,11 @@ test('M4-A12: every panel control once, one undo step each', async ({ page }) =>
     {
       kind: 'linear',
       transform: linear(0),
-      stops: h2.fill.stops,
+      stops: h2Stops,
       spread: 'pad',
     },
   );
-  expect((await node('h2')).fill).toEqual((await node('h1')).fill);
+  expect(fill(await node('h2'))).toEqual(fill(await node('h1')));
 
   // Every step undoes back to the fixture, byte for byte.
   expect(await undoDepth(page)).toBe(steps);

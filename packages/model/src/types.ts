@@ -550,36 +550,51 @@ export type RectangleNodeV8 = Omit<RectangleNodeV6, 'fill'> &
   LeafBlend &
   NodeEffects &
   NodeLock &
-  NodeBindings;
+  NodeBindings &
+  NodeSizing;
 export type EllipseNodeV8 = Omit<EllipseNodeV6, 'fill'> &
   NodeFills &
   LeafBlend &
   NodeEffects &
   NodeLock &
-  NodeBindings;
-export type LineNodeV8 = LineNodeV6 & LeafBlend & NodeEffects & NodeLock & NodeBindings;
+  NodeBindings &
+  NodeSizing;
+export type LineNodeV8 = LineNodeV6 &
+  LeafBlend &
+  NodeEffects &
+  NodeLock &
+  NodeBindings &
+  NodeSizing;
 export type PathNodeV8 = Omit<PathNodeV6, 'fill'> &
   NodeFills &
   LeafBlend &
   NodeEffects &
   NodeLock &
-  NodeBindings;
+  NodeBindings &
+  NodeSizing;
 export type CustomNodeV8 = Omit<CustomNodeV6, 'fill'> &
   NodeFills &
   LeafBlend &
   NodeEffects &
   NodeLock &
-  NodeBindings;
-export type TextNodeV8 = TextNode & LeafBlend & NodeEffects & NodeLock & NodeBindings;
-
-export type GroupNodeV8 = GroupNode & ContainerBlend & NodeEffects & NodeLock & NodeBindings;
+  NodeBindings &
+  NodeSizing;
+export type TextNodeV8 = TextNode & LeafBlend & NodeEffects & NodeLock & NodeBindings & NodeSizing;
+export type GroupNodeV8 = GroupNode &
+  ContainerBlend &
+  NodeEffects &
+  NodeLock &
+  NodeBindings &
+  NodeSizing;
 export type FrameNodeV8 = Omit<FrameNodeV6, 'fill'> &
   NodeFills &
   ContainerBlend &
   NodeEffects &
   NodeLock &
   NodeLayoutGrids &
-  NodeBindings;
+  NodeBindings &
+  NodeSizing &
+  FrameLayout;
 
 /**
  * The fields of an instance's source node an instance may override (V-37 contract, V37-S3): the
@@ -601,6 +616,7 @@ export type InstanceNodeV8 = InstanceNodeV5 &
   NodeEffects &
   NodeLock &
   NodeBindings &
+  NodeSizing &
   Readonly<{ overrides?: Readonly<Record<string, NodeOverride>> }>;
 
 /**
@@ -613,6 +629,7 @@ export type SymbolNodeV8 = Omit<SymbolNodeV6, 'fill'> &
   NodeLock &
   NodeLayoutGrids &
   NodeBindings &
+  NodeSizing &
   Readonly<{ variant?: Readonly<Record<string, string>> }>;
 
 /** A component set (V37-S1) before V-35: a frame's v6 fields (`fill`), holding only symbols. */
@@ -631,6 +648,7 @@ export type SymbolSetNode = NodeBaseV2 &
   NodeEffects &
   NodeLock &
   NodeBindings &
+  NodeSizing &
   Readonly<{
     type: 'symbolSet';
     children: readonly string[];
@@ -699,3 +717,28 @@ export type BindingKey = 'fill' | 'stroke' | 'text' | 'opacity' | 'strokeWidth' 
 
 /** A node's bindings (V39-S4): never empty when present. */
 export type Bindings = Readonly<Partial<Record<BindingKey, BindingRef>>>;
+// V-34 auto layout (contract sections 2 and 3): optional fields on the unreleased v8.
+
+/** A frame's auto layout (V34-S1): padding is top, right, bottom, left. */
+export type AutoLayout = Readonly<{
+  direction: 'horizontal' | 'vertical';
+  gap: number;
+  padding: readonly [number, number, number, number];
+  primaryAlign: 'start' | 'center' | 'end' | 'spaceBetween';
+  counterAlign: 'start' | 'center' | 'end';
+}>;
+
+/** One axis of a node's sizing (V34-S2). */
+export type AxisSizing = 'fixed' | 'hug' | 'fill';
+
+/** A node's sizing (V34-S2); absent means fixed on both axes. */
+export type LayoutSizing = Readonly<{ horizontal: AxisSizing; vertical: AxisSizing }>;
+
+/** V-34's `layoutSizing`, on every v8 node (V34-S2). */
+export type NodeSizing = Readonly<{ layoutSizing?: LayoutSizing }>;
+
+/** V-34's `autoLayout`, on v8 frames only (V34-S1). */
+export type FrameLayout = Readonly<{ autoLayout?: AutoLayout }>;
+
+/** The V-34 fields: `autoLayout` on frames only, `layoutSizing` on every node. */
+export type LayoutFields = Readonly<{ autoLayout?: AutoLayout; layoutSizing?: LayoutSizing }>;

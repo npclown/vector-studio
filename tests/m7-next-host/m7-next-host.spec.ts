@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Command, Editor, EditorEvent, SelectionHandles } from '@vector-studio/editor-core';
 import {
+  parseDocument,
   parseEnvelope,
   serializeDocument,
   type DocumentV8,
@@ -56,11 +57,12 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 // committed v6 migration, which differs in the version, the empty `textOverrides` of each
 // instance and the M4-M1 stroke keys (M6a contract, sections 2.1 and 9; M4 contract, section
 // 2.1).
-const FIXTURE_TEXT = readFileSync(
-  path.join(root, 'tests/fixtures/m4-appearance/migrated/symbols.v6.json'),
-  'utf8',
+// V-35: the editor holds the v8 migration of that v6 file, so the spec compares with it.
+const parsedFixture = parseDocument(
+  readFileSync(path.join(root, 'tests/fixtures/m4-appearance/migrated/symbols.v6.json'), 'utf8'),
 );
-const FIXTURE = JSON.parse(FIXTURE_TEXT) as DocumentV8;
+if (!parsedFixture.ok) throw new Error(`symbols.v6.json: ${parsedFixture.code}`);
+const FIXTURE: DocumentV8 = parsedFixture.document;
 /** The canonical text of the fixture, as the editor's document serializes. */
 const FIXTURE_SERIALIZED = serializeDocument(FIXTURE);
 /** `s1`'s descendants in its pre-order: the order of a detached copy (section 5.2). */
@@ -492,7 +494,7 @@ test('M7-A11: source edits reach instances; resize, detach, source delete and un
     name: 'Symbol',
     frame: { x: 300, y: 200, width: 60, height: 60 },
     children: [rectangle],
-    fill: null,
+    fills: [],
     stroke: null,
   });
   expect(wrapped.nodes[rectangle!]!.frame).toEqual({ x: 0, y: 0, width: 60, height: 60 });

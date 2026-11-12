@@ -55,6 +55,13 @@ export const DIAGNOSTIC_CODES = Object.freeze({
    */
   EFFECT_RESOURCE_LIMIT: 'render.effect-resource-limit',
   /**
+   * A layer tree's blend roots exceed the layer budget, or a blend root comes after the first 64
+   * of a frame, so the layers only blending asked for are dropped: blend roots draw as `normal`
+   * and isolating containers as `passThrough`; raised once per tree root or blend root on its
+   * transition into that state (V-35 contract, V35-K6, docs/plans/viz-v35-fills-blend-contract.md).
+   */
+  BLEND_RESOURCE_LIMIT: 'render.blend-resource-limit',
+  /**
    * The source draws text but the renderer could not create its text pipeline or atlas pages, so
    * text is not drawn (E28 contract, E28-D1, docs/plans/d9-e28-text-glyph-atlas-contract.md);
    * reserved by unit U1, reported from unit U3.
@@ -70,6 +77,17 @@ export const DIAGNOSTIC_CODES = Object.freeze({
    * by unit U1, reported from unit U2.
    */
   GLYPH_RASTER_FAILURE: 'render.glyph-raster-failure',
+  /**
+   * An image paint's image could not be obtained from the image source port (failed or threw),
+   * so it contributes nothing; once per key per renderer generation (V-32 contract, V32-K3,
+   * docs/plans/viz-v32-image-contract.md).
+   */
+  IMAGE_UNAVAILABLE: 'render.image-unavailable',
+  /**
+   * An image's texture does not fit the image texture budget, so its paint contributes nothing
+   * while it stays refused; once per key (V32-K5).
+   */
+  IMAGE_RESOURCE_LIMIT: 'render.image-resource-limit',
   DISPOSAL_COMPLETED: 'disposal.completed',
   DISPOSAL_FAILED: 'disposal.failed',
 } as const);

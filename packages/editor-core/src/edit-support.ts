@@ -2,6 +2,7 @@ import {
   isValidId,
   tableIds,
   type DocumentV8,
+  type Frame,
   type NodeV8,
   type PathData,
 } from '@vector-studio/model';
@@ -35,6 +36,10 @@ export type EditResult =
       created: readonly string[];
       /** The IDs the command returns when they are not `created` (the path commands, M3). */
       ids?: readonly string[];
+      /** V-34 section 4.1: placement targets, which a gesture carries to its commit. */
+      placed?: readonly string[];
+      /** V-34 section 4.2: resized nodes with their frames before, carried likewise. */
+      resized?: readonly (readonly [string, Frame])[];
     }>
   | Failure;
 
@@ -183,7 +188,10 @@ export function success(
   const expansion =
     draft.expansions === undefined ? null : expansionFailure(document, draft.expansions);
   if (expansion !== null) return expansion;
-  return { ok: true, document, touched: [...draft.touched], created };
+  const result = { ok: true as const, document, touched: [...draft.touched], created };
+  // V-34 section 4.1: a gesture accumulates its placement targets and resizes.
+  if (draft.placed.size === 0 && draft.resized.size === 0) return result;
+  return { ...result, placed: [...draft.placed], resized: [...draft.resized] };
 }
 
 export function isPoint(value: unknown): value is PagePoint {

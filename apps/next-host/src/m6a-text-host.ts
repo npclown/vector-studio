@@ -70,6 +70,8 @@ export function composeHost(options: HostCompositionOptions): HostComposition {
       // E41-U7 (E41-S6) and V-36 (V36-S5): node effects, inner shadows and background blur
       // included, reach the renderer, which runs on `effects: 'v1'`.
       projectEffects: 'v1',
+      // V-35 (V35-P4, V35-K2): blend modes reach the renderer, which runs on `blend: 'v0'`.
+      projectBlend: true,
       ...(options.drawStrokeColor === undefined
         ? {}
         : { drawStrokeColor: options.drawStrokeColor }),

@@ -31,7 +31,16 @@ export function toolbarTools(extensions: readonly ExtensionSummary[]): readonly 
   return [...BUILT_IN_TOOLS, ...extensions.flatMap((extension) => extension.tools)];
 }
 
-/** One tool button: test ID `tool-<id>`, the ID as its label, pressed when active. */
+/**
+ * Row 1 labels that differ from the tool ID. M8-N3 bounds row 1 by the 17a2b0a canvas row's
+ * width (1265 px at 1280 x 720 headed, 1268 px at 1280 x 900); the full word `eyedropper`
+ * (V-39) took the row to 1272 px, so the M8 row names it `dropper` (row 1 then ends near
+ * 1258 px). About 10 px remain: another built-in row 1 tool needs a layout change, not another
+ * short label. The studio toolbar keeps `Eyedropper`.
+ */
+const TOOL_LABELS: Readonly<Partial<Record<ToolId, string>>> = { eyedropper: 'dropper' };
+
+/** One tool button: test ID `tool-<id>`, its label (`TOOL_LABELS` or the ID), pressed if active. */
 export type ToolButton = Readonly<{
   testId: string;
   label: string;
@@ -43,7 +52,7 @@ export type ToolButton = Readonly<{
 export function toolButtons(tools: readonly ToolId[], active: ToolId): readonly ToolButton[] {
   return tools.map((tool) => ({
     testId: `tool-${tool}`,
-    label: tool,
+    label: TOOL_LABELS[tool] ?? tool,
     pressed: tool === active,
     command: { type: 'setTool', tool },
   }));

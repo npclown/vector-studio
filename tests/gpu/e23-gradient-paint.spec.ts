@@ -472,11 +472,11 @@ function reporter(name: string, info: { project: { name: string } }) {
     writeFileSync(path.join(directory, file), data, { flag: 'wx' });
 }
 
-async function open(page: Page, dpr: number) {
+async function open(page: Page, dpr: number, paints: 'gradient' | 'image' = 'gradient') {
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.setViewportSize({ width: 1200, height: 800 });
-  await page.goto(`/e23-gradient-paint.html?samples=4&dpr=${dpr}`);
+  await page.goto(`/e23-gradient-paint.html?samples=4&dpr=${dpr}&paints=${paints}`);
   const ready = await page.evaluate(() => window.__vectorStudioE23.ready);
   expect(ready.supported, JSON.stringify(ready)).toBe(true);
   return { ready, pageErrors };
@@ -539,11 +539,19 @@ function resources(statistics: RendererStatistics) {
   };
 }
 
-for (const dpr of [1, 2]) {
-  test(`E23-A03 G1 to G8 against the oracle at DPR ${dpr}`, async ({ page }, info) => {
+// V-32 (V32-A09): A03 and A04 run under `paints: 'gradient'` and, with the image paint layout,
+// `paints: 'image'`; the gradient probes are the same in both.
+for (const [dpr, paints] of [
+  [1, 'gradient'],
+  [2, 'gradient'],
+  [1, 'image'],
+  [2, 'image'],
+] as const) {
+  const mode = paints === 'gradient' ? '' : ' under paints image';
+  test(`E23-A03 G1 to G8 against the oracle at DPR ${dpr}${mode}`, async ({ page }, info) => {
     test.setTimeout(600_000);
-    const report = reporter(`a03-dpr-${dpr}`, info);
-    const { ready, pageErrors } = await open(page, dpr);
+    const report = reporter(`a03-dpr-${dpr}${paints === 'gradient' ? '' : '-image'}`, info);
+    const { ready, pageErrors } = await open(page, dpr, paints);
     const rows: unknown[] = [];
     const failures: string[] = [];
     for (const fixture of fixtures(dpr)) {
@@ -581,9 +589,9 @@ for (const dpr of [1, 2]) {
     expect(failures).toEqual([]);
   });
 
-  test(`E23-A04 premultiplied ramp and hard stop at DPR ${dpr}`, async ({ page }, info) => {
-    const report = reporter(`a04-dpr-${dpr}`, info);
-    await open(page, dpr);
+  test(`E23-A04 premultiplied ramp and hard stop at DPR ${dpr}${mode}`, async ({ page }, info) => {
+    const report = reporter(`a04-dpr-${dpr}${paints === 'gradient' ? '' : '-image'}`, info);
+    await open(page, dpr, paints);
     const g5 = fixtures(dpr).find((fixture) => fixture.name === 'G5')!;
     const rendered = await render(page, g5.items, HOME);
     const width = rendered.result.frame.width;
@@ -613,6 +621,29 @@ for (const dpr of [1, 2]) {
     expect(failures).toEqual([]);
   });
 }
+
+test('V32-A09: every gradient fixture draws byte-identically under paints image', async ({
+  browser,
+}, info) => {
+  test.setTimeout(600_000);
+  const report = reporter('v32-a09', info);
+  const frames = async (paints: 'gradient' | 'image') => {
+    const page = await browser.newPage();
+    await open(page, 1, paints);
+    const out: string[] = [];
+    for (const fixture of fixtures(1)) {
+      out.push((await render(page, fixture.items, fixture.camera)).result.frame.rgbaBase64);
+    }
+    await page.close();
+    return out;
+  };
+  const gradient = await frames('gradient');
+  const image = await frames('image');
+  const names = fixtures(1).map((fixture) => fixture.name);
+  const different = names.filter((_, index) => gradient[index] !== image[index]);
+  report('report.json', JSON.stringify({ fixtures: names.length, different }, null, 2));
+  expect(different).toEqual([]);
+});
 
 test('E23-A05 and A06: invalidation and batching counters', async ({ page }, info) => {
   const report = reporter('a05-a06', info);

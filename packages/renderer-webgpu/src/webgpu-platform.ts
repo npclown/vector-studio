@@ -1,5 +1,6 @@
 import type {
   Disposable,
+  ImageSourcePort,
   PixelSize,
   RendererAdapterInfo,
   ResourceDescriptor,
@@ -91,6 +92,12 @@ export interface WebGpuPrimitiveScenePort extends PrimitivePacketConsumer {
   readonly textPipelineAvailable?: boolean;
   /** E28-D1: true once an atlas page or the text buffer could not be created; text stays undrawn. */
   readonly textPageAllocationFailed?: boolean;
+  /** V-32 (V32-K3, K5): image notices since the last call; absent on scenes without paints. */
+  takeImageNotices?(limit?: number): readonly Readonly<{
+    key: string;
+    kind: 'unavailable' | 'resource-limit';
+    reason?: string;
+  }>[];
   /**
    * E41 contract, U5: true when this generation created the effect pipelines. Absent or false:
    * effect roots draw their content without effects (section 5.3).
@@ -102,6 +109,17 @@ export interface WebGpuPrimitiveScenePort extends PrimitivePacketConsumer {
   readonly backgroundBlurSkipped?: number;
   /** E41 section 5.4: the device's `maxTextureDimension2D`, which effect bounds respect. */
   readonly maxTextureDimension2D?: number;
+  /**
+   * V35-K7: true when this generation created the backdrop snapshot and blend composite
+   * pipelines. Absent or false: blend roots draw as `normal`.
+   */
+  readonly blendPipelineAvailable?: boolean;
+  /** V35-K8: backdrop splits this generation has made, one per end-and-resume of a pass. */
+  readonly blendSplits?: number;
+  /** @internal Tests only (V35-A05): blend composite draws submitted so far, per variant. */
+  blendCompositeDrawsForTesting?(): Readonly<
+    Record<'plain' | 'clip' | 'shifted' | 'clip-shifted', number>
+  >;
   setTarget(target: PrimitiveTarget): void;
   submitPrimitivePacket: PrimitivePacketConsumer['submitPrimitivePacket'];
   /**
@@ -168,6 +186,11 @@ export interface WebGpuPrimitiveSceneOptions {
    */
   readonly paintPipeline?: boolean;
   /**
+   * V-32 contract (V32-P1): the image source port the paint variants' texture store requests
+   * drawn image keys from. Without it every image paint binds the transparent texture.
+   */
+  readonly imageSource?: ImageSourcePort;
+  /**
    * E25 contract, U3: creates the layer pipeline variants of every variant the generation has
    * (section 4, Layer pipeline variants) and the composite pipeline. It needs the adapter's
    * `maxBindGroups` of at least 4; without it the layer pipeline is unavailable.
@@ -185,6 +208,13 @@ export interface WebGpuPrimitiveSceneOptions {
   readonly effectPipeline?: boolean;
   /** @internal Tests only (E41-A05): effect roots composite their content `L` only. */
   readonly effectContentForTesting?: boolean;
+  /**
+   * V-35 contract, V35-K4 and K5: creates the backdrop snapshot pipeline and the blend
+   * composite variants (with the layer pipeline only), and gives the multisample attachment and
+   * the layer tile colour textures `TEXTURE_BINDING`. Without them blend roots draw as `normal`
+   * and isolating containers as `passThrough` (V35-K7).
+   */
+  readonly blendPipeline?: boolean;
   /**
    * @internal Tests only (E25 contract, section 4): the layer tile edge instead of 1024; a
    * positive even integer.

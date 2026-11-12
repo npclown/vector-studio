@@ -4,6 +4,7 @@ import {
   type BindingRef,
   type DocumentV8,
   type InstanceNodeV8,
+  type LayoutSizing,
   type NodeV8,
   type SymbolNodeV8,
 } from '@vector-studio/model';
@@ -73,7 +74,19 @@ function detach(draft: Draft, document: DocumentV8, planned: Plan, ids: readonly
       if (isContainer(node)) copy.children = node.children.map((child) => copyOf.get(child)!);
       draft.set(copy as NodeV8);
     }
+    // V-34 section 4.2: detaching keeps the instance's `layoutSizing` (hug cannot apply).
+    const sizing = (instance as { layoutSizing?: LayoutSizing }).layoutSizing;
+    const kept =
+      sizing === undefined
+        ? {}
+        : {
+            layoutSizing: {
+              horizontal: sizing.horizontal === 'hug' ? 'fixed' : sizing.horizontal,
+              vertical: sizing.vertical === 'hug' ? 'fixed' : sizing.vertical,
+            },
+          };
     draft.set({
+      ...kept,
       id,
       name: instance.name,
       parent: instance.parent,

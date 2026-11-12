@@ -11,6 +11,9 @@ import {
   type BindingTables,
 } from './bindings.js';
 import type {
+  AutoLayout,
+  AxisSizing,
+  LayoutFields,
   Arrow,
   BindingKey,
   BindingRef,
@@ -842,6 +845,13 @@ type Schema = Readonly<{
    * is added, an absent field meaning none), `read` at v8 (V37-S2, S3).
    */
   variants: 'none' | 'added' | 'read';
+  /**
+   * V-34's optional `autoLayout` and `layoutSizing` (contract, section 2; viz-schema-v8.md): read
+   * only at v8 (`V8`). Every schema that reads an older input leaves it unset, so there the keys
+   * are unknown and their default (absent: no auto layout, fixed sizing) is what the v8 result
+   * holds.
+   */
+  autoLayout?: 'read';
 }>;
 
 const V4_TYPES = Object.keys(NODE_KEYS_V2) as Exclude<NodeTypeKey, 'symbolSet'>[];
@@ -914,6 +924,7 @@ const V8: Schema = {
   layout: 'read',
   tables: 'read',
   variants: 'read',
+  autoLayout: 'read',
 };
 /** v8 nodes of an input below v6, already migrated: v8 fields, the older opacity rule. */
 const V8_OLDER_OPACITY: Schema = { ...V8, ...OLDER };
@@ -1261,10 +1272,23 @@ function readNode(key: string, value: unknown, path: Path, schema: Schema): Node
   // V39-S4: an optional `bindings`, read after the node's own fields.
   let raw = value;
   let bindings: unknown;
-  if (schema.tables === 'read' && isPlainObject(value) && Object.hasOwn(value, 'bindings')) {
+  const hasBindings =
+    schema.tables === 'read' && isPlainObject(value) && Object.hasOwn(value, 'bindings');
+  if (hasBindings) {
     const { bindings: own, ...rest } = value;
     raw = rest;
     bindings = own;
+  }
+  // V-34 (contract, section 2): v8's optional `autoLayout` and `layoutSizing`, read apart from the
+  // node's own fields and checked last (V34-S1 to S3).
+  let autoLayout: unknown;
+  let layoutSizing: unknown;
+  const layoutKeys = schema.autoLayout === 'read' && isPlainObject(raw);
+  if (layoutKeys) {
+    const { autoLayout: own, layoutSizing: sizing, ...rest } = raw as Record<string, unknown>;
+    raw = rest;
+    autoLayout = own;
+    layoutSizing = sizing;
   }
   const legacy = schema.fills === 'read' ? readFillsShim(raw, path) : null;
   const node = readNodeFields(key, legacy === null ? raw : legacy.shim, path, schema);
@@ -1308,11 +1332,12 @@ function readNode(key: string, value: unknown, path: Path, schema: Schema): Node
   // V-37: a symbol's `variant` or an instance's non-empty `overrides` (read at v8 only).
   const optional = schema.variants === 'read' ? readOptional(node.type, record, path, schema) : {};
   const result = { ...withFills, blendMode, effects, ...lock, ...optional };
-  if (raw === value) return result as unknown as NodeV8;
-  return {
-    ...result,
-    bindings: readBindings(bindings, node.type, [...path, 'bindings']),
-  } as unknown as NodeV8;
+  const bound = (hasBindings
+    ? { ...result, bindings: readBindings(bindings, node.type, [...path, 'bindings']) }
+    : result) as unknown as NodeV8;
+  return layoutKeys
+    ? readLayoutFields(bound, value as Record<string, unknown>, autoLayout, layoutSizing, path)
+    : bound;
 }
 
 /** The optional fields of a v8 node: a symbol's `variant`, an instance's non-empty `overrides`. */
@@ -1467,6 +1492,70 @@ function readFills(value: unknown, path: Path): Fill[] {
       blendMode: readEnum(record.blendMode, BLEND_MODES, [...entryPath, 'blendMode']),
     };
   });
+}
+const DIRECTIONS: readonly AutoLayout['direction'][] = ['horizontal', 'vertical'];
+const PRIMARY_ALIGNS: readonly AutoLayout['primaryAlign'][] = [
+  'start',
+  'center',
+  'end',
+  'spaceBetween',
+];
+const COUNTER_ALIGNS: readonly AutoLayout['counterAlign'][] = ['start', 'center', 'end'];
+const AXIS_SIZINGS: readonly AxisSizing[] = ['fixed', 'hug', 'fill'];
+/** V34-S3: the bound of `gap` (either sign) and of each padding. */
+export const MAX_LAYOUT_SPACING = 10000;
+
+/**
+ * V34-S1 to S3: `autoLayout` on a frame only, exact keys; `layoutSizing` exact keys, `hug` only
+ * on a frame with `autoLayout`, fixed on both axes normalized away.
+ */
+function readLayoutFields(
+  node: NodeV8,
+  value: Record<string, unknown>,
+  autoLayout: unknown,
+  layoutSizing: unknown,
+  path: Path,
+): NodeV8 {
+  let out: NodeV8 & LayoutFields = node;
+  if (Object.hasOwn(value, 'autoLayout')) {
+    const at = [...path, 'autoLayout'];
+    if (node.type !== 'frame') invalid(at);
+    const record = readRecord(
+      autoLayout,
+      ['direction', 'gap', 'padding', 'primaryAlign', 'counterAlign'],
+      at,
+    );
+    const padding = record.padding;
+    if (!Array.isArray(padding) || padding.length !== 4) invalid([...at, 'padding']);
+    const pad = readArray(padding, [...at, 'padding'], (entry, entryPath) =>
+      readNumber(entry, entryPath, 0, MAX_LAYOUT_SPACING),
+    );
+    out = {
+      ...out,
+      autoLayout: {
+        direction: readEnum(record.direction, DIRECTIONS, [...at, 'direction']),
+        gap: readNumber(record.gap, [...at, 'gap'], -MAX_LAYOUT_SPACING, MAX_LAYOUT_SPACING),
+        padding: [pad[0]!, pad[1]!, pad[2]!, pad[3]!],
+        primaryAlign: readEnum(record.primaryAlign, PRIMARY_ALIGNS, [...at, 'primaryAlign']),
+        counterAlign: readEnum(record.counterAlign, COUNTER_ALIGNS, [...at, 'counterAlign']),
+      },
+    };
+  }
+  if (Object.hasOwn(value, 'layoutSizing')) {
+    const at = [...path, 'layoutSizing'];
+    const record = readRecord(layoutSizing, ['horizontal', 'vertical'], at);
+    const sizing = {
+      horizontal: readEnum(record.horizontal, AXIS_SIZINGS, [...at, 'horizontal']),
+      vertical: readEnum(record.vertical, AXIS_SIZINGS, [...at, 'vertical']),
+    };
+    for (const axis of ['horizontal', 'vertical'] as const) {
+      if (sizing[axis] === 'hug' && out.autoLayout === undefined) invalid([...at, axis]);
+    }
+    if (sizing.horizontal !== 'fixed' || sizing.vertical !== 'fixed') {
+      out = { ...out, layoutSizing: sizing };
+    }
+  }
+  return out;
 }
 
 /**

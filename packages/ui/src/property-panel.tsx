@@ -5,7 +5,9 @@ import {
   useEditorQuery,
   useEditorSelector,
   useSelection,
+  type AutoLayout,
   type Command,
+  type CommandResult,
   type Constraints,
   type DocumentV8,
   type Effect,
@@ -33,7 +35,7 @@ import {
   type EffectNumberKey,
   type EffectRow,
 } from './effects-model.js';
-import { withShortcut } from './editor-toolbar-model.js';
+import { shortcutFor, withShortcut } from './editor-toolbar-model.js';
 import {
   GRID_ALIGNS,
   GRID_NUMBER_LABELS,
@@ -52,6 +54,23 @@ import {
   toggleGridCommand,
   type GridHolder,
 } from './layout-grid-model.js';
+import {
+  ALIGN_LABELS,
+  COUNTER_ALIGNS,
+  PADDING_SIDES,
+  PRIMARY_ALIGNS,
+  SIZING_LABELS,
+  autoLayoutSection,
+  gapCommand,
+  inAutoLayout,
+  layoutPatchCommand,
+  paddingCommand,
+  resizingSection,
+  runAddAutoLayout,
+  sizingCommand,
+  type AutoLayoutSection as AutoLayoutState,
+  type ResizingSection as ResizingState,
+} from './layout-model.js';
 import { AppearancePanel } from './appearance-panel.js';
 import { ColorWell, Swatches } from './color-controls.js';
 import { Choice, Row, TextField } from './fields.js';
@@ -125,6 +144,8 @@ import {
   variantValueCommand,
   visibleOverrideCommand,
 } from './variant-model.js';
+import { RowBinding, type BindRun } from './style-controls.js';
+import { bindingState, tablesOfDocument } from './styles-model.js';
 
 // MVP M8 contract, section 7.3 (M8-R1 to M8-R5, M8-U5): the property panel. Under the moved M4
 // appearance panel come the transform, layer (name and visibility), line, constraint, text and
@@ -167,10 +188,13 @@ function TransformSection({
   nodes,
   target,
   run,
+  laidOut = false,
 }: {
   nodes: readonly NodeV8[];
   target: TransformTarget | null;
   run: Run;
+  /** V-34 section 6: a selected node is placed by auto layout, so X and Y are read-only. */
+  laidOut?: boolean;
 }) {
   // V-25 slice 9: X and Y, W and H, then the rotation, in a two-column grid (Figma), each with a
   // short visible label; values are the selection box's, editable for several nodes too.
@@ -193,7 +217,11 @@ function TransformSection({
               identity={fieldIdentity(nodes)}
               label={label}
               value={target === null ? null : targetText(target, key)}
-              disabled={target === null || !targetEditable(target, key)}
+              disabled={
+                target === null ||
+                !targetEditable(target, key) ||
+                (laidOut && (key === 'x' || key === 'y'))
+              }
               inputStyle={GRID_INPUT}
               commit={(text) => {
                 const value = parseTransform(key, text);
@@ -312,7 +340,12 @@ function TextSection({
   textEdit,
   run,
   exitTextEdit,
+  document,
+  bindRun,
 }: {
+  /** The document whose tables the text colour's Style menu lists (V-39 U2). */
+  document: DocumentV8;
+  bindRun: BindRun;
   texts: readonly TextNodeV8[];
   /** One node is selected, and it is this text node. */
   editable: boolean;
@@ -335,6 +368,10 @@ function TextSection({
   // V-25 slice 5: the hex field, the colour picker and the swatches write the run colour with
   // the shown colour's alpha (opaque when mixed), one `setTextStyle` each.
   const colorValue = color.state === 'one' ? colorHex(color.value) : null;
+  // V-39 U2: the text colour row's binding; bound to one style or variable, the chip replaces
+  // the hex field.
+  const tables = tablesOfDocument(document);
+  const colorBound = bindingState(tables, texts, 'text').state === 'one';
   const setColor = (hex: string) => {
     const value = runColor(hex, color);
     return value !== null && setStyle({ color: value });
@@ -420,14 +457,16 @@ function TextSection({
             return value !== null && setStyle({ size: value });
           }}
         />
-        <TextField
-          identity={runIdentity}
-          label="Text colour"
-          value={colorValue}
-          disabled={runsDisabled}
-          onLeaveTextEdit={exitTextEdit}
-          commit={setColor}
-        />
+        {!colorBound && (
+          <TextField
+            identity={runIdentity}
+            label="Text colour"
+            value={colorValue}
+            disabled={runsDisabled}
+            onLeaveTextEdit={exitTextEdit}
+            commit={setColor}
+          />
+        )}
         <ColorWell
           label="Text colour picker"
           testId="text-colour-picker"
@@ -436,6 +475,14 @@ function TextSection({
           textEdit={{ onLeave: exitTextEdit }}
           onOpen={openPicker}
           commit={pickColor}
+        />
+        <RowBinding
+          binder={{ tables, run: bindRun }}
+          nodes={texts}
+          bindingKey="text"
+          label="Text colour style"
+          testId="text-colour"
+          paint={color.state === 'one' ? color.value : null}
         />
       </Row>
       <Swatches
@@ -689,6 +736,216 @@ function EffectsSection({
           run={run}
         />
       ))}
+    </Section>
+  );
+}
+
+/** A pair of toggle buttons, one pressed per value (or none when mixed). */
+function Toggle<T extends string>({
+  label,
+  value,
+  options,
+  run,
+}: {
+  label: string;
+  value: Common<T>;
+  options: readonly Readonly<{ value: T; text: string; testId: string }>[];
+  run: (value: T) => void;
+}) {
+  return (
+    <span role="group" aria-label={label} style={{ display: 'inline-flex', gap: 2 }}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          data-testid={option.testId}
+          aria-pressed={value.state === 'one' && value.value === option.value}
+          onClick={() => run(option.value)}
+        >
+          {option.text}
+        </button>
+      ))}
+    </span>
+  );
+}
+
+/**
+ * V-34 section 6: the "Auto layout" section for a selection with frames: "+" when none has auto
+ * layout; otherwise direction, gap, padding, main and cross alignment and "−", "mixed" where the
+ * frames differ. Each edit is one `setLayout`.
+ */
+function AutoLayoutSection({
+  state,
+  keymap,
+  run,
+  execute,
+}: {
+  state: AutoLayoutState;
+  keymap: readonly KeyBinding[];
+  run: Run;
+  execute: (command: Command) => CommandResult;
+}) {
+  const identity = fieldIdentity(state.holders);
+  const frames = state.frames.map((node) => node.id);
+  if (state.holders.length === 0) {
+    return (
+      <Section legend="Auto layout">
+        <button
+          type="button"
+          data-testid="auto-layout-add"
+          title={withShortcut('Add auto layout', shortcutFor(keymap, 'addAutoLayout'))}
+          onClick={() => void runAddAutoLayout(execute, frames)}
+        >
+          + Auto layout
+        </button>
+      </Section>
+    );
+  }
+  const select = <T extends string>(
+    label: string,
+    testId: string,
+    value: Common<T>,
+    options: readonly T[],
+    patch: (value: T) => Partial<AutoLayout>,
+  ) => (
+    <select
+      aria-label={label}
+      data-testid={testId}
+      data-mixed={value.state === 'one' ? undefined : 'true'}
+      value={value.state === 'one' ? value.value : ''}
+      onChange={(event) =>
+        void run(layoutPatchCommand(state, patch(event.currentTarget.value as T)))
+      }
+    >
+      {value.state !== 'one' && (
+        <option value="" disabled>
+          mixed
+        </option>
+      )}
+      {options.map((option) => (
+        <option key={option} value={option}>
+          {ALIGN_LABELS[option] ?? option}
+        </option>
+      ))}
+    </select>
+  );
+  return (
+    <Section legend="Auto layout">
+      <Row>
+        <Toggle
+          label="Direction"
+          value={state.direction}
+          options={[
+            { value: 'horizontal', text: '→', testId: 'auto-layout-horizontal' },
+            { value: 'vertical', text: '↓', testId: 'auto-layout-vertical' },
+          ]}
+          run={(direction) => void run(layoutPatchCommand(state, { direction }))}
+        />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <span aria-hidden="true" style={{ opacity: 0.6 }}>
+            Gap
+          </span>
+          <TextField
+            identity={identity}
+            label="Gap"
+            value={commonText(state.gap)}
+            commit={(text) => {
+              const command = gapCommand(state, text);
+              return command !== null && run(command);
+            }}
+          />
+        </label>
+        <button
+          type="button"
+          data-testid="auto-layout-remove"
+          aria-label="Remove auto layout"
+          title={withShortcut('Remove auto layout', shortcutFor(keymap, 'removeAutoLayout'))}
+          onClick={() =>
+            void run({ type: 'removeAutoLayout', ids: state.holders.map((node) => node.id) })
+          }
+        >
+          −
+        </button>
+      </Row>
+      <Row>
+        {PADDING_SIDES.map((side, index) => (
+          <label key={side} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <span aria-hidden="true" style={{ opacity: 0.6 }}>
+              {side[0]!.toUpperCase()}
+            </span>
+            <TextField
+              identity={identity}
+              label={`Padding ${side}`}
+              value={commonText(state.padding[index]!)}
+              commit={(text) => {
+                const command = paddingCommand(state, index, text);
+                return command !== null && run(command);
+              }}
+            />
+          </label>
+        ))}
+      </Row>
+      <Row>
+        {select(
+          'Main alignment',
+          'auto-layout-primary',
+          state.primaryAlign,
+          PRIMARY_ALIGNS,
+          (primaryAlign) => ({ primaryAlign }),
+        )}
+        {select(
+          'Cross alignment',
+          'auto-layout-counter',
+          state.counterAlign,
+          COUNTER_ALIGNS,
+          (counterAlign) => ({ counterAlign }),
+        )}
+      </Row>
+    </Section>
+  );
+}
+
+/**
+ * V-34 section 6: the "Resizing" W and H selects (Fixed / Hug / Fill), Fill disabled for the
+ * nodes that count as fixed under it (groups, rotated nodes, zero-size paths).
+ */
+function ResizingSection({ state, run }: { state: ResizingState; run: Run }) {
+  return (
+    <Section legend="Resizing">
+      <Row>
+        {(['horizontal', 'vertical'] as const).map((axis) => {
+          const { value, choices } = state[axis];
+          return (
+            <select
+              key={axis}
+              aria-label={axis === 'horizontal' ? 'Width sizing' : 'Height sizing'}
+              data-testid={`resizing-${axis}`}
+              data-mixed={value.state === 'one' ? undefined : 'true'}
+              value={value.state === 'one' ? value.value : ''}
+              onChange={(event) =>
+                void run(
+                  sizingCommand(
+                    state.nodes,
+                    axis,
+                    event.currentTarget.value as 'fixed' | 'hug' | 'fill',
+                  ),
+                )
+              }
+            >
+              {value.state !== 'one' && (
+                <option value="" disabled>
+                  mixed
+                </option>
+              )}
+              {choices.map((choice) => (
+                <option key={choice.value} value={choice.value} disabled={!choice.enabled}>
+                  {`${axis === 'horizontal' ? 'W' : 'H'} ${SIZING_LABELS[choice.value]}`}
+                </option>
+              ))}
+            </select>
+          );
+        })}
+      </Row>
     </Section>
   );
 }
@@ -1196,6 +1453,11 @@ export function PropertySections() {
     setStatus(refusalText(result));
     return result.ok;
   };
+  const bindRun: BindRun = (command) => {
+    const result = execute(command);
+    setStatus(refusalText(result));
+    return result.ok ? { ok: true, ids: result.ids } : { ok: false, ids: [] };
+  };
   // M8-R4: a run field keeps the text edit selection while focused; leaving it for anything but
   // the canvas, another run field or the window (Alt+Tab keeps edit mode, as M6b-H2) exits.
   const exitTextEdit = () => {
@@ -1203,12 +1465,23 @@ export function PropertySections() {
       execute({ type: 'exitTextEdit' });
     }
   };
-  const constrained = constrainedNodes(document, nodes);
+  // V-34 section 6: children of auto-layout frames take no constraints.
+  const constrained = constrainedNodes(document, nodes).filter(
+    (node) => !inAutoLayout(document, node),
+  );
+  const laidOut = nodes.some((node) => inAutoLayout(document, node));
+  const autoLayout = autoLayoutSection(nodes);
+  const resizing = resizingSection(document, nodes);
   const texts = textNodes(nodes);
   const gridHolder = layoutGridTarget(nodes);
   return (
     <div style={{ fontSize: 13 }}>
-      <TransformSection nodes={nodes} target={transformTarget(nodes, handles, page)} run={run} />
+      <TransformSection
+        nodes={nodes}
+        target={transformTarget(nodes, handles, page)}
+        run={run}
+        laidOut={laidOut}
+      />
       <LayerSection nodes={nodes} run={run} />
       {lineNodes(nodes).length > 0 && <LineSection nodes={nodes} run={run} />}
       {constrained.length > 0 && (
@@ -1221,8 +1494,14 @@ export function PropertySections() {
           textEdit={textEdit}
           run={run}
           exitTextEdit={exitTextEdit}
+          document={document}
+          bindRun={bindRun}
         />
       )}
+      {autoLayout !== null && (
+        <AutoLayoutSection state={autoLayout} keymap={keymap} run={run} execute={execute} />
+      )}
+      {resizing !== null && <ResizingSection state={resizing} run={run} />}
       <EffectsSection document={document} nodes={nodes} run={run} />
       {gridHolder !== null && <LayoutGridSection node={gridHolder} run={run} />}
       <BooleanSection document={document} selection={selection} keymap={keymap} run={run} />

@@ -25,8 +25,16 @@ import { paste } from './clipboard.js';
 import { addEffect, removeEffect, setEffect } from './effect-commands.js';
 import { addFill, moveFill, removeFill, setFill } from './fill-commands.js';
 import { tableCommand } from './table-commands.js';
-import { Draft, fail, type Failure } from './draft.js';
 import { defaultBlendMode, paintFill } from './fills.js';
+import { hugSizing, inferAutoLayout } from './auto-layout.js';
+import {
+  addAutoLayoutToFrames,
+  allFrames,
+  removeAutoLayout,
+  setLayout,
+  withoutAutoLayout,
+} from './layout-commands.js';
+import { Draft, fail, withSizing, type Failure } from './draft.js';
 import { ExpansionCache, expansionFailure } from './expansion.js';
 import {
   freshId,
@@ -203,7 +211,7 @@ const PROPS: Readonly<Record<NodeV8['type'], readonly string[]>> = {
   // (section 5.1; its opacity any in `[0, 1]` since M4-U3, M4 contract, section 5).
   symbol: [...COMMON_PROPS, 'fill', 'fills', 'stroke', 'layoutGrids'],
   // V-37 contract, section 2.1: a set has a frame's props.
-  symbolSet: [...COMMON_PROPS, 'fill', 'fills', 'stroke', 'layoutGrids'],
+  symbolSet: [...COMMON_PROPS, 'fill', 'fills', 'stroke'],
   instance: COMMON_PROPS,
   // M6a contract, section 6.1: a text node takes the common props only; its own props are
   // `setTextProps`'s.
@@ -219,6 +227,21 @@ function childClipDepth(tree: TreeView, owner: string): number {
   const node = tree.node(owner);
   if (!isContainer(node)) return 0;
   return clipDepth(tree, owner) + (clipsChildren(node) ? 1 : 0);
+}
+
+/**
+ * Records every node of the subtree of `id` whose size differs from `base` as resized (V-34
+ * section 4.2), with its frame there.
+ */
+export function markResizedSubtree(draft: Draft, base: DocumentV8, id: string): void {
+  for (const member of subtree(draft, id)) {
+    const now = draft.node(member);
+    const old = Object.hasOwn(base.nodes, member) ? base.nodes[member] : undefined;
+    if (now === undefined || old === undefined) continue;
+    if (now.frame.width !== old.frame.width || now.frame.height !== old.frame.height) {
+      draft.markResized(member, old.frame);
+    }
+  }
 }
 
 /**
@@ -309,6 +332,10 @@ export function applyEdit(
         next.push(result.node);
       }
       const draft = new Draft(document);
+      // V-34 sections 4.1 and 4.2: the targets are placement candidates, and every node whose
+      // size this command changes (against the pre-gesture state in a gesture) is resized.
+      const sizeBase = context.resizeBase ?? document;
+      for (const node of next) draft.markPlaced(node.id);
       for (const node of next) {
         let before = draft.node(node.id)!.frame;
         draft.setChecked(node, true);
@@ -322,6 +349,7 @@ export function applyEdit(
         // A container's new size applies the resize rules to its descendants (section 4.4).
         resizeContainer(draft, node.id, before);
       }
+      for (const node of next) markResizedSubtree(draft, sizeBase, node.id);
       return success(finish(draft), draft, []);
     }
     case 'setNodeProps': {
@@ -385,6 +413,24 @@ export function applyEdit(
       return booleanNodes(document, command, context, custom, finish);
     case 'addEffect':
       return addEffect(document, command, context, custom, finish);
+    case 'setLayout':
+      return setLayout(document, command, context, custom, finish);
+    case 'removeAutoLayout':
+      return removeAutoLayout(document, command, context, custom, finish);
+    case 'addAutoLayout': {
+      const ids = uniqueIds(command.ids);
+      if (ids === null || ids.length === 0) return fail('editor.invalid-command', '/ids');
+      if (ids.some((id) => nodeOf(document, id) === undefined)) return fail('editor.unknown-node');
+      if (allFrames(document, ids)) {
+        return addAutoLayoutToFrames(
+          document,
+          ids.map((id) => document.nodes[id]!),
+          custom,
+          finish,
+        );
+      }
+      return group(document, { type: 'groupNodes', ids, kind: 'group' }, context, finish, true);
+    }
     case 'setEffect':
       return setEffect(document, command, context, custom, finish);
     case 'removeEffect':
@@ -588,10 +634,22 @@ export function refitGesture(
   touched: Iterable<string>,
   custom: CustomRules = NO_CUSTOM,
   expansions: ExpansionCache = new ExpansionCache((node) => custom.check(node)),
+  /** V-34 section 4.3: the gesture's placement targets and resizes, and the text layouter. */
+  marks: Readonly<{
+    placed?: Iterable<string>;
+    resized?: ReadonlyMap<string, Frame>;
+    layout?: TextLayouter | undefined;
+  }> = {},
 ): EditResult {
   const draft = new Draft(current);
   draft.adopt(touched);
-  const document = draft.finish((node) => custom.check(node), { refit: true, placementBase: base });
+  const document = draft.finish((node) => custom.check(node), {
+    refit: true,
+    placementBase: base,
+    placed: marks.placed,
+    resized: marks.resized,
+    layout: marks.layout,
+  });
   if ('ok' in document) return document;
   // The refit can change a group inside a source, so the expansions are checked again.
   const expansion = expansionFailure(document, expansions);
@@ -647,6 +705,7 @@ export function applyGestureEdit(
       }
     }
     for (const id of edit.ids) mapNodeInPageSpace(draft, id, edit.map);
+    for (const id of edit.ids) markResizedSubtree(draft, base, id);
   } else if (edit.kind === 'mirror') {
     const ids = edit.frames.map((entry) => entry.id);
     if (ids.some((id) => nodeOf(document, id) === undefined)) return fail('editor.unknown-node');
@@ -1219,7 +1278,8 @@ function createSymbol(
   const only = document.nodes[ids[0]!]!;
   if (ids.length === 1 && only.type === 'frame') {
     const draft = new Draft(document);
-    draft.set({ ...only, type: 'symbol' });
+    // V-34 section 4.2 (V34-Q2): a symbol carries no auto layout.
+    draft.set({ ...withoutAutoLayout(only), type: 'symbol' } as NodeV8);
     const result = success(finish(draft), draft, []);
     return result.ok ? { ...result, ids: [only.id] } : result;
   }
@@ -1237,6 +1297,8 @@ function group(
   command: Extract<DocumentCommand, { type: 'groupNodes' }>,
   context: EditContext,
   finish: (draft: Draft) => DocumentV8 | Failure,
+  /** V-34 section 5, rule 2: wrap the nodes in a new auto-layout frame instead. */
+  wrap = false,
 ): EditResult {
   const ids = uniqueIds(command.ids);
   if (ids === null) return fail('editor.invalid-command', '/ids');
@@ -1253,11 +1315,12 @@ function group(
   // Every check runs with a placeholder ID first, so a failed command draws no ID; the result
   // does not depend on the ID, so the build with the drawn one passes too.
   const placeholder = placeholderId(document);
-  const trial = buildGroup(document, command.kind, ids, owner, placeholder, finish);
+  const kind = wrap ? 'autoLayoutFrame' : command.kind;
+  const trial = buildGroup(document, kind, ids, owner, placeholder, finish);
   if (!trial.ok) return relativeToNew(trial, nodePath(placeholder));
   const id = freshId(document, context.ids);
   if (id === null) return fail('editor.duplicate-id');
-  return buildGroup(document, command.kind, ids, owner, id, finish);
+  return buildGroup(document, kind, ids, owner, id, finish);
 }
 
 /** A failure inside the new container is reported relative to it, as for creation commands. */
@@ -1282,7 +1345,7 @@ function placeholderId(document: DocumentV8): string {
 
 function buildGroup(
   document: DocumentV8,
-  kind: 'group' | 'maskGroup' | 'symbol',
+  kind: 'group' | 'maskGroup' | 'symbol' | 'autoLayoutFrame',
   ids: readonly string[],
   owner: string,
   id: string,
@@ -1318,10 +1381,28 @@ function buildGroup(
     blendMode: 'passThrough' as const,
   };
   // A source wraps the nodes as a group does, with no fill or stroke (M7 contract, section 5.1).
-  const container: NodeV8 =
+  let container: NodeV8 =
     kind === 'symbol'
       ? { ...shared, name: 'Symbol', type: 'symbol', fills: [], stroke: null }
-      : { ...shared, name: kind === 'group' ? 'Group' : 'Mask group', type: kind };
+      : kind === 'autoLayoutFrame'
+        ? { ...shared, name: 'Frame', type: 'frame', fills: [], stroke: null }
+        : { ...shared, name: kind === 'group' ? 'Group' : 'Mask group', type: kind };
+  if (kind === 'autoLayoutFrame') {
+    // V-34 section 5, rule 2: the inferred layout with padding 0, members re-sorted.
+    const boxes = nodes.map((node) => {
+      const b = rotatedBounds(node);
+      return { ...b, x: b.x - minX, y: b.y - minY };
+    });
+    const { layout, order } = inferAutoLayout(boxes, maxX - minX, maxY - minY, true);
+    container = withSizing(
+      {
+        ...container,
+        children: order.map((i) => members[i]!),
+        autoLayout: layout,
+      } as unknown as NodeV8,
+      hugSizing(container),
+    );
+  }
   const draft = new Draft(document);
   draft.set(container);
   for (const node of nodes) {

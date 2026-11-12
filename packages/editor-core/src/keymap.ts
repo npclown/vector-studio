@@ -58,6 +58,9 @@ export const BUILTIN_ACTIONS: ReadonlySet<string> = new Set([
   // V-38 contract, V38-C4.
   'toggleRulers',
   'toggleLayoutGrids',
+  // V-34 contract, section 5.
+  'addAutoLayout',
+  'removeAutoLayout',
 ]);
 
 /**
@@ -88,6 +91,8 @@ export const DEFAULT_KEYMAP: readonly KeyBinding[] = deepFreeze([
   { chord: 'Mod+Alt+S', action: 'boolean', args: { op: 'subtract' } },
   { chord: 'Mod+Alt+I', action: 'boolean', args: { op: 'intersect' } },
   { chord: 'Mod+Alt+X', action: 'boolean', args: { op: 'exclude' } },
+  { chord: 'Shift+A', action: 'addAutoLayout' },
+  { chord: 'Shift+Alt+A', action: 'removeAutoLayout' },
   { chord: 'Mod+D', action: 'duplicate' },
   { chord: 'Mod+Shift+L', action: 'toggleLocked' },
   { chord: 'Mod+Shift+H', action: 'toggleVisible' },
