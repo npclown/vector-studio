@@ -73,6 +73,8 @@ export function composeHost(options: HostCompositionOptions): HostComposition {
       // V-32 (V32-S4, V32-H1): image fills reach the renderer, which runs on `paints: 'image'`
       // with the host's image source (src/webgpu-renderer.ts).
       projectImages: true,
+      // V-35 (V35-P4, V35-K2): blend modes reach the renderer, which runs on `blend: 'v0'`.
+      projectBlend: true,
       ...(options.drawStrokeColor === undefined
         ? {}
         : { drawStrokeColor: options.drawStrokeColor }),

@@ -27,6 +27,7 @@ import type {
   Frame,
   JsonValue,
   ModelErrorCode,
+  NodeOverride,
   NodeV8,
   PageV2,
   Paint,
@@ -507,6 +508,29 @@ export type DocumentCommand =
   | Readonly<{ type: 'setInstanceText'; id: string; node: string; runs: readonly TextRun[] }>
   /** Removes the text override of `node` in instance `id`, or every one without `node`. */
   | Readonly<{ type: 'clearInstanceText'; id: string; node?: string }>
+  // Variant and override commands (V-37 contract, sections 4.1 and 4.2).
+  /**
+   * Moves two or more sibling symbols of the active page, none in a set, into a new
+   * `symbolSet`, each with `variant { 'Property 1': <value from its name> }`. Returns the set's ID.
+   */
+  | Readonly<{ type: 'combineAsVariants'; ids: readonly string[] }>
+  /** Replaces the `variant` of each listed symbol of a set in one step; returns empty `ids`. */
+  | Readonly<{
+      type: 'setVariantProperties';
+      updates: readonly Readonly<{ id: string; variant: Readonly<Record<string, string>> }>[];
+    }>
+  /**
+   * Makes instance `id` refer to the variant of its set that has its current variant's values
+   * with `values` applied; overrides carry by layer path. Returns empty `ids`.
+   */
+  | Readonly<{ type: 'setInstanceVariant'; id: string; values: Readonly<Record<string, string>> }>
+  /**
+   * Sets property overrides of the source node `node` (the source itself included) inside
+   * instance `id`; a value equal to the source node's removes that field. Returns empty `ids`.
+   */
+  | Readonly<{ type: 'setInstanceOverride'; id: string; node: string; props: NodeOverride }>
+  /** Removes the property and text overrides of `node` in instance `id`, or every one. */
+  | Readonly<{ type: 'resetInstanceOverrides'; id: string; node?: string }>
   /**
    * Rotates by `angle` (radians, clockwise) about the page point `pivot`, by default the centre
    * of the `handles` box (MVP M2 contract, section 4.1). A relative command: inside a gesture it
@@ -879,7 +903,11 @@ export type EditorErrorCode =
   // the image table over its limit; `setImageFill` or `setImagePaint` with no target node.
   | 'editor.image-invalid'
   | 'editor.image-too-large'
-  | 'editor.image-no-target';
+  | 'editor.image-no-target'
+  // V-37 contract, section 6.4.
+  | 'editor.invalid-variant'
+  | 'editor.no-such-variant'
+  | 'editor.invalid-override';
 
 /**
  * `consumed` is present on `input` results only (M2-I3): whether navigation, the tool or a key
@@ -1004,7 +1032,18 @@ export type Query =
    * `projectEffects: 'v1'`, else E41's drop shadow and layer blur. Frozen; it raises no event and
    * is the same value for the editor's lifetime.
    */
-  | Readonly<{ type: 'effectKinds' }>;
+  | Readonly<{ type: 'effectKinds' }>
+  /**
+
+   * The deepest visible source node of the instance `id` under `point` (page space), or null
+   * (V-37 section 6.3).
+   */
+  | Readonly<{ type: 'instanceLayerAt'; id: string; point: PagePoint }>
+  /**
+   * The page-space corners of the rotated frame of source node `node` as the expansion of
+   * instance `id` places it, or null (V-37 section 6.3).
+   */
+  | Readonly<{ type: 'instanceLayerCorners'; id: string; node: string }>;
 
 /**
  * What one registered extension contributes (MVP M8 contract, M8-X1), as the `extensions` query
@@ -1142,7 +1181,11 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'commi
                                                   ? Color | null
                                                   : Q extends { type: 'effectKinds' }
                                                     ? readonly Effect['kind'][]
-                                                    : number;
+                                                    : Q extends { type: 'instanceLayerAt' }
+                                                      ? string | null
+                                                      : Q extends { type: 'instanceLayerCorners' }
+                                                        ? readonly PagePoint[] | null
+                                                        : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';

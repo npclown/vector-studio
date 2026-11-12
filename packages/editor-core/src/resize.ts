@@ -186,7 +186,7 @@ export function mirrorContent(tree: WritableTree, id: string, mx: boolean, my: b
       // A frame child keeps its mirrored layout under later resizes: `start` and `end` swap
       // on each mirrored axis.
       const reflected = tree.node(child);
-      if (isFrameLike(node) && reflected !== undefined) {
+      if (isFrameLike(node) && node.type !== 'symbolSet' && reflected !== undefined) {
         const { horizontal, vertical } = reflected.constraints;
         const constraints = {
           horizontal: mx ? swapEnds(horizontal) : horizontal,
@@ -259,6 +259,9 @@ export function reflectNode(
   const one = fx !== fy;
   const rotation = one ? normalizeRotation(2 * psi - node.rotation) : node.rotation;
   tree.set({ ...node, frame, rotation });
+  // A variant is only placed by its set's flip: its content (and so every instance of it) is not
+  // mirrored (V-37 contract, section 2.1).
+  if (node.type === 'symbol' && tree.node(node.parent)?.type === 'symbolSet') return;
   if (one) mirrorContent(tree, id, fx, fy);
   else mirrorContent(tree, id, true, true);
 }
@@ -462,6 +465,8 @@ export function applyConstraints(
 ): void {
   const frame = tree.node(frameId);
   if (!isFrameLike(frame)) return;
+  // A set applies no constraints: resizing one resizes no variant (V-37 contract, section 2.1).
+  if (frame.type === 'symbolSet') return;
   if (tree.layoutAware === true && (frame as { autoLayout?: unknown }).autoLayout !== undefined) {
     return;
   }

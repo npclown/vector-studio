@@ -58,6 +58,7 @@ describe('V32-H1 webgpu-host editor options', () => {
       groups: 'isolated',
       text: 'atlas',
       effects: 'v1',
+      blend: 'v0',
       glyphRaster: raster,
     });
     const source = createImageSource(() => ({}));

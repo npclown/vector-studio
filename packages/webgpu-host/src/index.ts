@@ -26,7 +26,10 @@ export type EditorGlyphRaster = NonNullable<PrimitiveRendererServiceOptions['gly
 /** The service options the editor needs, without the fill and stroke mesh ports. */
 export type EditorRendererOptions = Readonly<
   Required<
-    Pick<PrimitiveRendererServiceOptions, 'clips' | 'paints' | 'groups' | 'text' | 'effects'>
+    Pick<
+      PrimitiveRendererServiceOptions,
+      'clips' | 'paints' | 'groups' | 'text' | 'effects' | 'blend'
+    >
   > & {
     glyphRaster: EditorGlyphRaster;
     /** V-32 (V32-H1): present with `paints: 'image'`, which needs it. */
@@ -41,7 +44,11 @@ export type EditorRendererOptions = Readonly<
  * editor's projected scene draws instead of being isolated as `editor.renderer-unsupported`. A
  * renderer on 'v1' draws E41's kinds exactly as on 'v0' (V36-A05) and scenes without effects
  * exactly as on 'none' (E41-A06), so an editor that projects fewer kinds
- * (`EditorOptions.projectEffects` `true` or off) draws as before. With an `imageSource` (V-32,
+ * (`EditorOptions.projectEffects` `true` or off) draws as before. `blend: 'v0'` (V-35, V35-K2)
+ * draws node and fill blend modes; a scene without one draws exactly as on 'none' (V35-A06), and
+ * a backend that cannot create the blend pipeline reports `blendPipelineAvailable` false and
+ * falls back by itself (V35-K7), so an editor that does not project blend modes
+ * (`EditorOptions.projectBlend` off) draws as before. With an `imageSource` (V-32,
  * V32-H1: `createImageSource` of `@vector-studio/react`) the paints are `'image'`, gradients and
  * image fills, which an editor created with `projectImages: true` projects; a scene without image
  * paints draws exactly as on 'gradient' (V32-A09).
@@ -57,6 +64,7 @@ export function editorRendererOptions(
     groups: 'isolated',
     text: 'atlas',
     effects: 'v1',
+    blend: 'v0',
     glyphRaster,
   };
 }

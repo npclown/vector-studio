@@ -48,6 +48,7 @@ const FILL_TYPES: ReadonlySet<NodeV8['type']> = new Set([
   'custom',
   'frame',
   'symbol',
+  'symbolSet',
 ]);
 const STROKE_TYPES: ReadonlySet<NodeV8['type']> = new Set([...FILL_TYPES, 'line']);
 

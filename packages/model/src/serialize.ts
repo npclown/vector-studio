@@ -12,9 +12,11 @@ import type {
   LayoutGrid,
   LayoutFields,
   NodeV6,
+  NodeOverride,
   NodeV8,
   Paint,
   Stroke,
+  SymbolSetNodeV6,
   TextRun,
 } from './types.js';
 
@@ -197,7 +199,8 @@ function nodeV8(value: NodeV8): Ordered {
     }
     node.bindings = bindings;
   }
-  return node;
+  // V-37: a symbol's `variant` or an instance's `overrides`, last among the keys.
+  return { ...node, ...optionalFields(value) };
 }
 
 /** V39-S7: `modes` (`id`, `name`), `mode`, `items` (`id`, `name`, `type`, `values`). */
@@ -238,7 +241,43 @@ function layoutGrid(value: LayoutGrid): Ordered {
   };
 }
 
-function nodeV6(value: NodeV6): Ordered {
+/** A symbol's `variant` and an instance's non-empty `overrides` (V-37), in code unit order. */
+function optionalFields(value: NodeV8): Ordered {
+  if (value.type === 'symbol' && value.variant !== undefined) {
+    const variant = value.variant;
+    return {
+      variant: Object.fromEntries(
+        Object.keys(variant)
+          .sort(compareCodeUnits)
+          .map((name) => [name, variant[name]]),
+      ),
+    };
+  }
+  if (value.type === 'instance' && value.overrides !== undefined) {
+    const overrides = value.overrides;
+    const keys = Object.keys(overrides);
+    if (keys.length === 0) return {};
+    return {
+      overrides: Object.fromEntries(
+        keys.sort(compareCodeUnits).map((key) => [key, override(overrides[key]!)]),
+      ),
+    };
+  }
+  return {};
+}
+
+/** V37-S3 field order: `fills, stroke, opacity, visible, effects`. */
+function override(value: NodeOverride): Ordered {
+  return {
+    ...(value.fills !== undefined && { fills: value.fills.map(fill) }),
+    ...(value.stroke !== undefined && { stroke: nullable(value.stroke, stroke) }),
+    ...(value.opacity !== undefined && { opacity: value.opacity }),
+    ...(value.visible !== undefined && { visible: value.visible }),
+    ...(value.effects !== undefined && { effects: value.effects.map(effect) }),
+  };
+}
+
+function nodeV6(value: NodeV6 | SymbolSetNodeV6): Ordered {
   const base = {
     id: value.id,
     name: value.name,
@@ -283,6 +322,7 @@ function nodeV6(value: NodeV6): Ordered {
       return { ...base, children: [...value.children] };
     case 'frame':
     case 'symbol':
+    case 'symbolSet':
       return {
         ...base,
         children: [...value.children],

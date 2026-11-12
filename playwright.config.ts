@@ -6,6 +6,8 @@ process.env.P1_RUNNER_COMMAND ??= JSON.stringify([process.execPath, ...process.a
 
 export default defineConfig({
   testDir: './tests/browser',
+  // The next-host specs run in their own configs (playwright.v35-studio.config.ts).
+  testIgnore: 'v35-next-host.spec.ts',
   outputDir: './test-results/browser',
   fullyParallel: false,
   workers: 1,

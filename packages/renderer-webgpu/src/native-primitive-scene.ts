@@ -31,6 +31,7 @@ import {
   E41_LAYER_REACH_MAX,
   E41_SIGMA_PX_MAX,
   maskTileSet,
+  planBackdropSplits,
 } from '@vector-studio/renderer-core';
 import {
   CLIP_BINDINGS,
@@ -167,6 +168,30 @@ import {
   effectCompositeClipKey,
   effectCompositeClipShiftedKey,
 } from './effect-composite-pipeline.js';
+import {
+  BACKDROP_SNAPSHOT_BINDINGS,
+  BACKDROP_SNAPSHOT_RECORD_SIZE,
+  backdropRect,
+  backdropSnapshotPipelineKey,
+  backdropSnapshotShader,
+  createBackdropSnapshotBindGroupLayoutDescriptor,
+  createBackdropSnapshotPipelineDescriptor,
+  packBackdropSnapshotRecord,
+  snapshotBackdrop,
+  type BackdropParent,
+  type BackdropSnapshot,
+} from './backdrop-pipeline.js';
+import {
+  BLEND_COMPOSITE_BINDINGS,
+  BLEND_COMPOSITE_VARIANTS,
+  BLEND_MODE_INDEX,
+  blendCompositePipelineKey,
+  blendCompositeVariantSource,
+  createBlendCompositeBindGroupLayoutDescriptor,
+  createBlendCompositePipelineDescriptor,
+  packBlendCompositeRecord,
+  type BlendCompositeVariant,
+} from './blend-composite-pipeline.js';
 import {
   PRIMITIVE_FRAME_SIZE,
   PRIMITIVE_GEOMETRY_STRIDE,
@@ -429,6 +454,21 @@ interface EffectPipelineState {
 }
 
 /**
+ * V-35 contract, V35-K4 and K5: the backdrop snapshot pipeline (reading attachments of the
+ * scene's sample count) and the blend composite variants. The clip variants exist with the clip
+ * variants, the shifted ones with the effect pipeline (passes inside an effect root's `L`).
+ */
+interface BlendPipelineState {
+  readonly snapshotBindGroupLayout: GPUBindGroupLayout;
+  readonly snapshot: GPURenderPipeline;
+  readonly compositeBindGroupLayout: GPUBindGroupLayout;
+  readonly plain: GPURenderPipeline;
+  readonly clip: GPURenderPipeline | null;
+  readonly shifted: GPURenderPipeline | null;
+  readonly clipShifted: GPURenderPipeline | null;
+}
+
+/**
  * E41 U5b: the pipelines a layer tile pass draws with. E25's set maps the tile through a
  * target-sized viewport (the base analytic and stencil pipelines, with group 0 only, draw there
  * too); the shifted set maps the tile through its vertex stages (shifted-layer-pipeline.ts), so
@@ -461,6 +501,9 @@ type LayerDrawPipelines = Readonly<
     textClip: GPURenderPipeline | null;
     /** E41 U5c: the effect composite's clip variant for this set's passes, or null. */
     compositeClip: GPURenderPipeline | null;
+    /** V35-K5: the blend composite and its clip variant for this set's passes, or null. */
+    blendComposite?: GPURenderPipeline | null;
+    blendCompositeClip?: GPURenderPipeline | null;
     /**
      * Whether the plain analytic and stencil pipelines have groups 1 to 3 (the shifted set):
      * the empty groups are then bound before them.
@@ -744,7 +787,25 @@ type ValidatedLayers = Readonly<{
   effects: readonly (LayerEffectFrame | null)[];
   /** E41 U5: the scratch pairs' sizes, in slot order; empty without passes that use them. */
   scratch: readonly Readonly<{ width: number; height: number }>[];
+  /**
+   * V35-K4, K5: per layer, its blend frame (the snapshot's rectangle) when it composites with
+   * its mode, else null (source-over).
+   */
+  blends: readonly (LayerBlendFrame | null)[];
+  /** V35-K4: the splits, keyed by pass (`-1` main, else `layer:tile`), then by blend root. */
+  splits: ReadonlyMap<string, ReadonlyMap<number, BlendSplitFrame>>;
 }> | null;
+
+/** V35-K4: a blend root's snapshot in a frame, in device pixels. */
+type LayerBlendFrame = Readonly<{ snapshot: DeviceRect; margin: number }>;
+
+/** V35-K4: one split: the composite's rectangle in its pass, and its snapshot record. */
+type BlendSplitFrame = Readonly<{ rect: DeviceRect; record: number }>;
+
+/** V35-K4: the key of a pass that may split: the main pass, or a layer's tile pass. */
+function splitKey(layer: number, tile: number): string {
+  return layer === -1 ? '-1' : `${layer}:${tile}`;
+}
 
 /**
  * E41 U5: an effect root's passes in a frame. `result` is `R`'s bound (the output bound inside
@@ -777,6 +838,10 @@ type LayerFrame = Readonly<{
   textures: readonly GPUTexture[];
   /** E41 U5: layers without a composite (an effect root whose `R` is empty). */
   skipped: ReadonlySet<number>;
+  /** V35-K4: per layer, its backdrop snapshot when it composites with its mode, else null. */
+  snapshots: readonly (BackdropSnapshot | null)[];
+  /** V35-K4: the layer records buffer, which the snapshot records sit in. */
+  records: GPUBuffer;
 }>;
 
 type MaskSourceDraw = Readonly<{ instance: number; firstTriangle: number; triangleCount: number }> &
@@ -1066,6 +1131,26 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   /** @internal Tests only (E41-A05): effect roots composite `L`, without their effects. */
   readonly #effectContentForTesting: boolean;
   #effectPasses = 0;
+  /** V35-K7: true when the backdrop snapshot and blend composite pipelines exist. */
+  readonly blendPipelineAvailable: boolean;
+  readonly #blend: BlendPipelineState | null;
+  /** V35-K8: backdrop splits so far (one per end-and-resume of a pass around a snapshot). */
+  #blendSplits = 0;
+  /** V35-K8: the splits encoded in the frame being built, added at its submission. */
+  #frameSplits = 0;
+  /** @internal Tests only (V35-A05): blend composite draws per variant, submitted so far. */
+  #blendCompositeDraws: Record<BlendCompositeVariant, number> = {
+    plain: 0,
+    clip: 0,
+    shifted: 0,
+    'clip-shifted': 0,
+  };
+  #frameBlendCompositeDraws: Record<BlendCompositeVariant, number> = {
+    plain: 0,
+    clip: 0,
+    shifted: 0,
+    'clip-shifted': 0,
+  };
   #backgroundBlurSkipped = 0;
   readonly textPipelineAvailable: boolean;
   readonly #text: TextPipelineState | null;
@@ -1128,7 +1213,10 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     text: TextPipelineState | null = null,
     effect: EffectPipelineState | null = null,
     effectContentForTesting = false,
+    blend: BlendPipelineState | null = null,
   ) {
+    this.#blend = blend;
+    this.blendPipelineAvailable = blend !== null;
     this.#effect = effect;
     this.effectPipelineAvailable = effect !== null;
     this.#effectContentForTesting = effectContentForTesting;
@@ -1275,7 +1363,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         size: { width: target.width, height: target.height },
         sampleCount: this.sampleCount,
         format: this.#format,
-        usage: RENDER_ATTACHMENT_USAGE,
+        // V35-K4: under blend 'v0' the backdrop snapshot reads the attachment.
+        usage: RENDER_ATTACHMENT_USAGE | (this.#blend === null ? 0 : TEXTURE_BINDING_USAGE),
       });
     } catch (error) {
       if (stencil !== undefined) this.#discardStencilAttachment(stencil);
@@ -1484,6 +1573,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       if (clip !== null) {
         this.#encodeMaskPasses(encoder, clip, arena, meshArena, transients);
       }
+      this.#frameSplits = 0;
+      for (const variant of BLEND_COMPOSITE_VARIANTS) this.#frameBlendCompositeDraws[variant] = 0;
       // E25 section 4, Pass order: the layers in post-order, after the mask passes.
       const layerFrame =
         layers === null
@@ -1492,29 +1583,66 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
               part: textDrawable ? text!.part : null,
             });
       const stencilView = this.#stencilAttachment?.createView();
-      const pass = encoder.beginRenderPass({
-        label: 'vector-studio/primitive-pass',
-        colorAttachments: [
-          {
-            view: multisampleView ?? presentationView,
-            ...(multisampleView === undefined ? {} : { resolveTarget: presentationView }),
-            clearValue: { r: 0, g: 0, b: 0, a: 1 },
-            loadOp: 'clear',
-            storeOp: multisampleView === undefined ? 'store' : 'discard',
-          },
-        ],
-        // E17 contract, section 3: cleared to 0 each frame, not stored.
-        ...(stencilView === undefined
-          ? {}
-          : {
-              depthStencilAttachment: {
-                view: stencilView,
-                stencilClearValue: 0,
-                stencilLoadOp: 'clear',
-                stencilStoreOp: 'discard',
-              },
-            }),
-      });
+      // V35-K4: the main pass's splits. Each segment before the last stores colour and stencil
+      // (and resolves nothing); a resumed one loads them. Without splits the pass is encoded
+      // exactly as before (V35-A06).
+      const mainSplits = layerFrame === null ? undefined : layers!.splits.get('-1');
+      let remainingSplits = mainSplits?.size ?? 0;
+      const beginMain = (resume: boolean) => {
+        const last = remainingSplits === 0;
+        return encoder.beginRenderPass({
+          label: 'vector-studio/primitive-pass',
+          colorAttachments: [
+            {
+              view: multisampleView ?? presentationView,
+              ...(multisampleView === undefined || !last
+                ? {}
+                : { resolveTarget: presentationView }),
+              clearValue: { r: 0, g: 0, b: 0, a: 1 },
+              loadOp: resume ? 'load' : 'clear',
+              storeOp: multisampleView === undefined || !last ? 'store' : 'discard',
+            },
+          ],
+          // E17 contract, section 3: cleared to 0 each frame, not stored (V35-K4: stored and
+          // loaded again across a split).
+          ...(stencilView === undefined
+            ? {}
+            : {
+                depthStencilAttachment: {
+                  view: stencilView,
+                  stencilClearValue: 0,
+                  stencilLoadOp: resume ? 'load' : 'clear',
+                  stencilStoreOp: last ? 'discard' : 'store',
+                },
+              }),
+        });
+      };
+      let pass = beginMain(false);
+      const mainParent: BackdropParent | null =
+        mainSplits === undefined || this.#blend === null
+          ? null
+          : Object.freeze({
+              pipeline: this.#blend.snapshot,
+              bindGroup: this.#device.createBindGroup({
+                label: 'vector-studio/backdrop-main-parent',
+                layout: this.#blend.snapshotBindGroupLayout,
+                entries: [
+                  {
+                    binding: BACKDROP_SNAPSHOT_BINDINGS.parent,
+                    resource: multisampleView ?? presentationView,
+                  },
+                  {
+                    binding: BACKDROP_SNAPSHOT_BINDINGS.record,
+                    resource: {
+                      buffer: layerFrame!.records,
+                      offset: 0,
+                      size: BACKDROP_SNAPSHOT_RECORD_SIZE,
+                    },
+                  },
+                ],
+              }),
+              region: { x: 0, y: 0, width: this.#target.width, height: this.#target.height },
+            });
       // P4 contract, U3: a clipped draw uses its pipeline's clip variant, with the clip bind
       // group at its state's dynamic offset; a draw without a clip state is encoded exactly as
       // before. Without the clip variants a clipped draw is not drawn (fail closed).
@@ -1591,6 +1719,23 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           return;
         }
         if (slot.layer === null || layerFrame === null) return;
+        const planned = mainSplits?.get(slot.layer);
+        const snapshot = layerFrame.snapshots[slot.layer];
+        if (planned !== undefined && mainParent !== null && snapshot != null) {
+          // V35-K4: end the pass, copy the backdrop under the root's composite, resume.
+          pass.end();
+          remainingSplits -= 1;
+          this.#frameSplits += 1;
+          snapshotBackdrop(
+            encoder,
+            mainParent,
+            planned.rect,
+            0,
+            snapshot,
+            planned.record * layers!.stride,
+          );
+          pass = beginMain(true);
+        }
         const state = this.#encodeComposite(pass, layerFrame, slot.layer, 0, clip);
         bound = null;
         // -1 (nothing drawn) is no state, so the next clipped draw binds its group.
@@ -1763,6 +1908,13 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         pass.drawIndexed(6, draw.count, 0, 0, draw.first);
       });
       drawMeshesAt(packet.draws.length);
+      if (remainingSplits > 0) {
+        // A planned split did not run (its slot drew nothing): the attachment is still stored
+        // unresolved, so an empty last segment resolves it (V35-K4).
+        pass.end();
+        remainingSplits = 0;
+        pass = beginMain(true);
+      }
       pass.end();
       if (capture !== null) {
         // E10 contract, sections 4 and 5: in this encoder, after the main pass, so the copy is
@@ -1807,6 +1959,10 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       if (layers !== null) {
         this.#layerPasses += layers.layers.length;
         this.#effectPasses += layers.effects.filter((effect) => effect?.result != null).length;
+        this.#blendSplits += this.#frameSplits;
+        for (const variant of BLEND_COMPOSITE_VARIANTS) {
+          this.#blendCompositeDraws[variant] += this.#frameBlendCompositeDraws[variant];
+        }
         this.#backgroundBlurSkipped += layers.effects.filter(
           (effect) => effect?.result != null && effect.backgroundBlurSkipped === true,
         ).length;
@@ -2295,6 +2451,19 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   /** E41 U5: effect roots submitted with their effects this generation, one per root and frame. */
   public get effectPasses(): number {
     return this.#effectPasses;
+  }
+
+  /**
+   * V35-K8: backdrop splits submitted so far, one per end-and-resume of a pass around a
+   * snapshot, counted where the split is encoded.
+   */
+  public get blendSplits(): number {
+    return this.#blendSplits;
+  }
+
+  /** @internal Tests only (V35-A05): blend composite draws submitted so far, per variant. */
+  public blendCompositeDrawsForTesting(): Readonly<Record<BlendCompositeVariant, number>> {
+    return Object.freeze({ ...this.#blendCompositeDraws });
   }
 
   /**
@@ -2872,7 +3041,12 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     const alignment = this.#device.limits.minUniformBufferOffsetAlignment;
     if (typeof alignment !== 'number' || !isPowerOfTwo(alignment)) throw new AllocationError();
     const stride = align(
-      Math.max(LAYER_PASS_RECORD_SIZE, LAYER_COMPOSITE_RECORD_SIZE, EFFECT_PASS_RECORD_SIZE),
+      Math.max(
+        LAYER_PASS_RECORD_SIZE,
+        LAYER_COMPOSITE_RECORD_SIZE,
+        EFFECT_PASS_RECORD_SIZE,
+        BACKDROP_SNAPSHOT_RECORD_SIZE,
+      ),
       alignment,
     );
     const passRecords: Uint8Array[] = [
@@ -2973,17 +3147,95 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       effect!.scratchSlot = slot;
     }
     for (const effect of effects) if (effect !== null) Object.freeze(effect);
-    const records = new Uint8Array(effectRecords * stride);
+    // V35-K4, K5: a blend root composites with its mode over its backdrop snapshot when the
+    // blend pipeline has the variant its pass and clip state need; otherwise (K7) it composites
+    // with source-over, as the packet's plan does when the backend sets no `blendLayers`.
+    const targetRect: DeviceRect = { x: 0, y: 0, width: target.width, height: target.height };
+    const blends = layers.map((layer, index): LayerBlendFrame | null => {
+      if (layer.blend === undefined && layer.backdrop === undefined) return null;
+      const margin = layer.backdrop?.margin;
+      if (
+        typeof layer.blend !== 'string' ||
+        !Object.hasOwn(BLEND_MODE_INDEX, layer.blend) ||
+        typeof margin !== 'number' ||
+        !Number.isSafeInteger(margin) ||
+        margin < 0
+      ) {
+        throw new Error('Invalid blend.');
+      }
+      const blend = this.#blend;
+      if (blend === null) return null;
+      const parentShifted = layer.parent !== -1 && shifted[layer.parent]!;
+      const clipped = compositeStates[index] !== 0;
+      const pipeline = parentShifted
+        ? clipped
+          ? blend.clipShifted
+          : blend.shifted
+        : clipped
+          ? blend.clip
+          : blend.plain;
+      if (pipeline === null) return null;
+      const effect = effects[index];
+      if (effect !== null && effect !== undefined && effect.result === null) return null;
+      const composite = effect?.result ?? layer.bound;
+      const region = layer.parent === -1 ? targetRect : layers[layer.parent]!.bound;
+      // V35-K4: a margin is only offered over the main target; in a layer it is ignored.
+      const grown = layer.parent === -1 ? margin : 0;
+      const snapshot = backdropRect(composite, grown, region);
+      return snapshot === null ? null : Object.freeze({ snapshot, margin: grown });
+    });
+    const splitPlan = planBackdropSplits(
+      layers.map((layer, index) => ({
+        parent: layer.parent,
+        bound: layer.bound,
+        ...(effects[index]?.result == null ? {} : { composite: effects[index].result }),
+        ...(blends[index] === null ? {} : { backdrop: { margin: blends[index]!.margin } }),
+      })),
+      targetRect,
+      tileWidth,
+      tileHeight,
+    );
+    const splits = new Map<string, Map<number, BlendSplitFrame>>();
+    const splitRecords: Uint8Array[] = [];
+    for (const split of splitPlan) {
+      const layer = layers[split.layer]!;
+      const tile = split.tile === -1 ? null : tiles[layer.parent]![split.tile]!;
+      const region =
+        tile === null
+          ? targetRect
+          : {
+              x: layers[layer.parent]!.bound.x + tile.x,
+              y: layers[layer.parent]!.bound.y + tile.y,
+              width: tile.width,
+              height: tile.height,
+            };
+      const key = splitKey(tile === null ? -1 : layer.parent, split.tile);
+      let entry = splits.get(key);
+      if (entry === undefined) {
+        entry = new Map();
+        splits.set(key, entry);
+      }
+      entry.set(
+        split.layer,
+        Object.freeze({ rect: split.rect, record: effectRecords + splitRecords.length }),
+      );
+      splitRecords.push(packBackdropSnapshotRecord(blends[split.layer]!.snapshot, region));
+    }
+    const records = new Uint8Array((effectRecords + splitRecords.length) * stride);
     passRecords.forEach((bytes, index) => records.set(bytes, index * stride));
+    splitRecords.forEach((bytes, index) => records.set(bytes, (effectRecords + index) * stride));
     layers.forEach((layer, index) => {
       const effect = effects[index];
-      records.set(
+      const blend = blends[index];
+      const bound = effect?.result ?? layer.bound;
+      const alpha =
         effect === null || effect === undefined
-          ? packLayerCompositeRecord(layer.bound, layer.opacity)
-          : packLayerCompositeRecord(
-              effect.result ?? layer.bound,
-              layer.opacity * layer.effect!.contentOpacity,
-            ),
+          ? layer.opacity
+          : layer.opacity * layer.effect!.contentOpacity;
+      records.set(
+        blend === null || blend === undefined
+          ? packLayerCompositeRecord(bound, alpha)
+          : packBlendCompositeRecord(bound, alpha, layer.blend!, blend.snapshot),
         (compositeRecordBase + index) * stride,
       );
       effect?.plan.passes.forEach((pass, offset) => {
@@ -3007,6 +3259,10 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       compositeRecordBase,
       effects: Object.freeze(effects),
       scratch: Object.freeze(scratch.map((pair) => Object.freeze({ ...pair }))),
+      blends: Object.freeze(blends),
+      splits: Object.freeze(
+        new Map([...splits].map(([key, entry]) => [key, Object.freeze(entry)] as const)),
+      ),
     });
   }
 
@@ -3082,6 +3338,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       ),
     );
     const { tileWidth, tileHeight } = layers;
+    // V35-K4: under blend 'v0' a backdrop snapshot reads the tile colour attachment.
     const color = texture(
       'tile-color',
       tileWidth,
@@ -3089,7 +3346,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       this.#format,
       this.sampleCount,
       4,
-      this.sampleCount === 4 ? 0 : TEXTURE_COPY_SOURCE_USAGE,
+      (this.sampleCount === 4 ? 0 : TEXTURE_COPY_SOURCE_USAGE) |
+        (this.#blend === null ? 0 : TEXTURE_BINDING_USAGE),
     );
     const resolve =
       this.sampleCount === 4
@@ -3141,26 +3399,52 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         ),
       ),
     );
-    const compositeGroups = textures.map((layerTexture, index) =>
-      this.#device.createBindGroup({
+    // V35-K4: each blend root's backdrop snapshot, filled by its splits before its composite.
+    const snapshots = layers.blends.map((blend, index): BackdropSnapshot | null =>
+      blend === null
+        ? null
+        : Object.freeze({
+            texture: texture(
+              `backdrop-${index}`,
+              blend.snapshot.width,
+              blend.snapshot.height,
+              this.#format,
+              1,
+              4,
+              TEXTURE_BINDING_USAGE,
+            ),
+            origin: Object.freeze({ x: blend.snapshot.x, y: blend.snapshot.y }),
+          }),
+    );
+    const compositeGroups = textures.map((layerTexture, index) => {
+      const snapshot = snapshots[index];
+      const record = {
+        buffer: records,
+        offset: (layers.compositeRecordBase + index) * layers.stride,
+        size: LAYER_COMPOSITE_RECORD_SIZE,
+      };
+      const layerView = (results[index] ?? layerTexture).createView();
+      if (snapshot !== null && snapshot !== undefined) {
+        // V35-K5: `R`, the blend record and the backdrop snapshot.
+        return this.#device.createBindGroup({
+          label: `${prefix}/blend-composite-${index}`,
+          layout: this.#blend!.compositeBindGroupLayout,
+          entries: [
+            { binding: BLEND_COMPOSITE_BINDINGS.layer, resource: layerView },
+            { binding: BLEND_COMPOSITE_BINDINGS.record, resource: record },
+            { binding: BLEND_COMPOSITE_BINDINGS.backdrop, resource: snapshot.texture.createView() },
+          ],
+        });
+      }
+      return this.#device.createBindGroup({
         label: `${prefix}/composite-${index}`,
         layout: pipelines.compositeBindGroupLayout,
         entries: [
-          {
-            binding: LAYER_COMPOSITE_BINDINGS.layer,
-            resource: (results[index] ?? layerTexture).createView(),
-          },
-          {
-            binding: LAYER_COMPOSITE_BINDINGS.record,
-            resource: {
-              buffer: records,
-              offset: (layers.compositeRecordBase + index) * layers.stride,
-              size: LAYER_COMPOSITE_RECORD_SIZE,
-            },
-          },
+          { binding: LAYER_COMPOSITE_BINDINGS.layer, resource: layerView },
+          { binding: LAYER_COMPOSITE_BINDINGS.record, resource: record },
         ],
-      }),
-    );
+      });
+    });
     const skipped = new Set<number>();
     layers.effects.forEach((effect, index) => {
       if (effect !== null && effect.result === null) skipped.add(index);
@@ -3171,6 +3455,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       compositeStates: layers.compositeStates,
       textures,
       skipped,
+      snapshots: Object.freeze(snapshots),
+      records,
     });
     const effectGroups = new Map<GPUTexture, GPUBindGroup>();
     const effectGroup = (source: GPUTexture) => {
@@ -3199,63 +3485,138 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       text: this.#text?.layer ?? null,
       textClip: this.#text?.clipLayer ?? null,
       compositeClip: this.#effect?.compositeClip ?? null,
+      blendComposite: this.#blend?.plain ?? null,
+      blendCompositeClip: this.#blend?.clip ?? null,
       fullLayouts: false,
     });
+    const shiftedSet: LayerDrawPipelines | null =
+      this.#effect === null
+        ? null
+        : Object.freeze({
+            ...this.#effect.shifted,
+            blendComposite: this.#blend?.shifted ?? null,
+            blendCompositeClip: this.#blend?.clipShifted ?? null,
+          });
     const colorView = color.createView();
     const resolveView = resolve?.createView();
     const stencilView = stencil?.createView();
     const copySource = resolve ?? color;
+    // V35-K4: a snapshot in a tile pass reads the tile colour attachment.
+    const tileParent =
+      this.#blend === null || ![...layers.splits.keys()].some((key) => key !== '-1')
+        ? null
+        : this.#device.createBindGroup({
+            label: `${prefix}/backdrop-tile-parent`,
+            layout: this.#blend.snapshotBindGroupLayout,
+            entries: [
+              { binding: BACKDROP_SNAPSHOT_BINDINGS.parent, resource: colorView },
+              {
+                binding: BACKDROP_SNAPSHOT_BINDINGS.record,
+                resource: { buffer: records, offset: 0, size: BACKDROP_SNAPSHOT_RECORD_SIZE },
+              },
+            ],
+          });
     layers.layers.forEach((layer, index) => {
-      for (const tile of layers.tiles[index]!) {
-        const pass = encoder.beginRenderPass({
-          label: `vector-studio/layer-pass/${index}`,
-          colorAttachments: [
-            {
-              view: colorView,
-              ...(resolveView === undefined ? {} : { resolveTarget: resolveView }),
-              clearValue: { r: 0, g: 0, b: 0, a: 0 },
-              loadOp: 'clear',
-              storeOp: resolveView === undefined ? 'store' : 'discard',
-            },
-          ],
-          ...(stencilView === undefined
-            ? {}
-            : {
-                depthStencilAttachment: {
-                  view: stencilView,
-                  stencilClearValue: 0,
-                  stencilLoadOp: 'clear',
-                  stencilStoreOp: 'discard',
-                },
-              }),
-        });
+      layers.tiles[index]!.forEach((tile, tileIndex) => {
+        const tileSplits = layers.splits.get(splitKey(index, tileIndex));
+        // V35-K4: a pass ended before a snapshot stores colour and stencil (and resolves only
+        // at its last segment); a resumed one loads them. Without splits, as E25 encodes it.
+        let remaining = tileSplits?.size ?? 0;
+        const begin = (resume: boolean) => {
+          const last = remaining === 0;
+          const next = encoder.beginRenderPass({
+            label: `vector-studio/layer-pass/${index}`,
+            colorAttachments: [
+              {
+                view: colorView,
+                ...(resolveView === undefined || !last ? {} : { resolveTarget: resolveView }),
+                clearValue: { r: 0, g: 0, b: 0, a: 0 },
+                loadOp: resume ? 'load' : 'clear',
+                storeOp: resolveView === undefined || !last ? 'store' : 'discard',
+              },
+            ],
+            ...(stencilView === undefined
+              ? {}
+              : {
+                  depthStencilAttachment: {
+                    view: stencilView,
+                    stencilClearValue: 0,
+                    stencilLoadOp: resume ? 'load' : 'clear',
+                    stencilStoreOp: last ? 'discard' : 'store',
+                  },
+                }),
+          });
+          if (shiftedPass) next.setViewport(0, 0, tileWidth, tileHeight, 0, 1);
+          else {
+            next.setViewport(
+              -(layer.bound.x + tile.x),
+              -(layer.bound.y + tile.y),
+              target.width,
+              target.height,
+              0,
+              1,
+            );
+          }
+          return next;
+        };
         const shiftedPass = layers.shifted[index]!;
-        if (shiftedPass) pass.setViewport(0, 0, tileWidth, tileHeight, 0, 1);
-        else {
-          pass.setViewport(
-            -(layer.bound.x + tile.x),
-            -(layer.bound.y + tile.y),
-            target.width,
-            target.height,
-            0,
-            1,
-          );
-        }
-        const set = shiftedPass ? this.#effect!.shifted : e25;
+        let pass = begin(false);
+        const parent: BackdropParent | null =
+          tileParent === null
+            ? null
+            : Object.freeze({
+                pipeline: this.#blend!.snapshot,
+                bindGroup: tileParent,
+                region: {
+                  x: layer.bound.x + tile.x,
+                  y: layer.bound.y + tile.y,
+                  width: tile.width,
+                  height: tile.height,
+                },
+              });
+        const split =
+          tileSplits === undefined || parent === null
+            ? null
+            : (child: number) => {
+                const planned = tileSplits.get(child);
+                const snapshot = frame.snapshots[child];
+                if (planned === undefined || snapshot == null) return null;
+                pass.end();
+                remaining -= 1;
+                this.#frameSplits += 1;
+                snapshotBackdrop(
+                  encoder,
+                  parent,
+                  planned.rect,
+                  0,
+                  snapshot,
+                  planned.record * layers.stride,
+                );
+                pass = begin(true);
+                return pass;
+              };
+        const set = shiftedPass ? shiftedSet! : e25;
         this.#encodeLayerPassDraws(pass, frame, layers, index, tile.record * layers.stride, set, {
           arena,
           meshArena,
           clip,
           paint,
           textPart: text.part,
+          split,
         });
+        if (remaining > 0) {
+          // A planned split did not run: an empty last segment resolves the tile (V35-K4).
+          pass.end();
+          remaining = 0;
+          pass = begin(true);
+        }
         pass.end();
         encoder.copyTextureToTexture(
           { texture: copySource },
           { texture: textures[index]!, origin: { x: tile.x, y: tile.y } },
           { width: tile.width, height: tile.height },
         );
-      }
+      });
       // E41 U5: `L` is complete; build `R` before any later pass composites it.
       const effect = layers.effects[index];
       if (effect == null || effect.result === null) return;
@@ -3298,7 +3659,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
    * fail closed, as in the main pass, and E17's write-once references restart in each pass.
    */
   #encodeLayerPassDraws(
-    pass: GPURenderPassEncoder,
+    firstPass: GPURenderPassEncoder,
     frame: LayerFrame,
     layers: NonNullable<ValidatedLayers>,
     index: number,
@@ -3311,8 +3672,14 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       paint: ValidatedPaint;
       /** E28 U3: the frame's text part when its draws are encoded, otherwise null. */
       textPart: TextPacketPart | null;
+      /**
+       * V35-K4: ends the pass before a blend root's composite, takes its snapshot and returns
+       * the resumed pass; null when that root has no split in this pass.
+       */
+      split?: ((layer: number) => GPURenderPassEncoder | null) | null;
     }>,
   ): void {
+    let pass = firstPass;
     const pipelines = this.#layer!;
     const draws = layers.layers[index]!.draws;
     const stencilPipelines = set.stencil;
@@ -3378,6 +3745,12 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         return;
       }
       if (slot.layer === null) return;
+      const resumed = env.split?.(slot.layer) ?? null;
+      if (resumed !== null) {
+        // The resumed pass has no state: the layer group is bound again, the rest on demand.
+        pass = resumed;
+        pass.setBindGroup(LAYER_BIND_GROUP_INDEX, frame.passGroup, [passOffset]);
+      }
       const state = this.#encodeComposite(
         pass,
         frame,
@@ -3386,6 +3759,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         clip,
         set.composite,
         set.compositeClip,
+        set.blendComposite ?? null,
+        set.blendCompositeClip ?? null,
       );
       // Unknown after a composite: the next draw sets its pipeline and groups.
       pipeline = null;
@@ -3555,12 +3930,34 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     clip: ValidatedClip,
     composite: GPURenderPipeline = this.#layer!.composite,
     compositeClip: GPURenderPipeline | null = this.#effect?.compositeClip ?? null,
+    blendComposite: GPURenderPipeline | null = this.#blend?.plain ?? null,
+    blendCompositeClip: GPURenderPipeline | null = this.#blend?.clip ?? null,
   ): number {
     if (frame.skipped.has(layer)) return -1;
     const state = frame.compositeStates[layer] ?? 0;
-    if (state !== 0 && (compositeClip === null || clip === null)) return -1;
+    // V35-K5: a blend root with its snapshot draws through the blend composite (preflight
+    // checked that this pass and clip state have their variant).
+    const blended = frame.snapshots[layer] != null;
+    const plain = blended ? blendComposite : composite;
+    const clipped = blended ? blendCompositeClip : compositeClip;
+    if (plain === null || (state !== 0 && (clipped === null || clip === null))) return -1;
     const pipelines = this.#layer!;
-    pass.setPipeline(state === 0 ? composite : compositeClip!);
+    const chosen = state === 0 ? plain : clipped!;
+    if (blended && this.#blend !== null) {
+      const blend = this.#blend;
+      const variant: BlendCompositeVariant | null =
+        chosen === blend.plain
+          ? 'plain'
+          : chosen === blend.clip
+            ? 'clip'
+            : chosen === blend.shifted
+              ? 'shifted'
+              : chosen === blend.clipShifted
+                ? 'clip-shifted'
+                : null;
+      if (variant !== null) this.#frameBlendCompositeDraws[variant] += 1;
+    }
+    pass.setPipeline(chosen);
     pass.setBindGroup(0, frame.compositeGroups[layer]!);
     if (state === 0) pass.setBindGroup(CLIP_BIND_GROUP_INDEX, pipelines.emptyBindGroup);
     else {
@@ -6060,6 +6457,121 @@ export function createNativePrimitiveSceneCreation(
         effect = null;
       }
     }
+    // V-35 contract, V35-K4 and K5: the backdrop snapshot pipeline and the blend composite
+    // variants, created here like the effect pipelines and never on the frame path, and only
+    // with the layer pipeline (blend roots are layers). A failure leaves them unavailable: blend
+    // roots then draw as `normal` and isolating containers as `passThrough` (V35-K7).
+    let blend: BlendPipelineState | null = null;
+    if (options.blendPipeline === true && layer !== null && !disposed) {
+      const blendTracked: string[] = [];
+      const blendKeys: PipelineCacheKey[] = [];
+      const trackBlend = (id: string, descriptor: ResourceDescriptor) => {
+        track(id, descriptor);
+        blendTracked.push(id);
+      };
+      try {
+        const snapshotBindGroupLayout = device.createBindGroupLayout(
+          createBackdropSnapshotBindGroupLayoutDescriptor(sampleCount),
+        );
+        trackBlend(`${prefix}/backdrop-snapshot-bind-group-layout`, {
+          category: 'bind-group-layout',
+        });
+        const snapshotLayout = device.createPipelineLayout({
+          label: `${prefix}/backdrop-snapshot-pipeline-layout`,
+          bindGroupLayouts: [snapshotBindGroupLayout],
+        });
+        trackBlend(`${prefix}/backdrop-snapshot-pipeline-layout`, { category: 'pipeline-layout' });
+        const snapshotModule = device.createShaderModule({
+          label: `${prefix}/backdrop-snapshot-shader`,
+          code: backdropSnapshotShader(sampleCount),
+        });
+        trackBlend(`${prefix}/backdrop-snapshot-shader`, { category: 'shader-module' });
+        const snapshotKey = backdropSnapshotPipelineKey(format, sampleCount);
+        blendKeys.push(snapshotKey);
+        const snapshot = await pipelineCache.getOrCreate(snapshotKey, () =>
+          device.createRenderPipelineAsync(
+            createBackdropSnapshotPipelineDescriptor(
+              snapshotModule,
+              snapshotLayout,
+              format,
+              sampleCount,
+            ),
+          ),
+        );
+        trackBlend(`${prefix}/backdrop-snapshot-pipeline`, { category: 'render-pipeline' });
+        const compositeBindGroupLayout = device.createBindGroupLayout(
+          createBlendCompositeBindGroupLayoutDescriptor(),
+        );
+        trackBlend(`${prefix}/blend-composite-bind-group-layout`, {
+          category: 'bind-group-layout',
+        });
+        const created = new Map<BlendCompositeVariant, GPURenderPipeline>();
+        for (const variant of BLEND_COMPOSITE_VARIANTS) {
+          const clipped = variant === 'clip' || variant === 'clip-shifted';
+          const shifted = variant === 'shifted' || variant === 'clip-shifted';
+          if (clipped && clip === null) continue;
+          if (shifted && effect === null) continue;
+          const pipelineLayout = device.createPipelineLayout({
+            label: `${prefix}/blend-composite-${variant}-pipeline-layout`,
+            bindGroupLayouts: [
+              compositeBindGroupLayout,
+              clipped ? clip!.bindGroupLayout : layer.emptyLayout,
+              layer.emptyLayout,
+              layer.bindGroupLayout,
+            ],
+          });
+          trackBlend(`${prefix}/blend-composite-${variant}-pipeline-layout`, {
+            category: 'pipeline-layout',
+          });
+          const module = device.createShaderModule({
+            label: `${prefix}/blend-composite-${variant}-shader`,
+            code: blendCompositeVariantSource(variant),
+          });
+          trackBlend(`${prefix}/blend-composite-${variant}-shader`, {
+            category: 'shader-module',
+          });
+          const key = blendCompositePipelineKey(format, sampleCount, stencil, variant);
+          blendKeys.push(key);
+          const pipeline = await pipelineCache.getOrCreate(key, () =>
+            device.createRenderPipelineAsync(
+              createBlendCompositePipelineDescriptor(
+                module,
+                pipelineLayout,
+                format,
+                sampleCount,
+                stencil,
+                variant,
+              ),
+            ),
+          );
+          trackBlend(`${prefix}/blend-composite-${variant}-pipeline`, {
+            category: 'render-pipeline',
+          });
+          created.set(variant, pipeline);
+        }
+        blend = Object.freeze({
+          snapshotBindGroupLayout,
+          snapshot,
+          compositeBindGroupLayout,
+          plain: created.get('plain')!,
+          clip: created.get('clip') ?? null,
+          shifted: created.get('shifted') ?? null,
+          clipShifted: created.get('clip-shifted') ?? null,
+        });
+      } catch {
+        // The E22-K5 rule: no blend pipeline this attempt cached outlives the failure.
+        for (const key of blendKeys) pipelineCache.evict(key);
+        for (const id of blendTracked) {
+          tracked.delete(id);
+          try {
+            resources.release(id);
+          } catch {
+            // Accounting cleanup is best effort.
+          }
+        }
+        blend = null;
+      }
+    }
     if (disposed || vertexBuffer === undefined || indexBuffer === undefined) {
       throw new Error('Primitive scene creation completed after disposal.');
     }
@@ -6088,6 +6600,7 @@ export function createNativePrimitiveSceneCreation(
       text,
       effect,
       options.effectContentForTesting === true,
+      blend,
     );
     vertexBuffer = undefined;
     indexBuffer = undefined;

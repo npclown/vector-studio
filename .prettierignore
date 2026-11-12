@@ -79,6 +79,8 @@ tests/fixtures/m7-symbols/**/*.json
 tests/fixtures/m6-text/**/*.json
 # M4 appearance fixtures are canonical serializeDocument output or malformed text, compared byte-for-byte.
 tests/fixtures/m4-appearance/**/*.json
+# V-37 fixtures are canonical serializeDocument output or malformed text, compared byte-for-byte.
+tests/fixtures/v37-variants/**/*.json
 **/.next/**
 apps/next-host/next-env.d.ts
 

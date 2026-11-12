@@ -90,6 +90,7 @@ describe('AR-U1 webgpu-host entry', () => {
       groups: 'isolated',
       text: 'atlas',
       effects: 'v1',
+      blend: 'v0',
       glyphRaster: port,
     });
   });

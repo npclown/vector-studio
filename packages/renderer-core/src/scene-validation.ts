@@ -310,14 +310,26 @@ function hasUnsupportedClipGraph(
 }
 
 /**
- * E25-S2 with E41-S7: whether a node is an isolating node, a visible container with
- * 0 < opacity < 1, or a visible effect root of any kind (non-empty `effects`, opacity > 0). A
- * container counts toward its descendants' isolation depth; a leaf effect root draws one layer
- * of its own, so it may have at most SCENE_MAX_ISOLATION_DEPTH - 1 isolating proper ancestors.
+ * E25-S2 with E41-S7 and V35-K3: whether a node is an isolating node, a visible container with
+ * 0 < opacity < 1, a visible effect root of any kind (non-empty `effects`, opacity > 0), a
+ * visible blend root of any kind (mode outside `normal` and `passThrough`, opacity > 0) or a
+ * visible container with mode `normal` and opacity > 0 (an isolating container). A
+ * container counts toward its descendants' isolation depth; a leaf effect or blend root draws one
+ * layer of its own, so it may have at most SCENE_MAX_ISOLATION_DEPTH - 1 isolating proper ancestors.
  */
 export function isIsolating(node: RenderNodeSnapshot): boolean {
   if (!node.visible || !(node.opacity > 0)) return false;
   if (node.effects !== undefined && node.effects.length > 0) return true;
+  // V35-K3 (amending E25-S2): a blend root of any kind, and a container whose mode is `normal`
+  // (an isolating container, at any opacity above 0).
+  const mode = node.blendMode;
+  if (
+    mode !== undefined &&
+    mode !== 'passThrough' &&
+    (mode !== 'normal' || node.kind === 'container')
+  ) {
+    return true;
+  }
   return node.kind === 'container' && node.opacity < 1;
 }
 

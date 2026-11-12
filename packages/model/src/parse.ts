@@ -63,6 +63,8 @@ import type {
   Stroke,
   StrokeCap,
   StrokeJoin,
+  SymbolSetNodeV6,
+  NodeOverride,
   TextNode,
   TextOverride,
   TextRun,
@@ -85,6 +87,8 @@ export const DOCUMENT_ERROR_CODES = [
   'document.invalid-mask-source',
   // Schema v3 (MVP M7 contract, section 2).
   'document.invalid-symbol',
+  // Schema v8 (V-37 contract, section 2).
+  'document.invalid-variant',
 ] as const;
 
 export type DocumentErrorCode = (typeof DOCUMENT_ERROR_CODES)[number];
@@ -816,7 +820,9 @@ const NODE_KEYS_V2 = {
   // Schema v4 (M6a contract, section 2).
   text: [...BASE_KEYS_V2, 'runs', 'sizing', 'align', 'letterSpacing', 'lineHeight'],
 } as const;
-type NodeTypeKey = keyof typeof NODE_KEYS_V2;
+type NodeTypeKey = keyof typeof NODE_KEYS_V8;
+/** Schema v8 (V-37-S1): a set's keys are a frame's. */
+const NODE_KEYS_V8 = { ...NODE_KEYS_V2, symbolSet: NODE_KEYS_V2.frame } as const;
 /** Schema v5 (M6a contract, section 9, M7-T3): `textOverrides` follows `symbol`. */
 const INSTANCE_KEYS_V5 = [...NODE_KEYS_V2.instance, 'textOverrides'] as const;
 
@@ -872,6 +878,12 @@ type Schema = Readonly<{
    */
   layout?: 'read';
   /**
+   * A symbol's `variant` and an instance's `overrides` (V-37 contract, section 2), both optional:
+   * `none` before v8 (the keys are unknown), `added` when an older input is read into v8 (nothing
+   * is added, an absent field meaning none), `read` at v8 (V37-S2, S3).
+   */
+  variants: 'none' | 'added' | 'read';
+  /**
    * V-34's optional `autoLayout` and `layoutSizing` (contract, section 2; viz-schema-v8.md): read
    * only at v8 (`V8`). Every schema that reads an older input leaves it unset, so there the keys
    * are unknown and their default (absent: no auto layout, fixed sizing) is what the v8 result
@@ -885,7 +897,7 @@ type Schema = Readonly<{
   images?: 'read';
 }>;
 
-const V4_TYPES = Object.keys(NODE_KEYS_V2) as NodeTypeKey[];
+const V4_TYPES = Object.keys(NODE_KEYS_V2) as Exclude<NodeTypeKey, 'symbolSet'>[];
 const V3_TYPES = V4_TYPES.filter((type) => type !== 'text');
 const V2_TYPES = V3_TYPES.filter((type) => type !== 'symbol' && type !== 'instance');
 const OLDER = { containerOpacity: 'one' } as const;
@@ -896,12 +908,15 @@ const ADD_EFFECTS = {
   fills: 'added',
   locked: 'added',
 } as const;
+const NO_VARIANTS = { variants: 'none' } as const;
+const ADD_VARIANTS = { variants: 'added' } as const;
 const V2: Schema = {
   types: V2_TYPES,
   overrides: 'none',
   appearance: 'none',
   ...OLDER,
   ...NO_EFFECTS,
+  ...NO_VARIANTS,
 };
 const V3: Schema = { ...V2, types: V3_TYPES };
 const V4_TO_V5: Schema = { ...V2, types: V4_TYPES, overrides: 'added' };
@@ -911,6 +926,7 @@ const V5_TO_V6: Schema = {
   appearance: 'added',
   ...OLDER,
   ...NO_EFFECTS,
+  ...NO_VARIANTS,
 };
 const V2_TO_V7: Schema = {
   types: V2_TYPES,
@@ -918,6 +934,7 @@ const V2_TO_V7: Schema = {
   appearance: 'added',
   ...OLDER,
   ...ADD_EFFECTS,
+  ...ADD_VARIANTS,
 };
 const V3_TO_V7: Schema = { ...V2_TO_V7, types: V3_TYPES };
 const V4_TO_V7: Schema = { ...V2_TO_V7, types: V4_TYPES };
@@ -928,6 +945,7 @@ const V6_TO_V7: Schema = {
   appearance: 'read',
   containerOpacity: 'any',
   ...ADD_EFFECTS,
+  ...ADD_VARIANTS,
 };
 /** `migrateV6toV7` only: a v7 result keeps v6's `fill`. */
 const V6_TO_V7_ONLY: Schema = { ...V6_TO_V7, fills: 'none' };
@@ -942,11 +960,13 @@ const V7: Schema = { ...V6_TO_V7, effects: 'read' };
 const V7_TO_V8: Schema = { ...V7, fills: 'added', locked: 'added' };
 const V8: Schema = {
   ...V7,
+  types: [...V4_TYPES, 'symbolSet'],
   effectKinds: 'v8',
   fills: 'read',
   locked: 'read',
   layout: 'read',
   tables: 'read',
+  variants: 'read',
   autoLayout: 'read',
   images: 'read',
 };
@@ -1134,7 +1154,13 @@ function strokeReaders(schema: Schema): Readers {
 }
 
 function isContainerType(type: string): boolean {
-  return type === 'group' || type === 'maskGroup' || type === 'frame' || type === 'symbol';
+  return (
+    type === 'group' ||
+    type === 'maskGroup' ||
+    type === 'frame' ||
+    type === 'symbol' ||
+    type === 'symbolSet'
+  );
 }
 
 const SIZINGS: readonly TextNode['sizing'][] = ['autoWidth', 'autoHeight', 'fixed'];
@@ -1250,6 +1276,85 @@ function readOverrides(value: unknown, path: Path): Record<string, TextOverride>
   );
 }
 
+/** The most entries of one variant, and the most UTF-16 units of a name or a value (V37-S2). */
+const MAX_VARIANT_ENTRIES = 16;
+const MAX_VARIANT_TEXT = 64;
+
+/** A name or value of 1 to 64 units without a control or a lone surrogate (V37-S2). */
+function isVariantText(text: string): boolean {
+  if (text.length === 0 || text.length > MAX_VARIANT_TEXT) return false;
+  for (let i = 0; i < text.length; i += 1) if (isControl(text.charCodeAt(i))) return false;
+  return loneSurrogate(text) === -1;
+}
+
+/**
+ * V37-S2 for one set whose children are symbols: each has 1 to 16 valid entries (at `variant` or
+ * the entry), then every later child has the first child's names and values no earlier child
+ * has (`document.invalid-variant` at its `variant`).
+ */
+function readSetVariants(children: readonly string[], nodes: Record<string, NodeV8>): void {
+  const variantOf = (child: string) => {
+    const node = nodes[child]!;
+    return node.type === 'symbol' ? node.variant : undefined;
+  };
+  for (const child of children) {
+    const variant = variantOf(child);
+    const path = ['nodes', child, 'variant'];
+    if (variant === undefined) invalid(path);
+    const names = Object.keys(variant);
+    if (names.length < 1 || names.length > MAX_VARIANT_ENTRIES) invalid(path);
+    for (const name of names) {
+      if (!isVariantText(name) || name.includes('=') || name.includes(','))
+        invalid([...path, name]);
+      if (!isVariantText(variant[name]!)) invalid([...path, name]);
+    }
+  }
+  const first = variantOf(children[0]!)!;
+  const names = Object.keys(first);
+  const seen = new Set<string>();
+  children.forEach((child, index) => {
+    const variant = variantOf(child)!;
+    const own = Object.keys(variant);
+    if (
+      index > 0 &&
+      (own.length !== names.length || !names.every((name) => Object.hasOwn(variant, name)))
+    ) {
+      throw new Failure('document.invalid-variant', ['nodes', child, 'variant']);
+    }
+    const tuple = JSON.stringify(names.map((name) => variant[name]));
+    if (seen.has(tuple)) throw new Failure('document.invalid-variant', ['nodes', child, 'variant']);
+    seen.add(tuple);
+  });
+}
+
+/**
+ * V37-S3 for one instance: each key names a node of the source subtree, the source included
+ * (`document.invalid-symbol`, as M7-T3), and each field applies to it (`document.invalid-field`):
+ * `fills` and `stroke` to a node with that field, the rest to a descendant only.
+ */
+function readOverrideTargets(
+  key: string,
+  source: string,
+  overrides: Readonly<Record<string, NodeOverride>>,
+  nodes: Record<string, NodeV8>,
+  symbolAbove: ReadonlyMap<string, string>,
+): void {
+  for (const [name, override] of Object.entries(overrides)) {
+    const target = Object.hasOwn(nodes, name) ? nodes[name]! : undefined;
+    const isSource = name === source;
+    if (target === undefined || (!isSource && symbolAbove.get(name) !== source)) {
+      throw new Failure('document.invalid-symbol', ['nodes', key, 'overrides', name]);
+    }
+    for (const field of OVERRIDE_FIELDS) {
+      if (!Object.hasOwn(override, field)) continue;
+      const own = field === 'fills' || field === 'stroke';
+      if (own ? !(field in target) : isSource) {
+        throw new Failure('document.invalid-field', ['nodes', key, 'overrides', name, field]);
+      }
+    }
+  }
+}
+
 /**
  * One node of any schema from v2 on, read with `schema`; the result is a v6 node when
  * `schema.appearance` is not `none`, else typed by the caller's version.
@@ -1315,13 +1420,98 @@ function readNode(key: string, value: unknown, path: Path, schema: Schema): Node
     readBoolean(record.locked, [...path, 'locked'])
       ? { locked: true as const }
       : {};
-  const result = { ...withFills, blendMode, effects, ...lock };
+  // V-37: a symbol's `variant` or an instance's non-empty `overrides` (read at v8 only).
+  const optional = schema.variants === 'read' ? readOptional(node.type, record, path, schema) : {};
+  const result = { ...withFills, blendMode, effects, ...lock, ...optional };
   const bound = (hasBindings
     ? { ...result, bindings: readBindings(bindings, node.type, [...path, 'bindings']) }
     : result) as unknown as NodeV8;
   return layoutKeys
     ? readLayoutFields(bound, value as Record<string, unknown>, autoLayout, layoutSizing, path)
     : bound;
+}
+
+/** The optional fields of a v8 node: a symbol's `variant`, an instance's non-empty `overrides`. */
+function readOptional(
+  type: string,
+  value: Record<string, unknown>,
+  path: Path,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the schema is already v8 here
+  _schema: Schema,
+) {
+  if (type === 'symbol' && Object.hasOwn(value, 'variant')) {
+    return { variant: readVariant(value.variant, [...path, 'variant']) };
+  }
+  if (type === 'instance' && Object.hasOwn(value, 'overrides')) {
+    const overrides = readNodeOverrides(value.overrides, [...path, 'overrides']);
+    return Object.keys(overrides).length === 0 ? {} : { overrides };
+  }
+  return {};
+}
+
+function compareCodeUnits(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * V37-S2, the shape only: a plain object of strings, its keys read in UTF-16 code unit order. The
+ * entry count, the name and value rules and the set rules are tree rules (`readTree`).
+ */
+function readVariant(value: unknown, path: Path): Record<string, string> {
+  if (!isPlainObject(value)) invalid(path);
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort(compareCodeUnits)
+      .map((name) => [name, readString(value[name], [...path, name])]),
+  );
+}
+
+const OVERRIDE_FIELDS = ['fill', 'fills', 'stroke', 'opacity', 'visible', 'effects'] as const;
+
+/**
+ * V37-S3, the values: each override a non-empty object of the fields above, read in that order
+ * with the node field's own rules, keys in UTF-16 code unit order. Whether each key names a node
+ * of the instance's source and each field applies to it is a tree rule (`readTree`).
+ */
+function readNodeOverrides(value: unknown, path: Path): Record<string, NodeOverride> {
+  if (!isPlainObject(value)) invalid(path);
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort(compareCodeUnits)
+      .map((key) => {
+        const entry = value[key];
+        const at = [...path, key];
+        if (!isPlainObject(entry)) invalid(at);
+        for (const field of Object.keys(entry)) {
+          if (!(OVERRIDE_FIELDS as readonly string[]).includes(field)) invalid([...at, field]);
+        }
+        if (Object.keys(entry).length === 0) invalid(at);
+        const result: { -readonly [K in keyof NodeOverride]: NodeOverride[K] } = {};
+        // V37-S4: `fills` is the node field's list. An override written as `fill` by a v8 build
+        // before V-35 reads as V-35 reads a node's `fill`: null is no fills, a paint one fill; both
+        // keys fail at `fill`.
+        if (Object.hasOwn(entry, 'fill')) {
+          if (Object.hasOwn(entry, 'fills')) invalid([...at, 'fill']);
+          const old = readNullable(entry.fill, [...at, 'fill'], readPaint);
+          result.fills = old === null ? [] : [defaultFill(old)];
+        } else if (Object.hasOwn(entry, 'fills')) {
+          result.fills = readFills(entry.fills, [...at, 'fills']);
+        }
+        if (Object.hasOwn(entry, 'stroke')) {
+          result.stroke = readNullable(entry.stroke, [...at, 'stroke'], readStroke);
+        }
+        if (Object.hasOwn(entry, 'opacity')) {
+          result.opacity = readNumber(entry.opacity, [...at, 'opacity'], 0, 1);
+        }
+        if (Object.hasOwn(entry, 'visible')) {
+          result.visible = readBoolean(entry.visible, [...at, 'visible']);
+        }
+        if (Object.hasOwn(entry, 'effects')) {
+          result.effects = readEffects(entry.effects, [...at, 'effects'], EFFECT_KINDS_V8);
+        }
+        return [key, result];
+      }),
+  );
 }
 
 /** V35-S2: the node types that hold `fills`. */
@@ -1332,6 +1522,7 @@ const FILL_TYPES: ReadonlySet<string> = new Set([
   'custom',
   'frame',
   'symbol',
+  'symbolSet',
 ]);
 /** V35-S2: the node types that take `passThrough`. */
 const CONTAINER_BLEND_TYPES: ReadonlySet<string> = new Set([
@@ -1339,6 +1530,7 @@ const CONTAINER_BLEND_TYPES: ReadonlySet<string> = new Set([
   'maskGroup',
   'frame',
   'symbol',
+  'symbolSet',
   'instance',
 ]);
 const BLEND_MODES: readonly BlendMode[] = [
@@ -1656,11 +1848,16 @@ function readEffects(value: unknown, path: Path, kinds: readonly Effect['kind'][
 }
 
 /** One node's fields before `effects`; typed as v6 whatever the schema. */
-function readNodeFields(key: string, value: unknown, path: Path, schema: Schema): NodeV6 {
+function readNodeFields(
+  key: string,
+  value: unknown,
+  path: Path,
+  schema: Schema,
+): NodeV6 | SymbolSetNodeV6 {
   if (!isPlainObject(value)) invalid(path);
   const type = readEnum(value.type, schema.types, [...path, 'type']);
   const typeKeys =
-    type === 'instance' && schema.overrides === 'read' ? INSTANCE_KEYS_V5 : NODE_KEYS_V2[type];
+    type === 'instance' && schema.overrides === 'read' ? INSTANCE_KEYS_V5 : NODE_KEYS_V8[type];
   const keys: string[] = [...typeKeys];
   // V38-S2: `layoutGrids` is optional, after `stroke` and before `effects`.
   if (
@@ -1674,6 +1871,11 @@ function readNodeFields(key: string, value: unknown, path: Path, schema: Schema)
   // V31-S1: the optional `locked` key at v8, after every other field.
   if (schema.effects === 'read' && schema.locked === 'read' && Object.hasOwn(value, 'locked')) {
     keys.push('locked');
+  }
+  // V-37: a symbol's `variant` and an instance's `overrides`, after `locked`.
+  const optionalKey = type === 'symbol' ? 'variant' : type === 'instance' ? 'overrides' : null;
+  if (schema.variants === 'read' && optionalKey !== null && Object.hasOwn(value, optionalKey)) {
+    keys.push(optionalKey);
   }
   const record = readRecord(value, keys, path);
   if (!isValidId(key) || record.id !== key) invalid([...path, 'id']);
@@ -1752,7 +1954,8 @@ function readNodeFields(key: string, value: unknown, path: Path, schema: Schema)
     case 'maskGroup':
       return { ...base, type, children: children() };
     case 'frame':
-    case 'symbol': {
+    case 'symbol':
+    case 'symbolSet': {
       const container = {
         ...base,
         type,
@@ -2036,9 +2239,10 @@ function compareKeys(left: string, right: string): number {
 
 /**
  * The document rules in the M7 contract's section 2 order: fields, ownership, M7-S2, the cycle
- * walk with the base tree depth, M7-S3, the M7-T3 override keys, the M7-S5 tree depth, then the
- * group and mask rules.
- * `references` false skips only M7-S2, the override keys and M7-S5, for `validateFragmentTree`.
+ * walk with the base tree depth, M7-S3 together with V37-S1, V37-S2, the M7-T3 override keys with
+ * V37-S3, the M7-S5 tree depth, then the group and mask rules.
+ * `references` false skips only M7-S2, the override keys (M7-T3 and V37-S3) and M7-S5, for
+ * `validateFragmentTree`.
  */
 function readTree(value: Record<string, unknown>, schema: Schema, references: boolean): Tree {
   // V39-S1, S2: a v8 document (not a fragment) may add `colorStyles` and `variables`.
@@ -2115,29 +2319,55 @@ function readTree(value: Record<string, unknown>, schema: Schema, references: bo
   const reached = new Set<string>();
   const depthOf = new Map<string, number>();
   const symbolAbove = new Map<string, string>();
-  const stack: [string, number, string | null][] = [];
-  for (const page of pages) for (const child of page.children) stack.push([child, 0, null]);
+  const setAbove = new Set<string>();
+  const stack: [string, number, string | null, boolean][] = [];
+  for (const page of pages) for (const child of page.children) stack.push([child, 0, null, false]);
   while (stack.length > 0) {
-    const [key, depth, above] = stack.pop()!;
+    const [key, depth, above, inSet] = stack.pop()!;
     reached.add(key);
     depthOf.set(key, depth);
     if (above !== null) symbolAbove.set(key, above);
+    if (inSet) setAbove.add(key);
     const node = nodes[key]!;
     if (depth > MAX_TREE_DEPTH) invalid(['nodes', key, 'parent']);
     if ('children' in node) {
       const inner = node.type === 'symbol' ? key : above;
-      for (const child of node.children) stack.push([child, depth + 1, inner]);
+      const innerSet = inSet || node.type === 'symbolSet';
+      for (const child of node.children) stack.push([child, depth + 1, inner, innerSet]);
     }
   }
   for (const [key] of entries) {
     if (!reached.has(key)) throw new Failure('document.cyclic-parent', ['nodes', key, 'parent']);
   }
 
-  // M7-S3: no instance and no symbol inside a symbol. A text node may be (M7-T1).
+  // M7-S3: no instance and no symbol inside a symbol. A text node may be (M7-T1). V37-S1, in the
+  // same pass: a set holds only symbols and is never inside a symbol or a set.
   for (const [key, node] of entries) {
+    if (node.type === 'symbolSet') {
+      if (symbolAbove.has(key) || setAbove.has(key)) {
+        throw new Failure('document.invalid-symbol', ['nodes', key, 'parent']);
+      }
+      if (node.children.length === 0) invalid(['nodes', key, 'children']);
+      for (const child of node.children) {
+        if (nodes[child]!.type !== 'symbol') {
+          throw new Failure('document.invalid-symbol', ['nodes', child, 'parent']);
+        }
+      }
+      continue;
+    }
     const nested = node.type === 'instance' || node.type === 'symbol';
     if (nested && symbolAbove.has(key)) {
       throw new Failure('document.invalid-symbol', ['nodes', key, 'parent']);
+    }
+  }
+
+  // V37-S2: variants of a set's symbols, then none outside a set.
+  for (const [, node] of entries) {
+    if (node.type === 'symbolSet') readSetVariants(node.children, nodes);
+  }
+  for (const [key, node] of entries) {
+    if (node.type === 'symbol' && node.variant !== undefined && !setAbove.has(key)) {
+      invalid(['nodes', key, 'variant']);
     }
   }
 
@@ -2150,6 +2380,12 @@ function readTree(value: Record<string, unknown>, schema: Schema, references: bo
         if (target?.type !== 'text' || symbolAbove.get(name) !== node.symbol) {
           throw new Failure('document.invalid-symbol', ['nodes', key, 'textOverrides', name]);
         }
+      }
+    }
+    // V37-S3, after the M7-T3 keys of every instance.
+    for (const [key, node] of entries) {
+      if (node.type === 'instance' && node.overrides !== undefined) {
+        readOverrideTargets(key, node.symbol, node.overrides, nodes, symbolAbove);
       }
     }
   }

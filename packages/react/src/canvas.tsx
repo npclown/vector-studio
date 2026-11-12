@@ -1,4 +1,5 @@
 import type { RendererSceneSynchronization } from '@vector-studio/contracts';
+import type { PagePoint } from '@vector-studio/editor-core';
 import {
   useEffect,
   useMemo,
@@ -67,6 +68,11 @@ export type EditorCanvasProps = Readonly<{
    * chosen files (`placeImagesFromPicker`). Default true; false leaves the key to the host.
    */
   placeImageShortcut?: boolean;
+  /**
+   * V-37 section 6.3: called after the editor handled a double-click, with its page point, so the
+   * host reads the selection the double-click left (the property panel's instance focus).
+   */
+  onCanvasDoubleClick?: (point: PagePoint) => void;
 }>;
 
 /**
@@ -133,6 +139,7 @@ export function EditorCanvas({
   children,
   onPressChange,
   placeImageShortcut = true,
+  onCanvasDoubleClick,
 }: EditorCanvasProps) {
   const editor = useEditor();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -162,6 +169,8 @@ export function EditorCanvas({
   onReady.current = onRendererReady;
   const onPress = useRef(onPressChange);
   onPress.current = onPressChange;
+  const onDouble = useRef(onCanvasDoubleClick);
+  onDouble.current = onCanvasDoubleClick;
   useEffect(() => {
     input.onPressChange = (pressed) => onPress.current?.(pressed);
     return () => {
@@ -260,7 +269,10 @@ export function EditorCanvas({
         onPointerUp={(event) => input.pointerUp(event)}
         onPointerCancel={(event) => input.pointerCancel(event)}
         onLostPointerCapture={(event) => input.lostPointerCapture(event)}
-        onDoubleClick={(event) => input.doubleClick(event)}
+        onDoubleClick={(event) => {
+          input.doubleClick(event);
+          onDouble.current?.(input.toPage(event.currentTarget, event.clientX, event.clientY));
+        }}
         onKeyDown={(event) => input.keyDown(keyOf(event))}
         onKeyUp={(event) => input.keyUp(keyOf(event))}
       />

@@ -41,7 +41,7 @@ import {
   toolOverlay,
   type RegisteredTool,
 } from './extensions.js';
-import { boundsOf, isLocked } from './hit-test.js';
+import { boundsOf, instanceLayerAt, instanceLayerCorners, isLocked } from './hit-test.js';
 import { createEyedropperTool, sampleColor } from './eyedropper.js';
 import { createCounterIdSource } from './ids.js';
 import {
@@ -406,6 +406,11 @@ const DOCUMENT_COMMANDS = new Set([
   'detachInstances',
   'setInstanceText',
   'clearInstanceText',
+  'combineAsVariants',
+  'setVariantProperties',
+  'setInstanceVariant',
+  'setInstanceOverride',
+  'resetInstanceOverrides',
   'addPage',
   'removePage',
   'renamePage',
@@ -1861,6 +1866,28 @@ class EditorCore implements Editor {
         }
         case 'extensions':
           return this.extensionSummaries;
+        case 'instanceLayerAt': {
+          const point: unknown = query.point;
+          const id: unknown = query.id;
+          if (typeof id !== 'string' || typeof point !== 'object' || point === null) return null;
+          const { x, y } = point as Record<string, unknown>;
+          if (typeof x !== 'number' || typeof y !== 'number') return null;
+          return instanceLayerAt(
+            this.document,
+            this.activePage,
+            id,
+            { x, y },
+            this.viewport.zoom,
+            (node) => this.extensions.geometry(node),
+            this.expansions,
+          );
+        }
+        case 'instanceLayerCorners': {
+          const id: unknown = query.id;
+          const node: unknown = query.node;
+          if (typeof id !== 'string' || typeof node !== 'string') return null;
+          return instanceLayerCorners(this.document, id, node, this.expansions);
+        }
         case 'exportScene':
         case 'exportSvg': {
           const ids: unknown = query.ids;
@@ -2640,7 +2667,12 @@ class EditorCore implements Editor {
     const scopeChanged =
       scope !== null &&
       (cause === 'load' || pageChanged || pageOf(documentTree(document), scope) !== page);
-    if (scopeChanged) this.scope = null;
+    if (scopeChanged) {
+      // A scope at or inside a removed set falls back to the set's parent scope (V-37 contract,
+      // section 2.1); any other lost scope ends it.
+      this.scope =
+        cause === 'load' || pageChanged ? null : scopeAfterSetRemoval(previous, document, scope);
+    }
     if (pageChanged) {
       selectionChanged = this.selection.length > 0;
       // A load has already reset the tool (interrupt), so it is reset once.
@@ -3879,4 +3911,24 @@ export function internalsOf(
 ): Pick<EditorCore, 'tools' | 'gesture' | 'expansions' | 'clipboardGeneration' | 'textLayouts'> {
   if (!(editor instanceof EditorCore)) throw new Error('not an editor-core editor');
   return editor;
+}
+
+/**
+ * The scope that replaces `scope` after a change that removed it: the parent of the removed
+ * symbol set at or above it, when that parent survives and is a container, else null.
+ */
+function scopeAfterSetRemoval(
+  previous: DocumentV8,
+  document: DocumentV8,
+  scope: string,
+): string | null {
+  const chain = [scope, ...ancestors(documentTree(previous), scope).map((node) => node.id)];
+  const at = chain.findIndex(
+    (id) => !Object.hasOwn(document.nodes, id) && previous.nodes[id]?.type === 'symbolSet',
+  );
+  if (at < 0) return null;
+  const parent = previous.nodes[chain[at]!]!.parent;
+  return Object.hasOwn(document.nodes, parent) && isContainer(document.nodes[parent])
+    ? parent
+    : null;
 }

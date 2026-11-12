@@ -69,6 +69,13 @@ const effects =
     : 'none';
 /** E41-A05: `effectcontent=1` composites effect roots' content only, for the oracle. */
 const effectContent = parameters.get('effectcontent') === '1';
+/** V-35 U4: `blend=v0` draws blend modes (with `groups=isolated`). */
+const blend = parameters.get('blend') === 'v0' && groups === 'isolated' ? 'v0' : 'none';
+/**
+ * V35-A05: `capture=0` leaves the E10 frame-capture hook off, so the canvas has the production
+ * usage; `render` then reads the presented frame back through a 2D canvas.
+ */
+const frameCapture = parameters.get('capture') !== '0';
 const tileParameter = parameters.get('tile');
 const text = parameters.get('text') === 'atlas' ? 'atlas' : 'none';
 const canvasRaster = createCanvasGlyphRaster();
@@ -150,9 +157,13 @@ export type E23PacketSummary = Readonly<{
       meshDraws: number;
       /** E41: the effect record's output bound, null without one. */
       effectOutput: Readonly<{ x: number; y: number; width: number; height: number }> | null;
+      /** V-35: a blend root's mode, null without one. */
+      blend: string | null;
     }>[];
     composites: number;
     notices: readonly string[];
+    /** V35-K6: the blend notices' node ids. */
+    blendNotices: readonly string[];
   }> | null;
   /** E28: the text part, null without one. */
   text: Readonly<{ pageCount: number; draws: number; instances: number }> | null;
@@ -182,6 +193,12 @@ export type E23Counters = Readonly<{
   effectPasses: number;
   /** E41 section 5.3: whether this generation draws effects. */
   effectPipelineAvailable: boolean;
+  /** V35-K8: backdrop splits of the current generation so far. */
+  blendSplits: number;
+  /** V35-A05: blend composite draws so far, per variant. */
+  blendCompositeDraws: Readonly<Record<'plain' | 'clip' | 'shifted' | 'clip-shifted', number>>;
+  /** V35-K7: whether this generation draws blend roots with their mode. */
+  blendPipelineAvailable: boolean;
   /** E28: glyph raster port calls and bitmaps uploaded by acknowledged packets. */
   glyphRasterCalls: number;
   glyphUploads: number;
@@ -253,9 +270,11 @@ function summarize(packet: PrimitivePacket): E23PacketSummary {
               draws: layer.draws.length,
               meshDraws: layer.meshDraws.length,
               effectOutput: layer.effect?.output ?? null,
+              blend: layer.blend ?? null,
             })),
             composites: packet.layers.composites.length,
             notices: packet.layers.notices.map((notice) => notice.nodeId),
+            blendNotices: (packet.layers.blendNotices ?? []).map((notice) => notice.nodeId),
           },
     text:
       packet.text === undefined
@@ -284,7 +303,7 @@ document.body.append(canvas);
 const diagnostics: RendererDiagnostic[] = [];
 const backend = new WebGpuBackend({
   sampleCountForTesting: samples,
-  frameCaptureForTesting: true,
+  ...(frameCapture ? { frameCaptureForTesting: true } : {}),
   ...(tileParameter === null ? {} : { layerTileSizeForTesting: Number(tileParameter) }),
   ...(effectContent ? { effectContentForTesting: true } : {}),
 });
@@ -325,6 +344,7 @@ async function start() {
     ...(paints === 'image' ? { imageSource } : {}),
     groups,
     ...(effects !== 'none' ? { effects } : {}),
+    ...(blend === 'v0' ? { blend } : {}),
     ...(isolateUnit ? { isolateUnitOpacityForTesting: true } : {}),
     ...(text === 'atlas' ? { text, glyphRaster } : {}),
     ...(pagesParameter === null ? {} : { textAtlasPagesForTesting: Number(pagesParameter) }),
@@ -340,6 +360,7 @@ async function start() {
     requiresLayerPipeline: product.requiresLayerPipeline,
     requiresTextPipeline: product.requiresTextPipeline,
     requiresEffectPipeline: product.requiresEffectPipeline,
+    requiresBlendPipeline: product.requiresBlendPipeline,
     ...(product.imageSource === undefined ? {} : { imageSource: product.imageSource }),
     prepare(target) {
       const packet = product.prepare(target);
@@ -375,13 +396,59 @@ async function start() {
 
 const ready = start();
 
+/**
+ * V35-A05: with `capture=0` the canvas keeps its production usage, so the frame is read back by
+ * drawing the canvas into a 2D canvas instead of through the E10 capture hook. The canvas texture
+ * is readable only in the task that drew it, so the read runs in an animation-frame callback
+ * registered after the backend's, once a frame has been submitted in it.
+ */
+async function nextPresentedCanvas() {
+  for (let attempt = 0; attempt < 600; attempt += 1) {
+    const before = backend.getStatistics().framesSubmitted;
+    backend.invalidate({ reason: 'scene' });
+    const frame = await new Promise<ReturnType<typeof readPresentedCanvas> | null>((resolve) =>
+      requestAnimationFrame(() =>
+        resolve(backend.getStatistics().framesSubmitted > before ? readPresentedCanvas() : null),
+      ),
+    );
+    if (frame !== null) return frame;
+  }
+  throw new Error('No frame was submitted for the canvas readback.');
+}
+
+/** Draws the canvas into a 2D canvas and reads its pixels. */
+function readPresentedCanvas(): Readonly<{
+  width: number;
+  height: number;
+  sampleCount: number;
+  devicePixelRatio: number;
+  rgba: Uint8Array;
+}> {
+  const reader = document.createElement('canvas');
+  reader.width = canvas.width;
+  reader.height = canvas.height;
+  const context = reader.getContext('2d', { willReadFrequently: true });
+  if (context === null) throw new Error('No 2D context for the readback.');
+  context.drawImage(canvas, 0, 0);
+  const image = context.getImageData(0, 0, reader.width, reader.height);
+  return {
+    width: reader.width,
+    height: reader.height,
+    sampleCount: samples,
+    devicePixelRatio: dpr,
+    rgba: new Uint8Array(image.data.buffer),
+  };
+}
+
 /** Captures the next frame after the current state has had two frames to settle. */
 async function capture(): Promise<E23Frame> {
   backend.invalidate({ reason: 'scene' });
   await nextAnimationFrame();
   await nextAnimationFrame();
   // Generous: a software adapter can take seconds for a 2048 x 2048 frame with 20 masks.
-  const frame = await backend.captureFrameForTesting({ timeoutMs: 30_000 });
+  const frame = frameCapture
+    ? await backend.captureFrameForTesting({ timeoutMs: 30_000 })
+    : await nextPresentedCanvas();
   return {
     width: frame.width,
     height: frame.height,
@@ -404,6 +471,9 @@ function counters(): E23Counters {
     layerPasses: backend.getLayerPassesForTesting(),
     effectPasses: backend.getEffectPassesForTesting(),
     effectPipelineAvailable: backend.effectPipelineAvailable,
+    blendSplits: backend.getBlendSplitsForTesting(),
+    blendCompositeDraws: backend.getBlendCompositeDrawsForTesting(),
+    blendPipelineAvailable: backend.blendPipelineAvailable,
     glyphRasterCalls: service!.getGlyphRasterCallsForTesting(),
     glyphUploads: service!.getGlyphUploadsForTesting(),
     atlasEvictions: service!.getAtlasEvictionsForTesting(),

@@ -618,9 +618,11 @@ describe('M8-A11 markup: one node editable, several read-only (V-25: transform a
       );
     // E41-U7: the Effects section's add buttons carry test IDs; they are not section 7.3's.
     const buttons = (html.match(/<button[^>]*>/gu) ?? []).filter(
-      (tag) => !tag.includes('data-testid="effects-add-'),
+      (tag) =>
+        !tag.includes('data-testid="effects-add-') && !tag.includes('data-testid="instance-layer-'),
     );
-    expect(buttons.length).toBe(3);
+    // Detach, V-37's "Reset all overrides" and one "Reset text" per override.
+    expect(buttons.length).toBe(4);
     expect(buttons.every((tag) => !tag.includes('data-testid'))).toBe(true);
   });
 

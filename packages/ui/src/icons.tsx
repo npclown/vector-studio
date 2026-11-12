@@ -61,6 +61,10 @@ const PATHS: Readonly<Record<string, ReactNode>> = {
     </>
   ),
   'create-symbol': <path d="M8 1.5 L14.5 8 L8 14.5 L1.5 8 Z M8 5 L11 8 L8 11 L5 8 Z" />,
+  // V-37: a component set, four diamonds (its variants), on the layer row.
+  'symbol-set': (
+    <path d="M4 1.5 L6.5 4 L4 6.5 L1.5 4 Z M12 1.5 L14.5 4 L12 6.5 L9.5 4 Z M4 9.5 L6.5 12 L4 14.5 L1.5 12 Z M12 9.5 L14.5 12 L12 14.5 L9.5 12 Z" />
+  ),
   'create-instance': <path d="M8 1.5 L14.5 8 L8 14.5 L1.5 8 Z" />,
   detach: <path d="M8 1.5 L11 4.5 M14.5 8 L11.5 11 M8 14.5 L5 11.5 M1.5 8 L4.5 5" />,
   // E41-U3b: two overlapping squares, the result region filled.
