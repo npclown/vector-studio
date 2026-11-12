@@ -29,7 +29,7 @@ Every drag run applied every move (`revisedMoves` equals `framesSubmitted`). The
 
 ## Verdict
 
-**Not met as written (disclosed for the user's decision).** Every median is 17.5 to 17.6 ms against the 16.7 ms ceiling, so A10 misses by about 0.9 ms. The miss is the display's pacing, not the scene:
+**Not met as written (disclosed; accepted by the user on 2026-11-12, see the [exit record](exit-2026-11-12.md)).** Every median is 17.5 to 17.6 ms against the 16.7 ms ceiling, so A10 misses by about 0.9 ms. The miss is the display's pacing, not the scene:
 
 - The idle rAF median, measured on the same page before any load, is also 17.5 to 18.0 ms, about 57 Hz. The loaded frame interval equals the idle one, so each frame holds one vsync.
 - The work per frame is far below a vsync: GPU median 7.2 to 8.0 ms (p95 at most 12.7), CPU encode and submit median 1.0 to 2.5 ms.
