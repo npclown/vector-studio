@@ -340,15 +340,15 @@ describe('V35-P6 the isolation count', () => {
   });
 });
 
-/** 32 nested groups in `normal` mode (each isolates) holding `inner`, which sits at count 32. */
-function deep(inner: Json[]): Json[] {
+/** `n` nested groups in `normal` mode (each isolates) holding `inner`, which sits at count `n`. */
+function deep(inner: Json[], n = 32): Json[] {
   const nodes: Json[] = [];
   let parent = 'p';
-  const first = inner.find((n) => n.parent === 'g31')!.id as string;
-  for (let i = 0; i < 32; i += 1) {
+  const first = inner.find((entry) => entry.parent === `g${n - 1}`)!.id as string;
+  for (let i = 0; i < n; i += 1) {
     nodes.push(
       node(`g${i}`, parent, 'group', {
-        children: [i < 31 ? `g${i + 1}` : first],
+        children: [i < n - 1 ? `g${i + 1}` : first],
         blendMode: 'normal',
       }),
     );
@@ -400,6 +400,51 @@ describe('V35-P6 fills, effects, instances and loading', () => {
         node('sr', 's', 'rectangle'),
       ]),
     ).toEqual({ ok: false, code: 'editor.isolation-depth', path: '/nodes/i/parent' });
+    // An instance's background is its source's fills.
+    const blended = node('s', 'p', 'symbol', {
+      children: ['sr'],
+      fills: [fill(red), fill(red, { blendMode: 'multiply' })],
+    });
+    const instanceAt = (n: number, extra: Json = {}) => [
+      ...deep([node('i', `g${n - 1}`, 'instance', { symbol: 's', ...extra })], n),
+      blended,
+      node('sr', 's', 'rectangle'),
+    ];
+    const refused = (id: string) => ({
+      ok: false,
+      code: 'editor.isolation-depth',
+      path: `/nodes/${id}/parent`,
+    });
+    expect(load(instanceAt(32))).toEqual(refused('i'));
+    expect(load(instanceAt(31, { opacity: 0.5 }))).toEqual(refused('i'));
+    expect(load(instanceAt(31))).toMatchObject({ ok: true });
+    // A leaf's fill leaves sit one level lower when its P2 container is a layer.
+    const fills = [fill(red), fill(red, { blendMode: 'multiply' })];
+    expect(load(deep([node('r', 'g30', 'rectangle', { fills, opacity: 0.5 })], 31))).toEqual(
+      refused('r'),
+    );
+    expect(load(deep([node('r', 'g30', 'rectangle', { fills, blendMode: 'screen' })], 31))).toEqual(
+      refused('r'),
+    );
+    expect(load(deep([node('r', 'g30', 'rectangle', { fills })], 31))).toMatchObject({
+      ok: true,
+    });
+  });
+
+  it('re-checks instances when a symbol fill gets a mode', () => {
+    const target = createEditor({
+      document: doc([
+        ...deep([node('i', 'g31', 'instance', { symbol: 's' })]),
+        node('s', 'p', 'symbol', { children: ['sr'], fills: [fill(red), fill(red)] }),
+        node('sr', 's', 'rectangle'),
+      ]),
+    });
+    fails(
+      target,
+      { type: 'setFill', ids: ['s'], index: 1, patch: { blendMode: 'multiply' } },
+      'editor.isolation-depth',
+      '/nodes/i/parent',
+    );
   });
 });
 

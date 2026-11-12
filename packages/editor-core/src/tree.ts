@@ -308,6 +308,26 @@ export function hasBlendedFill(node: NodeV8): boolean {
 }
 
 /**
+ * How many levels below `node`'s own count its fill leaves with a mode (K3 blend roots) sit, or
+ * null when it has none (V35-P6): a frame's or symbol's background, and an instance's (its
+ * source's fills), sit inside the unit, one lower when the unit isolates; a leaf's fill leaves sit
+ * in its P2 container, one lower when that container is a layer (opacity below 1, a mode, or
+ * effects).
+ */
+function blendedFillOffset(tree: TreeView, node: NodeV8): number | null {
+  if (node.type === 'instance') {
+    const source = tree.node(node.symbol);
+    if (source?.type !== 'symbol' || !hasBlendedFill(source)) return null;
+    return isolates(tree, node) ? 1 : 0;
+  }
+  if (!hasBlendedFill(node)) return null;
+  if (isContainer(node)) return isolates(tree, node) ? 1 : 0;
+  const opacity = effectiveOpacity(tree, node);
+  const effects = drawnEffects(tree, node).some((effect) => effect.visible) && opacity > 0;
+  return opacity < 1 || node.blendMode !== 'normal' || effects ? 1 : 0;
+}
+
+/**
  * Whether `node` draws as an isolated layer, counted conservatively on the document (V-35
  * contract, V35-P6): opacity below 1 (an instance's effective opacity), visible effects at
  * opacity above 0 (E41; an instance's inherited effects included), a container or instance mode
@@ -356,11 +376,9 @@ function sourceIsolationLevels(tree: TreeView, source: string): SourceIsolationL
     if (entry.type !== 'group' && entry.type !== 'maskGroup' && isolates(tree, entry)) {
       if (level > unit) unit = level;
     }
-    // A background fill with a mode sits inside its frame's unit, a level lower when it isolates.
-    if (isContainer(entry) && hasBlendedFill(entry)) {
-      const inner = level + (isolates(tree, entry) ? 1 : 0);
-      if (inner > unit) unit = inner;
-    }
+    // A fill leaf with a mode is a leaf layer, at or below its node's level (V35-P6).
+    const offset = blendedFillOffset(tree, entry);
+    if (offset !== null && level + offset > unit) unit = level + offset;
     if (isContainer(entry)) {
       const next = isolates(tree, entry) ? level + 1 : level;
       for (const child of entry.children) stack.push([child, next]);
@@ -398,11 +416,9 @@ export function isolationBreaks(
   // A frame unit or a leaf that is a layer puts its content one level below it (V35-P6).
   const layered = node.type !== 'group' && node.type !== 'maskGroup' && isolates(tree, node);
   if (layered && count > MAX_ISOLATED_UNIT_COUNT) return true;
-  // A frame's or symbol's background fill with a mode is a leaf layer inside its unit (V35-P6).
-  if (isContainer(node) && hasBlendedFill(node)) {
-    const level = count + (isolates(tree, node) ? 1 : 0);
-    if (level > MAX_ISOLATED_UNIT_COUNT) return true;
-  }
+  // A fill leaf with a mode is a leaf layer, at or below the node's count (V35-P6).
+  const offset = blendedFillOffset(tree, node);
+  if (offset !== null && count + offset > MAX_ISOLATED_UNIT_COUNT) return true;
   if (node.type !== 'instance') return false;
   const levels = levelsOf(node.symbol);
   const below = count + (isolates(tree, node) ? 1 : 0);
@@ -499,7 +515,7 @@ export function isolationViolation(
         before.opacity === 1 &&
         node.opacity < 1) ||
       (!isolates(baseTree, before) && isolates(tree, node)) ||
-      (!hasBlendedFill(before) && hasBlendedFill(node))
+      (blendedFillOffset(baseTree, before) ?? -1) < (blendedFillOffset(tree, node) ?? -1)
     ) {
       changed.push(id);
     }
