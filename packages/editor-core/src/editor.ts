@@ -39,6 +39,7 @@ import {
   type RegisteredTool,
 } from './extensions.js';
 import { boundsOf } from './hit-test.js';
+import { createEyedropperTool, sampleColor } from './eyedropper.js';
 import { createCounterIdSource } from './ids.js';
 import {
   allAnchors,
@@ -792,6 +793,8 @@ class EditorCore implements Editor {
   private textScopeExit = false;
   /** The text tool style (M6b-S2). */
   private textStyle: TextStyle;
+  /** The eyedropper's last pick (V-39 contract, E7). */
+  private pickedColor: Color | null = null;
   /**
    * The caret model of the last layout edit mode read, rebuilt when the cached layout object
    * changes (a text change, or a generation change dropping the cache).
@@ -958,6 +961,16 @@ class EditorCore implements Editor {
     this.tools.set(
       'text',
       createTextTool((node) => this.extensions.geometry(node), this.expansions, this.textSupport),
+    );
+    this.tools.set(
+      'eyedropper',
+      createEyedropperTool(
+        (point) => this.sampleColorAt(point),
+        (color) => {
+          this.pickedColor = deepFreeze({ ...color });
+          this.refresh({ type: 'session', field: 'pickedColor' });
+        },
+      ),
     );
     const isActive = () => this.gestureState !== null;
     // While composing, the public gesture API is inert (M6b contract, section 7.1): `begin`
@@ -1703,6 +1716,13 @@ class EditorCore implements Editor {
           if (scene === null) return null;
           return query.type === 'exportScene' ? scene : exportSceneToSvg(scene);
         }
+        case 'sampleColor': {
+          const point: unknown = query.point;
+          if (!isPoint(point)) return null;
+          return this.sampleColorAt(point);
+        }
+        case 'pickedColor':
+          return this.pickedColor;
       }
     })();
     return value as QueryResult<Q>;
@@ -3508,6 +3528,19 @@ class EditorCore implements Editor {
     }
   }
 
+  /** E6 at the current zoom on the active page; frozen, null over nothing. */
+  private sampleColorAt(point: PagePoint): Color | null {
+    const color = sampleColor(
+      this.document,
+      this.activePage,
+      point,
+      this.viewport.zoom,
+      (node) => this.extensions.geometry(node),
+      this.expansions,
+    );
+    return color === null ? null : deepFreeze(color);
+  }
+
   /** Tool overlays change without a document change; hosts learn of it through the snapshot. */
   private refreshOverlay(): void {
     const overlay = this.tools.get(this.tool)?.overlay() ?? null;
@@ -3535,6 +3568,7 @@ class EditorCore implements Editor {
       pathEdit: this.pathEdit,
       textEdit: this.textEdit,
       textStyle: this.textStyle,
+      pickedColor: this.pickedColor,
       history: { undoDepth: this.undoStack.length, redoDepth: this.redoStack.length },
     });
   }

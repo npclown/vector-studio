@@ -697,8 +697,14 @@ function Surface({
   const canvasHost = (size: StudioCanvasSize) => (
     <div
       data-testid="canvas-host"
-      data-cursor={handleCursor?.kind ?? 'default'}
-      style={{ width: size.width, cursor: handleCursorCss(handleCursor) }}
+      data-cursor={
+        snapshot.tool === 'eyedropper' ? 'eyedropper' : (handleCursor?.kind ?? 'default')
+      }
+      style={{
+        width: size.width,
+        // V-39 contract, E7: a crosshair while the eyedropper is active.
+        cursor: snapshot.tool === 'eyedropper' ? 'crosshair' : handleCursorCss(handleCursor),
+      }}
       onPointerMove={hover}
       onPointerDownCapture={studio ? readableText : undefined}
       onContextMenu={contextMenu.onContextMenu}

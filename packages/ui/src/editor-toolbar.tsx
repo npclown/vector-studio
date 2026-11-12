@@ -71,6 +71,40 @@ function useRefusal(): [string | null, (result: CommandResult | null) => void] {
   ];
 }
 
+/** `#RRGGBB` of a picked colour's straight channels (V-39 contract, V39-U1). */
+export function pickedHex(color: Readonly<{ r: number; g: number; b: number }>): string {
+  const byte = (v: number) =>
+    Math.round(Math.min(1, Math.max(0, v)) * 255)
+      .toString(16)
+      .padStart(2, '0');
+  return `#${byte(color.r)}${byte(color.g)}${byte(color.b)}`.toUpperCase();
+}
+
+const pickedOf = (snapshot: EditorSnapshot) => snapshot.pickedColor;
+
+/**
+ * V39-U1: an eyedropper pick with nothing selected copies `#RRGGBB` (best effort) and shows
+ * `Copied #RRGGBB` for 2 s. Each pick is a new snapshot value, so picking one colour twice
+ * shows the notice again.
+ */
+function usePickNotice(selection: readonly string[]): string | null {
+  const picked = useEditorSelector(pickedOf);
+  const first = useRef(picked);
+  const empty = useRef(selection.length === 0);
+  empty.current = selection.length === 0;
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (picked === null || picked === first.current || !empty.current) return;
+    const hex = pickedHex(picked);
+    const clipboard = (globalThis as { navigator?: Navigator }).navigator?.clipboard;
+    clipboard?.writeText(hex).catch(() => {});
+    setNotice(`Copied ${hex}`);
+    const timer = setTimeout(() => setNotice(null), 2000);
+    return () => clearTimeout(timer);
+  }, [picked]);
+  return notice;
+}
+
 function IconButton({
   testId,
   name,
@@ -129,6 +163,7 @@ export function EditorToolbar({ children }: EditorToolbarProps) {
   const extensions = useEditorQuery(EXTENSIONS);
   const keymap = useEditorQuery(KEYMAP);
   const [refusal, show] = useRefusal();
+  const picked = usePickNotice(selection);
   const edits = editActions({ selection, history, first, pathOverlay });
   const byId = new Map(
     [...edits, ...symbolActions(selection, types)].map((button) => [button.testId, button]),
@@ -190,6 +225,11 @@ export function EditorToolbar({ children }: EditorToolbarProps) {
         ))}
       </span>
       {children}
+      {picked === null ? null : (
+        <output role="status" className="vs-notice" data-testid="eyedropper-notice">
+          {picked}
+        </output>
+      )}
       {refusal === null ? null : (
         <output role="status" className="vs-refusal" data-testid="toolbar-refusal">
           {refusal}

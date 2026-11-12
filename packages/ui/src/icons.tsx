@@ -17,6 +17,10 @@ const PATHS: Readonly<Record<string, ReactNode>> = {
     </>
   ),
   text: <path d="M3 3.5 H13 M8 3.5 V13.5 M6 13.5 H10" />,
+  // V-39: a pipette, tip at the lower left.
+  eyedropper: (
+    <path d="M2.5 13.5 L3.5 12.5 L9 7 M7 5 L11 9 M9 3 L13 7 M10.2 1.8 A2 2 0 0 1 14.2 5.8 L12.5 7.5 L8.5 3.5 Z M9 7 L3.5 12.5" />
+  ),
   undo: <path d="M5.5 3.5 L2.5 6.5 L5.5 9.5 M2.5 6.5 H10 A3.5 3.5 0 0 1 10 13.5 H7" />,
   redo: <path d="M10.5 3.5 L13.5 6.5 L10.5 9.5 M13.5 6.5 H6 A3.5 3.5 0 0 0 6 13.5 H9" />,
   group: (

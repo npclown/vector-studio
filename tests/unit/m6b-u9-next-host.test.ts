@@ -123,7 +123,7 @@ describe('M6b-U9 text-edit fixture', () => {
     // The page lists the fixture, its style and the text tool button. Since M8-U6 the button is
     // the UI package's toolbar row 1 (`BUILT_IN_TOOLS`, M8-L1), which the page renders.
     expect(PAGE_SOURCE).toMatch(/'text-edit': \{\s+url: '\/m6b-text-edit\.json'/u);
-    expect(UI_TOOLBAR_SOURCE).toMatch(/'path',\s+'text',\s+\]\);/u);
+    expect(UI_TOOLBAR_SOURCE).toMatch(/'path',\s+'text',\s+'eyedropper',\s+\]\);/u);
     expect(PAGE_SOURCE).toMatch(/<ToolbarPrimaryRow>/u);
     expect(PAGE_SOURCE).toMatch(
       /^import \{[^}]*\bToolbarPrimaryRow\b[^}]*\} from '@vector-studio\/ui';/mu,

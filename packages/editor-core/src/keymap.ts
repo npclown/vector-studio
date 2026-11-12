@@ -14,6 +14,7 @@ export const TOOL_NAMES: readonly ToolName[] = [
   'frame',
   'path',
   'text',
+  'eyedropper',
 ];
 
 /**
@@ -63,6 +64,7 @@ export const DEFAULT_KEYMAP: readonly KeyBinding[] = deepFreeze([
   { chord: 'F', action: 'setTool', args: { tool: 'frame' } },
   { chord: 'P', action: 'setTool', args: { tool: 'path' } },
   { chord: 'T', action: 'setTool', args: { tool: 'text' } },
+  { chord: 'I', action: 'setTool', args: { tool: 'eyedropper' } },
   { chord: 'Delete', action: 'delete' },
   { chord: 'Backspace', action: 'delete' },
   { chord: 'Mod+Z', action: 'undo' },
