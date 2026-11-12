@@ -1,8 +1,8 @@
 import {
   serializeDocument,
-  type DocumentV7,
+  type DocumentV8,
   type Gradient,
-  type NodeV7,
+  type NodeV8,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
@@ -57,11 +57,11 @@ function ellipse(target: Editor, x: number, y: number, w: number, h: number): st
   })[0]!;
 }
 
-function doc(target: Editor): DocumentV7 {
+function doc(target: Editor): DocumentV8 {
   return target.query({ type: 'document' });
 }
 
-function node(target: Editor, id: string): NodeV7 {
+function node(target: Editor, id: string): NodeV8 {
   const found = target.query({ type: 'node', id });
   if (found === null) throw new Error(`no node ${id}`);
   return found;
@@ -83,7 +83,7 @@ function run(target: Editor, ids: readonly string[], op: Op) {
 }
 
 /** Page-space polygon of a path node, its cubics sampled at 64 steps (rotation 0 results). */
-function polygons(path: NodeV7): { x: number; y: number }[][] {
+function polygons(path: NodeV8): { x: number; y: number }[][] {
   if (path.type !== 'path') throw new Error('not a path');
   const { x: fx, y: fy, width, height } = path.frame;
   const pts = path.path.points;
@@ -118,7 +118,7 @@ function polygons(path: NodeV7): { x: number; y: number }[][] {
 }
 
 /** Signed area summed over contours, positive for the engine's orientation. */
-function area(path: NodeV7): number {
+function area(path: NodeV8): number {
   let sum = 0;
   for (const ring of polygons(path)) {
     for (let i = 0; i < ring.length; i += 1) {

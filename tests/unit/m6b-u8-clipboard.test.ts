@@ -1,7 +1,7 @@
 import {
   MAX_TEXT_LENGTH,
   type Color,
-  type DocumentV7,
+  type DocumentV8,
   type Frame,
   type TextRun,
 } from '@vector-studio/model';
@@ -66,7 +66,7 @@ function text(id: string, frame: Frame, runs: TextRun[], parent = 'p1'): Loose {
  * Page `p1`: `t` "ab cd" at (10, 20), `m` "ab" (size 10) + "cd" (size 20, red) at (10, 100), a
  * rectangle `r`, and a frame `fr` at (300, 300) holding the text `ft` "hi" and a rectangle `fr2`.
  */
-function fixture(): DocumentV7 {
+function fixture(): DocumentV8 {
   const nodes: Loose[] = [
     text('t', f(10, 20, 22.5, 12), [run('ab cd')]),
     text('m', f(10, 100, 30, 24), [run('ab'), run('cd', 20, red)]),
@@ -98,11 +98,11 @@ function fixture(): DocumentV7 {
     id: 'doc',
     pages: [{ id: 'p1', name: 'Page 1', children: ['t', 'm', 'r', 'fr'] }],
     nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
-  } as unknown as DocumentV7;
+  } as unknown as DocumentV8;
 }
 
 function editor(
-  options: { port?: boolean; viewport?: boolean; document?: DocumentV7 } = {},
+  options: { port?: boolean; viewport?: boolean; document?: DocumentV8 } = {},
 ): Editor {
   const target = createEditor({
     document: options.document ?? fixture(),
@@ -651,7 +651,7 @@ describe('M6b-A11 plain-text paste outside edit mode (sections 9.3 and 9.4)', ()
     const rotated = {
       ...document,
       nodes: { ...document.nodes, fr: { ...document.nodes.fr!, rotation: angle } },
-    } as DocumentV7;
+    } as DocumentV8;
     const target = editor({ document: rotated });
     target.execute({ type: 'setSelection', ids: ['fr'] });
     expect(target.execute({ type: 'paste', text: 'abc', pointer: at(380, 330) })).toEqual({

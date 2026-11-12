@@ -13,7 +13,7 @@ export function v7Value<T>(value: T): T {
   const nodes = record.nodes as Record<string, Json>;
   return {
     ...record,
-    schemaVersion: 7,
+    schemaVersion: 8,
     nodes: Object.fromEntries(
       Object.entries(nodes).map(([key, node]) => [key, { ...node, effects: [] }]),
     ),
@@ -44,7 +44,7 @@ export function v6Value<T>(value: T): T {
 
 /**
  * A clipboard text written at v6 (marker line plus compact fragment JSON) as the editor now
- * writes it: `schemaVersion: 7` and `effects: []` on every node and carried source node.
+ * writes it: `schemaVersion: 8` and `effects: []` on every node and carried source node.
  */
 export function v7Fragment(text: string): string {
   const start = text.indexOf('{');
@@ -56,7 +56,7 @@ export function v7Fragment(text: string): string {
         { ...node, effects: [] },
       ]),
     );
-  const upgraded: Json = { ...body, schemaVersion: 7, nodes: withEffects(body.nodes) };
+  const upgraded: Json = { ...body, schemaVersion: 8, nodes: withEffects(body.nodes) };
   if ('sourceNodes' in body) upgraded.sourceNodes = withEffects(body.sourceNodes);
   return text.slice(0, start) + JSON.stringify(upgraded);
 }

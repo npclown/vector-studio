@@ -11,7 +11,7 @@ import {
   validateDocument,
   validateNode,
   type DocumentV1,
-  type DocumentV7,
+  type DocumentV8,
   type ParseResult,
   type ParseResultV2,
 } from '@vector-studio/model';
@@ -45,7 +45,7 @@ function read(dir: string, name: string): Promise<string> {
   return readFile(path.join(dir, `${name}.json`), 'utf8');
 }
 
-function parsed(text: string): DocumentV7 {
+function parsed(text: string): DocumentV8 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Command, Editor, EditorEvent, SelectionHandles } from '@vector-studio/editor-core';
-import type { DocumentV7, NodeV7 } from '@vector-studio/model';
+import type { DocumentV8, NodeV8 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
 import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
@@ -38,13 +38,13 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 // sections 2.1 and 9; M4 contract, section 2.1).
 const FIXTURE = JSON.parse(
   readFileSync(path.join(root, 'tests/fixtures/m4-appearance/migrated/containers.v6.json'), 'utf8'),
-) as DocumentV7;
-const FIXTURE_LINE_STROKE = (FIXTURE.nodes.l1 as Extract<NodeV7, { type: 'line' }>).stroke!;
+) as DocumentV8;
+const FIXTURE_LINE_STROKE = (FIXTURE.nodes.l1 as Extract<NodeV8, { type: 'line' }>).stroke!;
 /** The page's fixture camera (apps/next-host/app/page.tsx): css = (page - position) * zoom. */
 const CAMERA = { x: -20, y: -20, zoom: 2 };
 
 /** A node's local point in its parent's space (M1 contract, section 5 transform). */
-function place(node: NodeV7, x: number, y: number): Point {
+function place(node: NodeV8, x: number, y: number): Point {
   const { frame, rotation } = node;
   const cos = Math.cos(rotation);
   const sin = Math.sin(rotation);
@@ -119,11 +119,11 @@ async function open(page: Page) {
   return { errors, status, screen };
 }
 
-async function readDocument(page: Page): Promise<DocumentV7> {
+async function readDocument(page: Page): Promise<DocumentV8> {
   const text = await page.evaluate(() =>
     JSON.stringify(window.__p5Host!.editor.query({ type: 'document' })),
   );
-  return JSON.parse(text) as DocumentV7;
+  return JSON.parse(text) as DocumentV8;
 }
 
 async function readHandles(page: Page): Promise<SelectionHandles | null> {
@@ -196,7 +196,7 @@ const RECOLOURED = (() => {
     if (command.type !== 'setNodeProps') continue;
     Object.assign(document.nodes[command.id]!, command.props);
   }
-  return document as unknown as DocumentV7;
+  return document as unknown as DocumentV8;
 })();
 /** Reference colours in bytes; `canvas` and `white` are measured per check. */
 const PAINTS: Readonly<Record<string, Rgb>> = {
@@ -276,7 +276,7 @@ async function click(page: Page, at: Point, shift = false) {
 }
 
 /** The IDs `after` adds to page-1's children. */
-function added(before: DocumentV7, after: DocumentV7): string[] {
+function added(before: DocumentV8, after: DocumentV8): string[] {
   const old = new Set(before.pages[0]!.children);
   return after.pages[0]!.children.filter((id) => !old.has(id));
 }

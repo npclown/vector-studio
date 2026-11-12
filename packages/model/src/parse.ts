@@ -11,10 +11,11 @@ import type {
   DocumentV5,
   DocumentV6,
   DocumentV7,
+  DocumentV8,
   Effect,
   NodeV6,
-  NodeV7,
-  PageV7,
+  NodeV8,
+  PageV8,
   Dash,
   FillRule,
   Frame,
@@ -66,11 +67,13 @@ export type ModelErrorCode = Exclude<
 /** `path` is a JSON Pointer (RFC 6901) to the offending field; `''` is the whole document. */
 export type ModelFailure = Readonly<{ ok: false; code: ModelErrorCode; path: string }>;
 
-/** The latest schema version, which every validated document has (E41 contract, section 3). */
-export type ParseResult = Readonly<{ ok: true; document: DocumentV7 }> | ModelFailure;
+/** The latest schema version, 8, which every validated document has (docs/plans/viz-schema-v8.md). */
+export type ParseResult = Readonly<{ ok: true; document: DocumentV8 }> | ModelFailure;
 
 /** The result of `migrateV5toV6`, the fifth step of the migration chain. */
 export type ParseResultV6 = Readonly<{ ok: true; document: DocumentV6 }> | ModelFailure;
+/** A migration step's v7 result. */
+export type ParseResultV7 = Readonly<{ ok: true; document: DocumentV7 }> | ModelFailure;
 
 /** The result of `migrateV1toV2`, the first step of the migration chain. */
 export type ParseResultV2 = Readonly<{ ok: true; document: DocumentV2 }> | ModelFailure;
@@ -86,10 +89,10 @@ export type ParseResultV5 = Readonly<{ ok: true; document: DocumentV5 }> | Model
 
 /** The result of `validateFragmentTree`: a node map, never a document. */
 export type FragmentTreeResult =
-  Readonly<{ ok: true; nodes: Readonly<Record<string, NodeV7>> }> | ModelFailure;
+  Readonly<{ ok: true; nodes: Readonly<Record<string, NodeV8>> }> | ModelFailure;
 
 export type NodeResult =
-  | Readonly<{ ok: true; node: NodeV7 }>
+  | Readonly<{ ok: true; node: NodeV8 }>
   | Readonly<{ ok: false; code: 'document.invalid-field'; path: string }>;
 
 /** Deepest container nesting of the node tree (ancestors that are containers). */
@@ -120,9 +123,9 @@ export function isValidId(value: unknown): value is string {
 }
 
 /**
- * Parses JSON text of schema version 1 to 7 into a validated v7 document (M1 contract, section
+ * Parses JSON text of schema version 1 to 8 into a validated v8 document (M1 contract, section
  * 2.1; M7 contract, section 2.1; M6a contract, sections 2.1 and 9; M4 contract, section 2.1; E41
- * contract, section 3); older versions are migrated by `migrateV1toV2` to `migrateV6toV7`. No
+ * contract, section 3); older versions are migrated by `migrateV1toV2` to `migrateV7toV8`. No
  * partial document is ever returned.
  */
 export function parseDocument(text: string): ParseResult {
@@ -132,7 +135,7 @@ export function parseDocument(text: string): ParseResult {
   } catch {
     return { ok: false, code: 'document.malformed-json', path: '' };
   }
-  const version = checkVersion(value, [1, 2, 3, 4, 5, 6, 7]);
+  const version = checkVersion(value, [1, 2, 3, 4, 5, 6, 7, 8]);
   if (version !== null) return version;
   // JSON.parse keeps the last of two equal keys, which would silently drop an entity. The scan
   // also bounds nesting, so validation never recurses deeper than MAX_DEPTH.
@@ -150,23 +153,23 @@ export function parseDocument(text: string): ParseResult {
 }
 
 /**
- * Validates an in-memory v7 document value and returns a normalized copy: negative zero becomes
+ * Validates an in-memory v8 document value and returns a normalized copy: negative zero becomes
  * 0, rotations are normalized, text override keys are in code unit order and nothing is shared
- * with the input. A v1 to v6 value is `document.unsupported-version`; `validateAnyDocument`
+ * with the input. A v1 to v7 value is `document.unsupported-version`; `validateAnyDocument`
  * accepts every version.
  */
 export function validateDocument(value: unknown): ParseResult {
-  const version = checkVersion(value, [7]);
+  const version = checkVersion(value, [8]);
   if (version !== null) return version;
-  return guarded(() => readDocumentV7(value as Record<string, unknown>, V7));
+  return guarded(() => readDocumentV8(value as Record<string, unknown>, V8));
 }
 
 /**
- * Validates an in-memory v1 to v7 value and returns a normalized v7 copy (older versions are
+ * Validates an in-memory v1 to v8 value and returns a normalized v8 copy (older versions are
  * migrated).
  */
 export function validateAnyDocument(value: unknown): ParseResult {
-  const version = checkVersion(value, [1, 2, 3, 4, 5, 6, 7]);
+  const version = checkVersion(value, [1, 2, 3, 4, 5, 6, 7, 8]);
   if (version !== null) return version;
   const record = value as Record<string, unknown>;
   if (record.schemaVersion === 1) {
@@ -188,9 +191,11 @@ export function validateAnyDocument(value: unknown): ParseResult {
     const v5 = migrateV4toV5(v4.document);
     if (!v5.ok) return v5;
     const v6 = migrateV5toV6(v5.document);
-    return v6.ok ? migrateV6toV7(v6.document) : v6;
+    if (!v6.ok) return v6;
+    const v7 = migrateV6toV7(v6.document);
+    return v7.ok ? migrateV7toV8(v7.document) : v7;
   }
-  // A v2 to v6 value is read once with its version's node types; the v7 result differs only in
+  // A v2 to v7 value is read once with its version's node types; the v8 result differs only in
   // its version, the empty `textOverrides` of every instance below v5 (`migrateV4toV5`), the
   // v6 strokes (`migrateV5toV6`) and the empty `effects` of every node (`migrateV6toV7`).
   const schema =
@@ -204,14 +209,16 @@ export function validateAnyDocument(value: unknown): ParseResult {
             ? V5_TO_V7
             : record.schemaVersion === 6
               ? V6_TO_V7
-              : V7;
-  return guarded(() => readDocumentV7(record, schema));
+              : record.schemaVersion === 7
+                ? V7_TO_V8
+                : V8;
+  return guarded(() => readDocumentV8(record, schema));
 }
 
 /**
  * The model's tree rules for a clipboard fragment (M7 contract, section 6), on a holder document
- * value of the latest schema version, 7 (E41 contract, section 3), whose pages hold the fragment
- * roots: `{ schemaVersion: 7, id, pages: [{ id, name, children: roots }], nodes }`, exactly the
+ * value of the latest schema version, 8, whose pages hold the fragment
+ * roots: `{ schemaVersion: 8, id, pages: [{ id, name, children: roots }], nodes }`, exactly the
  * four keys of a document, with `id` and the page ID not keys of `nodes` and each root's `parent`
  * the page ID (the caller rewrites the fragment's `""`). It runs every rule of `validateDocument`
  * except two, which the fragment rules and the paste resolve instead: M7-S2 (each instance names
@@ -221,10 +228,10 @@ export function validateAnyDocument(value: unknown): ParseResult {
  * no document entry point skips these rules.
  */
 export function validateFragmentTree(value: unknown): FragmentTreeResult {
-  const version = checkVersion(value, [7]);
+  const version = checkVersion(value, [8]);
   if (version !== null) return version;
   try {
-    const tree = readTree(value as Record<string, unknown>, V7, false);
+    const tree = readTree(value as Record<string, unknown>, V8, false);
     return { ok: true, nodes: tree.nodes };
   } catch (error) {
     if (error instanceof Failure) return { ok: false, code: error.code, path: pointer(error.path) };
@@ -235,7 +242,7 @@ export function validateFragmentTree(value: unknown): FragmentTreeResult {
 /** Options of `validateNode`. */
 export type ValidateNodeOptions = Readonly<{
   /**
-   * The node comes from an input below v6 (an older clipboard fragment), already given the v7
+   * The node comes from an input below v6 (an older clipboard fragment), already given the v8
    * fields: a container or instance opacity other than 1 fails at `/opacity`, in the field order
    * of an older document (M4 contract, M4-M2 and section 7).
    */
@@ -243,12 +250,12 @@ export type ValidateNodeOptions = Readonly<{
 }>;
 
 /**
- * Validates one v7 node with the field rules of `validateDocument`, so commands reject the values
+ * Validates one v8 node with the field rules of `validateDocument`, so commands reject the values
  * a load would reject. `path` is relative to the node; references (M7-S2 and the M7-T3 override
  * keys among them) are not checked here.
  */
 export function validateNode(value: unknown, options: ValidateNodeOptions = {}): NodeResult {
-  const schema = options.olderInput === true ? V7_OLDER_OPACITY : V7;
+  const schema = options.olderInput === true ? V8_OLDER_OPACITY : V8;
   try {
     const id = isPlainObject(value) ? value.id : undefined;
     return { ok: true, node: readNode(typeof id === 'string' ? id : '', value, [], schema) };
@@ -633,8 +640,19 @@ export function migrateV5toV6(document: DocumentV5): ParseResultV6 {
  * Changes `schemaVersion` to 7 and adds `effects: []` to every node, and nothing else (E41
  * contract, E41-S1).
  */
-export function migrateV6toV7(document: DocumentV6): ParseResult {
-  return guarded(() => readDocumentV7({ ...document, schemaVersion: 7 }, V6_TO_V7));
+export function migrateV6toV7(document: DocumentV6): ParseResultV7 {
+  return guarded(() => ({
+    schemaVersion: 7,
+    ...(readTree({ ...document, schemaVersion: 7 }, V6_TO_V7, true) as Tree<DocumentV7>),
+  }));
+}
+
+/**
+ * Changes `schemaVersion` to 8, and nothing else while v8 has v7's shape (the gap-list items
+ * V-31 to V-40 each add their fields and defaults here).
+ */
+export function migrateV7toV8(document: DocumentV7): ParseResult {
+  return guarded(() => readDocumentV8({ ...document, schemaVersion: 8 }, V7_TO_V8));
 }
 
 /** Normalizes radians to (−π, π], negative zero to 0 (contract M1-S1). */
@@ -776,8 +794,16 @@ const V6_TO_V7: Schema = {
   ...ADD_EFFECTS,
 };
 const V7: Schema = { ...V6_TO_V7, effects: 'read' };
-/** v7 nodes of an input below v6, already migrated: v7 fields, the older opacity rule. */
-const V7_OLDER_OPACITY: Schema = { ...V7, ...OLDER };
+/**
+ * A v7 input read into v8, and v8 itself: v7's fields, since v8 has v7's shape so far. An item
+ * adding a v8 field splits these two and adds its dimension to every schema that reads into v8
+ * (`V2_TO_V7` to `V6_TO_V7` too, which `validateAnyDocument` uses for older inputs); see
+ * docs/plans/viz-schema-v8.md, Where a field addition goes.
+ */
+const V7_TO_V8: Schema = V7;
+const V8: Schema = V7;
+/** v8 nodes of an input below v6, already migrated: v8 fields, the older opacity rule. */
+const V8_OLDER_OPACITY: Schema = { ...V8, ...OLDER };
 
 const GRADIENT_KINDS: readonly Gradient['kind'][] = ['linear', 'radial'];
 const SPREADS: readonly Gradient['spread'][] = ['pad', 'reflect', 'repeat'];
@@ -1033,9 +1059,9 @@ function readOverrides(value: unknown, path: Path): Record<string, TextOverride>
  * One node of any schema from v2 on, read with `schema`; the result is a v6 node when
  * `schema.appearance` is not `none`, else typed by the caller's version.
  */
-function readNode(key: string, value: unknown, path: Path, schema: Schema): NodeV7 {
+function readNode(key: string, value: unknown, path: Path, schema: Schema): NodeV8 {
   const node = readNodeFields(key, value, path, schema);
-  if (schema.effects === 'none') return node as NodeV7;
+  if (schema.effects === 'none') return node as NodeV8;
   const effects =
     schema.effects === 'read'
       ? readEffects((value as Record<string, unknown>).effects, [...path, 'effects'])
@@ -1207,7 +1233,7 @@ function readNodeFields(key: string, value: unknown, path: Path, schema: Schema)
   }
 }
 
-function readPage(value: unknown, path: Path): PageV7 {
+function readPage(value: unknown, path: Path): PageV8 {
   const record = readRecord(value, ['id', 'name', 'children'], path);
   return {
     id: readIdV2(record.id, [...path, 'id']),
@@ -1218,16 +1244,16 @@ function readPage(value: unknown, path: Path): PageV7 {
   };
 }
 
-/** A document's `id`, `pages` and `nodes`, typed as those of `D` (v7 unless migrating). */
-type Tree<D extends { pages: unknown; nodes: unknown } = DocumentV7> = Readonly<{
+/** A document's `id`, `pages` and `nodes`, typed as those of `D` (v8 unless migrating). */
+type Tree<D extends { pages: unknown; nodes: unknown } = DocumentV8> = Readonly<{
   id: string;
   pages: D['pages'];
   nodes: D['nodes'];
 }>;
 
-/** A v7 document read with the schema of its source version (an older one when migrating). */
-function readDocumentV7(value: Record<string, unknown>, schema: Schema): DocumentV7 {
-  return { schemaVersion: 7, ...readTree(value, schema, true) };
+/** A v8 document read with the schema of its source version (an older one when migrating). */
+function readDocumentV8(value: Record<string, unknown>, schema: Schema): DocumentV8 {
+  return { schemaVersion: 8, ...readTree(value, schema, true) };
 }
 
 /**
@@ -1245,7 +1271,7 @@ function readTree(value: Record<string, unknown>, schema: Schema, references: bo
   const entries = Object.entries(record.nodes).map(
     ([key, node]) => [key, readNode(key, node, ['nodes', key], schema)] as const,
   );
-  const nodes: Record<string, NodeV7> = Object.fromEntries(entries);
+  const nodes: Record<string, NodeV8> = Object.fromEntries(entries);
 
   const pageIds = new Set<string>();
   pages.forEach((page, index) => {

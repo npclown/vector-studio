@@ -48,9 +48,9 @@ const TYPICAL_VISIBLE = 995;
 const TYPICAL_VISIBLE_DPR2 = 987;
 /**
  * The configuration hash of `e26-mixed-view-edit-10k/v1` at DPR 1, five repetitions; re-pinned at
- * E41-U4, where the loaded document became schema v7 (E41-S1).
+ * E41-U4, where the loaded document became schema v7 (E41-S1), and at the v8 scaffold (2026-11-12).
  */
-const VIEW_EDIT_HASH = '3b2e8d79cfb1cd1b3c799159a854c9324743e48d6111827b633e5addbf3c7291';
+const VIEW_EDIT_HASH = '68becdb1e8f2aeff40f584ad03b0ed7b9eb581b10a2485142ca423d391085f7f';
 
 function allInside(bounds: typeof mixed.bounds, camera: E26Camera) {
   const { inside, leaves } = visibility(bounds, camera);

@@ -1,4 +1,4 @@
-import { MAX_TEXT_LENGTH, type DocumentV7 } from '@vector-studio/model';
+import { MAX_TEXT_LENGTH, type DocumentV8 } from '@vector-studio/model';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -30,7 +30,7 @@ const inputs = (commands: readonly Command[]): InputEvent[] =>
   commands.flatMap((command) => (command.type === 'input' ? [command.event] : []));
 
 /** A host in edit mode on `t` with the caret at `anchor`..`focus`, its logs cleared. */
-function editing(anchor = 5, focus = anchor, document?: DocumentV7) {
+function editing(anchor = 5, focus = anchor, document?: DocumentV8) {
   const host = textHost(document);
   expect(host.editor.execute({ type: 'enterTextEdit', id: 't', anchor, focus })).toEqual({
     ok: true,

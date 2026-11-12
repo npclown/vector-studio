@@ -1,4 +1,4 @@
-import type { Command, CommandResult, DocumentV7, KeyBinding } from '@vector-studio/react';
+import type { Command, CommandResult, DocumentV8, KeyBinding } from '@vector-studio/react';
 import { shortcutFor } from './editor-toolbar-model.js';
 
 // E41-U3b (E41 contract, section 6): the boolean actions the context menu and the property
@@ -29,7 +29,7 @@ const INPUT_TYPES: ReadonlySet<string> = new Set(['rectangle', 'ellipse', 'path'
  * ellipses, paths or custom nodes with one parent, none a mask group's source. A custom node
  * without a path still reaches the command, which refuses it with `editor.boolean-unsupported`.
  */
-export function booleanQualifies(document: DocumentV7, selection: readonly string[]): boolean {
+export function booleanQualifies(document: DocumentV8, selection: readonly string[]): boolean {
   if (selection.length < 2) return false;
   const nodes = selection.map((id) => document.nodes[id]);
   const parent = nodes[0]?.parent;
@@ -48,7 +48,7 @@ export function booleanQualifies(document: DocumentV7, selection: readonly strin
 
 /** The four boolean actions for `selection`, or none when it does not qualify. */
 export function booleanActions(
-  document: DocumentV7,
+  document: DocumentV8,
   selection: readonly string[],
   keymap: readonly KeyBinding[],
 ): readonly BooleanAction[] {

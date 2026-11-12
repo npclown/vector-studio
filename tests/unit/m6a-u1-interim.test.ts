@@ -53,7 +53,7 @@ function run(target: Editor, command: Command): CommandResult {
 describe('M6a-U1 interim: editor-core at schema v4, v6 since M4-U1', () => {
   it('loads the text fixture as its v7 migration and creates empty documents at v7', () => {
     expect(text(loaded())).toBe(TEXT_V7);
-    expect(createEditor().query({ type: 'document' }).schemaVersion).toBe(7);
+    expect(createEditor().query({ type: 'document' }).schemaVersion).toBe(8);
   });
 
   // M6c (contract section 1.2): replaces the M6a section 7 rule. Without a layout port a text
@@ -168,11 +168,11 @@ describe('M6a-U1 interim: fragments at schema v4, v6 since M4-U1 (section 8)', (
     return bodyOf(target.query({ type: 'clipboard' })!);
   }
 
-  it('copies a text node as fragment version 2 at schemaVersion 7 and pastes its runs and props', () => {
+  it('copies a text node as fragment version 2 at schemaVersion 8 and pastes its runs and props', () => {
     const target = loaded();
     run(target, { type: 'copy', ids: ['t2'] });
     const fragment = target.query({ type: 'clipboard' })!;
-    expect(fragment.startsWith(`${MARKER}{"fragmentVersion":2,"schemaVersion":7,`)).toBe(true);
+    expect(fragment.startsWith(`${MARKER}{"fragmentVersion":2,"schemaVersion":8,`)).toBe(true);
     const pasted = run(target, { type: 'paste' });
     expect(pasted.ok).toBe(true);
     const id = pasted.ok ? pasted.ids[0]! : '';
@@ -181,7 +181,7 @@ describe('M6a-U1 interim: fragments at schema v4, v6 since M4-U1 (section 8)', (
     );
   });
 
-  it('fails a text node below schema v4 at its type, and versions 2 and 8 of fragment version 2', () => {
+  it('fails a text node below schema v4 at its type, and versions 2 and 9 of fragment version 2', () => {
     const target = loaded();
     const body = copied(target, ['t1']);
     const before = text(target);
@@ -190,7 +190,7 @@ describe('M6a-U1 interim: fragments at schema v4, v6 since M4-U1 (section 8)', (
       typeFailure,
     );
     expect(run(target, { type: 'paste', text: marked(versionOne(body, 2)) })).toEqual(typeFailure);
-    for (const schemaVersion of [2, 8]) {
+    for (const schemaVersion of [2, 9]) {
       expect(run(target, { type: 'paste', text: marked({ ...body, schemaVersion }) })).toEqual({
         ok: false,
         code: 'document.unsupported-version',

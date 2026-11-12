@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import type { Color, DocumentV7, Frame, TextRun } from '@vector-studio/model';
+import type { Color, DocumentV8, Frame, TextRun } from '@vector-studio/model';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createCounterIdSource,
@@ -59,7 +59,7 @@ function text(id: string, frame: Frame, runs: TextRun[]): Loose {
  * Page `p1`: `t` "ab cd" at (10, 20), `h` "안녕" at (100, 20), a rectangle `r` and an empty frame
  * `fr` at (300, 300).
  */
-function fixture(): DocumentV7 {
+function fixture(): DocumentV8 {
   const nodes: Loose[] = [
     text('t', f(10, 20, 22.5, 12), [run('ab cd')]),
     text('h', f(100, 20, 20, 12), [run('안녕')]),
@@ -97,7 +97,7 @@ function fixture(): DocumentV7 {
     id: 'doc',
     pages: [{ id: 'p1', name: 'Page 1', children: nodes.map((node) => node.id) }],
     nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
-  } as unknown as DocumentV7;
+  } as unknown as DocumentV8;
 }
 
 function editor(): Editor {
@@ -480,8 +480,8 @@ describe('M6b-A06 merged entries under the E26-A09 scoped-projection oracle', ()
   } as const;
 
   type Entry = {
-    before: DocumentV7;
-    after: DocumentV7;
+    before: DocumentV8;
+    after: DocumentV8;
     touched: readonly string[];
     projected?: readonly string[];
   };

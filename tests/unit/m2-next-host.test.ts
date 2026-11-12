@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { DocumentV7 } from '@vector-studio/model';
+import type { DocumentV8 } from '@vector-studio/model';
 import { createElement, type ComponentType } from 'react';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -27,7 +27,7 @@ const { degreesLabel, inRotateZone, nodePageCorners } = (await import(
 )) as {
   degreesLabel: (radians: number) => string;
   inRotateZone: (handles: SelectionHandles, point: PagePoint, zoom: number) => boolean;
-  nodePageCorners: (document: DocumentV7, id: string) => Quad | null;
+  nodePageCorners: (document: DocumentV8, id: string) => Quad | null;
 };
 // M8-U6: the zoom label moved to the UI package's toolbar (M8-L1); next-host's copy is removed
 // and these expectations run against `ui`'s, unchanged.

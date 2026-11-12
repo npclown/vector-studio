@@ -2,9 +2,9 @@ import {
   normalizeRotation,
   type Constraint,
   type Frame,
-  type NodeV7,
+  type NodeV8,
   type Paint,
-  type TextNodeV7,
+  type TextNodeV8,
 } from '@vector-studio/model';
 import {
   apply,
@@ -25,7 +25,7 @@ import type { PagePoint } from './types.js';
 
 /** A tree whose nodes can be replaced, such as the edit draft. */
 export interface WritableTree extends TreeView {
-  set(node: NodeV7): void;
+  set(node: NodeV8): void;
   /**
    * Marks a text node whose auto dimensions are refit after the tree edit (M6a contract, section
    * 6.3); a tree without it, such as an instance expansion (M7-T2), keeps the mapped frame.
@@ -193,12 +193,12 @@ export function mirrorContent(tree: WritableTree, id: string, mx: boolean, my: b
   }
   // A custom node's geometry lives in its `data`, which is not mirrored, so its paints stay too.
   if (node.type === 'custom') return;
-  let next: NodeV7 = node;
+  let next: NodeV8 = node;
   if ('fill' in next && next.fill !== null)
     next = { ...next, fill: mirrorPaint(next.fill, mx, my) };
   if ('stroke' in next && next.stroke !== null) {
     const stroke = next.stroke as { color: Paint };
-    next = { ...next, stroke: { ...stroke, color: mirrorPaint(stroke.color, mx, my) } } as NodeV7;
+    next = { ...next, stroke: { ...stroke, color: mirrorPaint(stroke.color, mx, my) } } as NodeV8;
   }
   if (next.type === 'path') {
     next = { ...next, path: { ...next.path, points: mirrorUnit(next.path.points, mx, my) } };
@@ -257,7 +257,7 @@ function isAligned(theta: number): boolean {
 }
 
 /** The points of a path or line in its parent's space, interleaved. */
-function parentPoints(node: Extract<NodeV7, { type: 'path' | 'line' }>): number[] {
+function parentPoints(node: Extract<NodeV8, { type: 'path' | 'line' }>): number[] {
   const unit = node.type === 'path' ? node.path.points : node.points;
   const m = localTransform(node.frame, node.rotation);
   const out: number[] = [];
@@ -374,7 +374,7 @@ function nearlyEqual(a: number, b: number): boolean {
  */
 function mapText(
   tree: WritableTree,
-  node: TextNodeV7,
+  node: TextNodeV8,
   frame: Frame,
   theta: number,
   map: ScaleMap,
