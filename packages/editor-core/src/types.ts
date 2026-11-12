@@ -30,12 +30,24 @@ import type {
   Stroke,
   TextNodeV8,
   TextRun,
+  Guide,
+  LayoutGrid,
 } from '@vector-studio/model';
 
 // Public command, query and event shapes (P5 plan, sections 4.1 to 4.3; MVP M1 contract,
 // sections 3 and 4).
 
-export type ToolName = 'select' | 'rectangle' | 'ellipse' | 'line' | 'frame' | 'path' | 'text';
+export type ToolName =
+  | 'select'
+  | 'rectangle'
+  | 'ellipse'
+  | 'line'
+  | 'frame'
+  | 'path'
+  | 'text'
+  /** V-40: the freehand pencil and the regular polygon tools. */
+  | 'pencil'
+  | 'polygon';
 
 /**
  * A built-in tool name or a registered extension tool ID (MVP M2 contract, section 7; M2-Q13).
@@ -231,6 +243,8 @@ export type NodeProps = Readonly<{
   stroke?: Stroke | null;
   opacity?: number;
   visible?: boolean;
+  /** V31-E4: `false` removes the key (V31-S1). */
+  locked?: boolean;
   /** Custom nodes only. */
   data?: JsonValue;
   /** Rectangles only. */
@@ -239,6 +253,8 @@ export type NodeProps = Readonly<{
   startArrow?: Arrow;
   endArrow?: Arrow;
   constraints?: Constraints;
+  /** Frames and symbols only (V-38 contract, V38-C2); an empty list removes them. */
+  layoutGrids?: readonly LayoutGrid[];
 }>;
 
 /**
@@ -338,6 +354,11 @@ export type DocumentCommand =
       frames: readonly Readonly<{ id: string; frame: Frame; rotation?: number }>[];
     }>
   | Readonly<{ type: 'setNodeProps'; id: string; props: NodeProps }>
+  /**
+   * V-31 contract, V31-E4: sets `locked` and/or `visible` on nodes of the active page in one
+   * transaction (one undo step); `locked: false` removes the key; returns empty `ids`.
+   */
+  | Readonly<{ type: 'setLayerState'; ids: readonly string[]; locked?: boolean; visible?: boolean }>
   /**
    * Sets appearance on nodes of the active page at any depth in one transaction (MVP M4
    * contract, section 4.2); returns empty `ids`, and a change of no value records no step.
@@ -567,6 +588,11 @@ export type DocumentCommand =
   | Readonly<{ type: 'addPage'; name?: string; index?: number }>
   | Readonly<{ type: 'removePage'; id: string }>
   | Readonly<{ type: 'renamePage'; id: string; name: string }>
+  /**
+   * Replaces the guides of `page` (V-38 contract, V38-C1) as one step; guides equal to the
+   * page's record no step. Each guide is validated as a load would (V38-S1).
+   */
+  | Readonly<{ type: 'setGuides'; page: string; guides: readonly Guide[] }>
   | Readonly<{ type: 'movePage'; id: string; index: number }>;
 
 export type AlignEdge = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom';
@@ -589,6 +615,10 @@ export type SessionCommand =
   | Readonly<{ type: 'setKeymap'; bindings: readonly KeyBinding[] }>
   /** Turns snapping on or off (M2 contract, section 4.2); Ctrl or Meta held also disables it. */
   | Readonly<{ type: 'setSnapping'; enabled: boolean }>
+  /** Shows or hides the host's rulers and guides (V-38 contract, V38-C3). */
+  | Readonly<{ type: 'setRulersVisible'; visible: boolean }>
+  /** Shows or hides layout grids, and with them snapping to grid lines (V38-C3, V38-N1). */
+  | Readonly<{ type: 'setLayoutGridsVisible'; visible: boolean }>
   /**
    * Enters a container (group, mask group or frame) of the active page, or leaves every scope
    * with null (M2 contract, section 5).
@@ -632,7 +662,9 @@ export type SessionCommand =
   /** Commits an active composition (section 7.3); a no-op without one. */
   | Readonly<{ type: 'endComposition' }>
   /** Sets the text tool style (M6b-S2), a full `TextStyle`. */
-  | Readonly<{ type: 'setTextToolStyle'; style: TextStyle }>;
+  | Readonly<{ type: 'setTextToolStyle'; style: TextStyle }>
+  /** V-40: sets the polygon tool's side count, an integer from 3 to 60. */
+  | Readonly<{ type: 'setPolygonSides'; sides: number }>;
 
 export type Command =
   | DocumentCommand
@@ -711,6 +743,9 @@ export type EditorErrorCode =
   | 'editor.boolean-failed'
   // E41 contract, section 6.
   | 'editor.effect-limit'
+  // V-33 SVG import contract, section 2.
+  | 'editor.invalid-svg'
+  | 'editor.empty-svg'
   // V-39 contract, section 3 (V39-E3).
   | 'editor.unknown-style'
   | 'editor.unknown-variable'
@@ -753,6 +788,10 @@ export type EditorSnapshot = Readonly<{
   snap: SnapOverlay | null;
   /** Whether snapping is on; true by default. */
   snapping: boolean;
+  /** Whether the host shows rulers and guides (V-38 contract, V38-C3); false by default. */
+  rulersVisible: boolean;
+  /** Whether layout grids show and snap (V38-C3, V38-N1); true by default. */
+  layoutGridsVisible: boolean;
   /** The entered container of the active page (M2 contract, section 5), or null. */
   scope: string | null;
   /** Path edit mode (M3 contract, section 4), or null. */
@@ -761,6 +800,8 @@ export type EditorSnapshot = Readonly<{
   textEdit: TextEditState | null;
   /** The style the text tool gives a new node (M6b-S2). */
   textStyle: TextStyle;
+  /** V-40: the side count the polygon tool draws with, 3 to 60; 3 by default. */
+  polygonSides: number;
 }>;
 
 export type Query =
@@ -787,6 +828,9 @@ export type Query =
   /** The snap overlay of the active gesture, or null. */
   | Readonly<{ type: 'snap' }>
   | Readonly<{ type: 'snapping' }>
+  /** V-38 contract, V38-C3. */
+  | Readonly<{ type: 'rulersVisible' }>
+  | Readonly<{ type: 'layoutGridsVisible' }>
   /** The entered container, or null. */
   | Readonly<{ type: 'scope' }>
   /**
@@ -919,7 +963,7 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'commi
                         ? readonly KeyBinding[]
                         : Q extends { type: 'snap' }
                           ? SnapOverlay | null
-                          : Q extends { type: 'snapping' }
+                          : Q extends { type: 'snapping' | 'rulersVisible' | 'layoutGridsVisible' }
                             ? boolean
                             : Q extends { type: 'scope' }
                               ? string | null
@@ -966,13 +1010,18 @@ export type EditorEvent =
         | 'keymap'
         | 'snap'
         | 'snapping'
+        /** V-38 contract, V38-C3. */
+        | 'rulersVisible'
+        | 'layoutGridsVisible'
         | 'scope'
         | 'pathEdit'
         /** The text layout port's generation changed (M6a contract, section 5). */
         | 'textLayout'
         /** Text edit mode and the text tool style (M6b contract, M6b-S1 and S2). */
         | 'textEdit'
-        | 'textStyle';
+        | 'textStyle'
+        /** The polygon tool's side count (V-40). */
+        | 'polygonSides';
     }>
   | DiagnosticEvent;
 

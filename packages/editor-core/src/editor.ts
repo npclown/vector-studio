@@ -21,6 +21,7 @@ import {
   pasteTargetOf,
 } from './clipboard.js';
 import { buildExportScene, exportSceneToSvg } from './export.js';
+import { isSvgText, svgToFragment, type SvgTextRun } from './svg-import.js';
 import { ExpansionCache, expansionFailure } from './expansion.js';
 import {
   applyEdit,
@@ -38,7 +39,7 @@ import {
   toolOverlay,
   type RegisteredTool,
 } from './extensions.js';
-import { boundsOf } from './hit-test.js';
+import { boundsOf, isLocked } from './hit-test.js';
 import { createCounterIdSource } from './ids.js';
 import {
   allAnchors,
@@ -83,10 +84,13 @@ import {
   type TextToolSupport,
 } from './text-edit.js';
 import { normalizeInputText, textKeyRoute } from './text-input.js';
+import { POLYGON_SIDES, isPolygonSides } from './freehand.js';
 import {
   createBoxTool,
   createLineTool,
   createPathTool,
+  createPencilTool,
+  createPolygonTool,
   createSelectTool,
   createTextTool,
   selectionHandles,
@@ -327,6 +331,18 @@ export const ZOOM_MIN = 1 / 64;
 export const ZOOM_MAX = 256;
 /** The zoom-to-fit padding: 32 CSS px on each side (M2-Q2). */
 const FIT_PADDING = 64;
+/**
+ * V31-E2b: whether a document change from `previous` locked `id` (it or an ancestor), which
+ * ends path or text edit mode on it, as `exitScope` does.
+ */
+function becameLocked(
+  previous: DocumentV8 | null | undefined,
+  document: DocumentV8,
+  id: string,
+): boolean {
+  return previous != null && !isLocked(previous, id) && isLocked(document, id);
+}
+
 const DEFAULT_VIEWPORT: RenderCamera = deepFreeze({ position: { x: 0, y: 0 }, zoom: 1 });
 const DOCUMENT_COMMANDS = new Set([
   'createRectangle',
@@ -337,6 +353,7 @@ const DOCUMENT_COMMANDS = new Set([
   'createCustomNode',
   'setFrames',
   'setNodeProps',
+  'setLayerState',
   'setStyle',
   'deleteNodes',
   'groupNodes',
@@ -355,6 +372,7 @@ const DOCUMENT_COMMANDS = new Set([
   'removePage',
   'renamePage',
   'movePage',
+  'setGuides',
   'rotateNodes',
   'alignNodes',
   'distributeNodes',
@@ -478,6 +496,8 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.boolean-too-large',
   'editor.boolean-failed',
   'editor.effect-limit',
+  'editor.invalid-svg',
+  'editor.empty-svg',
 ]);
 
 /**
@@ -753,6 +773,9 @@ class EditorCore implements Editor {
   private snap: SnapOverlay | null = null;
   private snapKey = 'null';
   private snapping = true;
+  /** V-38 contract, V38-C3: the host's rulers and guides, and layout grids. */
+  private rulersVisible = false;
+  private layoutGridsVisible = true;
   /** The entered container of the active page (M2 contract, section 5), or null. */
   private scope: string | null = null;
   /**
@@ -804,6 +827,8 @@ class EditorCore implements Editor {
   private textScopeExit = false;
   /** The text tool style (M6b-S2). */
   private textStyle: TextStyle;
+  /** V-40: the polygon tool's side count. */
+  private polygonSides: number = POLYGON_SIDES.default;
   /**
    * The caret model of the last layout edit mode read, rebuilt when the cached layout object
    * changes (a text change, or a generation change dropping the cache).
@@ -967,6 +992,19 @@ class EditorCore implements Editor {
     this.tools.set('frame', createBoxTool('createFrame', draw));
     this.tools.set('line', createLineTool(draw));
     this.tools.set('path', createPathTool(draw));
+    this.tools.set('pencil', createPencilTool(draw));
+    this.tools.set(
+      'polygon',
+      createPolygonTool(
+        {
+          get: () => this.polygonSides,
+          set: (sides) => {
+            this.setPolygonSides(sides);
+          },
+        },
+        draw,
+      ),
+    );
     this.tools.set(
       'text',
       createTextTool((node) => this.extensions.geometry(node), this.expansions, this.textSupport),
@@ -1246,7 +1284,11 @@ class EditorCore implements Editor {
     if (command.type === 'paste') {
       const source = pasteSource(command, this.clipboard);
       if (typeof source !== 'string') return source;
-      if (!this.isFragmentSource(command, source)) return this.pastePlainText(command, source);
+      if (!this.isFragmentSource(command, source)) {
+        // V-33 (V33-P1): unmarked SVG text imports as nodes instead of creating a text node.
+        if (isSvgText(source)) return this.pasteSvg(command, source);
+        return this.pastePlainText(command, source);
+      }
     }
     if (DOCUMENT_COMMANDS.has(command.type)) {
       // A host command during a drag would leave the gesture's base stale, so it applies to the
@@ -1453,6 +1495,18 @@ class EditorCore implements Editor {
         if (this.updateKeymap()) this.refresh({ type: 'session', field: 'keymap' });
         return { ok: true, ids: [] };
       }
+      case 'setRulersVisible':
+      case 'setLayoutGridsVisible': {
+        if (typeof command.visible !== 'boolean') {
+          return failure('editor.invalid-command', '/visible');
+        }
+        const field = command.type === 'setRulersVisible' ? 'rulersVisible' : 'layoutGridsVisible';
+        if (command.visible !== this[field]) {
+          this[field] = command.visible;
+          this.refresh({ type: 'session', field });
+        }
+        return { ok: true, ids: [] };
+      }
       case 'setSnapping': {
         if (typeof command.enabled !== 'boolean') {
           return failure('editor.invalid-command', '/enabled');
@@ -1554,6 +1608,10 @@ class EditorCore implements Editor {
         return this.setTextSelection(command);
       case 'endComposition':
         // The forced end above committed an active composition (M6b-H2); else a no-op.
+        return { ok: true, ids: [] };
+      case 'setPolygonSides':
+        if (!isPolygonSides(command.sides)) return failure('editor.invalid-command', '/sides');
+        this.setPolygonSides(command.sides);
         return { ok: true, ids: [] };
       case 'setTextToolStyle': {
         const style = checkTextStyle(command.style);
@@ -1672,6 +1730,10 @@ class EditorCore implements Editor {
           return this.snap;
         case 'snapping':
           return this.snapping;
+        case 'rulersVisible':
+          return this.rulersVisible;
+        case 'layoutGridsVisible':
+          return this.layoutGridsVisible;
         case 'scope':
           return this.scope;
         case 'clipboard':
@@ -1907,8 +1969,13 @@ class EditorCore implements Editor {
       case 'delete':
         return selection.length === 0 ? nothing : this.run({ type: 'deleteNodes', ids: selection });
       case 'selectAll': {
-        // The scope's children, or the page's (section 7).
-        const ids = childrenOf(documentTree(this.document), this.scope ?? this.activePage);
+        // The scope's children, or the page's (section 7), except hidden and locked ones (V31-E3).
+        const ids = childrenOf(documentTree(this.document), this.scope ?? this.activePage).filter(
+          (id) => {
+            const node = this.document.nodes[id];
+            return node !== undefined && node.visible && !isLocked(this.document, id);
+          },
+        );
         return this.run({ type: 'setSelection', ids });
       }
       case 'enterScope': {
@@ -1916,6 +1983,8 @@ class EditorCore implements Editor {
         // single selected path enters edit mode (M3 contract, section 4); any other selection
         // does nothing (still consumed).
         const node = selection.length === 1 ? this.document.nodes[selection[0]!] : undefined;
+        // V31-E2b: a locked node is neither entered nor edited (consumed).
+        if (node !== undefined && isLocked(this.document, node.id)) return nothing;
         if (node?.type === 'path') return this.run({ type: 'enterPathEdit', id: node.id });
         // One selected text node enters text edit mode, all text selected (M6b section 3.2).
         if (node?.type === 'text') return this.run({ type: 'enterTextEdit', id: node.id });
@@ -1976,9 +2045,23 @@ class EditorCore implements Editor {
         return result;
       }
       case 'nudge': {
-        if (selection.length === 0) return nothing;
+        // V31-E2b: locked nodes stay put; with none left the nudge is a consumed no-op.
+        const free = selection.filter((id) => !isLocked(this.document, id));
+        if (free.length === 0) return nothing;
         const { dx, dy } = binding.args as { dx: number; dy: number };
-        return this.run({ type: 'nudgeNodes', ids: selection, dx, dy });
+        return this.run({ type: 'nudgeNodes', ids: free, dx, dy });
+      }
+      case 'toggleLocked': {
+        // V31-E5: lock all when any selected node is unlocked, else unlock all; one step.
+        if (selection.length === 0) return nothing;
+        const lock = selection.some((id) => this.document.nodes[id]?.locked !== true);
+        return this.run({ type: 'setLayerState', ids: selection, locked: lock });
+      }
+      case 'toggleVisible': {
+        // V31-E5: hide all when any selected node is visible, else show all; one step.
+        if (selection.length === 0) return nothing;
+        const show = !selection.some((id) => this.document.nodes[id]?.visible !== false);
+        return this.run({ type: 'setLayerState', ids: selection, visible: show });
       }
       case 'reorder': {
         if (selection.length === 0) return nothing;
@@ -2005,6 +2088,11 @@ class EditorCore implements Editor {
         return this.run({ type: 'zoomTo', target: 'selection' });
       case 'zoomTo100':
         return this.run({ type: 'zoomTo', target: 'actual' });
+      // V-38 contract, V38-C4.
+      case 'toggleRulers':
+        return this.run({ type: 'setRulersVisible', visible: !this.rulersVisible });
+      case 'toggleLayoutGrids':
+        return this.run({ type: 'setLayoutGridsVisible', visible: !this.layoutGridsVisible });
       // The in-memory clipboard (section 6); the dispatch leaves an empty-selection copy or
       // cut unconsumed before it gets here.
       case 'copy':
@@ -2564,7 +2652,8 @@ class EditorCore implements Editor {
       node !== undefined &&
       this.tool === 'select' &&
       this.selection.length === 1 &&
-      this.selection[0] === edit.id;
+      this.selection[0] === edit.id &&
+      !becameLocked(previous, this.document, edit.id);
     if (!kept) {
       this.setPathEditState(null);
       return;
@@ -3263,6 +3352,44 @@ class EditorCore implements Editor {
   }
 
   /**
+   * `paste` of unmarked SVG text outside text edit mode (V-33 contract, V33-P1): `svgToFragment`
+   * with the layout port as its measure and the text style family as its default family, then
+   * the fragment paste centred on `pointer`, else `at`, else the viewport centre
+   * (`editor.no-viewport-size` without one). An SVG with text and no port fails with
+   * `editor.no-text-layout`; conversion failures are `editor.invalid-svg` and
+   * `editor.empty-svg`.
+   */
+  private pasteSvg(command: Extract<Command, { type: 'paste' }>, source: string): CommandResult {
+    const centre = command.pointer ?? command.at ?? this.viewportCentre();
+    if (centre === null) return failure('editor.no-viewport-size');
+    const layouts = this.textLayouts;
+    const converted = svgToFragment(source, {
+      defaultFamily: this.textStyle.family,
+      ...(layouts === null
+        ? {}
+        : {
+            layout: (runs: readonly SvgTextRun[]) => {
+              const result = layouts.layoutRequest({
+                runs,
+                width: null,
+                align: 'left',
+                letterSpacing: 0,
+                lineHeight: TEXT_LINE_HEIGHT,
+              });
+              return {
+                width: result.width,
+                height: result.height,
+                baseline: result.lines[0]?.baseline ?? 0,
+              };
+            },
+          }),
+    });
+    if (!converted.ok) return converted;
+    if (converted.hasText && layouts === null) return failure('editor.no-text-layout');
+    return this.run({ type: 'paste', text: converted.fragment, at: centre });
+  }
+
+  /**
    * `paste` of unmarked text outside text edit mode (M6b contract, sections 9.3 and 9.4): the
    * text normalized (section 9.1), empty `editor.unsupported-clipboard`; without a port
    * `editor.no-text-layout`; then one `createText` of an `autoWidth` node in the text tool
@@ -3484,7 +3611,8 @@ class EditorCore implements Editor {
       edit.id !== null
         ? editableText(this.document, this.activePage, edit.id) !== undefined &&
           selection.length === 1 &&
-          selection[0] === edit.id
+          selection[0] === edit.id &&
+          !becameLocked(previous, this.document, edit.id)
         : selection.length === 0 &&
           pendingParentHolds(this.document, this.activePage, edit.pending!.parent);
     const kept = previous !== null && !this.textScopeExit && this.tool === 'select' && holds;
@@ -3543,12 +3671,23 @@ class EditorCore implements Editor {
       keymap: this.keymap,
       snap: this.snap,
       snapping: this.snapping,
+      rulersVisible: this.rulersVisible,
+      layoutGridsVisible: this.layoutGridsVisible,
       scope: this.scope,
       pathEdit: this.pathEdit,
       textEdit: this.textEdit,
       textStyle: this.textStyle,
+      polygonSides: this.polygonSides,
       history: { undoDepth: this.undoStack.length, redoDepth: this.redoStack.length },
     });
+  }
+
+  /** V-40: sets the polygon side count, clamped to 3..60 (the tool's arrow keys step it). */
+  private setPolygonSides(sides: number): void {
+    const next = Math.min(POLYGON_SIDES.max, Math.max(POLYGON_SIDES.min, Math.round(sides)));
+    if (!Number.isFinite(next) || next === this.polygonSides) return;
+    this.polygonSides = next;
+    this.refresh({ type: 'session', field: 'polygonSides' });
   }
 
   private refresh(event: EditorEvent): void {

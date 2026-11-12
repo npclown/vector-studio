@@ -68,9 +68,11 @@ describe('M8-A10 toolbar row 1: tools (M8-L1)', () => {
       'select',
       'rectangle',
       'ellipse',
+      'polygon',
       'line',
       'frame',
       'path',
+      'pencil',
       'text',
     ]);
     expect(Object.isFrozen(BUILT_IN_TOOLS)).toBe(true);
@@ -335,9 +337,11 @@ describe('M8-A10 toolbar rows markup (M8-L1, M8-Q10 (a))', () => {
       ['tool-select', false, 'false'],
       ['tool-rectangle', false, 'false'],
       ['tool-ellipse', false, 'false'],
+      ['tool-polygon', false, 'false'],
       ['tool-line', false, 'false'],
       ['tool-frame', false, 'false'],
       ['tool-path', false, 'false'],
+      ['tool-pencil', false, 'false'],
       ['tool-text', false, 'false'],
       ['tool-aaa.ext', false, 'false'],
       ['tool-test.ui.alpha', false, 'true'],

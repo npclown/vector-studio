@@ -1,11 +1,13 @@
 import {
   eventChord,
+  isSvgText,
   type CommandResult,
   type Editor,
   type InputEvent,
   type Modifiers,
   type PagePoint,
 } from '@vector-studio/editor-core';
+import { importSvgFiles, isSvgFile, type SvgFileLike } from './import-svg.js';
 import type { BeforeInputLike, TextInputHost } from './text-input.js';
 
 // MVP M2 contract, M2-I4: how `EditorCanvas` turns DOM input into editor `input` commands. Kept
@@ -75,6 +77,20 @@ export type KeyLike = ModifierKeys &
 export type ClipboardDataLike = Readonly<{
   getData(format: string): string;
   setData(format: string, data: string): void;
+  /** The pasted files (V33-P2); absent in older fakes. */
+  files?: ArrayLike<SvgFileLike>;
+}>;
+
+/** A DOM `dragover` or `drop` on the canvas, as the import uses it (V33-P3). */
+export type DragEventLike = Readonly<{
+  clientX: number;
+  clientY: number;
+  dataTransfer: Readonly<{
+    types: ArrayLike<string>;
+    files: ArrayLike<SvgFileLike>;
+    dropEffect: string;
+  }> | null;
+  preventDefault(): void;
 }>;
 
 export type ClipboardEventLike = Readonly<{
@@ -351,12 +367,65 @@ export class CanvasInput {
    */
   clipboardPaste(event: ClipboardEventLike): void {
     event.preventDefault();
-    const text = event.clipboardData?.getData('text/plain') ?? '';
+    const data = event.clipboardData;
+    let text = data?.getData('text/plain') ?? '';
     const canvas = this.canvas();
     const hover = this.hover;
     const pointer =
       hover === null || canvas === null ? null : this.toPage(canvas, hover.clientX, hover.clientY);
+    // V33-P2: outside text edit mode, SVG data or an SVG file before plain text (a fragment
+    // still wins); in edit mode only `text/plain` is read (M6b section 9.1).
+    if (
+      data !== null &&
+      this.editor.getSnapshot().textEdit === null &&
+      !text.startsWith('vector-studio/fragment')
+    ) {
+      const svg = data.getData('image/svg+xml');
+      const file = Array.from(data.files ?? []).find(isSvgFile);
+      if (svg !== '') text = svg;
+      else if (file !== undefined) {
+        void file.text().then(
+          (body) => {
+            // A file read that ends after edit mode began is dropped (V33-P2).
+            if (this.editor.getSnapshot().textEdit !== null || !isSvgText(body)) return;
+            this.editor.execute({
+              type: 'paste',
+              text: body,
+              ...(pointer === null ? {} : { pointer }),
+            });
+          },
+          () => undefined,
+        );
+        return;
+      }
+    }
     this.editor.execute({ type: 'paste', text, ...(pointer === null ? {} : { pointer }) });
+  }
+
+  /** V33-P3: a drag carrying files may drop on the canvas (as a copy). */
+  dragOver(event: DragEventLike): void {
+    const transfer = event.dataTransfer;
+    if (transfer === null || !Array.from(transfer.types).includes('Files')) return;
+    event.preventDefault();
+    (transfer as { dropEffect: string }).dropEffect = 'copy';
+  }
+
+  /**
+   * V33-P3: the SVG files of a drop, imported at the drop point (page space by the camera at drop
+   * time), each later file 16 page units further; resolves when every file is imported.
+   */
+  drop(event: DragEventLike): Promise<unknown> {
+    const transfer = event.dataTransfer;
+    if (transfer === null || !Array.from(transfer.types).includes('Files')) {
+      return Promise.resolve([]);
+    }
+    // Every file drop is prevented, so the browser never opens a dropped file (V33-P3).
+    event.preventDefault();
+    const files = transfer.files;
+    if (!Array.from(files).some(isSvgFile)) return Promise.resolve([]);
+    const canvas = this.canvas();
+    const at = canvas === null ? undefined : this.toPage(canvas, event.clientX, event.clientY);
+    return importSvgFiles(this.editor, files, at === undefined ? {} : { at });
   }
 
   keyUp(event: KeyLike): void {
@@ -443,11 +512,15 @@ export function attachCanvasListeners(
   const onCopy = (event: Event) => input.clipboardCopy('copy', event as ClipboardEvent);
   const onCut = (event: Event) => input.clipboardCopy('cut', event as ClipboardEvent);
   const onPaste = (event: Event) => input.clipboardPaste(event as ClipboardEvent);
+  const onDragOver = (event: Event) => input.dragOver(event as unknown as DragEventLike);
+  const onDrop = (event: Event) => void input.drop(event as unknown as DragEventLike);
   canvas.addEventListener('wheel', onWheel, { passive: false });
   canvas.addEventListener('blur', onBlur);
   canvas.addEventListener('copy', onCopy);
   canvas.addEventListener('cut', onCut);
   canvas.addEventListener('paste', onPaste);
+  canvas.addEventListener('dragover', onDragOver);
+  canvas.addEventListener('drop', onDrop);
   view.addEventListener('blur', onWindowBlur);
   // M6b-H2 and H3: the textarea's blur and clipboard listeners, `beforeinput` and composition.
   const text = textarea === null ? [] : textareaListeners(input);
@@ -462,6 +535,8 @@ export function attachCanvasListeners(
     canvas.removeEventListener('copy', onCopy);
     canvas.removeEventListener('cut', onCut);
     canvas.removeEventListener('paste', onPaste);
+    canvas.removeEventListener('dragover', onDragOver);
+    canvas.removeEventListener('drop', onDrop);
     view.removeEventListener('blur', onWindowBlur);
     for (const [type, listener] of text) textarea?.removeEventListener(type, listener);
     textarea?.removeEventListener('blur', onBlur);

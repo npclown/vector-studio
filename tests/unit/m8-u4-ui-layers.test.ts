@@ -196,6 +196,8 @@ describe('M8-A10 layer rows (M8-L3)', () => {
         expanded: false,
         selected: false,
         visible: true,
+        locked: false,
+        inherited: null,
       },
       {
         id: g,
@@ -207,6 +209,8 @@ describe('M8-A10 layer rows (M8-L3)', () => {
         expanded: false,
         selected: false,
         visible: true,
+        locked: false,
+        inherited: null,
       },
       {
         id: s,
@@ -218,6 +222,8 @@ describe('M8-A10 layer rows (M8-L3)', () => {
         expanded: false,
         selected: false,
         visible: true,
+        locked: false,
+        inherited: null,
       },
     ]);
   });
@@ -462,12 +468,15 @@ describe('M8-A10 PageList and LayerTree markup (M8-L2 to L4)', () => {
       ['reorder-front', false, null],
       ['reorder-back', false, null],
       [`layer-name-${i}`, false, 'false'],
+      [`layer-lock-${i}`, false, 'false'],
       [`layer-visible-${i}`, false, null],
       [`layer-toggle-${g}`, false, null],
       [`layer-name-${g}`, false, 'true'],
+      [`layer-lock-${g}`, false, 'false'],
       [`layer-visible-${g}`, false, null],
       [`layer-toggle-${s}`, false, null],
       [`layer-name-${s}`, false, 'false'],
+      [`layer-lock-${s}`, false, 'false'],
       [`layer-visible-${s}`, false, null],
     ]);
     const rows = [
@@ -485,8 +494,12 @@ describe('M8-A10 PageList and LayerTree markup (M8-L2 to L4)', () => {
     expect(html).toContain('<span>group</span>');
     expect(html).toContain('<span>symbol</span>');
     // The hidden symbol is dimmed and offers "show".
-    expect(html).toContain(`data-testid="layer-visible-${s}">show</button>`);
-    expect(html).toContain(`data-testid="layer-visible-${g}">hide</button>`);
+    expect(html).toMatch(
+      new RegExp(`data-testid="layer-visible-${s}"[^>]*>.*?show</span></button>`, 'u'),
+    );
+    expect(html).toMatch(
+      new RegExp(`data-testid="layer-visible-${g}"[^>]*>.*?hide</span></button>`, 'u'),
+    );
     expect(html).toContain('opacity:0.5');
     expect(html).not.toContain('layers-refusal');
   });

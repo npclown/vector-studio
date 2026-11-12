@@ -90,6 +90,10 @@ function detach(draft: Draft, document: DocumentV8, planned: Plan, ids: readonly
       stroke: source.stroke,
       // The effects the instance draws with (E41-S10): its own, or else its source's.
       effects: instance.effects.length > 0 ? instance.effects : source.effects,
+      // V31-S3: detach keeps the instance's lock, as it keeps `visible`.
+      ...(instance.locked === true ? { locked: true } : {}),
+      // V-38 contract, V38-S2: the source's layout grids.
+      ...(source.layoutGrids === undefined ? {} : { layoutGrids: source.layoutGrids }),
       // V39-E4: the frame carries the source's paint bindings and the instance's own; the
       // draft drops those that no longer hold (an opacity binding unless the product equals it).
       ...detachedBindings(source, instance),

@@ -7,8 +7,23 @@ export {
   DEFAULT_SHAPE_STROKE,
 } from './edits.js';
 export { createCounterIdSource } from './ids.js';
+export {
+  MAX_GRID_LINES,
+  layoutGridLines,
+  type LayoutGridBand,
+  type LayoutGridGeometry,
+  type LayoutGridLine,
+} from './layout-grid.js';
 export { starExtension, type StarCreateArgs } from './star.js';
 export { extensionCommand, type ExtensionCommandBuilder } from './extension-command.js';
+export {
+  isSvgText,
+  svgToFragment,
+  type SvgImport,
+  type SvgImportOptions,
+  type SvgTextMeasure,
+  type SvgTextRun,
+} from './svg-import.js';
 export type * from './types.js';
 
 // MVP M8 contract, M8-T1 (M8-Q2 (a)): every `model` and `contracts` type in the reach of this
@@ -30,10 +45,14 @@ export type {
   CustomNodeV6,
   CustomNodeV8,
   Dash,
-  DocumentErrorCode,
-  DocumentV8,
   DropShadowEffect,
   Effect,
+  BandLayoutGrid,
+  Guide,
+  LayoutGrid,
+  UniformLayoutGrid,
+  DocumentErrorCode,
+  DocumentV8,
   EllipseNodeV6,
   EllipseNodeV8,
   FillRule,
@@ -57,6 +76,8 @@ export type {
   NodeBaseV2,
   NodeBindings,
   NodeEffects,
+  NodeLock,
+  NodeLayoutGrids,
   NodeV8,
   PageV1,
   PageV2,
