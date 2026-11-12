@@ -7,7 +7,7 @@ import { expect, test, type Download, type Page } from '@playwright/test';
 // canvas after each change and that undo restores each step; A09 exports a page with a multiply
 // fill as PNG and SVG and compares the PNG with the canvas (within 2/255). The pixel probes read
 // the presented frame through the page's E10 capture hook; the headless smoke project (SwiftShader)
-// checks them when its renderer starts. Runs in playwright.v35-next-host.config.ts.
+// checks them when its renderer starts. Runs in playwright.v35-studio.config.ts.
 
 type Hook = Readonly<{ editor: Editor }>;
 type Rgb = readonly [number, number, number];
@@ -306,15 +306,27 @@ test('V35-A09: a multiply fill over a backdrop exports as PNG and SVG like the c
   const png = await decode(page, await bytes(await exportFile(page, 'png')), [inside, outside]);
   expect(png.size).toEqual([200, 200]);
   // Multiply: grey · orange = (128, 64, 0); the backdrop alone is (255, 128, 0).
-  expect(channelGap(png.probes[0]!, [128, 64, 0]), `PNG ${png.probes[0]}`).toBeLessThanOrEqual(2);
-  expect(channelGap(png.probes[1]!, [255, 128, 0]), `PNG ${png.probes[1]}`).toBeLessThanOrEqual(2);
+  expect(
+    channelGap(png.probes[0]!, [128, 64, 0]),
+    `PNG ${JSON.stringify(png.probes[0])}`,
+  ).toBeLessThanOrEqual(2);
+  expect(
+    channelGap(png.probes[1]!, [255, 128, 0]),
+    `PNG ${JSON.stringify(png.probes[1])}`,
+  ).toBeLessThanOrEqual(2);
   if (rendering) {
     const canvas = await pixels(page, [
       { x: inside[0], y: inside[1] },
       { x: outside[0], y: outside[1] },
     ]);
-    expect(channelGap(canvas[0]!, png.probes[0]!), `canvas ${canvas[0]}`).toBeLessThanOrEqual(2);
-    expect(channelGap(canvas[1]!, png.probes[1]!), `canvas ${canvas[1]}`).toBeLessThanOrEqual(2);
+    expect(
+      channelGap(canvas[0]!, png.probes[0]!),
+      `canvas ${JSON.stringify(canvas[0])}`,
+    ).toBeLessThanOrEqual(2);
+    expect(
+      channelGap(canvas[1]!, png.probes[1]!),
+      `canvas ${JSON.stringify(canvas[1])}`,
+    ).toBeLessThanOrEqual(2);
   }
 
   // SVG: the blended fill carries `mix-blend-mode`.

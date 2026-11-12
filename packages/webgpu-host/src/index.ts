@@ -22,7 +22,10 @@ export type EditorGlyphRaster = NonNullable<PrimitiveRendererServiceOptions['gly
 /** The service options the editor needs, without the fill and stroke mesh ports. */
 export type EditorRendererOptions = Readonly<
   Required<
-    Pick<PrimitiveRendererServiceOptions, 'clips' | 'paints' | 'groups' | 'text' | 'effects' | 'blend'>
+    Pick<
+      PrimitiveRendererServiceOptions,
+      'clips' | 'paints' | 'groups' | 'text' | 'effects' | 'blend'
+    >
   > & {
     glyphRaster: EditorGlyphRaster;
   }
