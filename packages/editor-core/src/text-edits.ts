@@ -1,5 +1,6 @@
 import { validateNode, type DocumentV8, type TextNodeV8 } from '@vector-studio/model';
-import { Draft, fail, type Failure } from './draft.js';
+import { layoutSizingOf } from './auto-layout.js';
+import { Draft, fail, withSizing, type Failure } from './draft.js';
 import { nodeOf, success, uniqueIds, type EditContext, type EditResult } from './edit-support.js';
 import {
   isAuto,
@@ -152,9 +153,24 @@ export function setTextProps(
   if (Object.keys(props).length === 0) return fail('editor.invalid-command');
   const node = textNodeOf(document, raw.id, '/id');
   if (isFailure(node)) return node;
-  const next = validated({ ...node, ...props });
+  const next = validated(withTextSizing({ ...node, ...props }, node));
   if (isFailure(next)) return next;
   return written(document, next, context, finish);
+}
+
+/**
+ * V-34 section 4.2: a text whose sizing becomes automatic gives up `fill` on the axes it now sizes
+ * itself, so the layout pass does not undo the change. `autoWidth` sizes both axes, `autoHeight`
+ * the vertical one.
+ */
+function withTextSizing(next: TextNodeV8, before: TextNodeV8): TextNodeV8 {
+  if (next.sizing === before.sizing || next.sizing === 'fixed') return next;
+  const sizing = layoutSizingOf(next);
+  const horizontal =
+    next.sizing === 'autoWidth' && sizing.horizontal === 'fill' ? 'fixed' : sizing.horizontal;
+  const vertical = sizing.vertical === 'fill' ? 'fixed' : sizing.vertical;
+  if (horizontal === sizing.horizontal && vertical === sizing.vertical) return next;
+  return withSizing(next, { horizontal, vertical }) as TextNodeV8;
 }
 
 /**

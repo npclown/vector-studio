@@ -90,6 +90,8 @@ describe('V-25 slice 10: the context menu items', () => {
       'context-group',
       'context-ungroup',
       'context-mask',
+      // V-34 contract, section 6.
+      'context-auto-layout-add',
       'context-visibility',
       'context-lock',
       'context-create-symbol',
@@ -305,7 +307,8 @@ describe('V-25 slice 10: CanvasContextMenu markup', () => {
     expect(html).toContain('data-testid="context-menu"');
     expect(html).toContain('data-testid="context-copy"');
     expect(html).toMatch(/data-testid="context-ungroup"[^>]*disabled=""/u);
-    expect((html.match(/role="separator"/gu) ?? []).length).toBe(5);
+    // V-34 adds the auto layout group.
+    expect((html.match(/role="separator"/gu) ?? []).length).toBe(6);
     expect(html).toContain('Bring to front');
     expect(html).toContain('Ctrl+G');
   });
