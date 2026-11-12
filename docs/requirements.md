@@ -82,7 +82,9 @@ A mask group uses its first path as the mask for its remaining children.
 - Instances have independent placement and size.
 - Instance text content may differ from the source.
 - Instances can be detached.
-- Nested instances, variants, and general property overrides are deferred.
+- Symbols can be combined into a component set of variants named by property values; an instance can switch its variant (V-37, 2026-11-12).
+- Instances can override the fill, stroke, opacity, visibility and effects of any layer of their content (V-37, 2026-11-12).
+- Nested instances, component properties, and overrides of layer geometry or text style are deferred.
 
 ## Initial appearance model
 
