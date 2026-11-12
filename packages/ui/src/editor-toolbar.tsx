@@ -1,4 +1,5 @@
 import {
+  useEditor,
   useEditorCommands,
   useEditorQuery,
   useEditorSelector,
@@ -87,21 +88,22 @@ const pickedOf = (snapshot: EditorSnapshot) => snapshot.pickedColor;
  * `Copied #RRGGBB` for 2 s. Each pick is a new snapshot value, so picking one colour twice
  * shows the notice again.
  */
-function usePickNotice(selection: readonly string[]): string | null {
+function usePickNotice(): string | null {
+  const editor = useEditor();
   const picked = useEditorSelector(pickedOf);
   const first = useRef(picked);
-  const empty = useRef(selection.length === 0);
-  empty.current = selection.length === 0;
   const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
-    if (picked === null || picked === first.current || !empty.current) return;
+    if (picked === null || picked === first.current) return;
+    // The eyedropper keeps the selection, so the current one is the one it applied to.
+    if (editor.getSnapshot().selection.length > 0) return;
     const hex = pickedHex(picked);
     const clipboard = (globalThis as { navigator?: Navigator }).navigator?.clipboard;
     clipboard?.writeText(hex).catch(() => {});
     setNotice(`Copied ${hex}`);
     const timer = setTimeout(() => setNotice(null), 2000);
     return () => clearTimeout(timer);
-  }, [picked]);
+  }, [editor, picked]);
   return notice;
 }
 
@@ -163,7 +165,7 @@ export function EditorToolbar({ children }: EditorToolbarProps) {
   const extensions = useEditorQuery(EXTENSIONS);
   const keymap = useEditorQuery(KEYMAP);
   const [refusal, show] = useRefusal();
-  const picked = usePickNotice(selection);
+  const picked = usePickNotice();
   const edits = editActions({ selection, history, first, pathOverlay });
   const byId = new Map(
     [...edits, ...symbolActions(selection, types)].map((button) => [button.testId, button]),

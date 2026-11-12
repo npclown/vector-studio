@@ -79,10 +79,11 @@ export function sampleColor(
   custom: CustomGeometry,
   expansions?: ExpansionCache,
 ): Color | null {
-  const hit = paintHitAt(document, page, point, zoom, custom, expansions);
+  const hit = paintHitAt(document, page, point, zoom, custom, expansions, (found) => {
+    return hitPaint(found) !== null;
+  });
   if (hit === null) return null;
-  const paint = hitPaint(hit);
-  return paint === null ? null : paintColorAt(paint, hit.unit);
+  return paintColorAt(hitPaint(hit)!, hit.unit);
 }
 
 /** Whether a node takes the picked colour as a fill (E7), else as a stroke colour. */
@@ -152,7 +153,15 @@ export function createEyedropperTool(
       const selection = context.query({ type: 'selection' });
       const commands = eyedropperCommands(document, selection, color, event.modifiers.shift);
       if (commands.length > 0 && context.gesture.begin()) {
-        const result = context.gesture.replace(commands);
+        // A text node in an auto size needs the layout port even for a colour; without one its
+        // command fails, so the pick is applied again without the text nodes (disclosed, E7).
+        let result = context.gesture.replace(commands);
+        if (!result.ok) {
+          const rest = commands.filter((command) => command.type !== 'setTextStyle');
+          if (rest.length > 0 && rest.length < commands.length) {
+            result = context.gesture.replace(rest);
+          }
+        }
         if (result.ok) context.gesture.commit();
         else context.gesture.cancel();
       }
@@ -164,7 +173,9 @@ export function createEyedropperTool(
       hover = null;
     },
     overlay(): ToolOverlay | null {
-      return hover === null ? null : { kind: 'eyedropper', point: hover.point, color: hover.color };
+      // Sampled again for each overlay read, so an undo or a camera change keeps it current.
+      if (hover === null) return null;
+      return { kind: 'eyedropper', point: hover.point, color: sample(hover.point) };
     },
   };
 }

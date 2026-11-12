@@ -151,6 +151,43 @@ describe('V39-A04 sampleColor (E6)', () => {
     expect(paintColorAt(radial, { x: 0.9, y: 0.5 })).toEqual(green);
   });
 
+  it('evaluates a radial gradient through the editor with each spread, offset and rotated', () => {
+    const target = editor();
+    const radial = (spread: Gradient['spread']): Gradient => ({
+      kind: 'radial',
+      transform: [0.25, 0, 0, 0.25, 0.5, 0.5],
+      stops: [
+        { offset: 0, color: red },
+        { offset: 1, color: blue },
+      ],
+      spread,
+    });
+    // Offset at x = 300 so the frame origin is subtracted; t = |g| = 1.5 at 37.5 px off centre.
+    rect(target, 300, 0, radial('pad'));
+    rect(target, 300, 200, radial('repeat'));
+    rect(target, 300, 400, radial('reflect'));
+    close(sample(target, { x: 350, y: 50 }), red);
+    close(sample(target, { x: 387.5, y: 50 }), blue);
+    close(sample(target, { x: 387.5, y: 250 }), { r: 0.5, g: 0, b: 0.5, a: 1 });
+    close(sample(target, { x: 387.5, y: 450 }), { r: 0.5, g: 0, b: 0.5, a: 1 });
+    // A linear gradient on a node turned 90° clockwise: unit x runs down the page.
+    const turned = rect(target, 0, 600, linear('pad'));
+    ok(target, { type: 'rotateNodes', ids: [turned], angle: Math.PI / 2 });
+    close(sample(target, { x: 50, y: 625 }), { r: 0.75, g: 0, b: 0.25, a: 1 });
+  });
+
+  it('a line without a stroke paints nothing, so the node below shows', () => {
+    const target = editor();
+    rect(target, 0, 0, red);
+    const line = ok(target, {
+      type: 'createLine',
+      start: { x: 0, y: 50 },
+      end: { x: 100, y: 50 },
+    })[0]!;
+    ok(target, { type: 'setStyle', ids: [line], style: { stroke: null } });
+    expect(sample(target, { x: 50, y: 50 })).toEqual(red);
+  });
+
   it('a stroke wins over the fill within half its width', () => {
     const target = editor();
     const id = rect(target, 0, 0, red);
@@ -248,6 +285,7 @@ describe('V39-A05 the eyedropper tool (E7)', () => {
     const stroke = (node(target, a) as { stroke: { color: Color; width: number } }).stroke;
     expect(stroke.color).toEqual(green);
     expect(node(target, a)).toMatchObject({ fill: blue });
+    expect((node(target, 't') as TextNodeV7).runs[0]!.color).toEqual(green);
   });
 
   it('skips groups; a press on nothing does nothing; Escape returns to select', () => {
@@ -271,6 +309,45 @@ describe('V39-A05 the eyedropper tool (E7)', () => {
       event: { kind: 'keydown', key: 'Escape', modifiers: none },
     });
     expect(target.query({ type: 'tool' })).toBe('select');
+  });
+
+  it('raises the pickedColor session event, keeps it across a load, re-samples the overlay', () => {
+    const target = editor();
+    const a = rect(target, 0, 0, red);
+    const fields: string[] = [];
+    target.subscribe((event) => {
+      if (event.type === 'session') fields.push(event.field);
+    });
+    ok(target, { type: 'setTool', tool: 'eyedropper' });
+    press(target, { x: 50, y: 50 });
+    expect(fields).toContain('pickedColor');
+    ok(target, { type: 'loadDocument', document: target.query({ type: 'document' }) });
+    expect(target.query({ type: 'pickedColor' })).toEqual(red);
+    ok(target, { type: 'setTool', tool: 'eyedropper' });
+    ok(target, {
+      type: 'input',
+      event: { kind: 'pointermove', point: { x: 50, y: 50 }, modifiers: none },
+    });
+    ok(target, { type: 'setStyle', ids: [a], style: { fill: green } });
+    expect(target.query({ type: 'overlay' })).toMatchObject({ color: green });
+  });
+
+  it('without a layout port, an auto-width text node is skipped and the rest applies', () => {
+    const target = withText();
+    const document = target.query({ type: 'document' });
+    const auto = { ...(document.nodes.t as TextNodeV7), sizing: 'autoWidth' as const };
+    ok(target, {
+      type: 'loadDocument',
+      document: { ...document, nodes: { ...document.nodes, t: auto } },
+    });
+    const a = Object.keys(document.nodes).find((id) => id !== 't')!;
+    const source = rect(target, 400, 0, blue);
+    expect(source).toBeDefined();
+    ok(target, { type: 'setSelection', ids: [a, 't'] });
+    ok(target, { type: 'setTool', tool: 'eyedropper' });
+    press(target, { x: 450, y: 50 });
+    expect(node(target, a)).toMatchObject({ fill: blue });
+    expect((node(target, 't') as TextNodeV7).runs[0]!.color).toEqual(green);
   });
 
   it('with nothing selected only records the pick', () => {

@@ -359,6 +359,8 @@ export function hitPart(
     inFill = () => insideEllipse(point, node.frame);
     lines = () => [ellipseOutline(node.frame, tolerance)];
   } else if (node.type === 'line') {
+    // Review: in paint mode a line without a drawn stroke paints nothing.
+    if (paint && (node.stroke === null || radius <= 0)) return null;
     const { lines: segments, triangles } = lineOutline(node);
     if (triangles.some((triangle) => insideFill(point, [triangle], false))) return 'stroke';
     return nearOutline(point, [...segments, ...triangles], radius) ? 'stroke' : null;
@@ -597,7 +599,8 @@ export function hitsAt(
 /**
  * The topmost painted part of `page` at `point` (V-39 contract, E6): the walk of `deepestHit`
  * with the paint rule of `hitPart` (strokes within half their width, no tolerance), reaching
- * into instance expansions. Null when nothing is painted there.
+ * into instance expansions; `accept` can pass over a hit (one that paints nothing). Null when
+ * nothing is painted there.
  */
 export function paintHitAt(
   document: DocumentV7,
@@ -606,6 +609,7 @@ export function paintHitAt(
   zoom: number,
   custom: CustomGeometry,
   expansions: ExpansionCache = new ExpansionCache(),
+  accept: (hit: PaintHit) => boolean = () => true,
 ): PaintHit | null {
   let found: PaintHit | null = null;
   visitHits(
@@ -615,6 +619,8 @@ export function paintHitAt(
     zoom,
     custom,
     (_id, hit) => {
+      // A hit whose part paints nothing (a null stroke) lets the walk go on below it.
+      if (!accept(hit)) return false;
       found = hit;
       return true;
     },

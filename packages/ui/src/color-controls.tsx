@@ -141,6 +141,9 @@ export function ColorWell({
       style={{ width: 28, height: 24, padding: 0, border: 'none', background: 'none' }}
     />
   );
+  // The well stays the fragment's first child, so React keeps its element (and the native
+  // `change` listener above) when the button appears after mount. A pick that resolves after
+  // the well unmounts still commits to the target `onOpen` captured.
   if (!screenPicker) return well;
   return (
     <>
@@ -154,6 +157,9 @@ export function ColorWell({
         disabled={disabled}
         onMouseDown={(event) => event.preventDefault()}
         onClick={pickFromScreen}
+        onBlur={(event: FocusEvent<HTMLButtonElement>) => {
+          if (textEdit !== undefined && !inTextEditFocus(event.relatedTarget)) textEdit.onLeave();
+        }}
         data-text-edit-focus={textEdit === undefined ? undefined : ''}
         style={{ width: 24, height: 24, padding: 0 }}
       >
