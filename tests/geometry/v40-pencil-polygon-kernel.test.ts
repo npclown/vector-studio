@@ -59,6 +59,27 @@ const cases: [string, PathData][] = [
   ['closed loop', freehandPath(loop(), 1)!],
   ['scribble', freehandPath(scribble(), 1)!],
   ['scribble at zoom 4', freehandPath(scribble(), 4)!],
+  // Sparse input, fitted unsmoothed (review r2): a quick loop and a quick flick.
+  ...[5, 6, 7, 9].map(
+    (count) =>
+      [
+        `sparse loop of ${count}`,
+        freehandPath(
+          Array.from({ length: count + 1 }, (_, i) => ({
+            x: 100 + 40 * Math.cos((2 * Math.PI * i) / count),
+            y: 100 + 40 * Math.sin((2 * Math.PI * i) / count),
+          })),
+          1,
+        )!,
+      ] as [string, PathData],
+  ),
+  [
+    'flick of 7',
+    freehandPath(
+      [0, 1, 2, 3, 4, 5, 6].map((i) => ({ x: 20 + i * 25, y: 50 + 30 * Math.sin(i) })),
+      1,
+    )!,
+  ],
   ...[3, 4, 5, 6, 7, 8, 9, 12, 24, 60].map(
     (sides) =>
       [`polygon ${sides}`, polygonPath({ x: 30, y: 40, width: 120, height: 100 }, sides)!] as [

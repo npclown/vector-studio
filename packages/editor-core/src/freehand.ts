@@ -46,26 +46,45 @@ export function dedupe(points: readonly PagePoint[], minStep: number): PagePoint
 }
 
 /**
- * A moving-average smoothing of the samples (window `radius` on each side, shrinking at the
- * ends), which takes out hand jitter before the fit. The end points stay where they are; with
- * `closed` the window wraps around and every point is smoothed.
+ * A moving-average smoothing of the samples over a window measured in distance: each sample is
+ * averaged with the neighbours whose distance along the stroke is within `reach`, the same count
+ * on both sides (so the window is symmetric), at most `maxRadius` each side. Dense, jittery
+ * samples are averaged; sparse samples (a quick flick, spaced more than `reach` apart) are kept as
+ * drawn, so a sparse loop is not pulled toward its centre (V-40 review B1). The end points of an
+ * open stroke stay where they are; with `closed` the window wraps and covers at most a quarter of
+ * the loop each side.
  */
-export function smooth(points: readonly PagePoint[], radius: number, closed = false): PagePoint[] {
+export function smooth(
+  points: readonly PagePoint[],
+  reach: number,
+  closed = false,
+  maxRadius = 8,
+): PagePoint[] {
   const n = points.length;
-  if (n < 3 || radius < 1) return points.slice();
+  if (n < 3 || !(reach > 0)) return points.slice();
+  const at = (i: number) => points[((i % n) + n) % n]!;
   const out: PagePoint[] = [];
   for (let i = 0; i < n; i += 1) {
     if (!closed && (i === 0 || i === n - 1)) {
       out.push(points[i]!);
       continue;
     }
-    // A closed window covers at most about half the loop, so a sparse loop is not pulled into
-    // its centroid (V-40 review B1).
-    const r = closed ? Math.min(radius, Math.floor((n - 1) / 4)) : Math.min(radius, i, n - 1 - i);
+    const limit = closed
+      ? Math.min(maxRadius, Math.floor((n - 1) / 4))
+      : Math.min(maxRadius, i, n - 1 - i);
+    let r = 0;
+    let back = 0;
+    let ahead = 0;
+    while (r < limit) {
+      back += dist(at(i - r), at(i - r - 1));
+      ahead += dist(at(i + r), at(i + r + 1));
+      if (back > reach || ahead > reach) break;
+      r += 1;
+    }
     let sx = 0;
     let sy = 0;
     for (let k = -r; k <= r; k += 1) {
-      const p = points[(((i + k) % n) + n) % n]!;
+      const p = at(i + k);
       sx += p.x;
       sy += p.y;
     }
@@ -269,10 +288,8 @@ export function fitCubics(
 export const FREEHAND = Object.freeze({
   /** Samples closer than this to the previous one are dropped. */
   minStepPx: 1,
-  /** The moving-average window on each side of a sample. */
-  smoothRadius: 2,
-  /** Strokes with fewer samples than this are fitted unsmoothed. */
-  smoothMinSamples: 8,
+  /** The moving-average window: neighbours within this distance along the stroke. */
+  smoothPx: 3,
   /** The fit tolerance: every smoothed sample is within this distance of the curve. */
   tolerancePx: 2.5,
   /** A stroke that ends this close to its start closes the path. */
@@ -311,11 +328,7 @@ export function freehandPath(samples: readonly PagePoint[], zoom: number): PathD
       points.pop();
     }
   }
-  // A sparse stroke (a quick flick) has too few samples to average without losing its shape.
-  const smoothed =
-    points.length >= FREEHAND.smoothMinSamples
-      ? smooth(points, FREEHAND.smoothRadius, closed)
-      : points.slice();
+  const smoothed = smooth(points, FREEHAND.smoothPx / z, closed);
   const loop = closed ? [...smoothed, smoothed[0]!] : smoothed;
   const curves = fitCubics(loop, FREEHAND.tolerancePx / z, closed);
   if (curves.length === 0) return null;
@@ -333,11 +346,11 @@ export function freehandPath(samples: readonly PagePoint[], zoom: number): PathD
       gridSnap(end.y),
     );
   }
-  // A result that collapsed (smaller than the click length on both axes) makes no path.
+  // A result that collapsed below the click length (its box diagonal) makes no path.
   const xs = out.filter((_, i) => i % 2 === 0);
   const ys = out.filter((_, i) => i % 2 === 1);
-  const extent = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
-  if (!(extent >= FREEHAND.minLengthPx / z)) return null;
+  const diagonal = Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+  if (!(diagonal >= FREEHAND.minLengthPx / z)) return null;
   if (closed) {
     // The last cubic ends exactly on the start point.
     out[out.length - 2] = out[0]!;
@@ -355,7 +368,7 @@ export function freehandPreview(samples: readonly PagePoint[], zoom: number): Pa
   const z = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
   const raw = dedupe(samples, FREEHAND.minStepPx / z);
   if (raw.length < 2 || polylineLength(raw) < FREEHAND.minLengthPx / z) return null;
-  const points = raw.length >= FREEHAND.smoothMinSamples ? smooth(raw, FREEHAND.smoothRadius) : raw;
+  const points = smooth(raw, FREEHAND.smoothPx / z);
   const verbs: PathVerb[] = ['move'];
   const out: number[] = [];
   points.forEach((p, i) => {

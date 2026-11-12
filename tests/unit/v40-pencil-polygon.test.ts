@@ -121,7 +121,7 @@ describe('V-40 freehand geometry', () => {
     // 101 samples become a handful of curves.
     expect(data.verbs.length - 1).toBeLessThanOrEqual(8);
     const curve = sampleCurve(data.points);
-    const smoothed = smooth(samples, FREEHAND.smoothRadius);
+    const smoothed = smooth(samples, FREEHAND.smoothPx);
     for (const p of smoothed) expect(nearest(curve, p)).toBeLessThan(FREEHAND.tolerancePx + 0.1);
     // Ends where the stroke starts and ends.
     expect(data.points.slice(0, 2)).toEqual([0, 50]);
@@ -146,13 +146,25 @@ describe('V-40 freehand geometry', () => {
     }
   });
 
-  it('keeps the size of a sparse loop (review B1): a quick flick is not pulled to its centroid', () => {
-    for (const count of [5, 6, 8, 16]) {
-      const samples = circle(count).map((p) => ({ x: (p.x - 100) * 0.6 + 100, y: p.y }));
-      const data = freehandPath(samples, 1);
-      if (data === null) continue;
-      const xs = data.points.filter((_, i) => i % 2 === 0);
-      expect(Math.max(...xs) - Math.min(...xs), `${count} samples`).toBeGreaterThan(50);
+  it('keeps the size of a loop however sparse its samples (review B1, r2)', () => {
+    for (const radius of [10, 30, 100]) {
+      for (let count = 4; count <= 40; count += 1) {
+        const samples: PagePoint[] = [];
+        for (let i = 0; i <= count; i += 1) {
+          const angle = (2 * Math.PI * i) / count;
+          samples.push({ x: radius * Math.cos(angle), y: radius * Math.sin(angle) });
+        }
+        const data = freehandPath(samples, 1);
+        // Too short to close (a loop of 10 px with few samples) is still a path, never null.
+        expect(data, `r ${radius} n ${count}`).not.toBeNull();
+        const curve = sampleCurve(data!.points);
+        const xs = curve.map((p) => p.x);
+        // The drawn polygon's own width is at least 2r cos(pi / n); the curve keeps 90 % of it.
+        const drawn = 2 * radius * Math.cos(Math.PI / count);
+        expect(Math.max(...xs) - Math.min(...xs), `r ${radius} n ${count}`).toBeGreaterThan(
+          0.9 * drawn,
+        );
+      }
     }
     // The reviewer's square loop makes a real shape, not a point.
     const square = freehandPath(
@@ -174,6 +186,27 @@ describe('V-40 freehand geometry', () => {
   it('leaves a stroke open when it ends away from its start', () => {
     const open = circle().slice(0, 100);
     expect(freehandPath(open, 1)!.verbs.at(-1)).toBe('cubic');
+  });
+
+  it('accepts a 3 px stroke in any direction and a tiny dense scribble (review r2)', () => {
+    for (const angle of [0, Math.PI / 4, Math.PI / 2, 1]) {
+      const end = { x: 3.2 * Math.cos(angle), y: 3.2 * Math.sin(angle) };
+      expect(freehandPath([{ x: 0, y: 0 }, end], 1), `angle ${angle}`).not.toBeNull();
+    }
+    const scribble: PagePoint[] = [];
+    for (let i = 0; i <= 50; i += 1) {
+      const a = (8 * Math.PI * i) / 50;
+      scribble.push({ x: 2 * Math.cos(a) + i * 0.01, y: 2 * Math.sin(a) });
+    }
+    expect(freehandPath(scribble, 1)).not.toBeNull();
+  });
+
+  it('keeps the drawn preview still while the stroke grows, except near its tip', () => {
+    const samples = wave(1, 0.8);
+    const before = freehandPreview(samples.slice(0, 60), 1)!.points;
+    const after = freehandPreview(samples.slice(0, 61), 1)!.points;
+    // Points more than the smoothing reach (3 px, about 3 samples here) behind the tip stay put.
+    expect(after.slice(0, 2 * 55)).toEqual(before.slice(0, 2 * 55));
   });
 
   it('makes nothing for a click or a stroke shorter than the minimum length', () => {
