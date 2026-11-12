@@ -1,4 +1,4 @@
-import type { Frame, NodeV7, PathData } from '@vector-studio/model';
+import type { Frame, NodeV8, PathData } from '@vector-studio/model';
 import { apply, boundsOfPoints, corners, localTransform } from './geometry.js';
 import type { PagePoint } from './types.js';
 
@@ -97,10 +97,10 @@ export function pathUnitBounds(path: PathData): readonly [number, number, number
 }
 
 /** Reads a node of the same document by ID (a group's children). */
-export type NodeLookup = (id: string) => NodeV7 | undefined;
+export type NodeLookup = (id: string) => NodeV8 | undefined;
 
 /** A path's curve box in its own axes, or null when the curve fills its frame. */
-function pathBox(node: Extract<NodeV7, { type: 'path' }>): Frame | null {
+function pathBox(node: Extract<NodeV8, { type: 'path' }>): Frame | null {
   // Cached by node object, so a group's cache sees the same box object while the path is unchanged.
   const cached = pathBoxes.get(node);
   if (cached !== undefined) return cached;
@@ -117,11 +117,11 @@ function pathBox(node: Extract<NodeV7, { type: 'path' }>): Frame | null {
   return box;
 }
 
-const pathBoxes = new WeakMap<NodeV7, Frame | null>();
+const pathBoxes = new WeakMap<NodeV8, Frame | null>();
 
 /** A group's computed box with the child nodes and child boxes it was computed from. */
 type GroupEntry = {
-  children: readonly (NodeV7 | undefined)[];
+  children: readonly (NodeV8 | undefined)[];
   boxes: readonly (Frame | null)[];
   box: Frame | null;
 };
@@ -131,10 +131,10 @@ type GroupEntry = {
  * group object stays, so an entry holds only while its child objects and their own (cached, so
  * identical) boxes are the same: a lookup costs one pass over the subtree, with no repeated work.
  */
-const groupBoxes = new WeakMap<NodeV7, GroupEntry>();
+const groupBoxes = new WeakMap<NodeV8, GroupEntry>();
 
 /** A node's corners in its parent's space for its content box `box` (null: its whole frame). */
-function cornersOf(node: NodeV7, box: Frame | null): PagePoint[] {
+function cornersOf(node: NodeV8, box: Frame | null): PagePoint[] {
   if (box === null) return corners(node.frame, node.rotation);
   const left = box.x;
   const top = box.y;
@@ -163,7 +163,7 @@ function cornersOf(node: NodeV7, box: Frame | null): PagePoint[] {
  * its frame; a group or mask group whose children's content boxes (through groups only; a frame,
  * symbol or instance clips or owns its box) bound a box other than its frame.
  */
-function innerBox(node: NodeV7, lookup: NodeLookup): Frame | null {
+function innerBox(node: NodeV8, lookup: NodeLookup): Frame | null {
   if (node.type === 'path') return pathBox(node);
   if (node.type !== 'group' && node.type !== 'maskGroup') return null;
   const children = node.children.map(lookup);
@@ -196,7 +196,7 @@ function innerBox(node: NodeV7, lookup: NodeLookup): Frame | null {
  * Whether a node's content box differs from its frame (`innerBox`). Every other node keeps its
  * frame, bit for bit.
  */
-export function hasInnerContentBox(node: NodeV7, lookup: NodeLookup): boolean {
+export function hasInnerContentBox(node: NodeV8, lookup: NodeLookup): boolean {
   return innerBox(node, lookup) !== null;
 }
 
@@ -206,18 +206,18 @@ export function hasInnerContentBox(node: NodeV7, lookup: NodeLookup): boolean {
  * boxes in its own space (V-26; the group's frame is still fitted to its children's frames); for
  * any other node `{ 0, 0, width, height }`.
  */
-export function contentBox(node: NodeV7, lookup: NodeLookup): Frame {
+export function contentBox(node: NodeV8, lookup: NodeLookup): Frame {
   return (
     innerBox(node, lookup) ?? { x: 0, y: 0, width: node.frame.width, height: node.frame.height }
   );
 }
 
 /** The four corners of a node's rotated content box in its parent's space. */
-export function contentCorners(node: NodeV7, lookup: NodeLookup): PagePoint[] {
+export function contentCorners(node: NodeV8, lookup: NodeLookup): PagePoint[] {
   return cornersOf(node, innerBox(node, lookup));
 }
 
 /** The page-aligned bounds of a node's rotated content box in its parent's space. */
-export function contentBounds(node: NodeV7, lookup: NodeLookup): Frame {
+export function contentBounds(node: NodeV8, lookup: NodeLookup): Frame {
   return boundsOfPoints(contentCorners(node, lookup))!;
 }

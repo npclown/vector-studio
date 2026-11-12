@@ -1,7 +1,7 @@
 import {
   useEditorCommands,
   useEditorSelector,
-  type NodeV7,
+  type NodeV8,
   type Paint,
   type Gradient,
   type Stroke,
@@ -261,7 +261,7 @@ function GradientControls({
 }
 
 /** The stroke controls (section 8): on and off, paint, width, cap, join, miter limit and dash. */
-function StrokeControls({ nodes, commit }: { nodes: readonly NodeV7[]; commit: Commit }) {
+function StrokeControls({ nodes, commit }: { nodes: readonly NodeV8[]; commit: Commit }) {
   const takers = nodes.filter((node) => idsTaking([node], 'stroke').length > 0);
   const stroked = takers.filter((node) => strokeOf(node) !== null);
   const strokes = stroked.map((node) => strokeOf(node)!);
@@ -401,7 +401,7 @@ function OpacitySlider({ value, commit }: { value: Common<number>; commit: Commi
 
 const CORNERS = ['top left', 'top right', 'bottom right', 'bottom left'] as const;
 
-function RadiiControls({ nodes, commit }: { nodes: readonly NodeV7[]; commit: Commit }) {
+function RadiiControls({ nodes, commit }: { nodes: readonly NodeV8[]; commit: Commit }) {
   const [linked, setLinked] = useState(true);
   const rectangles = nodes.filter((node) => node.type === 'rectangle');
   const lead = rectangles[0]!.cornerRadii;
@@ -468,7 +468,7 @@ export function AppearancePanel({ layout = 'aside' }: AppearancePanelProps) {
   const nodes = useMemo(
     () =>
       selection.flatMap((id) =>
-        Object.hasOwn(content.nodes, id) ? [content.nodes[id] as NodeV7] : [],
+        Object.hasOwn(content.nodes, id) ? [content.nodes[id] as NodeV8] : [],
       ),
     [selection, content],
   );

@@ -4,7 +4,7 @@ import {
   type Command,
   type Editor,
 } from '@vector-studio/editor-core';
-import { serializeDocument, type NodeV7 } from '@vector-studio/model';
+import { serializeDocument, type NodeV8 } from '@vector-studio/model';
 import { EditorProvider, PropertySections } from '@vector-studio/ui';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
@@ -80,7 +80,7 @@ function expectBox(actual: { x: number; y: number; width: number; height: number
   expect(actual.height).toBeCloseTo(b[3]!, 9);
 }
 
-const node = (editor: Editor, id: string): NodeV7 => editor.query({ type: 'node', id })!;
+const node = (editor: Editor, id: string): NodeV8 => editor.query({ type: 'node', id })!;
 
 /** An arch from (0, 0) to (100, 0) whose handles reach y = 100; the curve peaks at y = 75. */
 function arch(editor: Editor, dx = 0, dy = 0): string {

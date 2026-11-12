@@ -1,4 +1,4 @@
-import type { DocumentV7 } from '@vector-studio/model';
+import type { DocumentV8 } from '@vector-studio/model';
 import { apply, invertRigid } from './geometry.js';
 import { ancestors, childrenOf, documentTree, isAncestor, spaceOf, type TreeView } from './tree.js';
 import type { PagePoint } from './types.js';
@@ -25,7 +25,7 @@ function insideFrame(tree: TreeView, id: string, point: PagePoint): boolean {
  * Nodes in `exclude`, and their subtrees, are skipped.
  */
 function frameIn(
-  document: DocumentV7,
+  document: DocumentV8,
   tree: TreeView,
   owner: string,
   point: PagePoint,
@@ -65,7 +65,7 @@ function inSymbol(tree: TreeView, id: string): boolean {
  * there.
  */
 export function adoptionOwner(
-  document: DocumentV7,
+  document: DocumentV8,
   page: string,
   scope: string | null,
   point: PagePoint,
@@ -105,7 +105,7 @@ function containedIn(tree: TreeView, id: string, owner: string): boolean {
  * The moved nodes and their subtrees are never the target.
  */
 export function dropAdoption(
-  document: DocumentV7,
+  document: DocumentV8,
   page: string,
   scope: string | null,
   ids: readonly string[],

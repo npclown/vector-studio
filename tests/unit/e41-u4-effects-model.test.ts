@@ -5,6 +5,7 @@ import {
   MAX_EFFECT_RADIUS,
   MAX_EFFECTS,
   migrateV6toV7,
+  migrateV7toV8,
   parseDocument,
   parseEnvelope,
   serializeDocument,
@@ -14,7 +15,7 @@ import {
   validateFragmentTree,
   validateNode,
   type DocumentV6,
-  type DocumentV7,
+  type DocumentV8,
   type Effect,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
@@ -59,13 +60,13 @@ const rect = (id: string, effects: unknown, extra: Loose = {}): Loose => ({
 });
 
 const documentOf = (effects: unknown): Loose => ({
-  schemaVersion: 7,
+  schemaVersion: 8,
   id: 'd',
   pages: [{ id: 'p', name: 'P', children: ['r'] }],
   nodes: { r: rect('r', effects) },
 });
 
-function parsed(text: string): DocumentV7 {
+function parsed(text: string): DocumentV8 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -234,7 +235,8 @@ describe('E41-A01 migration v6 to v7 (E41-S1)', () => {
       expect(effects).toEqual([]);
       expect(rest).toEqual(node);
     }
-    expect(serializeDocument(migrated.document)).toBe(
+    const latest = migrateV7toV8(migrated.document);
+    expect(latest.ok && serializeDocument(latest.document)).toBe(
       v7Text(read('m4-appearance/appearance.v6.json')),
     );
   });
@@ -262,7 +264,7 @@ describe('E41-A01 migration v6 to v7 (E41-S1)', () => {
       'm4-appearance/host.v6.json',
     ]) {
       const document = parsed(read(file));
-      expect(document.schemaVersion, file).toBe(7);
+      expect(document.schemaVersion, file).toBe(8);
       for (const node of Object.values(document.nodes)) expect(node.effects, file).toEqual([]);
     }
   });

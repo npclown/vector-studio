@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { validateDocument, type DocumentV7, type NodeV7 } from '@vector-studio/model';
+import { validateDocument, type DocumentV8, type NodeV8 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   createEditor,
@@ -57,7 +57,7 @@ type JsonNode = {
 type Json = { pages: { id: string; children: string[] }[]; nodes: Record<string, JsonNode> };
 
 /** The symbols fixture after `edit`, read by the model; nodes the edit adds gain `effects: []`. */
-function symbols(edit: (value: Json) => void = () => {}): DocumentV7 {
+function symbols(edit: (value: Json) => void = () => {}): DocumentV8 {
   const value = JSON.parse(SYMBOLS) as Json;
   edit(value);
   const result = validateDocument(v7Value(value));
@@ -65,7 +65,7 @@ function symbols(edit: (value: Json) => void = () => {}): DocumentV7 {
   return result.document;
 }
 
-function expanded(document: DocumentV7, id: string): Expansion {
+function expanded(document: DocumentV8, id: string): Expansion {
   const result = expandInstance(document, id);
   if (result === null || !result.ok) throw new Error(`no expansion of ${id}`);
   return result.expansion;
@@ -75,7 +75,7 @@ const frameOf = (expansion: Expansion, id: string) => expansion.nodes.get(id)!.f
 
 /** A rotated node's frame under the approximation: centre exact, size by MVP-Q3 (a). */
 function approximated(
-  node: NodeV7,
+  node: NodeV8,
   sx: number,
   sy: number,
 ): { x: number; y: number; width: number; height: number } {
@@ -188,7 +188,7 @@ describe('M7-A02 expandInstance', () => {
     });
     const expansion = expanded(document, 'i2');
     /** The path's points in the source's local space. */
-    const points = (group: NodeV7, node: NodeV7) => {
+    const points = (group: NodeV8, node: NodeV8) => {
       if (node.type !== 'path') throw new Error('not a path');
       const out: number[] = [];
       const inGroup = localTransform(node.frame, node.rotation);
@@ -271,7 +271,7 @@ describe('M7-X3 expansion validity', () => {
       } as unknown as JsonNode;
       value.nodes.s1!.children.push('s1-c');
     });
-    const wide = (node: NodeV7) =>
+    const wide = (node: NodeV8) =>
       node.type === 'custom' && node.frame.width > 50
         ? { code: 'document.invalid-custom-data' as const, path: '/data' }
         : null;
@@ -546,7 +546,7 @@ describe('M7-X4 the expansion cache', () => {
   it('reuses results by node identity, and subtrees while their nodes and scale hold', () => {
     const target = createEditor({ document: symbols() });
     /** Runs `command` and returns the editor's new document. */
-    const after = (_document: DocumentV7, command: Command): DocumentV7 => {
+    const after = (_document: DocumentV8, command: Command): DocumentV8 => {
       expect(target.execute(command).ok).toBe(true);
       return target.query({ type: 'document' });
     };
@@ -596,7 +596,7 @@ describe('M7-X4 the expansion cache', () => {
 
 describe('M7-A06 a symbol follows the frame rules', () => {
   /** s1's children after a resize from 100 × 80 to 200 × 160 by their constraints. */
-  const resizedChildren = (document: DocumentV7) => {
+  const resizedChildren = (document: DocumentV8) => {
     const nodes = document.nodes;
     expect(nodes['s1-r']).toEqual(symbols().nodes['s1-r']);
     expect(nodes['s1-g']).toEqual(symbols().nodes['s1-g']);

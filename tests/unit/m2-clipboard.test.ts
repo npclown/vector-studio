@@ -1,4 +1,4 @@
-import { serializeDocument, type DocumentV7, type Frame, type NodeV7 } from '@vector-studio/model';
+import { serializeDocument, type DocumentV8, type Frame, type NodeV8 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_FRAME_FILL,
@@ -256,12 +256,12 @@ const childrenOf = (target: Editor, owner: string): readonly string[] => {
 };
 
 /** A copy of `node` with ID `id` and, optionally, other fields replaced. */
-function copyOf(node: NodeV7, id: string, changes: Partial<Record<string, unknown>> = {}) {
+function copyOf(node: NodeV8, id: string, changes: Partial<Record<string, unknown>> = {}) {
   return { ...node, id, ...changes };
 }
 
 /** A node's frame and rotation in page space, as `copy` converts a root. */
-function pagePlacement(document: DocumentV7, id: string) {
+function pagePlacement(document: DocumentV8, id: string) {
   const node = document.nodes[id]!;
   const tree = documentTree(document);
   if (tree.page(node.parent) !== undefined) return { frame: node.frame, rotation: node.rotation };
@@ -271,7 +271,7 @@ function pagePlacement(document: DocumentV7, id: string) {
 
 /** A page placement mapped into the space of container `owner`, as `paste` maps a root. */
 function placedIn(
-  document: DocumentV7,
+  document: DocumentV8,
   owner: string,
   placement: Readonly<{ frame: Frame; rotation: number }>,
 ) {
@@ -280,7 +280,7 @@ function placedIn(
 }
 
 /** The page corners of a node's rotated frame. */
-function pageCorners(document: DocumentV7, id: string): PagePoint[] {
+function pageCorners(document: DocumentV8, id: string): PagePoint[] {
   const node = document.nodes[id]!;
   const { matrix } = spaceOf(documentTree(document), node.parent);
   const local = localTransform(node.frame, node.rotation);
@@ -377,7 +377,7 @@ describe('M2-A10 copy', () => {
     ok(target, { type: 'copy', ids: ['fc', 'gb'] });
     const body = JSON.parse(clipboard(target)!.slice(MARKER.length)) as {
       roots: string[];
-      nodes: Record<string, NodeV7>;
+      nodes: Record<string, NodeV8>;
     };
     // gb (inside g) paints before fc (inside fr).
     expect(body.roots).toEqual(['gb', 'fc']);
@@ -1090,7 +1090,7 @@ describe('M2-A10 copy and cut details', () => {
   }
 
   const frameIn = (fragment: string | null, id: string) =>
-    (JSON.parse(fragment!.slice(MARKER.length)) as { nodes: Record<string, NodeV7> }).nodes[id]!
+    (JSON.parse(fragment!.slice(MARKER.length)) as { nodes: Record<string, NodeV8> }).nodes[id]!
       .frame;
 
   it('copy during a move drag copies the live position and leaves the drag running', () => {

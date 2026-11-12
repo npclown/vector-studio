@@ -1,5 +1,5 @@
 import type { EditorSnapshot } from '@vector-studio/editor-core';
-import type { NodeV7 } from '@vector-studio/model';
+import type { NodeV8 } from '@vector-studio/model';
 import { useEditorSelector } from '@vector-studio/ui';
 import { useRef, useState } from 'react';
 
@@ -9,14 +9,14 @@ import { useRef, useState } from 'react';
 // in a read-only box with a copy button. Host only; nothing in the editor changes.
 
 /** The one selected path node, or null. A module-level selector, so the store is made once. */
-function selectedPath(snapshot: EditorSnapshot): NodeV7 | null {
+function selectedPath(snapshot: EditorSnapshot): NodeV8 | null {
   if (snapshot.selection.length !== 1) return null;
   const node = snapshot.document.nodes[snapshot.selection[0]!];
   return node?.type === 'path' ? node : null;
 }
 
 /** The text the debug box shows for `node`: the node as stored, two-space JSON. */
-export function pathDebugText(node: NodeV7): string {
+export function pathDebugText(node: NodeV8): string {
   return JSON.stringify(node, null, 2);
 }
 
