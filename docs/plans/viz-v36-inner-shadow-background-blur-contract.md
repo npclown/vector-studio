@@ -1,6 +1,6 @@
 # V-36 contract: inner shadow and background blur
 
-Status: **PROPOSED 2026-11-12** (review round 1 NOT READY, findings applied; section 12), Full tier. The user asked for this on 2026-11-12 (item 6 of the Figma gap list, "1~10번까지 다 진행해줘"), which lifts the [requirements.md](../requirements.md) deferral of inner shadows and background blur. The open choices in section 9 take the recommended option under the user's standing instruction of 2026-10-24 (추천안 자동 채택 2026-11-12) unless the user picks otherwise.
+Status: **ADOPTED 2026-11-12** (review round 3 READY; section 12), Full tier. The user asked for this on 2026-11-12 (item 6 of the Figma gap list, "1~10번까지 다 진행해줘"), which lifts the [requirements.md](../requirements.md) deferral of inner shadows and background blur. The open choices in section 9 take the recommended option under the user's standing instruction of 2026-10-24 (추천안 자동 채택 2026-11-12) unless the user picks otherwise.
 
 This is visualization-track item V-36 ([status index](d9-visualization-track.md#status-index)). It extends the [E41 contract](d9-e41-boolean-effects-contract.md) (effects model, effect roots, effect passes, budget) and reuses the backdrop snapshot of V-35 (multiple fills and blend modes, developed in parallel). It changes shared surface:
 
@@ -88,7 +88,7 @@ The snapshot with a margin reads the main target only. A background blur draws o
 
 ### 5.5 Budget
 
-E41 section 5.4 with: a root with inner shadows counts its source bound in the scratch term, `4 × (2 + 2/3) × max(maxᵣ Oᵣ, maxᵣ,ⱼ |Hᵣⱼ|, max |D|)`; per background-blur root, `D` at `4 × |(O ⊕ margin) ∩ P|` and `B` at `4 O`, counted per root (conservative: they are used one root at a time). These count against the same 96 MiB tree admission; a tree over budget drops all its effects with one `render.effect-resource-limit`, as today.
+E41 section 5.4 with: each inner shadow's `H` counts in the scratch term, `4 × (2 + 2/3) × max(maxᵣ Oᵣ, maxᵣ,ⱼ |Hᵣⱼ|, max |D|)`; per background-blur root, `D` at `4 × |(O ⊕ margin) ∩ P|` and `B` at `4 O`, counted per root (conservative: they are used one root at a time). These count against the same 96 MiB tree admission; a tree over budget drops all its effects with one `render.effect-resource-limit`, as today.
 
 ## 6. Editor
 
@@ -145,3 +145,4 @@ U2 can merge before V-35; U3 follows V-35's snapshot (or Q4 (a)'s fallback).
 
 - **Round 1 (2026-11-12): NOT READY**, 3 blocking and 12 should-fix findings, all applied: B1 the inner-shadow formula tinted translucent interiors, now Figma's hardened coverage (Q1 rewritten, `coverageAlpha` removed); B2 inner shadows now extend the cull reach and clamp at cut sides (K1, K1b, G8); B3 the pre-U3 fallback and the panel's projected kinds (S4, S5, section 6, hosts on `'v1'` in U2); S1 pass details (K2); S2 the snapshot margin from K4's read chain; S3 own shadows and layer blur with background blur (5.1, Q5, G9); S4 tiny σ; S5 dropped with `coverageAlpha`; S6 "top-level" defined (5.3, requirements); S7 kind changes (section 6); S8 budget terms (5.5); S9 the module re-pin and byte identity (K3, A05); S10 criteria A03, A04, A06, A07; S11 host-api.md (U2); S12 the composite opacity `o`.
 - **Round 2 (2026-11-12): NOT READY**, 1 blocking, 5 should-fix, 1 nit, all applied: N1 the K1b clamp sat on a pass that never read past its region, now `harden` writes over its readers' whole region `H` (K1b, K2, 5.5); N2 the pre-U3 fallback test moved into U2's gate; N3 the cull reach formula; N4 effective (inherited) effects in the panel rule; N5 whole-command refusal of kind changes; N6 the track row; the nit on the 127× gain (A04).
+- **Round 3 (2026-11-12): READY**, one nit (5.5's wording now names `H`), applied.
