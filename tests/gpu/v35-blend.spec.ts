@@ -537,7 +537,8 @@ for (const samples of [1, 4] as const) {
           }
         }
         (report.cases as unknown[]).push(entry);
-        if (comparison.worst > TOLERANCE) {
+        // Over the tolerance plus the oracle's one-step slack (V35-A05 amendment).
+        if (comparison.over > 0) {
           failures.push(
             `${fixture.name} (${variant}): worst ${comparison.worst} at ${JSON.stringify(comparison.at)}`,
           );
