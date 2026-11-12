@@ -1,4 +1,6 @@
 import {
+  placeImagesFromPicker,
+  subscribeImageNotices,
   useEditor,
   useEditorCommands,
   useEditorQuery,
@@ -23,7 +25,10 @@ import {
   actionName,
   actionShortcut,
   actionTitle,
+  imageNoticeText,
+  macKeymap,
   nextMenuIndex,
+  placeImageTitle,
   polygonSidesCommit,
   polygonSidesStep,
   shortcutFor,
@@ -109,6 +114,28 @@ function usePickNotice(): string | null {
   return notice;
 }
 
+/**
+ * V32-H2: files a paste, drop or the Place image picker skipped show `Skipped: <names>`
+ * (`editor.image-unsupported-file`) for 4 s.
+ */
+function useImageNotice(): string | null {
+  const editor = useEditor();
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = subscribeImageNotices(editor, (value) => {
+      setNotice(imageNoticeText(value.files));
+      clearTimeout(timer);
+      timer = setTimeout(() => setNotice(null), 4000);
+    });
+    return () => {
+      unsubscribe();
+      clearTimeout(timer);
+    };
+  }, [editor]);
+  return notice;
+}
+
 function IconButton({
   testId,
   name,
@@ -157,6 +184,7 @@ export type EditorToolbarProps = Readonly<{
  * (`toolbar-refusal`). Host controls follow as `children`.
  */
 export function EditorToolbar({ children }: EditorToolbarProps) {
+  const editor = useEditor();
   const execute = useEditorCommands();
   const tool = useTool();
   const history = useHistory();
@@ -168,6 +196,7 @@ export function EditorToolbar({ children }: EditorToolbarProps) {
   const keymap = useEditorQuery(KEYMAP);
   const [refusal, show] = useRefusal();
   const picked = usePickNotice();
+  const imageNotice = useImageNotice();
   const edits = editActions({ selection, history, first, pathOverlay });
   const byId = new Map(
     [...edits, ...symbolActions(selection, types)].map((button) => [button.testId, button]),
@@ -229,7 +258,27 @@ export function EditorToolbar({ children }: EditorToolbarProps) {
           />
         ))}
       </span>
+      <span role="group" aria-label="image" style={ROW}>
+        <Divider />
+        <IconButton
+          testId="place-image"
+          name={placeImageTitle(macKeymap(keymap))}
+          icon="place-image"
+          // The picker opens from this click (the user activation), then the files are placed.
+          onClick={() => {
+            void placeImagesFromPicker(editor).then(
+              (outcome) => show(outcome === null ? null : outcome.result),
+              () => undefined,
+            );
+          }}
+        />
+      </span>
       {children}
+      {imageNotice === null ? null : (
+        <output role="status" className="vs-refusal" data-testid="image-notice">
+          {imageNotice}
+        </output>
+      )}
       {picked === null ? null : (
         <output role="status" className="vs-notice" data-testid="eyedropper-notice">
           {picked}

@@ -1,5 +1,9 @@
 import { DIAGNOSTIC_CODES } from '@vector-studio/contracts';
-import type { RendererDiagnostic, RendererSceneSynchronization } from '@vector-studio/contracts';
+import type {
+  ImageSourcePort,
+  RendererDiagnostic,
+  RendererSceneSynchronization,
+} from '@vector-studio/contracts';
 import type {
   PrimitiveRendererService,
   PrimitiveRendererServiceOptions,
@@ -25,6 +29,8 @@ export type EditorRendererOptions = Readonly<
     Pick<PrimitiveRendererServiceOptions, 'clips' | 'paints' | 'groups' | 'text' | 'effects'>
   > & {
     glyphRaster: EditorGlyphRaster;
+    /** V-32 (V32-H1): present with `paints: 'image'`, which needs it. */
+    imageSource?: ImageSourcePort;
   }
 >;
 
@@ -35,12 +41,19 @@ export type EditorRendererOptions = Readonly<
  * editor's projected scene draws instead of being isolated as `editor.renderer-unsupported`. A
  * renderer on 'v1' draws E41's kinds exactly as on 'v0' (V36-A05) and scenes without effects
  * exactly as on 'none' (E41-A06), so an editor that projects fewer kinds
- * (`EditorOptions.projectEffects` `true` or off) draws as before.
+ * (`EditorOptions.projectEffects` `true` or off) draws as before. With an `imageSource` (V-32,
+ * V32-H1: `createImageSource` of `@vector-studio/react`) the paints are `'image'`, gradients and
+ * image fills, which an editor created with `projectImages: true` projects; a scene without image
+ * paints draws exactly as on 'gradient' (V32-A09).
  */
-export function editorRendererOptions(glyphRaster: EditorGlyphRaster): EditorRendererOptions {
+export function editorRendererOptions(
+  glyphRaster: EditorGlyphRaster,
+  imageSource?: ImageSourcePort,
+): EditorRendererOptions {
   return {
     clips: 'all',
-    paints: 'gradient',
+    paints: imageSource === undefined ? 'gradient' : 'image',
+    ...(imageSource === undefined ? {} : { imageSource }),
     groups: 'isolated',
     text: 'atlas',
     effects: 'v1',
@@ -107,6 +120,13 @@ export type WebGpuRendererFactoryOptions = Readonly<{
   wasm: GeometryWasmSource;
   /** Options for the WebGPU backend; test-only fields stay test-only. */
   backendOptions?: WebGpuBackendOptions | (() => WebGpuBackendOptions) | undefined;
+  /**
+   * V-32 (V32-H1): the image source port, for example `createImageSource` of
+   * `@vector-studio/react` over the editor's document. With it the service draws image paints
+   * (`paints: 'image'`); without it, image fills need `projectImages` off (the editor then
+   * projects them as no fill).
+   */
+  imageSource?: ImageSourcePort | undefined;
   /** Wraps the glyph raster port the editor's service uses (for example to log its calls). */
   wrapGlyphRaster?: ((port: EditorGlyphRaster) => EditorGlyphRaster) | undefined;
   /** Runs after the service exists and before the backend attaches it and initializes. */
@@ -230,7 +250,7 @@ export function createWebGpuRendererFactory(
         fillMeshMemoryBytes: () => fill.linearMemoryBytes(),
         strokeMesh: stroke,
         strokeMeshMemoryBytes: () => stroke.linearMemoryBytes(),
-        ...editorRendererOptions(servicePort),
+        ...editorRendererOptions(servicePort, options.imageSource),
       });
       releases.push(() => service.dispose());
       let renderer: RendererSceneSynchronization = service;

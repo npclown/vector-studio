@@ -11,6 +11,8 @@ import {
 import {
   EditorCanvas,
   EditorProvider,
+  createImageSource,
+  subscribeImageNotices,
   useEditor,
   useEditorCommands,
   useEditorSelector,
@@ -542,6 +544,20 @@ function Surface({
   const [renderer, setRenderer] = useState('pending');
   const [fixture, setFixture] = useState('none');
   const [file, setFile] = useState('');
+  // V-32 (V32-H1): the image source over the editor's document, and the renderer factory that
+  // gives the service it, so image fills draw. One per editor, stable across renders.
+  const createRenderer = useMemo(
+    () => createWebGpuRenderer(createImageSource(() => editor.getSnapshot().document)),
+    [editor],
+  );
+  // V32-H2: files a paste, drop or picker skipped show as a file status line.
+  useEffect(
+    () =>
+      subscribeImageNotices(editor, (notice) =>
+        setFile(`${notice.code}: ${notice.files.join(', ')}`),
+      ),
+    [editor],
+  );
   const bench = useMemo(() => pageBench(), []);
   const width = bench === null ? WIDTH : BENCH_CANVAS.width;
   const height = bench === null ? HEIGHT : BENCH_CANVAS.height;
@@ -738,7 +754,7 @@ function Surface({
       <EditorCanvas
         width={size.width}
         height={size.height}
-        createRenderer={createWebGpuRenderer}
+        createRenderer={createRenderer}
         onRendererError={(error) => {
           setRenderer('error');
           setErrors((list) => [...list, String(error)]);

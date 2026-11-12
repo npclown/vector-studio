@@ -32,6 +32,34 @@ export {
 // V-30 export contract, section 3: a PNG of the page or of some nodes.
 export { exportPng, type ExportPngOptions } from './export-image.js';
 
+// V-32 image contract: the image source port (H1), the E1 header parser, and pasted, dropped and
+// picked image files (H2, H3).
+export { createImageSource } from './image-source.js';
+export type {
+  ImageDocumentLike,
+  ImageSource,
+  ImageSourceHost,
+  ImageSourceOptions,
+  ImageSourceReply,
+} from './image-source.js';
+export { imageAssetFromBlob, readImageHeader } from './image-header.js';
+export type { ImageBlobLike, ImageHeader } from './image-header.js';
+export {
+  isImageFile,
+  pickImageFiles,
+  placeImageFiles,
+  placeImagesFromPicker,
+  raiseImageNotice,
+  subscribeImageNotices,
+} from './image-input.js';
+export type {
+  ImageFileLike,
+  ImageNotice,
+  ImagePickerInput,
+  PlaceImagesOptions,
+  PlaceImagesOutcome,
+} from './image-input.js';
+
 // V-33 SVG import contract, V33-P3 and U1: SVG files imported as editable nodes.
 export {
   importSvgFiles,

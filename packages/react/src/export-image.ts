@@ -6,13 +6,16 @@ import type {
   SceneAffine,
   SceneBlendMode,
   SceneGradient,
+  SceneImagePaint,
   ScenePaint,
   ScenePathGeometry,
 } from '@vector-studio/editor-core';
+import { base64ToBytes } from './image-header.js';
 
 // V-30 export contract (docs/plans/viz-v30-export-contract.md), section 3: a PNG of the export
 // scene painted with Canvas 2D in the page's document, so the fonts registered for text layout
-// draw as on the editor canvas.
+// draw as on the editor canvas. V-32 (image contract, V32-E4): image paints draw after their
+// images decode (`createImageBitmap`); a failed decode leaves that paint out.
 
 /** V30-P1: the largest side and pixel count of an exported image. */
 export const EXPORT_MAX_SIDE = 16_384;
@@ -152,12 +155,73 @@ export function spreadStops(
   return out;
 }
 
+/** The decoded images of an export, by document key; a key that failed to decode is absent. */
+type Bitmaps = ReadonlyMap<string, ImageBitmap>;
+
+/** The pieces of `0..1` an `extend` axis draws: the image, and the edge texel held beyond it. */
+export type Band = Readonly<{ u0: number; u1: number; s0: number; s1: number }>;
+
+/**
+ * The bands of one image axis of `size` pixels covering `[lo, hi]` in unit coordinates: the image
+ * itself, and for `extend` its edge texel stretched below 0 and above 1 (clamp to edge, V32-K1).
+ */
+export function axisBands(wrap: 'extend' | 'decal', size: number, lo: number, hi: number): Band[] {
+  const bands: Band[] = [{ u0: 0, u1: 1, s0: 0, s1: size }];
+  if (wrap === 'extend') {
+    if (lo < 0) bands.push({ u0: lo, u1: 0, s0: 0, s1: 1 });
+    if (hi > 1) bands.push({ u0: 1, u1: hi, s0: size - 1, s1: size });
+  }
+  return bands;
+}
+
+function imageKeys(scene: ExportScene): string[] {
+  const keys = new Set<string>();
+  for (const node of scene.nodes.values()) {
+    if (node.kind === 'path' && node.fill !== null && 'kind' in node.fill) {
+      if (node.fill.kind === 'image') keys.add(node.fill.image);
+    }
+  }
+  return [...keys];
+}
+
+/**
+ * V32-E4: awaits a decode of each image the scene's fills name, with the V32-H1 options (no
+ * colour conversion, straight alpha, EXIF orientation). A key that is not in the scene's table or
+ * fails to decode is left out, and its paint draws nothing; the export still succeeds.
+ */
+async function decodeImages(scene: ExportScene): Promise<Map<string, ImageBitmap>> {
+  const out = new Map<string, ImageBitmap>();
+  const table = scene.images;
+  if (table === undefined) return out;
+  await Promise.all(
+    imageKeys(scene).map(async (key) => {
+      const asset = Object.hasOwn(table, key) ? table[key] : undefined;
+      if (asset === undefined) return;
+      try {
+        const blob = new Blob([base64ToBytes(asset.data) as BlobPart], { type: asset.mimeType });
+        out.set(
+          key,
+          await createImageBitmap(blob, {
+            colorSpaceConversion: 'none',
+            premultiplyAlpha: 'none',
+            imageOrientation: 'from-image',
+          }),
+        );
+      } catch {
+        // A failed decode leaves the paint out (V32-E4).
+      }
+    }),
+  );
+  return out;
+}
+
 class Painter {
   constructor(
     private readonly width: number,
     private readonly height: number,
     private readonly make: (width: number, height: number) => Surface,
     private readonly scene: ExportScene,
+    private readonly bitmaps: Bitmaps = new Map(),
   ) {}
 
   layer(): { surface: Surface; context: Context } {
@@ -244,6 +308,7 @@ class Painter {
       context.restore();
       return;
     }
+    // An image paint is a fill only (V32-S2) and `imageFill` draws it; it never reaches a stroke.
     if (paint.kind === 'image') return;
     const { surface, context: layer } = this.layer();
     setMatrix(layer, m);
@@ -252,6 +317,94 @@ class Painter {
     draw(layer);
     this.gradientInto(layer, paint, m);
     this.composite(context, surface, 1);
+  }
+
+  /**
+   * V32-E4: fills the shape of `geometry` (node space, mapped to the device by `m`) with an image
+   * paint. `repeat` is a canvas pattern placed by `setTransform`; `extend` and `decal` are
+   * `drawImage` under the shape's clip, `decal` only where the image is (so it clips to the image
+   * rectangle too) and `extend` also holding the edge texels beyond it. A pair with one repeating
+   * axis is the repeat-x or repeat-y pattern, which leaves the other axis `decal`.
+   */
+  imageFill(
+    context: Context,
+    paint: SceneImagePaint,
+    m: Matrix,
+    path: Path2D,
+    geometry: ScenePathGeometry,
+  ): void {
+    const bitmap = this.bitmaps.get(paint.image);
+    if (bitmap === undefined || bitmap.width < 1 || bitmap.height < 1) return;
+    const toNode = invert(paint.transform);
+    if (toNode === null) return;
+    context.save();
+    try {
+      setMatrix(context, m);
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = 'high';
+      if (paint.wrapX === 'repeat' || paint.wrapY === 'repeat') {
+        const mode =
+          paint.wrapX === 'repeat' && paint.wrapY === 'repeat'
+            ? 'repeat'
+            : paint.wrapX === 'repeat'
+              ? 'repeat-x'
+              : 'repeat-y';
+        const pattern = context.createPattern(bitmap, mode);
+        if (pattern === null) return;
+        // Pattern space to node space: image pixels to the unit square, then the paint's map.
+        const t = multiply(paint.transform, [1 / bitmap.width, 0, 0, 1 / bitmap.height, 0, 0]);
+        pattern.setTransform(new DOMMatrix([t[0], t[1], t[2], t[3], t[4], t[5]]));
+        context.fillStyle = pattern;
+        context.fill(path, geometry.fillRule);
+        return;
+      }
+      context.clip(path, geometry.fillRule);
+      // The shape's extent in the image's unit space, which the `extend` bands must cover.
+      const p = geometry.points;
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (let at = 0; at + 1 < p.length; at += 2) {
+        minX = Math.min(minX, p[at]!);
+        maxX = Math.max(maxX, p[at]!);
+        minY = Math.min(minY, p[at + 1]!);
+        maxY = Math.max(maxY, p[at + 1]!);
+      }
+      if (!(minX <= maxX && minY <= maxY)) return;
+      const corners = [
+        [minX, minY],
+        [maxX, minY],
+        [maxX, maxY],
+        [minX, maxY],
+      ].map(([x, y]) => ({
+        x: toNode[0] * x! + toNode[2] * y! + toNode[4],
+        y: toNode[1] * x! + toNode[3] * y! + toNode[5],
+      }));
+      const us = corners.map((c) => c.x);
+      const vs = corners.map((c) => c.y);
+      const xs = axisBands(paint.wrapX, bitmap.width, Math.min(...us), Math.max(...us));
+      const ys = axisBands(paint.wrapY, bitmap.height, Math.min(...vs), Math.max(...vs));
+      // Unit square to device: the image is drawn in unit coordinates, sampled in pixels.
+      setMatrix(context, multiply(m, paint.transform));
+      for (const y of ys) {
+        for (const x of xs) {
+          context.drawImage(
+            bitmap,
+            x.s0,
+            y.s0,
+            x.s1 - x.s0,
+            y.s1 - y.s0,
+            x.u0,
+            y.u0,
+            x.u1 - x.u0,
+            y.u1 - y.u0,
+          );
+        }
+      }
+    } finally {
+      context.restore();
+    }
   }
 
   strokeStyle(target: Context, stroke: PathStroke): void {
@@ -315,7 +468,12 @@ class Painter {
       case 'path': {
         const path = pathOf(node.geometry);
         if (node.fill !== null) {
-          this.paint(context, node.fill, m, (target) => target.fill(path, node.geometry.fillRule));
+          const fill = node.fill;
+          if ('kind' in fill && fill.kind === 'image') {
+            this.imageFill(context, fill, m, path, node.geometry);
+          } else {
+            this.paint(context, fill, m, (target) => target.fill(path, node.geometry.fillRule));
+          }
         }
         const stroke = node.stroke;
         if (stroke !== null && stroke.width > 0) {
@@ -398,10 +556,16 @@ export async function exportPng(
       `exportPng: the image would be ${Math.ceil(scene.bounds.width * scale)} × ${Math.ceil(scene.bounds.height * scale)} px, over the ${EXPORT_MAX_SIDE} px side or 2^27 pixel limit`,
     );
   }
-  const painter = new Painter(size.width, size.height, defaultSurface, scene);
-  const { surface, context } = painter.layer();
-  const { x, y } = scene.bounds;
-  const base: Matrix = [scale, 0, 0, scale, -x * scale, -y * scale];
-  for (const id of scene.rootOrder) painter.node(context, id, base);
-  return toBlob(surface);
+  // V32-E4: the images decode first, so the painting stays synchronous.
+  const bitmaps = await decodeImages(scene);
+  try {
+    const painter = new Painter(size.width, size.height, defaultSurface, scene, bitmaps);
+    const { surface, context } = painter.layer();
+    const { x, y } = scene.bounds;
+    const base: Matrix = [scale, 0, 0, scale, -x * scale, -y * scale];
+    for (const id of scene.rootOrder) painter.node(context, id, base);
+    return await toBlob(surface);
+  } finally {
+    for (const bitmap of bitmaps.values()) bitmap.close();
+  }
 }

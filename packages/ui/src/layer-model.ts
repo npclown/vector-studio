@@ -116,7 +116,16 @@ export type LayerRow = Readonly<{
   locked: boolean;
   /** V31-U1: the row is inside a locked (first) or hidden ancestor, else null. */
   inherited: 'locked' | 'hidden' | null;
+  /** V32-H3: the node's topmost fill is an image paint (the row shows an image icon). */
+  image: boolean;
 }>;
+
+/** Whether the node's topmost fill (V-35 fills are bottom first) is an image paint. */
+function hasImageFill(node: NodeV8): boolean {
+  if (!('fills' in node)) return false;
+  const paint = node.fills.at(-1)?.paint;
+  return paint !== undefined && 'kind' in paint && paint.kind === 'image';
+}
 
 const childrenOf = (node: NodeV8): readonly string[] | null =>
   'children' in node ? node.children : null;
@@ -166,6 +175,7 @@ export function layerRows(
               visible: node.visible,
               locked: node.locked === true,
               inherited,
+              image: hasImageFill(node),
             };
       if (cache !== null) next.set(node.id, { node, row });
       rows.push(row);

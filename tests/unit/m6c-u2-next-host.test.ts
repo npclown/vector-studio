@@ -141,7 +141,9 @@ describe("M6c-U2 next-host renderer options (text: 'atlas')", () => {
     // The host's service and the probe's both take them, with the canvas raster port.
     // M6c-U4: under `?test=1` the host service gets the logged port (glyphRasterLog).
     // AR-U1: the host's service is created by @vector-studio/webgpu-host with the same options.
-    expect(HOST_SOURCE).toMatch(/\.\.\.editorRendererOptions\(servicePort\),\n {6}\}\);/u);
+    expect(HOST_SOURCE).toMatch(
+      /\.\.\.editorRendererOptions\(servicePort, options\.imageSource\),\n {6}\}\);/u,
+    );
     expect(RENDERER_SOURCE).toMatch(
       /new core\.PrimitiveRendererService\(target, hostRendererOptions\(glyphRaster\)\)/u,
     );

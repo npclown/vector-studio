@@ -70,6 +70,9 @@ export function composeHost(options: HostCompositionOptions): HostComposition {
       // E41-U7 (E41-S6) and V-36 (V36-S5): node effects, inner shadows and background blur
       // included, reach the renderer, which runs on `effects: 'v1'`.
       projectEffects: 'v1',
+      // V-32 (V32-S4, V32-H1): image fills reach the renderer, which runs on `paints: 'image'`
+      // with the host's image source (src/webgpu-renderer.ts).
+      projectImages: true,
       ...(options.drawStrokeColor === undefined
         ? {}
         : { drawStrokeColor: options.drawStrokeColor }),
