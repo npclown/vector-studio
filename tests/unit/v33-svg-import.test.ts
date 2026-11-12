@@ -530,6 +530,29 @@ describe('V33-A03 mapping', () => {
       `<defs><path id="p" d="${d}"/>${ten('p', 'a')}${ten('a', 'b')}</defs>${ten('b', 'c')}`,
     );
     expect(svgToFragment(heavy)).toEqual({ ok: false, code: 'editor.invalid-svg' });
+    // Long text copied through nested <use>, measured once per distinct run list.
+    const long = 'x'.repeat(16_000);
+    const nine = (href: string, id: string) =>
+      `<g id="${id}">${Array.from({ length: 9 }, () => `<use href="#${href}"/>`).join('')}</g>`;
+    let calls = 0;
+    const counting = (runs: readonly SvgTextRun[]) => {
+      calls += 1;
+      return layout(runs);
+    };
+    const copies = svg(
+      `<defs><text id="t0" y="10">${long}</text>${nine('t0', 't1')}${nine('t1', 't2')}</defs>` +
+        `${nine('t2', 't3')}`,
+    );
+    expect(svgToFragment(copies, { layout: counting })).toEqual({
+      ok: false,
+      code: 'editor.invalid-svg',
+    });
+    calls = 0;
+    expect(
+      svgToFragment(svg(`<text id="t" y="10">${long}</text><use href="#t"/>`), { layout: counting })
+        .ok,
+    ).toBe(true);
+    expect(calls).toBe(1);
     // The same path drawn a few times imports.
     expect(svgToFragment(svg(`<path d="${d}"/><use href="#x"/>`)).ok).toBe(true);
   });

@@ -86,6 +86,8 @@ const MAX_USE_DEPTH = 32;
 const MAX_VISITS = 200_000;
 /** Path points emitted (clip outlines included), so references cannot multiply the output. */
 export const MAX_SVG_POINTS = 1_000_000;
+/** Text code units emitted, so text copied through `<use>` cannot multiply the output. */
+export const MAX_SVG_TEXT = 1_000_000;
 const TEXT_LINE_HEIGHT = 1.2;
 const MAX_TEXT_SIZE = 4096;
 const GENERIC_FAMILIES: ReadonlySet<string> = new Set([
@@ -244,6 +246,9 @@ class Converter {
   private count = 0;
   private visits = 0;
   private points = 0;
+  private textUnits = 0;
+  /** Layouts by run content: `<use>` copies of one text measure once. */
+  private readonly measured = new Map<string, SvgTextMeasure>();
   /** The root viewport's normalized diagonal, the reference of percentage stroke lengths. */
   private diagonal = 100;
   private readonly parents = new Map<XmlElement, XmlElement>();
@@ -1120,7 +1125,14 @@ class Converter {
         last.text += run.text;
       } else merged.push({ ...run });
     }
-    const measure = this.measure(merged);
+    for (const run of merged) this.textUnits += run.text.length;
+    if (this.textUnits > MAX_SVG_TEXT) throw new TooLarge();
+    const key = JSON.stringify(merged);
+    let measure = this.measured.get(key);
+    if (measure === undefined) {
+      measure = this.measure(merged);
+      this.measured.set(key, measure);
+    }
     const anchorValue = style['text-anchor'].trim();
     const k = anchorValue === 'middle' ? 0.5 : anchorValue === 'end' ? 1 : 0;
     const align = k === 0.5 ? 'center' : k === 1 ? 'right' : 'left';
