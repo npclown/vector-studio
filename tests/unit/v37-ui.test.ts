@@ -20,6 +20,7 @@ import {
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { offersPassThrough } from '../../packages/ui/src/fill-model.js';
 import {
   createCounterIdSource,
   createEditor,
@@ -910,5 +911,14 @@ describe('V37-U4 instanceLayerCorners query', () => {
     expect(corners(target, 'missing')).toBeNull();
     expect(target.query({ type: 'instanceLayerCorners', id: 'sA', node: 'rA' })).toBeNull();
     expect(target.query({ type: 'instanceLayerCorners', id: 3 as never, node: 'rA' })).toBeNull();
+  });
+});
+
+describe('V-37 a set in V-35 menus', () => {
+  it('offers Pass through for a selected set, its default blend mode', () => {
+    const target = variants();
+    const set = docOf(target).nodes['set1']!;
+    expect(set.type).toBe('symbolSet');
+    expect(offersPassThrough([set])).toBe(true);
   });
 });

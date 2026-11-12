@@ -180,6 +180,7 @@ const CONTAINER_TYPES: ReadonlySet<NodeV8['type']> = new Set([
   'maskGroup',
   'frame',
   'symbol',
+  'symbolSet',
   'instance',
 ]);
 
