@@ -107,6 +107,11 @@ describe('M8-A10 toolbar row 1: tools (M8-L1)', () => {
     expect(target.getSnapshot().tool).toBe('test.ui.draw');
     expect(target.getSnapshot().history).toEqual({ undoDepth: 0, redoDepth: 0 });
   });
+
+  it('labels the eyedropper `dropper`, so row 1 stays within the M8-N3 width (V-39)', () => {
+    const [button] = toolButtons(['eyedropper'], 'select');
+    expect(button).toMatchObject({ testId: 'tool-eyedropper', label: 'dropper' });
+  });
 });
 
 describe('M8-A10 toolbar row 1: actions and enable rules (M8-L1)', () => {
