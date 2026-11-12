@@ -46,8 +46,16 @@ type SceneApplyResult = ReturnType<RendererSceneSynchronization['applyChanges']>
 
 // E41-U7c: `doc=e41-cards`, the effects benchmark scene (E41 contract, section 5.6).
 // V35-U5: `doc=v35-cards`, the fills and blend benchmark scene (V35-A10).
-export type BenchDocument = 'm1-a13' | 'stress' | 'm9-v2' | 'e41-cards' | 'v35-cards';
-const BENCH_DOCUMENTS: readonly string[] = ['m1-a13', 'stress', 'm9-v2', 'e41-cards', 'v35-cards'];
+// V36-U4: `doc=v36-glass`, the inner shadow and background blur benchmark scene (V36-A10).
+export type BenchDocument = 'm1-a13' | 'stress' | 'm9-v2' | 'e41-cards' | 'v35-cards' | 'v36-glass';
+const BENCH_DOCUMENTS: readonly string[] = [
+  'm1-a13',
+  'stress',
+  'm9-v2',
+  'e41-cards',
+  'v35-cards',
+  'v36-glass',
+];
 
 export type BenchQuery = Readonly<{
   /** The scenario document to load, or null. */

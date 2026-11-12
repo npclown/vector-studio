@@ -147,7 +147,7 @@ describe('M9-A03: the M9 bench flags are inert without ?bench=1', () => {
     expect(bench.benchQuery('?bench=1&doc=m9-v3')).toMatchObject({ doc: null });
     // The route serves the v2 document by name and nothing else new (E41-U7c adds e41-cards).
     expect(ROUTE).toContain(
-      "const DOCUMENTS = new Set(['m1-a13', 'stress', 'm9-v2', 'e41-cards', 'v35-cards']);",
+      "const DOCUMENTS = new Set(['m1-a13', 'stress', 'm9-v2', 'e41-cards', 'v35-cards', 'v36-glass']);",
     );
   });
 

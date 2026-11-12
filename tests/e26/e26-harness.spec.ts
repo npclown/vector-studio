@@ -26,6 +26,8 @@ import {
   E26_SCENARIOS,
   E41_SCENARIOS,
   V35_SCENARIOS,
+  V36_GLASS,
+  V36_SCENARIOS,
   e41CardsMoveSelection,
   nodeDrawBounds,
   E26_TYPICAL_VISIBLE,
@@ -259,6 +261,7 @@ const runs: { scenario: E26Scenario; variant: Variant }[] = [
   ...V20_UI0_SCENARIOS,
   ...E41_SCENARIOS,
   ...V35_SCENARIOS,
+  ...V36_SCENARIOS,
 ]
   .filter(
     (scenario) => filter.length === 0 || filter.some((entry) => scenario.id.startsWith(entry)),
@@ -335,6 +338,8 @@ type PageHook = {
     /** V35-U5: backdrop splits (V35-K8) and whether the blend pipeline exists (V35-K7). */
     getBlendSplitsForTesting(): number;
     readonly blendPipelineAvailable: boolean;
+    /** V36-U4: effect roots whose background blur was not drawn (V-36 section 5.4). */
+    getBackgroundBlurSkippedForTesting(): number;
   } | null;
   setDriver(driver: unknown): void;
   driverSteps(): number;
@@ -947,6 +952,7 @@ for (const { scenario, variant } of runs) {
             const submitted = backend.getStatistics().framesSubmitted;
             const effectPassesBefore = backend.getEffectPassesForTesting();
             const blendSplitsBefore = backend.getBlendSplitsForTesting();
+            const backgroundBlurSkippedBefore = backend.getBackgroundBlurSkippedForTesting();
             for (const name of Object.values(splitNames)) performance.clearMeasures(name);
             backend.startFrameMeasurements(8192);
             await until(t0 + windowEndMs);
@@ -977,6 +983,9 @@ for (const { scenario, variant } of runs) {
               // V35-U5: backdrop splits over the window (0 without blend roots).
               blendSplits: backend.getBlendSplitsForTesting() - blendSplitsBefore,
               blendPipelineAvailable: backend.blendPipelineAvailable,
+              // V36-U4: background blurs not drawn over the window (V-36 section 5.4).
+              backgroundBlurSkipped:
+                backend.getBackgroundBlurSkippedForTesting() - backgroundBlurSkippedBefore,
               lifecycle: backend.getStatistics().lifecycle,
               recoveryAttempts: backend.getStatistics().recoveryAttempts,
               measurements,
@@ -1088,6 +1097,24 @@ for (const { scenario, variant } of runs) {
           expect(run.blendSplits, 'backdrop splits over the window').toBeGreaterThanOrEqual(
             run.framesSubmitted,
           );
+          if (scenario.interaction === 'edit-drag')
+            expect(draggedFrameAfter, 'the dragged card moved').not.toEqual(draggedFrameBefore);
+        }
+        // V36-U4 (V36-A10): every card's effects drew in every frame, and every glass card's
+        // background blur drew in every frame: one backdrop snapshot (one split, V35-K8) per glass
+        // card and frame, none skipped (the scene has no blend roots, so the splits are the
+        // background blurs'; their GPU time is the frame's `vs-gpu`).
+        if (scenario.document === 'v36-glass') {
+          expect(run.effectPipelineAvailable, 'the effect pipeline').toBe(true);
+          expect(run.blendPipelineAvailable, 'the backdrop snapshot pipeline').toBe(true);
+          const roots = loaded(scenario.document).document.pages[0]!.children.length;
+          expect(run.effectPasses, 'effect passes over the window').toBe(
+            roots * run.framesSubmitted,
+          );
+          expect(run.blendSplits, 'background blur snapshots over the window').toBe(
+            V36_GLASS.glassCards * run.framesSubmitted,
+          );
+          expect(run.backgroundBlurSkipped, 'background blurs skipped').toBe(0);
           if (scenario.interaction === 'edit-drag')
             expect(draggedFrameAfter, 'the dragged card moved').not.toEqual(draggedFrameBefore);
         }
