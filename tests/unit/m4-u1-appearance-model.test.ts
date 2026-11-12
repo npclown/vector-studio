@@ -19,6 +19,7 @@ import {
   validateNode as validateNodeV7,
   type DocumentV5,
   type DocumentV8,
+  type Paint,
   type PathData,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
@@ -36,7 +37,7 @@ import {
 import { documentIdOf, projectPage } from '../../packages/editor-core/src/projector.js';
 import { RetainedSceneMirror } from '../../packages/renderer-core/src/scene-mirror.js';
 import { RecordingRenderer } from '../support/p5-recording-renderer.js';
-import { v6Value, v7Text, v7Value } from '../support/schema-v7.js';
+import { v6Node, v6Value, v7Text, v7Value } from '../support/schema-v7.js';
 
 // MVP M4-U1 (M4 contract, sections 2, 3 M4-P2, 4.1 and 7): schema v6 with paints, gradients, the
 // one stroke type and dashes; the M4-S rules with their literal paths (M4-A01); the migration
@@ -373,11 +374,12 @@ describe('M4-A01 schema v6 rules (M4-S1 to M4-S5)', () => {
     expect(node.ok).toBe(true);
     // JSON.stringify writes -0 as 0, so each value is checked with Object.is.
     const read = (node.ok ? node.node : null) as unknown as {
-      fill: { transform: number[]; stops: { offset: number }[] };
+      fills: { paint: { transform: number[]; stops: { offset: number }[] } }[];
       stroke: { dash: { pattern: number[]; phase: number } };
     };
-    for (const index of [1, 2, 4]) expect(Object.is(read.fill.transform[index], 0)).toBe(true);
-    expect(Object.is(read.fill.stops[0]!.offset, 0)).toBe(true);
+    const paint = read.fills[0]!.paint;
+    for (const index of [1, 2, 4]) expect(Object.is(paint.transform[index], 0)).toBe(true);
+    expect(Object.is(paint.stops[0]!.offset, 0)).toBe(true);
     expect(Object.is(read.stroke.dash.pattern[0], 0)).toBe(true);
     expect(Object.is(read.stroke.dash.phase, 0)).toBe(true);
   });
@@ -508,17 +510,18 @@ describe('M4-A02 migration v5 to v6, versions and round trips (section 2.1)', ()
   it('writes a gradient, a stop, a stroke and a dash in the fixed key order', () => {
     const raw = JSON.parse(APPEARANCE) as Json;
     const r1 = raw.nodes.r1 as {
-      fill: Loose & { stops: Loose[] };
+      fills: (Loose & { paint: Loose & { stops: Loose[] } })[];
       stroke: Loose & { dash: Loose };
     };
-    expect(Object.keys(r1.fill)).toEqual(['kind', 'transform', 'stops', 'spread']);
-    expect(Object.keys(r1.fill.stops[0]!)).toEqual(['offset', 'color']);
+    expect(Object.keys(r1.fills[0]!)).toEqual(['paint', 'visible', 'opacity', 'blendMode']);
+    expect(Object.keys(r1.fills[0]!.paint)).toEqual(['kind', 'transform', 'stops', 'spread']);
+    expect(Object.keys(r1.fills[0]!.paint.stops[0]!)).toEqual(['offset', 'color']);
     expect(Object.keys(r1.stroke)).toEqual(['color', 'width', 'cap', 'join', 'miterLimit', 'dash']);
     expect(Object.keys(r1.stroke.dash)).toEqual(['pattern', 'phase']);
     // An in-memory value in other key orders serializes to the same text.
     const value = parsed(APPEARANCE);
     const node = value.nodes.r1 as Extract<DocumentV8['nodes'][string], { type: 'rectangle' }>;
-    const fill = node.fill as Extract<typeof node.fill, { kind: string }>;
+    const fill = node.fills[0]!.paint as Extract<Paint, { kind: string }>;
     const stroke = node.stroke!;
     const shuffled = {
       ...value,
@@ -526,12 +529,19 @@ describe('M4-A02 migration v5 to v6, versions and round trips (section 2.1)', ()
         ...value.nodes,
         r1: {
           ...node,
-          fill: {
-            spread: fill.spread,
-            stops: fill.stops.map((stop) => ({ color: stop.color, offset: stop.offset })),
-            transform: fill.transform,
-            kind: fill.kind,
-          },
+          fills: [
+            {
+              blendMode: node.fills[0]!.blendMode,
+              opacity: node.fills[0]!.opacity,
+              visible: node.fills[0]!.visible,
+              paint: {
+                spread: fill.spread,
+                stops: fill.stops.map((stop) => ({ color: stop.color, offset: stop.offset })),
+                transform: fill.transform,
+                kind: fill.kind,
+              },
+            },
+          ],
           stroke: {
             dash: { phase: stroke.dash!.phase, pattern: stroke.dash!.pattern },
             miterLimit: stroke.miterLimit,
@@ -549,7 +559,7 @@ describe('M4-A02 migration v5 to v6, versions and round trips (section 2.1)', ()
   it('covers every paint, stroke and dash variant on every node type with paint', () => {
     const value = parsed(APPEARANCE);
     const paints = Object.values(value.nodes).flatMap((node) => [
-      ...('fill' in node && node.fill !== null ? [node.fill] : []),
+      ...('fills' in node ? node.fills.map((fill) => fill.paint) : []),
       ...('stroke' in node && node.stroke !== null ? [node.stroke.color] : []),
     ]);
     const kinds = new Set(paints.map((paint) => ('kind' in paint ? paint.kind : 'color')));
@@ -786,11 +796,14 @@ describe('M4-A03 fragments at v6, older fragments migrated (section 7)', () => {
         '{"fragmentVersion":2,"schemaVersion":8,"roots":["r1"],"nodes":{"r1":{"id":"r1",' +
         '"name":"r1","parent":"","frame":{"x":20,"y":20,"width":200,"height":120},' +
         '"rotation":0,"constraints":{"horizontal":"start","vertical":"start"},"opacity":1,' +
-        '"visible":true,"type":"rectangle","cornerRadii":[8,0,8,0],"fill":{"kind":"linear",' +
+        '"visible":true,"type":"rectangle","cornerRadii":[8,0,8,0],"fills":[{"paint":' +
+        '{"kind":"linear",' +
         '"transform":[1,0,0,1,0,0],"stops":[{"offset":0,"color":{"r":1,"g":0,"b":0,"a":1}},' +
-        '{"offset":1,"color":{"r":0,"g":0,"b":1,"a":1}}],"spread":"pad"},"stroke":{"color":' +
+        '{"offset":1,"color":{"r":0,"g":0,"b":1,"a":1}}],"spread":"pad"},"visible":true,' +
+        '"opacity":1,"blendMode":"normal"}],"stroke":{"color":' +
         '{"r":0,"g":0,"b":0,"a":1},"width":4,"cap":"butt","join":"miter","miterLimit":4,' +
-        '"dash":{"pattern":[12,6],"phase":0}},"effects":[]}},"sources":[],"sourceNodes":{}}',
+        '"dash":{"pattern":[12,6],"phase":0}},"blendMode":"normal","effects":[]}},' +
+        '"sources":[],"sourceNodes":{}}',
     );
   });
 
@@ -993,9 +1006,7 @@ describe('M4-A03 fragments at v6, older fragments migrated (section 7)', () => {
     const noEffects = (nodes: Record<string, Loose>) =>
       Object.fromEntries(
         Object.entries(nodes).map(([key, node]) => {
-          const rest = { ...node };
-          delete rest.effects;
-          return [key, rest];
+          return [key, v6Node(node)];
         }),
       );
     body.nodes = noEffects(body.nodes);
@@ -1089,7 +1100,7 @@ describe('M4-U1 commands: v6 input and defaults (section 4.1)', () => {
     const line = target.execute({ type: 'createLine', start: { x: 0, y: 0 }, end: { x: 5, y: 5 } });
     const document = target.query({ type: 'document' });
     expect(created.ok && document.nodes[created.ids[0]!]).toMatchObject({
-      fill: LINEAR,
+      fills: [{ paint: LINEAR }],
       stroke: DEFAULT_SHAPE_STROKE,
     });
     expect(line.ok && document.nodes[line.ids[0]!]).toMatchObject({ stroke: DEFAULT_PATH_STROKE });
@@ -1133,7 +1144,7 @@ describe('M4-U1 commands: v6 input and defaults (section 4.1)', () => {
     expect(result).toEqual({ ok: true, ids: [] });
     const after = serializeDocument(target.query({ type: 'document' }));
     expect(target.query({ type: 'node', id: 'e1' })).toMatchObject({
-      fill: LINEAR,
+      fills: [{ paint: LINEAR }],
       stroke: DASHED,
     });
     expect(target.execute({ type: 'undo' }).ok).toBe(true);

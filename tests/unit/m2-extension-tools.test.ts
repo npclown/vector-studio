@@ -535,7 +535,7 @@ describe('M2-A12 a binding to the extension’s own command', () => {
     expect(press(target, 'f', mods('alt'))).toEqual(consumed);
     ok(target, { type: 'setSelection', ids: [a] });
     expect(press(target, 'f', mods('alt'))).toEqual({ ok: true, ids: [a], consumed: true });
-    expect(target.query({ type: 'node', id: a })).toMatchObject({ fill: red });
+    expect(target.query({ type: 'node', id: a })).toMatchObject({ fills: [{ paint: red }] });
     expect(target.query({ type: 'keymap' }).find((b) => b.chord === 'Alt+KeyF')).toEqual({
       chord: 'Alt+KeyF',
       action: 'ext.stamp.fill',

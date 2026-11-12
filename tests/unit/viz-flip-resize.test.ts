@@ -110,7 +110,7 @@ describe('resize past the opposite handle flips', () => {
     const after = node(target, p);
     expect(after.frame).toEqual({ x: -20, y: 0, width: 20, height: 10 });
     expect(points(target, p)).toEqual([1, 0, 0, 0, 0, 1]);
-    expect(after.type === 'path' && after.fill).toEqual({
+    expect(after.type === 'path' && after.fills[0]!.paint).toEqual({
       ...gradient,
       transform: [-1, 0, 0, 1, 1, 0],
     });
@@ -143,8 +143,8 @@ describe('resize past the opposite handle flips', () => {
     drag(target, [10, 10], [-20, 10], [-20, -20], [20, 30]);
     const after = node(target, p);
     expect(after.frame).toEqual({ x: 0, y: 0, width: 20, height: 30 });
-    expect(after.type === 'path' && [after.path, after.fill]).toEqual(
-      before.type === 'path' && [before.path, before.fill],
+    expect(after.type === 'path' && [after.path, after.fills]).toEqual(
+      before.type === 'path' && [before.path, before.fills],
     );
   });
 

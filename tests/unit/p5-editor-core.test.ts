@@ -81,9 +81,12 @@ describe('P5-A01 creation through execute', () => {
           visible: true,
           type: 'rectangle',
           cornerRadii: [0, 0, 0, 0],
-          fill: { r: 1, g: 0, b: 0, a: 1 },
+          fills: [
+            { paint: { r: 1, g: 0, b: 0, a: 1 }, visible: true, opacity: 1, blendMode: 'normal' },
+          ],
           stroke: { color: black, width: 2, ...SHAPE },
           effects: [],
+          blendMode: 'normal',
         },
       },
     };
@@ -105,12 +108,12 @@ describe('P5-A01 creation through execute', () => {
     });
     const document = target.query({ type: 'document' });
     expect(document.nodes[rect!]).toMatchObject({
-      fill: { r: 0.8, g: 0.8, b: 0.8, a: 1 },
+      fills: [{ paint: { r: 0.8, g: 0.8, b: 0.8, a: 1 } }],
       stroke: null,
     });
     expect(document.nodes[line!]).toMatchObject({
       name: 'Path',
-      fill: null,
+      fills: [],
       stroke: { color: black, width: 1, cap: 'butt', join: 'miter', miterLimit: 4, dash: null },
     });
     expect(document.pages[0]!.children).toEqual([rect, line]);
@@ -143,8 +146,9 @@ describe('P5-A01 creation through execute', () => {
         points: [0, 0.25, 0.5, 0, 1, 0.5, 1, 1, 0, 1],
         fillRule: 'evenodd',
       },
-      fill: black,
+      fills: [{ paint: black, visible: true, opacity: 1, blendMode: 'normal' }],
       stroke: null,
+      blendMode: 'normal',
       effects: [],
     });
   });
@@ -183,7 +187,7 @@ describe('P5-A01 creation through execute', () => {
       name: 'A',
       opacity: 0.5,
       visible: false,
-      fill: null,
+      fills: [],
     });
     ok(target, { type: 'deleteNodes', ids: [a!] });
     expect(target.query({ type: 'document' }).pages[0]!.children).toEqual([b]);

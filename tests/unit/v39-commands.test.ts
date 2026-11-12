@@ -72,8 +72,10 @@ function failure(target: Editor, command: Command) {
   return result.ok ? null : { code: result.code, ...(result.path ? { path: result.path } : {}) };
 }
 
-function node(target: Editor, id: string): NodeV8 {
-  return target.query({ type: 'node', id })!;
+/** The node, with V-35's top fill paint also read as `fill` (what a `fill` binding holds). */
+function node(target: Editor, id: string): NodeV8 & { fill?: unknown } {
+  const value = target.query({ type: 'node', id })!;
+  return 'fills' in value ? { ...value, fill: value.fills.at(-1)?.paint ?? null } : value;
 }
 
 function depth(target: Editor): number {
@@ -647,7 +649,10 @@ describe('V-39 review r1 follow-ups', () => {
       failure(target, { type: 'updateVariable', id: o, values: { aa: 2, zz: 'bad' } } as never),
     ).toEqual({ code: 'editor.invalid-command', path: '/values/zz' });
     expect(bind(target, [a], 'fill', { style: '' })).toMatchObject({ path: '/ref' });
-    const bad = { ...node(target, a), bindings: { fill: { style: 'a\u0000' } } };
+    const bad = {
+      ...target.query({ type: 'node', id: a })!,
+      bindings: { fill: { style: 'a\u0000' } },
+    };
     expect(validateNode(bad)).toEqual({
       ok: false,
       code: 'document.invalid-field',

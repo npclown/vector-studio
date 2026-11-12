@@ -117,7 +117,7 @@ describe('V38-A01 guides and layout grids in the document', () => {
     expect(Object.keys(raw.pages[0]!)).toEqual(['id', 'name', 'children', 'guides']);
     expect(Object.keys(raw.pages[0]!.guides[0]!)).toEqual(['axis', 'value']);
     const keys = Object.keys(raw.nodes.f);
-    expect(keys.slice(-3)).toEqual(['stroke', 'layoutGrids', 'effects']);
+    expect(keys.slice(-4)).toEqual(['stroke', 'layoutGrids', 'blendMode', 'effects']);
     expect(raw.nodes.f.layoutGrids.map((grid) => Object.keys(grid))).toEqual([
       ['type', 'size', 'color', 'visible'],
       ['type', 'count', 'align', 'size', 'gutter', 'offset', 'color', 'visible'],

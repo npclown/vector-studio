@@ -729,7 +729,7 @@ describe('M6a-A13 (model half): text nodes and symbols', () => {
 
 describe('M6a-A01 validateNode on text nodes', () => {
   it('accepts a text node and reports paths relative to it', () => {
-    const node = { ...textNode('t', 'p'), effects: [] };
+    const node = { ...textNode('t', 'p'), blendMode: 'normal', effects: [] };
     expect(validateNode(node)).toEqual({ ok: true, node });
     expect(
       failure(validateNode(textNode('t', 'p', [run('a'), run('b')], { effects: [] }))),

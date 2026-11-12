@@ -5,6 +5,7 @@ import type {
   Dash,
   DocumentV8,
   Effect,
+  Fill,
   JsonValue,
   LayoutGrid,
   NodeV6,
@@ -121,17 +122,40 @@ function effect(value: Effect): Ordered {
   };
 }
 
+/** V35-S2 key order: `paint, visible, opacity, blendMode`. */
+function fill(value: Fill): Ordered {
+  return {
+    paint: paint(value.paint),
+    visible: value.visible,
+    opacity: value.opacity,
+    blendMode: value.blendMode,
+  };
+}
+
 /**
- * A v8 node: the v6 fields, then `layoutGrids` (V38-S2), `effects` (E41-S1), `locked` only when
- * true (V31-S1), then `bindings` when present (V39-S7).
+ * A v8 node: the v6 fields with `fills` in `fill`'s place (V35-S2), then `layoutGrids` (V38-S2),
+ * `blendMode` (V35-S2), `effects` (E41-S1), `locked` only when true (V31-S1), then `bindings`
+ * when present (V39-S7).
  */
 function nodeV8(value: NodeV8): Ordered {
+  const fills = 'fills' in value ? value.fills : null;
+  const v6 = nodeV6({ ...value, fill: null } as unknown as NodeV6);
+  const ordered: Ordered = {};
+  for (const [key, field] of Object.entries(v6)) {
+    if (key === 'fill') ordered.fills = (fills ?? []).map(fill);
+    else ordered[key] = field;
+  }
   // V38-S2: `layoutGrids` after `stroke`, before `effects`; an empty list is not written.
   const grids =
     (value.type === 'frame' || value.type === 'symbol') && (value.layoutGrids?.length ?? 0) > 0
       ? { layoutGrids: value.layoutGrids!.map(layoutGrid) }
       : {};
-  const node: Ordered = { ...nodeV6(value), ...grids, effects: value.effects.map(effect) };
+  const node: Ordered = {
+    ...ordered,
+    ...grids,
+    blendMode: value.blendMode,
+    effects: value.effects.map(effect),
+  };
   if (value.locked === true) node.locked = true;
   // V39-S7: `bindings` last, keys in BINDING_KEYS order, each `{ style }` or `{ variable }`.
   if (value.bindings !== undefined) {
@@ -303,8 +327,9 @@ export function orderedDocument(document: DocumentV8): Ordered {
  * `textOverrides` (its keys in code unit order, each value `{ runs }`), a text
  * node's in the base order followed by `runs` (each `text`, `family`, `size`, `color`),
  * `sizing`, `align`, `letterSpacing`, `lineHeight`. Every node ends with `effects`, each effect in
- * the E41-S2 key order, then its V-39 `bindings` if any. The V-39 `colorStyles` and `variables`
- * follow the document `id` when present (V39-S7).
+ * the E41-S2 key order, then its V-39 `bindings` if any. A v8 node holds `fills` (each `paint`,
+ * `visible`, `opacity`, `blendMode`) where v7 held `fill`, and `blendMode` before `effects`
+ * (V35-S2). The V-39 `colorStyles` and `variables` follow the document `id` when present (V39-S7).
  */
 export function serializeDocument(document: DocumentV8): string {
   return `${JSON.stringify(orderedDocument(document), null, 2)}\n`;

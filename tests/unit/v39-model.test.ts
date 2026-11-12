@@ -12,6 +12,7 @@ import {
   type VariableSet,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
+import { v6Node } from '../support/schema-v7.js';
 
 // V-39 contract (docs/plans/viz-v39-styles-variables-contract.md), V39-A01: the model reads,
 // validates (S1 to S6, in order) and writes (S7) colour styles, variables and bindings.
@@ -50,7 +51,7 @@ function base(): DocumentV8 {
     lineHeight: 1.2,
   } as unknown as Record<string, unknown>;
   delete text.cornerRadii;
-  delete text.fill;
+  delete text.fills;
   delete text.stroke;
   const page = document.pages[0]!;
   return {
@@ -116,10 +117,21 @@ describe('V39-A01 the model', () => {
     const result = validateDocument(plain);
     expect(result.ok && 'colorStyles' in result.document).toBe(false);
     expect(result.ok && 'variables' in result.document).toBe(false);
-    const older = validateAnyDocument({ ...plain, schemaVersion: 7 });
+    // The same document at v7: `fill` for `fills`, no mode (v7 keeps `effects`).
+    const v7 = {
+      ...plain,
+      schemaVersion: 7,
+      nodes: Object.fromEntries(
+        Object.entries(plain.nodes).map(([key, node]) => [
+          key,
+          { ...v6Node(node as unknown as Record<string, unknown>), effects: node.effects },
+        ]),
+      ),
+    };
+    const older = validateAnyDocument(v7);
     expect(older.ok && older.document.schemaVersion).toBe(8);
     // A v7 input has no such key.
-    expect(validateAnyDocument({ ...plain, schemaVersion: 7, colorStyles: styles })).toEqual({
+    expect(validateAnyDocument({ ...v7, colorStyles: styles })).toEqual({
       ok: false,
       code: 'document.invalid-field',
       path: '/colorStyles',

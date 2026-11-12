@@ -185,7 +185,7 @@ describe('P5-A10 ext.star through the public API', () => {
     expect(target.query({ type: 'node', id: id! })).toMatchObject({
       name: 'ext.star',
       data: { points: 5, innerRatio: 0.5 },
-      fill: null,
+      fills: [],
       stroke: { width: 1 },
     });
     expect(target.execute({ type: 'createCustomNode', customType: 'ext.moon', frame })).toEqual({

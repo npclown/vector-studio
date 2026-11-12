@@ -86,10 +86,12 @@ function detach(draft: Draft, document: DocumentV8, planned: Plan, ids: readonly
       visible: instance.visible,
       type: 'frame',
       children: children.map((child) => copyOf.get(child)!),
-      fill: source.fill,
+      // V35-S4: the source's fills, and the instance's own mode.
+      fills: source.fills,
       stroke: source.stroke,
       // The effects the instance draws with (E41-S10): its own, or else its source's.
       effects: instance.effects.length > 0 ? instance.effects : source.effects,
+      blendMode: instance.blendMode,
       // V31-S3: detach keeps the instance's lock, as it keeps `visible`.
       ...(instance.locked === true ? { locked: true } : {}),
       // V-38 contract, V38-S2: the source's layout grids.
