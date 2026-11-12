@@ -160,7 +160,8 @@ export type SceneNodeBase = Readonly<{
   opacity: number;
   /**
    * E41-S5: the node's visible effects, in list order. Absent and `[]` both mean none; a non-empty
-   * list needs the renderer's `effects: 'v0'` (E41-S6), else it is `unsupported-feature`. A frame
+   * list needs the renderer's `effects: 'v0'` (E41-S6), or `'v1'` when it holds an inner shadow
+   * or a background blur (V36-S4), else it is `unsupported-feature`. A frame
    * unit carries its effects on its outer container.
    */
   effects?: readonly SceneEffect[];

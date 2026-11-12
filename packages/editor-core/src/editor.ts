@@ -10,6 +10,7 @@ import {
   validateAnyDocument,
   type Color,
   type DocumentV8,
+  type Effect,
   type ParseResult,
   type TextNodeV8,
 } from '@vector-studio/model';
@@ -56,7 +57,7 @@ import {
   validateLayer,
   type CanonicalBinding,
 } from './keymap.js';
-import { SceneProjector } from './projector.js';
+import { SceneProjector, type EffectProjection } from './projector.js';
 import { TextLayoutCache, layoutRequest, type TextLayouter } from './text.js';
 import { emptySplit, probeNow, textProbe, type RelayoutSplit } from './text-probe.js';
 import {
@@ -172,9 +173,11 @@ export type EditorOptions = Readonly<{
   /**
    * E41 contract, E41-S6: when true, the scene the editor projects to an attached renderer
    * carries node effects (drop shadows, layer blur), which needs a renderer on `effects: 'v0'`.
-   * Defaults to false: effects stay in the document and are not drawn.
+   * `'v1'` (V-36 contract, V36-S5) adds inner shadows and background blur and needs a renderer
+   * on `effects: 'v1'`; under `true` those kinds are left out of the scene. Defaults to false:
+   * effects stay in the document and are not drawn.
    */
-  projectEffects?: boolean;
+  projectEffects?: boolean | 'v1';
   /**
    * V-25 slice 4: when true, the drawing tools create a node in the innermost frame under the
    * press point (inside the scope when it holds the point), and a select-tool move that ends with
@@ -704,6 +707,15 @@ function normalizeSelection(
   return unique.filter((id) => !ancestors(tree, id).some((node) => listed.has(node.id)));
 }
 
+/** The `effectKinds` query (V-36 contract, section 6), in panel order. */
+const EFFECT_KINDS_V0: readonly Effect['kind'][] = Object.freeze(['dropShadow', 'layerBlur']);
+const EFFECT_KINDS_V1: readonly Effect['kind'][] = Object.freeze([
+  'dropShadow',
+  'innerShadow',
+  'layerBlur',
+  'backgroundBlur',
+]);
+
 class EditorCore implements Editor {
   private document: DocumentV8;
   private activePage: string;
@@ -832,7 +844,7 @@ class EditorCore implements Editor {
   readonly textLayouts: TextLayoutCache | null;
   private readonly layout: TextLayouter | undefined;
   /** E41-S6: whether the projector emits node effects (`EditorOptions.projectEffects`). */
-  private readonly projectEffects: boolean;
+  private readonly projectEffects: EffectProjection;
 
   /**
    * The IDs of `returned` that a draw on `drawnOn` accepted: `drawIds` and `freshId` skip only
@@ -934,7 +946,10 @@ class EditorCore implements Editor {
     if (!result.ok) throw new Error(`createEditor: ${result.code} at ${result.path}`);
     this.document = deepFreeze(result.document);
     this.activePage = this.document.pages[0]!.id;
-    this.projectEffects = options.projectEffects === true;
+    this.projectEffects =
+      options.projectEffects === true || options.projectEffects === 'v1'
+        ? options.projectEffects
+        : false;
     this.snapshot = this.buildSnapshot();
     this.tools.set(
       'select',
@@ -1660,6 +1675,8 @@ class EditorCore implements Editor {
           return this.snap;
         case 'snapping':
           return this.snapping;
+        case 'effectKinds':
+          return this.projectEffects === 'v1' ? EFFECT_KINDS_V1 : EFFECT_KINDS_V0;
         case 'scope':
           return this.scope;
         case 'clipboard':

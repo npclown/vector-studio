@@ -752,14 +752,16 @@ type Schema = Readonly<{
    * `read` at v7 (E41-S2, S3).
    */
   effects: 'none' | 'added' | 'read';
+  /** The effect kinds `read` accepts: E41's at v7, V-36's too at v8 (V36-S2). */
+  effectKinds: 'v7' | 'v8';
 }>;
 
 const V4_TYPES = Object.keys(NODE_KEYS_V2) as NodeTypeKey[];
 const V3_TYPES = V4_TYPES.filter((type) => type !== 'text');
 const V2_TYPES = V3_TYPES.filter((type) => type !== 'symbol' && type !== 'instance');
 const OLDER = { containerOpacity: 'one' } as const;
-const NO_EFFECTS = { effects: 'none' } as const;
-const ADD_EFFECTS = { effects: 'added' } as const;
+const NO_EFFECTS = { effects: 'none', effectKinds: 'v7' } as const;
+const ADD_EFFECTS = { effects: 'added', effectKinds: 'v7' } as const;
 const V2: Schema = {
   types: V2_TYPES,
   overrides: 'none',
@@ -795,13 +797,13 @@ const V6_TO_V7: Schema = {
 };
 const V7: Schema = { ...V6_TO_V7, effects: 'read' };
 /**
- * A v7 input read into v8, and v8 itself: v7's fields, since v8 has v7's shape so far. An item
- * adding a v8 field splits these two and adds its dimension to every schema that reads into v8
- * (`V2_TO_V7` to `V6_TO_V7` too, which `validateAnyDocument` uses for older inputs); see
+ * A v7 input read into v8 (v7's fields and effect kinds), and v8 itself (V-36's effect kinds too).
+ * An item adding a v8 field adds its dimension to every schema that reads into v8 (`V2_TO_V7` to
+ * `V6_TO_V7` too, which `validateAnyDocument` uses for older inputs); see
  * docs/plans/viz-schema-v8.md, Where a field addition goes.
  */
 const V7_TO_V8: Schema = V7;
-const V8: Schema = V7;
+const V8: Schema = { ...V7, effectKinds: 'v8' };
 /** v8 nodes of an input below v6, already migrated: v8 fields, the older opacity rule. */
 const V8_OLDER_OPACITY: Schema = { ...V8, ...OLDER };
 
@@ -1064,28 +1066,37 @@ function readNode(key: string, value: unknown, path: Path, schema: Schema): Node
   if (schema.effects === 'none') return node as NodeV8;
   const effects =
     schema.effects === 'read'
-      ? readEffects((value as Record<string, unknown>).effects, [...path, 'effects'])
+      ? readEffects(
+          (value as Record<string, unknown>).effects,
+          [...path, 'effects'],
+          schema.effectKinds === 'v8' ? EFFECT_KINDS_V8 : EFFECT_KINDS_V7,
+        )
       : [];
   return { ...node, effects };
 }
 
-const EFFECT_KINDS: readonly Effect['kind'][] = ['dropShadow', 'layerBlur'];
+const EFFECT_KINDS_V7: readonly Effect['kind'][] = ['dropShadow', 'layerBlur'];
+const EFFECT_KINDS_V8: readonly Effect['kind'][] = [
+  ...EFFECT_KINDS_V7,
+  'innerShadow',
+  'backgroundBlur',
+];
 
 /**
- * E41-S2, S3 in key order: at most MAX_EFFECTS entries (at `effects`), each `kind` first, then a
- * drop shadow's `visible, color, offsetX, offsetY, radius` or a layer blur's `visible, radius`;
- * a second layer blur fails at its own index.
+ * E41-S2, S3 and V36-S1, S2 in key order: at most MAX_EFFECTS entries (at `effects`), each `kind`
+ * first (one of `kinds`), then a shadow's `visible, color, offsetX, offsetY, radius` or a blur's
+ * `visible, radius`; a second layer blur or background blur fails at its own index.
  */
-function readEffects(value: unknown, path: Path): Effect[] {
+function readEffects(value: unknown, path: Path, kinds: readonly Effect['kind'][]): Effect[] {
   if (!Array.isArray(value) || value.length > MAX_EFFECTS) invalid(path);
-  let blurs = 0;
+  const blurs = { layerBlur: 0, backgroundBlur: 0 };
   return readArray(value, path, (entry, entryPath): Effect => {
     if (!isPlainObject(entry)) invalid(entryPath);
-    const kind = readEnum(entry.kind, EFFECT_KINDS, [...entryPath, 'kind']);
-    if (kind === 'layerBlur') {
+    const kind = readEnum(entry.kind, kinds, [...entryPath, 'kind']);
+    if (kind === 'layerBlur' || kind === 'backgroundBlur') {
       const record = readRecord(entry, ['kind', 'visible', 'radius'], entryPath);
-      blurs += 1;
-      if (blurs > 1) invalid(entryPath);
+      blurs[kind] += 1;
+      if (blurs[kind] > 1) invalid(entryPath);
       return {
         kind,
         visible: readBoolean(record.visible, [...entryPath, 'visible']),
