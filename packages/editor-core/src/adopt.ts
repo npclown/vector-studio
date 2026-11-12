@@ -55,6 +55,33 @@ function visibleAt(tree: TreeView, id: string, point: PagePoint): boolean {
   return chain.every((node) => node?.type !== 'frame' || insideFrame(tree, node.id, point));
 }
 
+/**
+ * The innermost visible symbol set of `owner`'s subtree whose box contains `point`, searching
+ * through groups but not frames (the owner is already the innermost frame there), front first;
+ * V-37 contract, section 2.1: a dragged symbol is adopted into it.
+ */
+function setIn(
+  document: DocumentV8,
+  tree: TreeView,
+  owner: string,
+  point: PagePoint,
+  exclude: ReadonlySet<string>,
+): string | null {
+  const children = childrenOf(tree, owner);
+  for (let i = children.length - 1; i >= 0; i -= 1) {
+    const id = children[i]!;
+    const node = document.nodes[id];
+    if (node === undefined || exclude.has(id) || node.visible === false) continue;
+    if (node.type === 'symbolSet') {
+      if (insideFrame(tree, id, point)) return id;
+    } else if (node.type === 'group') {
+      const found = setIn(document, tree, id, point, exclude);
+      if (found !== null) return found;
+    }
+  }
+  return null;
+}
+
 /** Whether a node lies in a symbol source (its contents follow the M7 rules, not adoption). */
 function inSymbol(tree: TreeView, id: string): boolean {
   return [tree.node(id), ...ancestors(tree, id)].some((node) => node?.type === 'symbol');
@@ -75,6 +102,10 @@ export function adoptionOwner(
   exclude: ReadonlySet<string> = new Set(),
 ): string {
   const tree = documentTree(document);
+  // A set takes no node a tool draws: its scope draws into the set's parent (V-37 contract,
+  // section 2.1), and the point inside a set is not a frame there.
+  const scoped = scope === null ? undefined : tree.node(scope);
+  if (scoped?.type === 'symbolSet') scope = scoped.parent === page ? null : scoped.parent;
   if (
     scope !== null &&
     tree.node(scope) !== undefined &&
@@ -116,18 +147,35 @@ export function dropAdoption(
 ): Readonly<{ ids: readonly string[]; parent: string }> | null {
   const tree = documentTree(document);
   const moved = new Set(ids);
-  const parent = adoptionOwner(document, page, scope, point, moved);
+  const outer = adoptionOwner(document, page, scope, point, moved);
+  const frame = tree.node(outer);
+  if (frame !== undefined && (frame.type !== 'frame' || inSymbol(tree, outer))) return null;
+  // Symbols dropped on a set under the pointer join it, and nothing else does (V-37 contract,
+  // section 2.1).
+  const roots = ids.filter(
+    (id) => !ids.some((other) => other !== id && isAncestor(tree, other, id)),
+  );
+  const set = roots.every((id) => tree.node(id)?.type === 'symbol')
+    ? setIn(document, tree, outer, point, moved)
+    : null;
+  const parent = set ?? outer;
   const target = tree.node(parent);
-  if (target !== undefined && (target.type !== 'frame' || inSymbol(tree, parent))) return null;
   const adopted = ids.filter((id) => {
     const node = tree.node(id);
-    if (node === undefined || node.parent === parent || inSymbol(tree, id)) return false;
+    if (node === undefined || node.parent === parent) return false;
+    // A symbol (a variant too) is not inside a source; its descendants are.
+    if (ancestors(tree, id).some((up) => up.type === 'symbol')) return false;
+    if (node.type !== 'symbol' && inSymbol(tree, id)) return false;
     if (ids.some((other) => other !== id && isAncestor(tree, other, id))) return false;
+    if (set === null && node.type === 'symbol' && tree.node(node.parent)?.type !== 'symbolSet') {
+      return false;
+    }
     const owner = node.parent;
     if (tree.page(owner) !== undefined) {
       return node.type !== 'frame' || (target !== undefined && containedIn(tree, id, parent));
     }
-    return tree.node(owner)?.type === 'frame';
+    const above = tree.node(owner)?.type;
+    return above === 'frame' || above === 'symbolSet';
   });
   return adopted.length === 0 ? null : { ids: adopted, parent };
 }

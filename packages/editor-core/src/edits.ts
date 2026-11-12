@@ -71,6 +71,13 @@ import {
 import { refitText, setText, setTextProps, setTextStyle } from './text-edits.js';
 import { boundsOf } from './hit-test.js';
 import { clearInstanceText, setInstanceText } from './instance-text.js';
+import {
+  combineAsVariants,
+  resetInstanceOverrides,
+  setInstanceOverride,
+  setInstanceVariant,
+  setVariantProperties,
+} from './variants.js';
 import { detachInstances, orphanedInstances, withDetach } from './symbols.js';
 import { visualBounds } from './visual-bounds.js';
 import { handleBoxOf, handleCentre } from './handles.js';
@@ -195,6 +202,8 @@ const PROPS: Readonly<Record<NodeV8['type'], readonly string[]>> = {
   // M7 contract: a symbol has a frame's props (section 1.2), an instance only the common ones
   // (section 5.1; its opacity any in `[0, 1]` since M4-U3, M4 contract, section 5).
   symbol: [...COMMON_PROPS, 'fill', 'fills', 'stroke', 'layoutGrids'],
+  // V-37 contract, section 2.1: a set has a frame's props.
+  symbolSet: [...COMMON_PROPS, 'fill', 'fills', 'stroke', 'layoutGrids'],
   instance: COMMON_PROPS,
   // M6a contract, section 6.1: a text node takes the common props only; its own props are
   // `setTextProps`'s.
@@ -414,6 +423,16 @@ export function applyEdit(
       return setInstanceText(document, command, context, finish);
     case 'clearInstanceText':
       return clearInstanceText(document, command, context, finish);
+    case 'combineAsVariants':
+      return combineAsVariants(document, command, context, finish);
+    case 'setVariantProperties':
+      return setVariantProperties(document, command, context, finish);
+    case 'setInstanceVariant':
+      return setInstanceVariant(document, command, context, finish);
+    case 'setInstanceOverride':
+      return setInstanceOverride(document, command, context, finish);
+    case 'resetInstanceOverrides':
+      return resetInstanceOverrides(document, command, context, finish);
     case 'ungroupNodes': {
       if (typeof command.id !== 'string') return fail('editor.invalid-command', '/id');
       const node = nodeOf(document, command.id);
@@ -734,9 +753,11 @@ function create(
   if (!onPage && owner === undefined) return fail('editor.unknown-node');
   let source: SymbolNodeV8 | null = null;
   if (command.type === 'createInstance') {
-    const named = nodeOf(document, command.symbol);
+    let named = nodeOf(document, command.symbol);
     if (named === undefined) return fail('editor.unknown-node');
-    if (named.type !== 'symbol') return fail('editor.not-a-symbol');
+    // A set stands for its default variant, its first child (V-37 contract, section 4.1).
+    if (named.type === 'symbolSet') named = nodeOf(document, named.children[0]);
+    if (named?.type !== 'symbol') return fail('editor.not-a-symbol');
     source = named;
   }
   const siblings = childrenOf(tree, parent);
@@ -922,6 +943,8 @@ function create(
   const rejected = custom.check(deepFreeze(result.node));
   if (rejected !== null) return fail(rejected.code, rejected.path);
   if (!onPage && !isContainer(owner)) return fail('editor.invalid-parent', '/parent');
+  // A set holds symbols only, and nothing a creating command makes is one (V-37, section 2.1).
+  if (owner?.type === 'symbolSet') return fail('editor.invalid-parent', '/parent');
   if (owner?.type === 'maskGroup' && index === 0 && result.node.type !== 'path') {
     return fail('editor.invalid-mask-source', '/index');
   }
@@ -929,7 +952,8 @@ function create(
   const clips = childClipDepth(tree, parent);
   if (
     clips > MAX_CLIP_DEPTH ||
-    (result.node.type === 'frame' && clips > MAX_CLIP_CONTAINER_DEPTH) ||
+    ((result.node.type === 'frame' || result.node.type === 'symbolSet') &&
+      clips > MAX_CLIP_CONTAINER_DEPTH) ||
     (source !== null && instanceClipBreaks(clips, sourceClipLevels(tree, source.id)))
   ) {
     return fail('editor.clip-depth', '/parent');
@@ -1224,6 +1248,8 @@ function group(
   if (owner === undefined || ids.some((member) => document.nodes[member]!.parent !== owner)) {
     return fail('editor.not-siblings');
   }
+  // A group never sits directly in a set (V-37 contract, section 2.1).
+  if (document.nodes[owner]?.type === 'symbolSet') return fail('editor.invalid-parent', '/parent');
   // Every check runs with a placeholder ID first, so a failed command draws no ID; the result
   // does not depend on the ID, so the build with the drawn one passes too.
   const placeholder = placeholderId(document);
@@ -1341,6 +1367,8 @@ function move(
   const targetNode = tree.node(target);
   if (
     (targetNode !== undefined && !isContainer(targetNode)) ||
+    (targetNode?.type === 'symbolSet' &&
+      roots.some((id) => document.nodes[id]!.type !== 'symbol')) ||
     roots.some(
       (id) => id === target || isAncestor(tree, id, target) || pageOf(tree, id) !== targetPage,
     )

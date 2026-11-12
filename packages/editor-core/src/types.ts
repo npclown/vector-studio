@@ -25,6 +25,7 @@ import type {
   Frame,
   JsonValue,
   ModelErrorCode,
+  NodeOverride,
   NodeV8,
   PageV2,
   Paint,
@@ -471,6 +472,29 @@ export type DocumentCommand =
   | Readonly<{ type: 'setInstanceText'; id: string; node: string; runs: readonly TextRun[] }>
   /** Removes the text override of `node` in instance `id`, or every one without `node`. */
   | Readonly<{ type: 'clearInstanceText'; id: string; node?: string }>
+  // Variant and override commands (V-37 contract, sections 4.1 and 4.2).
+  /**
+   * Moves two or more sibling symbols of the active page, none in a set, into a new
+   * `symbolSet`, each with `variant { 'Property 1': <value from its name> }`. Returns the set's ID.
+   */
+  | Readonly<{ type: 'combineAsVariants'; ids: readonly string[] }>
+  /** Replaces the `variant` of each listed symbol of a set in one step; returns empty `ids`. */
+  | Readonly<{
+      type: 'setVariantProperties';
+      updates: readonly Readonly<{ id: string; variant: Readonly<Record<string, string>> }>[];
+    }>
+  /**
+   * Makes instance `id` refer to the variant of its set that has its current variant's values
+   * with `values` applied; overrides carry by layer path. Returns empty `ids`.
+   */
+  | Readonly<{ type: 'setInstanceVariant'; id: string; values: Readonly<Record<string, string>> }>
+  /**
+   * Sets property overrides of the source node `node` (the source itself included) inside
+   * instance `id`; a value equal to the source node's removes that field. Returns empty `ids`.
+   */
+  | Readonly<{ type: 'setInstanceOverride'; id: string; node: string; props: NodeOverride }>
+  /** Removes the property and text overrides of `node` in instance `id`, or every one. */
+  | Readonly<{ type: 'resetInstanceOverrides'; id: string; node?: string }>
   /**
    * Rotates by `angle` (radians, clockwise) about the page point `pivot`, by default the centre
    * of the `handles` box (MVP M2 contract, section 4.1). A relative command: inside a gesture it
@@ -807,7 +831,11 @@ export type EditorErrorCode =
   | 'editor.table-limit'
   | 'editor.last-mode'
   /** V-35 contract, V35-C1: `addFill` past 16 fills. */
-  | 'editor.fill-limit';
+  | 'editor.fill-limit'
+  // V-37 contract, section 6.4.
+  | 'editor.invalid-variant'
+  | 'editor.no-such-variant'
+  | 'editor.invalid-override';
 
 /**
  * `consumed` is present on `input` results only (M2-I3): whether navigation, the tool or a key

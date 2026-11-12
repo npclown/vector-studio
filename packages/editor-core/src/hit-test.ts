@@ -9,7 +9,7 @@ import {
   rotatedBounds,
 } from './geometry.js';
 import { contentBounds, contentCorners, hasInnerContentBox } from './content-box.js';
-import { ExpansionCache, type Expansion } from './expansion.js';
+import { ExpansionCache, sourceAppearance, type Expansion } from './expansion.js';
 import { clampedRadii } from './projector.js';
 import {
   ancestors,
@@ -515,8 +515,9 @@ function visitHits(
     const inside = insideBox(local, box);
     if (node.type === 'instance') {
       const source = tree.node(node.symbol);
-      fill = source?.type === 'symbol' && hasVisibleFill(source.fills);
-      stroke = source?.type === 'symbol' ? source.stroke : null;
+      const own = source?.type === 'symbol' ? sourceAppearance(node, source) : null;
+      fill = own !== null && hasVisibleFill(own.fills);
+      stroke = own === null ? null : own.stroke;
       if (source !== undefined) painted = source;
       // An instance's content is always clipped to its box, so outside it nothing inside hits.
       const result = inside ? expansions.expand(document, node.id) : null;

@@ -571,11 +571,7 @@ export type CustomNodeV8 = Omit<CustomNodeV6, 'fill'> &
   NodeLock &
   NodeBindings;
 export type TextNodeV8 = TextNode & LeafBlend & NodeEffects & NodeLock & NodeBindings;
-export type InstanceNodeV8 = InstanceNodeV5 &
-  ContainerBlend &
-  NodeEffects &
-  NodeLock &
-  NodeBindings;
+
 export type GroupNodeV8 = GroupNode & ContainerBlend & NodeEffects & NodeLock & NodeBindings;
 export type FrameNodeV8 = Omit<FrameNodeV6, 'fill'> &
   NodeFills &
@@ -584,13 +580,62 @@ export type FrameNodeV8 = Omit<FrameNodeV6, 'fill'> &
   NodeLock &
   NodeLayoutGrids &
   NodeBindings;
+
+/**
+ * The fields of an instance's source node an instance may override (V-37 contract, V37-S3): the
+ * appearance fields; text runs stay in `textOverrides`, and `blendMode` is not overridable
+ * (V37-Q5). At least one field is present. `fills` is the node field's own list (V35-S2; V-37
+ * V35 rebase amendment 2026-11-12).
+ */
+export type NodeOverride = Readonly<{
+  fills?: readonly Fill[];
+  stroke?: Stroke | null;
+  opacity?: number;
+  visible?: boolean;
+  effects?: readonly Effect[];
+}>;
+
+/** V37-S3: `overrides` is keyed by node IDs of the source subtree; absent when empty. */
+export type InstanceNodeV8 = InstanceNodeV5 &
+  ContainerBlend &
+  NodeEffects &
+  NodeLock &
+  NodeBindings &
+  Readonly<{ overrides?: Readonly<Record<string, NodeOverride>> }>;
+
+/**
+ * V37-S2: a symbol in a symbol set names its variant by property values; absent outside a set.
+ */
 export type SymbolNodeV8 = Omit<SymbolNodeV6, 'fill'> &
   NodeFills &
   ContainerBlend &
   NodeEffects &
   NodeLock &
   NodeLayoutGrids &
-  NodeBindings;
+  NodeBindings &
+  Readonly<{ variant?: Readonly<Record<string, string>> }>;
+
+/** A component set (V37-S1) before V-35: a frame's v6 fields (`fill`), holding only symbols. */
+export type SymbolSetNodeV6 = NodeBaseV2 &
+  Readonly<{
+    type: 'symbolSet';
+    children: readonly string[];
+    fill: Paint | null;
+    stroke: Stroke | null;
+  }>;
+
+/** A component set (V37-S1): a frame's fields, holding only symbols. */
+export type SymbolSetNode = NodeBaseV2 &
+  NodeFills &
+  ContainerBlend &
+  NodeEffects &
+  NodeLock &
+  NodeBindings &
+  Readonly<{
+    type: 'symbolSet';
+    children: readonly string[];
+    stroke: Stroke | null;
+  }>;
 
 export type LeafNodeV8 =
   | RectangleNodeV8
@@ -600,7 +645,7 @@ export type LeafNodeV8 =
   | CustomNodeV8
   | TextNodeV8
   | InstanceNodeV8;
-export type ContainerNodeV8 = GroupNodeV8 | FrameNodeV8 | SymbolNodeV8;
+export type ContainerNodeV8 = GroupNodeV8 | FrameNodeV8 | SymbolNodeV8 | SymbolSetNode;
 export type NodeV8 = LeafNodeV8 | ContainerNodeV8;
 export type NodeTypeV8 = NodeV8['type'];
 

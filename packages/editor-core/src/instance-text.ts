@@ -26,11 +26,11 @@ type InstanceTextCommand<T extends 'setInstanceText' | 'clearInstanceText'> = Ex
  * The overrides of a copied instance whose source is copied too: each key mapped to the copy of
  * its text node; a key without a copy is dropped (none in a valid document).
  */
-export function remappedOverrides(
-  overrides: InstanceNodeV8['textOverrides'],
+export function remappedOverrides<T>(
+  overrides: Readonly<Record<string, T>>,
   copyOf: ReadonlyMap<string, string>,
-): Record<string, TextOverride> {
-  const entries: [string, TextOverride][] = [];
+): Record<string, T> {
+  const entries: [string, T][] = [];
   for (const key of Object.keys(overrides)) {
     const copy = copyOf.get(key);
     if (copy !== undefined) entries.push([copy, overrides[key]!]);
