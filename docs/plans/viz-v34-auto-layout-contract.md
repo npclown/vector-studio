@@ -99,7 +99,7 @@ The child's frame takes the new size with its top-left corner kept, then:
 ### 4.2 Sizing changes by the user (V34-Q4)
 
 - **Resized set.** The draft records nodes the command itself resized (`markResized`): `setFrames` targets whose size changed, descendants that `resizeContainer` or `mapNode` resized outside the pass (a group scale, a parent's constraints, the multi-select map gesture). A hug axis of a resized F whose size changed becomes `fixed` in the same step, and F keeps the new size; a fill axis of a resized child likewise. Sizes changed by the pass never count, so a child resize gesture under a hug F leaves F hug and a fill sibling fill.
-- `fill` on the horizontal axis of an `autoWidth` text sets its sizing to `autoHeight`; `fill` on the vertical axis of a non-`fixed` text sets `fixed`. `setTextProps` setting `autoWidth` turns a horizontal `fill` into `fixed`, and `autoHeight` a vertical `fill`.
+- `fill` on the horizontal axis of an `autoWidth` text sets its sizing to `autoHeight`; `fill` on the vertical axis of a non-`fixed` text sets `fixed`. `setTextProps` changing the sizing to `autoWidth` turns a `fill` on either axis into `fixed` (it sizes both axes), and to `autoHeight` a vertical `fill`, so the pass does not undo the change.
 - Removing `autoLayout` by any command turns F's hug axes into `fixed`. `createSymbol` on a single auto-layout frame drops `autoLayout` and turns hug into fixed (V34-Q2). Detaching an instance keeps its `layoutSizing`.
 
 ### 4.3 The layout pass
@@ -131,6 +131,7 @@ Loading, `loadDocument`, undo and redo take stored frames as they are. A font lo
 - **Panel "Auto layout" section** for a selection containing frames: "+" when none has auto layout (adds to each); otherwise direction (two toggle buttons), gap, padding top/right/bottom/left, main alignment, cross alignment, "−". "Mixed" where selected frames differ; each edit is one `setLayout`.
 - **"Resizing" W and H selects** (Fixed / Hug / Fill), shown when a choice beyond Fixed exists: Hug for auto-layout frames, Fill for their children. Fill is shown disabled for children that count as fixed (groups, mask groups, rotated children, zero-size axes). The Constraints section is hidden for children of auto-layout frames, and their X/Y fields are read-only.
 - **Context menu**: "Add auto layout" or "Remove auto layout" per the selection, with the key labels.
+- Known limits (disclosed 2026-11-12, implementation review): a padding edit across frames whose other sides differ sends no command (`setLayout` patches the whole `padding`, so the field stays as it was); a selection that mixes auto-layout frames with nodes that offer neither Hug nor Fill shows no Resizing section.
 - No canvas overlay for gaps and padding (backlog).
 
 ## 7. Acceptance criteria
