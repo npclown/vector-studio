@@ -1,4 +1,13 @@
 import type { NodeV8 } from '@vector-studio/react';
+import {
+  createCounterIdSource,
+  createEditor,
+  type Command,
+  type Editor,
+} from '@vector-studio/editor-core';
+import { AppearancePanel, EditorProvider, StylesPanel } from '@vector-studio/ui';
+import { createElement, type ComponentType } from 'react';
+import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
   bindCommand,
@@ -110,5 +119,61 @@ describe('V39-A07 the style menus and panel model', () => {
       ref: null,
     });
     expect(paintCss({ ...gradient, kind: 'radial' })).toMatch(/^radial-gradient\(circle, /u);
+  });
+});
+
+function ok(target: Editor, command: Command): readonly string[] {
+  const result = target.execute(command);
+  if (!result.ok) throw new Error(`${command.type}: ${result.code} ${result.path ?? ''}`);
+  return result.ids;
+}
+
+function markup(target: Editor, panel: ComponentType): string {
+  return renderToString(createElement(EditorProvider, { editor: target }, createElement(panel)));
+}
+
+describe('V39-A07 markup', () => {
+  it('the Local styles panel lists styles and variables; mode controls are disabled without a set', () => {
+    const target = createEditor({ ids: createCounterIdSource('n') });
+    const empty = markup(target, StylesPanel);
+    expect(empty).toContain('Local styles');
+    expect(empty).toMatch(/aria-label="Active mode"[^>]*disabled/u);
+    expect(empty).toMatch(/aria-label="Add mode"[^>]*disabled/u);
+    ok(target, { type: 'createColorStyle', name: 'Brand', paint: red });
+    ok(target, { type: 'createVariable', name: 'Gap', kind: 'number', value: 4 });
+    ok(target, { type: 'addVariableMode', name: 'Mode 1' });
+    const html = markup(target, StylesPanel);
+    expect(html).toContain('aria-label="Style 1 name"');
+    expect(html).toContain('value="Brand"');
+    // Repeated mode names still give unique labels.
+    expect(html).toContain('aria-label="Variable 1 mode 1 value"');
+    expect(html).toContain('aria-label="Variable 1 mode 2 value"');
+    expect(html).not.toMatch(/aria-label="Active mode"[^>]*disabled/u);
+  });
+
+  it('a bound fill shows its chip in place of the hex field; mixed shows Mixed', () => {
+    const target = createEditor({ ids: createCounterIdSource('n') });
+    const [a] = ok(target, {
+      type: 'createRectangle',
+      frame: { x: 0, y: 0, width: 10, height: 10 },
+      fill: red,
+    });
+    const [b] = ok(target, {
+      type: 'createRectangle',
+      frame: { x: 20, y: 0, width: 10, height: 10 },
+      fill: red,
+    });
+    const [s] = ok(target, { type: 'createColorStyle', name: 'Brand', paint: blue });
+    ok(target, { type: 'bindProperty', ids: [a!], key: 'fill', ref: { style: s! } });
+    ok(target, { type: 'setSelection', ids: [a!] });
+    const one = markup(target, () => createElement(AppearancePanel, { layout: 'section' }));
+    expect(one).toMatch(/data-testid="fill-binding" data-state="one"/u);
+    expect(one).toContain('Brand');
+    expect(one).not.toContain('aria-label="Fill colour"');
+    expect(one).toContain('data-testid="fill-bind"');
+    ok(target, { type: 'setSelection', ids: [a!, b!] });
+    const mixed = markup(target, () => createElement(AppearancePanel, { layout: 'section' }));
+    expect(mixed).toMatch(/data-state="mixed"[^>]*>Mixed/u);
+    expect(mixed).toContain('aria-label="Fill colour"');
   });
 });

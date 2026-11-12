@@ -1,5 +1,5 @@
 import type { BindingKey, Command, NodeV8, Paint } from '@vector-studio/react';
-import { useEffect, useRef, useState, type FocusEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FocusEvent } from 'react';
 import {
   bindCommand,
   bindingState,
@@ -99,13 +99,29 @@ export function BindMenu({
 }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLSpanElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const buttonId = useId();
+  /** Closes the menu and gives focus back to its button, so keyboard users keep their place. */
+  const close = () => {
+    setOpen(false);
+    trigger.current?.focus();
+  };
+  /** Arrow keys move between the menu's items (the ARIA menu pattern), wrapping around. */
+  const move = (step: number) => {
+    const items = [
+      ...(box.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []),
+    ];
+    if (items.length === 0) return;
+    const at = items.indexOf(globalThis.document?.activeElement as HTMLButtonElement);
+    items[(at + step + items.length) % items.length]!.focus();
+  };
   useEffect(() => {
     if (!open) return;
     const first = box.current?.querySelector<HTMLButtonElement>('[role="menuitem"]');
     first?.focus();
   }, [open]);
   const choose = (action: () => void) => {
-    setOpen(false);
+    close();
     action();
   };
   const leave = (event: FocusEvent<HTMLSpanElement>) => {
@@ -119,13 +135,19 @@ export function BindMenu({
       style={{ position: 'relative', display: 'inline-flex' }}
       onBlur={leave}
       onKeyDown={(event) => {
-        if (event.key === 'Escape' && open) {
+        if (!open) return;
+        if (event.key === 'Escape') {
           event.stopPropagation();
-          setOpen(false);
+          close();
+        } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          move(event.key === 'ArrowDown' ? 1 : -1);
         }
       }}
     >
       <button
+        ref={trigger}
+        id={buttonId}
         type="button"
         aria-label={label}
         title={label}
@@ -146,7 +168,7 @@ export function BindMenu({
       {open && (
         <div
           role="menu"
-          aria-label={label}
+          aria-labelledby={buttonId}
           data-testid={`${testId}-menu`}
           style={{
             position: 'absolute',
@@ -242,6 +264,9 @@ export function RowBinding({
     paint === undefined || paint === null
       ? undefined
       : () => {
+          // Two commands, two undo steps: the style's ID is known only once it exists. A first
+          // undo drops the binding and keeps the style; a refused bind leaves the style. On a
+          // mixed row the new style takes the first paint and binds every node to it.
           const created = run(createStyleCommand(tables, paint));
           const id = created.ids[0];
           if (created.ok && id !== undefined) run(bindCommand(ids, bindingKey, { style: id }));

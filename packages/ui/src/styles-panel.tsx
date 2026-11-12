@@ -35,18 +35,19 @@ const SWATCH = {
 function ValueField({
   variable,
   mode,
-  modeName,
+  modeIndex,
   index,
   run,
 }: {
   variable: Variable;
   mode: string;
-  modeName: string;
+  /** The mode's position from 1: mode names may repeat (V39-S3), labels must not. */
+  modeIndex: number;
   index: number;
   run: (command: Command) => boolean;
 }) {
   const value = variable.values[mode];
-  const label = `Variable ${index} ${modeName} value`;
+  const label = `Variable ${index} mode ${modeIndex} value`;
   const set = (next: Color | number) =>
     run({ type: 'updateVariable', id: variable.id, values: { [mode]: next } });
   if (variable.type === 'color') {
@@ -158,46 +159,49 @@ export function StylesPanel() {
       </fieldset>
       <fieldset>
         <legend>Variables</legend>
-        {set !== undefined && (
-          <Row>
-            <select
-              aria-label="Active mode"
-              value={set.mode}
-              onChange={(event) =>
-                void run({ type: 'setVariableMode', id: event.currentTarget.value })
-              }
-            >
-              {modes.map((mode) => (
-                <option key={mode.id} value={mode.id}>
-                  {mode.name}
-                </option>
-              ))}
-            </select>
-            {active !== undefined && (
-              <TextField
-                identity={active.id}
-                label="Mode name"
-                value={active.name}
-                commit={(name) => run({ type: 'renameVariableMode', id: active.id, name })}
-              />
-            )}
-            <button
-              type="button"
-              aria-label="Add mode"
-              onClick={() => void run({ type: 'addVariableMode', name: nextModeName(tables) })}
-            >
-              + mode
-            </button>
-            <button
-              type="button"
-              aria-label="Remove mode"
-              disabled={modes.length <= 1}
-              onClick={() => void run({ type: 'removeVariableMode', id: set.mode })}
-            >
-              − mode
-            </button>
-          </Row>
-        )}
+        {/* V39-S2: without a variable set the mode controls show, disabled. */}
+        <Row>
+          <select
+            aria-label="Active mode"
+            disabled={set === undefined}
+            value={set?.mode ?? ''}
+            onChange={(event) =>
+              void run({ type: 'setVariableMode', id: event.currentTarget.value })
+            }
+          >
+            {modes.map((mode) => (
+              <option key={mode.id} value={mode.id}>
+                {mode.name}
+              </option>
+            ))}
+          </select>
+          {active !== undefined && (
+            <TextField
+              identity={active.id}
+              label="Mode name"
+              value={active.name}
+              commit={(name) => run({ type: 'renameVariableMode', id: active.id, name })}
+            />
+          )}
+          <button
+            type="button"
+            aria-label="Add mode"
+            disabled={set === undefined}
+            onClick={() => void run({ type: 'addVariableMode', name: nextModeName(tables) })}
+          >
+            + mode
+          </button>
+          <button
+            type="button"
+            aria-label="Remove mode"
+            disabled={set === undefined || modes.length <= 1}
+            onClick={() => {
+              if (set !== undefined) void run({ type: 'removeVariableMode', id: set.mode });
+            }}
+          >
+            − mode
+          </button>
+        </Row>
         {(set?.items ?? []).map((variable, i) => {
           const n = i + 1;
           return (
@@ -211,12 +215,12 @@ export function StylesPanel() {
               <span data-testid={`variable-${n}-type`} style={{ opacity: 0.7 }}>
                 {variable.type}
               </span>
-              {modes.map((mode) => (
+              {modes.map((mode, m) => (
                 <ValueField
                   key={mode.id}
                   variable={variable}
                   mode={mode.id}
-                  modeName={mode.name}
+                  modeIndex={m + 1}
                   index={n}
                   run={run}
                 />

@@ -95,7 +95,7 @@ test('V39-A07 styles and variables: panel, style menu, bind buttons, modes', asy
   const [m1, m2] = doc.variables!.modes.map((mode) => mode.id);
   expect(doc.variables!.modes.map((mode) => mode.name)).toEqual(['Mode 1', 'Mode 2']);
   await panel.getByTestId(`variable-1-value-${m2}`).fill('#0000ff');
-  const half = panel.getByLabel('Variable 2 Mode 2 value');
+  const half = panel.getByLabel('Variable 2 mode 2 value');
   await half.fill('0.5');
   await half.press('Enter');
   doc = await docOf(page);
@@ -175,5 +175,52 @@ test('V39-A07 styles and variables: panel, style menu, bind buttons, modes', asy
   // Undo restores the style and the binding.
   await ok(page, { type: 'undo' });
   expect((await node(page, text!)).bindings).toEqual({ text: { style: expect.any(String) } });
+
+  // U3 on stroke width and corner radius: Number 1 is 0.5 in the active mode.
+  const [box] = await ok(page, {
+    type: 'createRectangle',
+    frame: { x: 0, y: 100, width: 40, height: 40 },
+    fill: RED,
+    stroke: { color: RED, width: 3, cap: 'butt', join: 'miter', miterLimit: 4, dash: null },
+  });
+  await ok(page, { type: 'setSelection', ids: [box!] });
+  await page.getByTestId('stroke-width-bind').click();
+  await page.getByTestId('stroke-width-option-1').click();
+  await page.getByTestId('corner-radius-bind').click();
+  await page.getByTestId('corner-radius-option-1').click();
+  expect(await node(page, box!)).toMatchObject({
+    stroke: { width: 0.5 },
+    cornerRadii: [0.5, 0.5, 0.5, 0.5],
+  });
+  await expect(page.getByTestId('stroke-width-binding')).toHaveText('Number 1 = 0.5');
+  // Escape closes a menu and gives focus back to its button.
+  await page.getByTestId('fill-bind').click();
+  await expect(page.getByTestId('fill-menu')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('fill-menu')).toBeHidden();
+  await expect(page.getByTestId('fill-bind')).toBeFocused();
+  // Two rectangles bound to different targets show Mixed.
+  await ok(page, { type: 'setSelection', ids: [rect!, box!] });
+  await expect(page.getByTestId('opacity-binding')).toHaveText('Mixed');
+
+  // U4: rename and delete a variable, rename and remove a mode.
+  await ok(page, { type: 'setSelection', ids: [] });
+  const variableName = panel.getByLabel('Variable 1 name');
+  await variableName.fill('Accent');
+  await variableName.press('Enter');
+  const modeName = panel.getByLabel('Mode name');
+  await modeName.fill('Dark');
+  await modeName.press('Enter');
+  doc = await docOf(page);
+  expect(doc.variables!.items[0]!.name).toBe('Accent');
+  expect(doc.variables!.modes.find((mode) => mode.id === m2)!.name).toBe('Dark');
+  await panel.getByLabel('Remove mode').click();
+  doc = await docOf(page);
+  expect(doc.variables!.modes.map((mode) => mode.id)).toEqual([m1]);
+  await expect(panel.getByLabel('Remove mode')).toBeDisabled();
+  await panel.getByLabel('Delete variable 2').click();
+  doc = await docOf(page);
+  expect(doc.variables!.items.map((item) => item.name)).toEqual(['Accent']);
+  expect((await node(page, box!)).bindings).toBeUndefined();
   expect(errors).toEqual([]);
 });
