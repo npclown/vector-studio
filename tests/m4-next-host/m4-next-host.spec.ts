@@ -8,7 +8,6 @@ import {
   serializeDocument,
   type DocumentV8,
   type Gradient,
-  type NodeV8,
   type Stroke,
 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
@@ -437,9 +436,10 @@ test('M4-A12: every panel control once, one undo step each', async ({ page }) =>
     await box(name).fill(value);
     await box(name).press('Tab');
   };
-  const fill = (value: Loose) => value.fill;
+  // V-35: a node's fill is its top fill's paint (`fills` is bottom first), or null without one.
+  const fill = (value: Loose) => (value.fills as { paint: unknown }[]).at(-1)?.paint ?? null;
   const stroke = (value: Loose) => value.stroke;
-  const grad = (value: Loose) => value.fill as Gradient;
+  const grad = (value: Loose) => fill(value) as Gradient;
   const strokeOf = (value: Loose) => value.stroke as Stroke;
   const strokeGrad = (value: Loose) => (value.stroke as Stroke).color as Gradient;
 
@@ -718,26 +718,17 @@ test('M4-A12: every panel control once, one undo step each', async ({ page }) =>
   );
   await step('stroke off', () => checkbox.click(), stroke, null);
 
-  // A mixed selection: h1 (fill none) and h2 (radial) show the fill type as mixed; the edited
-  // value replaces both in one step.
+  // A mixed selection (V35-C2): h1 (fill none) and h2 (radial) show "Mixed"; `+` replaces both
+  // nodes' fills by one default fill in one step.
   await run(page, { type: 'setSelection', ids: ['h1', 'h2'] });
-  await expect(select('Fill type')).toHaveAttribute('data-mixed', 'true');
-  const h2 = FIXTURE.nodes.h2 as NodeV8 & { fill: Gradient };
-  await step(
-    'mixed fill type',
-    () =>
-      select('Fill type')
-        .selectOption('linear')
-        .then(() => {}),
-    fill,
-    {
-      kind: 'linear',
-      transform: linear(0),
-      stops: h2.fill.stops,
-      spread: 'pad',
-    },
-  );
-  expect((await node('h2')).fill).toEqual((await node('h1')).fill);
+  await expect(panel.getByTestId('fill-mixed')).toBeVisible();
+  await step('mixed fill replace', () => button('Add fill').click(), fill, {
+    r: 0.8,
+    g: 0.8,
+    b: 0.8,
+    a: 1,
+  });
+  expect(fill(await node('h2'))).toEqual(fill(await node('h1')));
 
   // Every step undoes back to the fixture, byte for byte.
   expect(await undoDepth(page)).toBe(steps);
