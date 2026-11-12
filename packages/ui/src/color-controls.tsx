@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FocusEvent } from 'react';
 import { PANEL_SWATCHES } from './appearance-model.js';
+import { Icon } from './icons.js';
 
 // V-25 colour controls, shared by the appearance panel's solid paints (slice 3) and the text
 // section's run colour (slice 5): the browser colour picker and the one-click swatches.
@@ -98,7 +99,27 @@ export function ColorWell({
     setSource(value);
     setDraft(null);
   }
-  return (
+  // V-39 contract, V39-U1: the browser's screen eyedropper where it has one (Chromium), found
+  // after mount so the server markup stays the same.
+  const [screenPicker, setScreenPicker] = useState(false);
+  useEffect(() => {
+    setScreenPicker(eyeDropperConstructor() !== null);
+  }, []);
+  const pickFromScreen = () => {
+    const EyeDropper = eyeDropperConstructor();
+    if (EyeDropper === null) return;
+    onOpen?.();
+    new EyeDropper()
+      .open()
+      .then((result) => {
+        const hex = result.sRGBHex.toLowerCase();
+        if (/^#[0-9a-f]{6}$/u.test(hex)) void latest.current(hex);
+      })
+      .catch(() => {
+        // Escape or a lost focus cancels the pick; nothing changes.
+      });
+  };
+  const well = (
     <input
       ref={input}
       type="color"
@@ -120,6 +141,40 @@ export function ColorWell({
       style={{ width: 28, height: 24, padding: 0, border: 'none', background: 'none' }}
     />
   );
+  // The well stays the fragment's first child, so React keeps its element (and the native
+  // `change` listener above) when the button appears after mount. A pick that resolves after
+  // the well unmounts still commits to the target `onOpen` captured.
+  if (!screenPicker) return well;
+  return (
+    <>
+      {well}
+      <button
+        type="button"
+        className="vs-icon-button"
+        aria-label={`${label}: pick from screen`}
+        title="Pick from screen"
+        data-testid={`${testId}-screen-pick`}
+        disabled={disabled}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={pickFromScreen}
+        onBlur={(event: FocusEvent<HTMLButtonElement>) => {
+          if (textEdit !== undefined && !inTextEditFocus(event.relatedTarget)) textEdit.onLeave();
+        }}
+        data-text-edit-focus={textEdit === undefined ? undefined : ''}
+        style={{ width: 24, height: 24, padding: 0 }}
+      >
+        <Icon name="eyedropper" />
+      </button>
+    </>
+  );
+}
+
+type EyeDropperLike = new () => { open(): Promise<{ sRGBHex: string }> };
+
+/** The browser's `EyeDropper` constructor, or null where there is none (or no window). */
+function eyeDropperConstructor(): EyeDropperLike | null {
+  const scope = globalThis as { EyeDropper?: unknown };
+  return typeof scope.EyeDropper === 'function' ? (scope.EyeDropper as EyeDropperLike) : null;
 }
 
 /**
