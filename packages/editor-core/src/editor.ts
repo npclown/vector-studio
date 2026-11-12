@@ -392,6 +392,18 @@ const DOCUMENT_COMMANDS = new Set([
   'setTextStyle',
   'setTextProps',
   'refitText',
+  // V-39 contract, section 3.
+  'createColorStyle',
+  'updateColorStyle',
+  'removeColorStyle',
+  'createVariable',
+  'updateVariable',
+  'removeVariable',
+  'addVariableMode',
+  'renameVariableMode',
+  'removeVariableMode',
+  'setVariableMode',
+  'bindProperty',
 ]);
 
 /**

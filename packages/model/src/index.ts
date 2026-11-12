@@ -30,6 +30,7 @@ export {
   validateFragmentTree,
   validateGuides,
   validateNode,
+  validatePaint,
   type DocumentErrorCode,
   type FragmentTreeResult,
   type GuidesResult,
@@ -56,4 +57,28 @@ export {
 } from './envelope.js';
 export { MAX_DEPTH, scanJson, type ScanFinding, type ScanOptions } from './json-scan.js';
 export { serializeDocument } from './serialize.js';
+export {
+  BINDING_KEYS,
+  MAX_COLOR_STYLES,
+  MAX_TABLE_NAME_LENGTH,
+  MAX_VARIABLE_MODES,
+  MAX_VARIABLES,
+  bindingHolds,
+  bindingKeyAllowed,
+  bindingRange,
+  bindingRangeFits,
+  bindingTarget,
+  bindingTypeFits,
+  boundValue,
+  isColor,
+  isPaintKey,
+  recolourRuns,
+  resolvedValue,
+  samePaint,
+  tableIds,
+  tablesOf,
+  withBoundValue,
+  type BindingTables,
+  type BindingTarget,
+} from './bindings.js';
 export type * from './types.js';

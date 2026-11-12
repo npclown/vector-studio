@@ -35,9 +35,13 @@ export {
 export type {
   AlignEdge,
   Arrow,
+  BindingKey,
+  BindingRef,
+  Bindings,
   CameraApplyResult,
   CanvasSize,
   Color,
+  ColorStyle,
   Command,
   CommandResult,
   Constraint,
@@ -106,6 +110,7 @@ export type {
   ModelErrorCode,
   Modifiers,
   NodeBaseV2,
+  NodeBindings,
   NodeEffects,
   NodeLock,
   NodeLayoutGrids,
@@ -214,6 +219,9 @@ export type {
   ToolId,
   ToolName,
   ToolOverlay,
+  Variable,
+  VariableMode,
+  VariableSet,
   ViewportSize,
 } from '@vector-studio/react';
 

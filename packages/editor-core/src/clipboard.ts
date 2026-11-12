@@ -29,6 +29,7 @@ import {
   type Expansion,
 } from './expansion.js';
 import { deepFreeze } from './freeze.js';
+import { detachedBindings } from './symbols.js';
 import { remappedOverrides } from './instance-text.js';
 import { contentCorners } from './content-box.js';
 import { boundsOfPoints, IDENTITY, relocate } from './geometry.js';
@@ -957,6 +958,8 @@ export function paste(
           effects: node.effects.length > 0 ? node.effects : how.source.effects,
           // V-38 contract, V38-S2: the source's layout grids.
           ...(how.source.layoutGrids === undefined ? {} : { layoutGrids: how.source.layoutGrids }),
+          // V39-E4: as `detachInstances`, the source's paint bindings and the instance's own.
+          ...detachedBindings(how.source, node as InstanceNodeV8),
         });
       }
       // A root's mapped placement and a detached frame are validated again; the rest is as the

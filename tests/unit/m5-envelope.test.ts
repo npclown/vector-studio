@@ -548,6 +548,8 @@ describe('M5-A03 model stays unchanged and import-free', () => {
     const dir = path.join(root, 'packages/model/src');
     const sources = (await readdir(dir)).filter((file) => file.endsWith('.ts')).sort();
     expect(sources).toEqual([
+      // V-39: the binding rules, type imports only.
+      'bindings.ts',
       'envelope.ts',
       'index.ts',
       'json-scan.ts',
