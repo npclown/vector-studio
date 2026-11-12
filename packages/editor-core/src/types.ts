@@ -47,7 +47,9 @@ export type ToolName =
   | 'text'
   /** V-40: the freehand pencil and the regular polygon tools. */
   | 'pencil'
-  | 'polygon';
+  | 'polygon'
+  /** V-39 contract, E7. */
+  | 'eyedropper';
 
 /**
  * A built-in tool name or a registered extension tool ID (MVP M2 contract, section 7; M2-Q13).
@@ -216,7 +218,12 @@ export type TextEditOverlay = Readonly<{
 /** Tool state the host UI draws over the canvas; it is never document content. */
 export type ToolOverlay =
   | Readonly<{ kind: 'marquee'; frame: Frame }>
-  | Readonly<{ kind: 'path'; anchors: readonly PathAnchor[] }>;
+  | Readonly<{ kind: 'path'; anchors: readonly PathAnchor[] }>
+  /**
+   * The eyedropper's hover (V-39 contract, E7): the pointer's last page point and the colour
+   * `sampleColor` gives there, or null over nothing.
+   */
+  | Readonly<{ kind: 'eyedropper'; point: PagePoint; color: Color | null }>;
 
 /** A page-space segment of the snap overlay. */
 export type Segment = Readonly<{ a: PagePoint; b: PagePoint }>;
@@ -802,6 +809,8 @@ export type EditorSnapshot = Readonly<{
   textStyle: TextStyle;
   /** V-40: the side count the polygon tool draws with, 3 to 60; 3 by default. */
   polygonSides: number;
+  /** The eyedropper's last pick (V-39 contract, E7), or null. */
+  pickedColor: Color | null;
 }>;
 
 export type Query =
@@ -862,7 +871,15 @@ export type Query =
    */
   | Readonly<{ type: 'exportScene'; ids?: readonly string[] }>
   /** The SVG text of the same export, or null (V30-S5). */
-  | Readonly<{ type: 'exportSvg'; ids?: readonly string[] }>;
+  | Readonly<{ type: 'exportSvg'; ids?: readonly string[] }>
+  /**
+   * The colour under the page point on the active page at the current zoom, or null (V-39
+   * contract, E6): the paint of the topmost painted part, a gradient evaluated at the point,
+   * node and ancestor opacity not applied.
+   */
+  | Readonly<{ type: 'sampleColor'; point: PagePoint }>
+  /** The eyedropper's last pick, or null (V-39 contract, E7). */
+  | Readonly<{ type: 'pickedColor' }>;
 
 /**
  * What one registered extension contributes (MVP M8 contract, M8-X1), as the `extensions` query
@@ -985,7 +1002,9 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'commi
                                               ? ExportScene | null
                                               : Q extends { type: 'exportSvg' }
                                                 ? string | null
-                                                : number;
+                                                : Q extends { type: 'sampleColor' | 'pickedColor' }
+                                                  ? Color | null
+                                                  : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';
@@ -1021,7 +1040,9 @@ export type EditorEvent =
         | 'textEdit'
         | 'textStyle'
         /** The polygon tool's side count (V-40). */
-        | 'polygonSides';
+        | 'polygonSides'
+        /** The eyedropper's last pick (V-39 contract, E7). */
+        | 'pickedColor';
     }>
   | DiagnosticEvent;
 

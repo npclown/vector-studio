@@ -16,6 +16,7 @@ export const TOOL_NAMES: readonly ToolName[] = [
   'text',
   'pencil',
   'polygon',
+  'eyedropper',
 ];
 
 /**
@@ -73,6 +74,7 @@ export const DEFAULT_KEYMAP: readonly KeyBinding[] = deepFreeze([
   // V-40: the pencil on Shift+P (Figma); the polygon tool has no default chord.
   { chord: 'Shift+P', action: 'setTool', args: { tool: 'pencil' } },
   { chord: 'T', action: 'setTool', args: { tool: 'text' } },
+  { chord: 'I', action: 'setTool', args: { tool: 'eyedropper' } },
   { chord: 'Delete', action: 'delete' },
   { chord: 'Backspace', action: 'delete' },
   { chord: 'Mod+Z', action: 'undo' },
