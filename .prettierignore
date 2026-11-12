@@ -117,3 +117,4 @@ docs/evidence/pa-u7/**
 docs/evidence/pa-u9/**
 # Preserve the E41-U8 main-PC sitting records byte-for-byte.
 docs/evidence/e41/pc-*/**/*.json
+docs/evidence/v35/**/*.json
