@@ -76,6 +76,10 @@ Groups scale their children proportionally when resized.
 
 A mask group uses its first path as the mask for its remaining children.
 
+## Colour styles and variables
+
+Since 2026-11-12 (Figma gap item 9; [V-39 contract](plans/viz-v39-styles-variables-contract.md)) a document can hold shared colour styles (a named solid or gradient paint) and variables (named colours or numbers with one value per mode, one mode active). A node's fill, stroke colour, text colour, opacity, stroke width and corner radius can be bound to a style or variable: changing the style, a variable's value or the active mode updates every bound node, and editing a bound value by hand detaches it. The Local styles panel edits the tables when nothing is selected. Libraries shared between files, style types other than colour (text, effect, grid), variable aliases and scoping stay deferred.
+
 ## Symbols
 
 - Source changes propagate to instances.
