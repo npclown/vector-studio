@@ -907,7 +907,11 @@ function LayerControlsSection({
       <Section legend="Layer overrides">
         <div role="group" aria-label={`Layer ${node.name}`} data-testid="layer-controls">
           <p style={{ margin: '0 0 4px' }}>{node.name}</p>
-          {controls.fill && (
+          {controls.fill && 'fills' in node && node.fills.length > 1 && (
+            // A single-colour edit would replace every fill (V35-S5), as in the appearance panel.
+            <p data-testid="layer-fill-multiple">Multiple fills</p>
+          )}
+          {controls.fill && !('fills' in node && node.fills.length > 1) && (
             <Row>
               <TextField
                 identity={`${identity} ${fill ?? ''}`}

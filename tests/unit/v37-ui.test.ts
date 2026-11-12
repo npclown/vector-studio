@@ -760,6 +760,28 @@ describe('V37-U4 panel markup', () => {
     expect(source).not.toContain('<legend>Layer effects</legend>');
   });
 
+  it('shows "Multiple fills" and no fill edit for a layer with two effective fills', () => {
+    const target = loose();
+    ok(target, { type: 'setSelection', ids: ['inst'] });
+    const fill = { blendMode: 'normal', opacity: 1, visible: true } as const;
+    ok(target, {
+      type: 'setInstanceOverride',
+      id: 'inst',
+      node: 'rA',
+      props: {
+        fills: [
+          { ...fill, paint: { r: 1, g: 0, b: 0, a: 1 } },
+          { ...fill, paint: { r: 0, g: 0, b: 1, a: 1 } },
+        ],
+      },
+    });
+    setInstanceFocus(target, 'inst', 'rA');
+    const html = render(target);
+    expect(html).toContain('data-testid="layer-fill-multiple"');
+    expect(html).not.toContain('aria-label="Layer fill colour"');
+    expect(html).toContain('aria-label="Layer stroke colour"');
+  });
+
   it('shows the layer row icon for a set', () => {
     const target = variants();
     const html = renderToString(

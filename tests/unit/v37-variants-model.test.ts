@@ -4,6 +4,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import {
+  bindingKeyAllowed,
   migrateV7toV8,
   parseDocument,
   parseEnvelope,
@@ -518,5 +519,14 @@ describe('V37-A02 fragments (V37 contract, section 5)', () => {
       code: 'document.invalid-field',
       path: '/nodes/set1/type',
     });
+  });
+});
+
+describe('V-37 a set takes paint bindings as a frame does (V39-S6)', () => {
+  it('allows fill, stroke and strokeWidth bindings on a symbolSet', () => {
+    for (const key of ['fill', 'stroke', 'strokeWidth'] as const) {
+      expect(bindingKeyAllowed('symbolSet', key)).toBe(bindingKeyAllowed('frame', key));
+      expect(bindingKeyAllowed('symbolSet', key)).toBe(true);
+    }
   });
 });
