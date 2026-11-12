@@ -3,6 +3,7 @@ import {
   type Constraint,
   type Frame,
   type NodeV8,
+  type FillPaint,
   type Paint,
   type TextNodeV8,
 } from '@vector-studio/model';
@@ -148,8 +149,9 @@ export function resizeInOwnAxes(
 }
 
 /** A paint mirrored in the unit box: a gradient's transform flips, a colour stays. */
-function mirrorPaint(paint: Paint, mx: boolean, my: boolean): Paint {
-  if (!('kind' in paint)) return paint;
+function mirrorPaint<P extends FillPaint>(paint: P, mx: boolean, my: boolean): P {
+  // V32-M6: an image paint is not mirrored; its scale mode re-fits it.
+  if (!('kind' in paint) || paint.kind === 'image') return paint;
   const [a, b, c, d, e, f] = paint.transform;
   return {
     ...paint,

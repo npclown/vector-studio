@@ -202,6 +202,11 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   #effectPipelineRequired = false;
   /** V35-K2: the attached source draws blend modes (`blend: 'v0'`). */
   #blendPipelineRequired = false;
+  /**
+   * V-36 section 5.2: the attached source draws background blur (`effects: 'v1'`), which needs
+   * V-35's snapshot pipeline and the main attachment's TEXTURE_BINDING as `blend: 'v0'` does.
+   */
+  #backdropSnapshotRequired = false;
   /** V35-K7: whether the canvas was configured with TEXTURE_BINDING (or its usage is unknown). */
   #canvasReadable = false;
   /** E28-D1: the generation that last reported `render.text-unavailable`. */
@@ -338,6 +343,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     this.#textPipelineRequired = source.requiresTextPipeline === true;
     this.#effectPipelineRequired = source.requiresEffectPipeline === true;
     this.#blendPipelineRequired = source.requiresBlendPipeline === true;
+    this.#backdropSnapshotRequired = source.requiresBackdropSnapshot === true;
     let disposed = false;
     return {
       get disposed() {
@@ -355,6 +361,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
           this.#textPipelineRequired = false;
           this.#effectPipelineRequired = false;
           this.#blendPipelineRequired = false;
+          this.#backdropSnapshotRequired = false;
         }
       },
     };
@@ -489,7 +496,9 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   get blendPipelineAvailable(): boolean {
     const scene = this.#primitiveScene;
     return (
-      scene?.blendPipelineAvailable === true && (scene.sampleCount === 4 || this.#canvasReadable)
+      this.#blendPipelineRequired &&
+      scene?.blendPipelineAvailable === true &&
+      (scene.sampleCount === 4 || this.#canvasReadable)
     );
   }
 
@@ -821,8 +830,10 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       );
       contextConfigured = true;
       // V35-K4: blend 'v0' adds TEXTURE_BINDING (the E10 section 3.2 amendment); without it
-      // and without a capture the configuration is the same as before (V35-A06).
-      const blendUsage = this.#blendPipelineRequired && this.#primitiveMode;
+      // and without a capture the configuration is the same as before (V35-A06). V-36 section
+      // 5.2: so does effects 'v1', whose background blur snapshots the main target.
+      const blendUsage =
+        (this.#blendPipelineRequired || this.#backdropSnapshotRequired) && this.#primitiveMode;
       context.configure({
         device,
         format,
@@ -920,6 +931,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
           this.#textPipelineRequired ||
           this.#effectPipelineRequired ||
           this.#blendPipelineRequired ||
+          this.#backdropSnapshotRequired ||
           Object.keys(hooks).length > 0
             ? device.createPrimitiveScene(context, format, generation, tracker, {
                 ...(this.#meshPipelineRequired ? { meshPipeline: true } : {}),
@@ -933,7 +945,8 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
                 ...(this.#layerPipelineRequired ? { layerPipeline: true } : {}),
                 ...(this.#textPipelineRequired ? { textPipeline: true } : {}),
                 ...(this.#effectPipelineRequired ? { effectPipeline: true } : {}),
-                ...(this.#blendPipelineRequired && this.#layerPipelineRequired
+                ...((this.#blendPipelineRequired || this.#backdropSnapshotRequired) &&
+                this.#layerPipelineRequired
                   ? { blendPipeline: true }
                   : {}),
                 ...hooks,
@@ -1751,6 +1764,13 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       scene.blendPipelineAvailable === true &&
       (scene.sampleCount === 4 || this.#canvasReadable)
         ? { blendLayers: true }
+        : {}),
+      // V-36 section 5.2: background blur snapshots the main target under the same conditions.
+      ...(this.#backdropSnapshotRequired &&
+      scene.effectPipelineAvailable === true &&
+      scene.blendPipelineAvailable === true &&
+      (scene.sampleCount === 4 || this.#canvasReadable)
+        ? { backdropSnapshots: true }
         : {}),
     });
   }

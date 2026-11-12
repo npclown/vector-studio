@@ -1,4 +1,11 @@
-import type { Color, DocumentV8, Gradient, NodeV8, Paint } from '@vector-studio/model';
+import {
+  isImagePaint,
+  type Color,
+  type DocumentV8,
+  type Gradient,
+  type NodeV8,
+  type Paint,
+} from '@vector-studio/model';
 import type { Tool, ToolContext } from './editor.js';
 import type { ExpansionCache } from './expansion.js';
 import { paintHitAt, type CustomGeometry, type PaintHit } from './hit-test.js';
@@ -67,7 +74,8 @@ function hitPaint(hit: PaintHit): Paint | null {
   // V-35: the top fill that draws (fills are bottom first).
   if (!('fills' in node)) return null;
   const top = [...node.fills].reverse().find((fill) => fill.visible && fill.opacity > 0);
-  return top?.paint ?? null;
+  // V32: an image fill has no single colour to pick.
+  return top === undefined || isImagePaint(top.paint) ? null : top.paint;
 }
 
 /**

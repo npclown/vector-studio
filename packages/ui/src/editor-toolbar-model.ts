@@ -242,3 +242,18 @@ export function polygonSidesStep(sides: number, key: string): number | null {
   const next = sides + (key === 'ArrowUp' ? 1 : -1);
   return next >= 3 && next <= 60 ? next : null;
 }
+
+/**
+ * V32-H3: the Place image button's tooltip: its name and the shortcut the canvas handles from its
+ * keydown (Ctrl or Cmd+Shift+K, not an editor keymap action), `⌘+Shift+K` on a Mac keymap.
+ */
+export function placeImageTitle(mac: boolean): string {
+  return withShortcut('Place image', mac ? '⌘+Shift+K' : 'Ctrl+Shift+K');
+}
+
+/** V32-H2: the toolbar's line for skipped image files (`editor.image-unsupported-file`). */
+export function imageNoticeText(files: readonly string[], reason?: string): string {
+  return reason === undefined
+    ? `Skipped: ${files.join(', ')}`
+    : `Not placed (${reason}): ${files.join(', ')}`;
+}

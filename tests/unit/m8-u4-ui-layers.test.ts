@@ -198,6 +198,7 @@ describe('M8-A10 layer rows (M8-L3)', () => {
         visible: true,
         locked: false,
         inherited: null,
+        image: false,
       },
       {
         id: g,
@@ -211,6 +212,7 @@ describe('M8-A10 layer rows (M8-L3)', () => {
         visible: true,
         locked: false,
         inherited: null,
+        image: false,
       },
       {
         id: s,
@@ -224,6 +226,7 @@ describe('M8-A10 layer rows (M8-L3)', () => {
         visible: true,
         locked: false,
         inherited: null,
+        image: false,
       },
     ]);
   });

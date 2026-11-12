@@ -19,9 +19,18 @@ export type HostGlyphRaster = EditorGlyphRaster;
 /** The options every next-host service gets, without the fill and stroke mesh ports. */
 export type HostRendererOptions = EditorRendererOptions;
 
-/** AR-U1: the editor renderer options now live in `@vector-studio/webgpu-host`. */
-export function hostRendererOptions(glyphRaster: HostGlyphRaster): HostRendererOptions {
-  return editorRendererOptions(glyphRaster);
+/** The image source port (V32-P1), as the service options type carries it. */
+export type HostImageSource = NonNullable<EditorRendererOptions['imageSource']>;
+
+/**
+ * AR-U1: the editor renderer options now live in `@vector-studio/webgpu-host`. V-32: with an
+ * image source the options are `paints: 'image'` (V32-H1).
+ */
+export function hostRendererOptions(
+  glyphRaster: HostGlyphRaster,
+  imageSource?: HostImageSource,
+): HostRendererOptions {
+  return editorRendererOptions(glyphRaster, imageSource);
 }
 
 /** One call the host's service made to its glyph raster port (M6c-U4, `?test=1` only). */

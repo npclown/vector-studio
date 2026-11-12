@@ -4,12 +4,13 @@ import type {
   SceneAffine,
   SceneBlendMode,
   SceneClip,
+  SceneImagePaint,
   ScenePaint,
   ScenePathGeometry,
   SceneTextRun,
 } from '@vector-studio/contracts';
 import { isSceneGradient, isSceneImagePaint } from '@vector-studio/contracts';
-import type { DocumentV8, Frame } from '@vector-studio/model';
+import type { DocumentV8, Frame, ImageAsset } from '@vector-studio/model';
 import type { ExpansionCache } from './expansion.js';
 import { apply, boundsOfPoints, multiply } from './geometry.js';
 import {
@@ -133,6 +134,8 @@ export function buildExportScene(
     // V35-E1: export carries the blend modes whatever the host's renderer draws.
     false,
     true,
+    // V32-S4: and always the images.
+    true,
   );
   // Paint order is document pre-order over the projected units (V30-S2).
   const order = new Map(projection.units.map((id, index) => [id, index]));
@@ -205,7 +208,17 @@ export function buildExportScene(
   const width = Math.max(1, Math.ceil(box.x + box.width) - x);
   const height = Math.max(1, Math.ceil(box.y + box.height) - y);
   if (![x, y, width, height].every(Number.isFinite)) return null;
-  return { bounds: { x, y, width, height }, nodes, rootOrder };
+  // V32-E4: the table entries the export's image paints name.
+  const named: Record<string, ImageAsset> = {};
+  for (const node of nodes.values()) {
+    if (node.kind !== 'path' || node.fill === null || !isSceneImagePaint(node.fill)) continue;
+    const key = node.fill.image;
+    if (document.images !== undefined && Object.hasOwn(document.images, key)) {
+      named[key] = document.images[key]!;
+    }
+  }
+  const images = Object.keys(named).length === 0 ? {} : { images: named };
+  return { bounds: { x, y, width, height }, nodes, rootOrder, ...images };
 }
 
 // --- SVG (V30-S5) ---
@@ -277,6 +290,10 @@ function hexColor(color: { r: number; g: number; b: number }): string {
 class SvgWriter {
   private readonly defs: string[] = [];
   private next = 0;
+  /** Image key to the id of its `<image>` in `<defs>`. */
+  private readonly imageIds = new Map<string, string>();
+  /** Whether a `<use>` carries `xlink:href`, so the root declares the namespace. */
+  private xlink = false;
 
   constructor(private readonly scene: ExportScene) {}
 
@@ -287,7 +304,12 @@ class SvgWriter {
 
   /** ` fill="…"` (and opacity) for `paint` on attribute `name` ('fill' or 'stroke'). */
   private paint(name: 'fill' | 'stroke', paint: ScenePaint | null): string {
-    if (paint === null || isSceneImagePaint(paint)) return ` ${name}="none"`;
+    if (paint === null) return ` ${name}="none"`;
+    if (isSceneImagePaint(paint)) {
+      // V32-E4: a repeating image is a pattern; the others are drawn as an image by `node` (a
+      // fill) and are `none` here, as in a stroke, where an image paint is not valid.
+      return name === 'fill' && repeats(paint) ? this.pattern(paint) : ` ${name}="none"`;
+    }
     if (!isSceneGradient(paint)) {
       const alpha = Math.min(1, Math.max(0, paint.a));
       return alpha >= 1
@@ -311,6 +333,59 @@ class SvgWriter {
         : `<radialGradient ${common} cx="0" cy="0" r="1" fx="0" fy="0">${stops}</radialGradient>`,
     );
     return ` ${name}="url(#${id})"`;
+  }
+
+  /**
+   * The id of image `key`'s one `<image>` in `<defs>` (written on first use, so its data appears
+   * once however often it is drawn), or null when the scene does not carry it. Ids are `i1`,
+   * `i2`, … in order of first use; the other ids of the writer have other prefixes.
+   */
+  private imageId(key: string): string | null {
+    const held = this.imageIds.get(key);
+    if (held !== undefined) return held;
+    const images = this.scene.images;
+    if (images === undefined || !Object.hasOwn(images, key)) return null;
+    const asset = images[key]!;
+    const id = `i${this.imageIds.size + 1}`;
+    this.imageIds.set(key, id);
+    this.defs.push(
+      `<image id="${id}" href="data:${asset.mimeType};base64,${asset.data}" width="1" height="1" preserveAspectRatio="none"/>`,
+    );
+    return id;
+  }
+
+  /** `<use>` of a defs image; `xlink:href` goes with `href` for older viewers (not on the data). */
+  private use(id: string, transform: string): string {
+    this.xlink = true;
+    return `<use href="#${id}" xlink:href="#${id}"${transform}/>`;
+  }
+
+  /** V32-E4: `fill="url(#p)"` for a repeating image paint, or `fill="none"` without its data. */
+  private pattern(paint: SceneImagePaint): string {
+    const image = this.imageId(paint.image);
+    if (image === null) return ' fill="none"';
+    const id = this.id('p');
+    this.defs.push(
+      `<pattern id="${id}" patternUnits="userSpaceOnUse" width="1" height="1" patternTransform="matrix(${paint.transform
+        .map(svgNumber)
+        .join(' ')})">${this.use(image, '')}</pattern>`,
+    );
+    return ` fill="url(#${id})"`;
+  }
+
+  /**
+   * V32-E4: the fill of a path with a non-repeating image paint: a group clipped to the shape (the
+   * clip path with the shape's `clip-rule`) holding the image placed by the paint's transform.
+   * `extend` is approximated as `decal`, which matches inside the shape for `fill` and `stretch`.
+   */
+  private imageFill(paint: SceneImagePaint, geometry: ScenePathGeometry): string {
+    const image = this.imageId(paint.image);
+    if (image === null) return '';
+    const id = this.id('c');
+    this.defs.push(
+      `<clipPath id="${id}"><path d="${svgPathData(geometry)}" clip-rule="${geometry.fillRule}"/></clipPath>`,
+    );
+    return `<g clip-path="url(#${id})">${this.use(image, matrixAttribute(paint.transform))}</g>`;
   }
 
   private opacity(node: ExportNode): string {
@@ -391,6 +466,15 @@ class SvgWriter {
         return body === '' ? '' : `<g${head}${clip}>${body}</g>`;
       }
       case 'path': {
+        if (node.fill !== null && isSceneImagePaint(node.fill) && !repeats(node.fill)) {
+          const stroke = this.stroke(node.stroke);
+          const body =
+            this.imageFill(node.fill, node.geometry) +
+            (stroke === ' stroke="none"'
+              ? ''
+              : `<path d="${svgPathData(node.geometry)}" fill="none"${stroke}/>`);
+          return body === '' ? '' : `<g${head}>${body}</g>`;
+        }
         const fill = this.paint('fill', node.fill);
         const rule =
           node.fill !== null && node.geometry.fillRule === 'evenodd' ? ' fill-rule="evenodd"' : '';
@@ -410,10 +494,15 @@ class SvgWriter {
     const body = this.scene.rootOrder.map((id) => this.node(id)).join('');
     const defs = this.defs.length === 0 ? '' : `<defs>${this.defs.join('')}</defs>`;
     return (
-      `<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="${width}" height="${height}" viewBox="${x} ${y} ${width} ${height}">` +
+      `<svg xmlns="http://www.w3.org/2000/svg"${this.xlink ? ' xmlns:xlink="http://www.w3.org/1999/xlink"' : ''} version="1.1" width="${width}" height="${height}" viewBox="${x} ${y} ${width} ${height}">` +
       `${defs}${body}</svg>\n`
     );
   }
+}
+
+/** V32-E4: whether an image paint repeats (a pattern in SVG); the other wraps draw one image. */
+function repeats(paint: SceneImagePaint): boolean {
+  return paint.wrapX === 'repeat' && paint.wrapY === 'repeat';
 }
 
 /** The CSS name of a blend mode: `colorDodge` → `color-dodge` (V35-E2). */

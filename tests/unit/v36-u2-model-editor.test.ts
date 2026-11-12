@@ -393,7 +393,7 @@ const panel = (target: Editor) =>
   );
 
 describe('V-36 the panel section (section 6)', () => {
-  it("offers inner shadow under 'v1' only, and background blur not before U3", () => {
+  it("offers inner shadow and background blur under 'v1' only (U3 offers background blur)", () => {
     for (const projection of [true, 'v1'] as const) {
       const target = editor(projection);
       const id = rectangle(target);
@@ -402,7 +402,7 @@ describe('V-36 the panel section (section 6)', () => {
       expect(html).toContain('data-testid="effects-add-shadow"');
       expect(html).toContain('data-testid="effects-add-blur"');
       expect(html.includes('data-testid="effects-add-inner-shadow"')).toBe(projection === 'v1');
-      expect(html).not.toContain('effects-add-background-blur');
+      expect(html.includes('data-testid="effects-add-background-blur"')).toBe(projection === 'v1');
     }
   });
 

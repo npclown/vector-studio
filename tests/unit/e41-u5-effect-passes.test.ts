@@ -1,12 +1,16 @@
 import type { DeviceRect, LayerEffectRecord } from '@vector-studio/renderer-core';
 import { describe, expect, it } from 'vitest';
 
-import { effectOracle } from '../support/e41-effect-oracle.js';
+import { backdropMargin } from '../../packages/renderer-core/src/effect-plan.js';
+import { backgroundBlurOracle, effectOracle } from '../support/e41-effect-oracle.js';
 import {
+  EFFECT_EDGE_CLAMP_ALL,
   EFFECT_PASS_RECORD_SIZE,
   EFFECT_SHADER,
+  blurReadRegion,
   effectPipelineKey,
   packEffectPassRecord,
+  planBackgroundBlurPasses,
   planEffectPasses,
   type EffectPass,
   type EffectSurface,
@@ -60,12 +64,24 @@ function runPlan(
   result: DeviceRect,
   scratch: Readonly<{ width: number; height: number }>,
 ): Image {
-  const surfaces: Record<EffectSurface, Image> = {
+  return runSurfaces(passes, {
     content,
     result: image(result),
     scratch0: image({ x: 0, y: 0, ...scratch }),
     scratch1: image({ x: 0, y: 0, ...scratch }),
-  };
+    backdrop: image({ x: 0, y: 0, width: 0, height: 0 }),
+    blurred: image({ x: 0, y: 0, width: 0, height: 0 }),
+  }).result;
+}
+
+/**
+ * Runs passes over the given surfaces (each a texture: its texel 0 at the image's origin) and
+ * returns them. V-36: a pass with `at` writes its region from that attachment texel.
+ */
+function runSurfaces(
+  passes: readonly EffectPass[],
+  surfaces: Record<EffectSurface, Image>,
+): Record<EffectSurface, Image> {
   for (const pass of passes) {
     const target = surfaces[pass.target];
     const backing = surfaces[pass.source];
@@ -80,10 +96,11 @@ function runPlan(
     if (pass.clear) target.data.fill(0);
     const clamp = pass.edge;
     const written = new Float64Array(target.data);
+    const [atX, atY] = pass.at ?? [0, 0];
     for (let row = 0; row < pass.height; row += 1) {
       for (let column = 0; column < pass.width; column += 1) {
-        const x = column + pass.dstOrigin[0];
-        const y = row + pass.dstOrigin[1];
+        const x = atX + column + pass.dstOrigin[0];
+        const y = atY + row + pass.dstOrigin[1];
         let value: number[];
         switch (pass.kind) {
           case 'downsample': {
@@ -153,8 +170,8 @@ function runPlan(
             break;
           }
         }
-        // Pixel (column, row) of the attachment.
-        const at = (row * target.width + column) * 4;
+        // Pixel (column, row) of the attachment's region.
+        const at = ((atY + row) * target.width + atX + column) * 4;
         if (pass.kind === 'coverage') {
           // dst × src.a.
           for (let i = 0; i < 4; i += 1) written[at + i] = written[at + i]! * value[3]!;
@@ -168,7 +185,7 @@ function runPlan(
     }
     target.data.set(written);
   }
-  return surfaces.result;
+  return surfaces;
 }
 
 /** The top-left width × height texels of an image, as a tightly packed copy. */
@@ -658,5 +675,158 @@ describe('V36 inner shadow passes against section 4.1', () => {
     expect([...run(15).subarray(20, 24)]).toEqual([0, 0.5, 0, 1]);
     expect([...run(1).subarray(20, 24)]).toEqual([0, 0, 0, 0]);
     expect([...run(4).subarray(0, 4)]).toEqual([0, 0, 0, 0]);
+  });
+});
+
+// V-36 contract, section 5.2: the background-blur passes (blur of the snapshot `D` with its first
+// reader clamped, into `B`; coverage by `h`; a blend root's merge of `B` over `D`) against
+// section 5.1 applied to `D` clamped at the target's edges (tests/support/e41-effect-oracle.ts).
+describe('V36 background-blur passes against section 5.1', () => {
+  const target: DeviceRect = { x: 0, y: 0, width: 160, height: 120 };
+  /** An opaque backdrop over the target: vertical stripes with a soft gradient. */
+  const stripes = (): Image => {
+    const out = image(target);
+    for (let y = 0; y < target.height; y += 1)
+      for (let x = 0; x < target.width; x += 1) {
+        const on = Math.floor(x / 6) % 2 === 0;
+        const g = y / target.height;
+        out.data.set(
+          on ? [0.9, 0.2 + 0.5 * g, 0.1, 1] : [0.05, 0.1, 0.8 - 0.4 * g, 1],
+          (y * target.width + x) * 4,
+        );
+      }
+    return out;
+  };
+  /** The snapshot texture: `D` over the snapshot rectangle. */
+  const snapshotOf = (backdrop: Image, rect: DeviceRect): Image => {
+    const out = image(rect);
+    for (let y = 0; y < rect.height; y += 1)
+      for (let x = 0; x < rect.width; x += 1)
+        out.data.set(texel(backdrop, rect.x + x, rect.y + y), (y * rect.width + x) * 4);
+    return out;
+  };
+  const grownInTarget = (rect: DeviceRect, margin: number): DeviceRect => {
+    const x = Math.max(rect.x - margin, 0);
+    const y = Math.max(rect.y - margin, 0);
+    return {
+      x,
+      y,
+      width: Math.min(rect.x + rect.width + margin, target.width) - x,
+      height: Math.min(rect.y + rect.height + margin, target.height) - y,
+    };
+  };
+  const run = (rect: DeviceRect, sigmaPx: number, c: number, blend: boolean, opacity = 1) => {
+    const effect = record({
+      source: rect,
+      output: rect,
+      contentOpacity: c,
+      backgroundBlur: { sigmaPx },
+    });
+    const l = contentImage(rect, c);
+    const backdrop = stripes();
+    const snapshot = grownInTarget(rect, backdropMargin(sigmaPx));
+    const plan = planBackgroundBlurPasses(snapshot, rect, rect, effect, blend, opacity);
+    const surfaces = runSurfaces(plan.passes, {
+      content: l,
+      result: image({ x: 0, y: 0, width: 0, height: 0 }),
+      scratch0: image({ x: 0, y: 0, ...plan.scratch }),
+      scratch1: image({ x: 0, y: 0, ...plan.scratch }),
+      backdrop: snapshotOf(backdrop, snapshot),
+      blurred: image(rect),
+    });
+    const expected = backgroundBlurOracle(backdrop, target, rect, sigmaPx, l, c);
+    return { plan, surfaces, expected, backdrop, snapshot };
+  };
+
+  it.each([
+    ['σ 3 inside the target', { x: 40, y: 30, width: 40, height: 34 }, 3, 1],
+    ['σ 10 (radius 20), leaf at c 0.5', { x: 50, y: 40, width: 44, height: 30 }, 10, 0.5],
+    ['σ 10 at the target edge (clamp)', { x: 0, y: 84, width: 48, height: 36 }, 10, 1],
+    ['σ 20, downsampled once, at the corner', { x: 120, y: 0, width: 40, height: 40 }, 20, 1],
+    ['σ 47, downsampled twice', { x: 30, y: 20, width: 90, height: 70 }, 47, 0.8],
+  ] as const)('%s', (_, rect, sigmaPx, c) => {
+    const { plan, surfaces, expected } = run(rect, sigmaPx, c, false);
+    expect(maxDifference(surfaces.blurred, expected)).toBeLessThan(1e-9);
+    // The first reader of `D` clamps every side; no other pass does.
+    expect(plan.passes[0]!.source).toBe('backdrop');
+    expect(plan.passes[0]!.edge).toBe(EFFECT_EDGE_CLAMP_ALL);
+    expect(plan.passes.slice(1).every((pass) => pass.edge === 0)).toBe(true);
+    // A blur without levels ends in `B`; with levels, an upsample does; then coverage.
+    expect(plan.passes.at(-1)!.kind).toBe('coverage');
+    expect(plan.passes.at(-1)!.contentScale).toBeCloseTo(127 / c);
+    expect(plan.passes.at(-2)!.kind).toBe(sigmaPx > 32 / 3 ? 'upsample' : 'blur');
+    expect(plan.passes.filter((pass) => pass.target === 'blurred' && pass.clear)).toHaveLength(1);
+    for (const pass of plan.passes) {
+      if (pass.target === 'scratch0' || pass.target === 'scratch1') {
+        expect(pass.width).toBeLessThanOrEqual(plan.scratch.width);
+        expect(pass.height).toBeLessThanOrEqual(plan.scratch.height);
+      }
+    }
+  });
+
+  it('merges B at the composite opacity over D inside O for a blend root', () => {
+    const rect = { x: 50, y: 40, width: 44, height: 30 };
+    const { plan, surfaces, expected, backdrop, snapshot } = run(rect, 6, 1, true, 0.6);
+    const merge = plan.passes.at(-1)!;
+    expect([merge.kind, merge.source, merge.target, merge.contentScale]).toEqual([
+      'merge',
+      'blurred',
+      'backdrop',
+      0.6,
+    ]);
+    expect(merge.at).toEqual([rect.x - snapshot.x, rect.y - snapshot.y]);
+    let worst = 0;
+    for (let y = snapshot.y; y < snapshot.y + snapshot.height; y += 1)
+      for (let x = snapshot.x; x < snapshot.x + snapshot.width; x += 1) {
+        const d = texel(backdrop, x, y);
+        const inside =
+          x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height;
+        const b = inside ? texel(expected, x, y).map((v) => v * 0.6) : [0, 0, 0, 0];
+        const want = d.map((v, i) => b[i]! + v * (1 - b[3]!));
+        const got = texel(surfaces.backdrop, x, y);
+        want.forEach((v, i) => (worst = Math.max(worst, Math.abs(v - got[i]!))));
+      }
+    expect(worst).toBeLessThan(1e-9);
+    // Without a blend mode, `D` is left as the snapshot took it.
+    const plain = run(rect, 6, 1, false);
+    expect(plain.plan.passes.some((pass) => pass.target === 'backdrop')).toBe(false);
+  });
+
+  it('plans nothing below the σ epsilon or without a background blur', () => {
+    const rect = { x: 10, y: 10, width: 20, height: 20 };
+    for (const effect of [record({ backgroundBlur: { sigmaPx: 1e-4 } }), record({})]) {
+      const plan = planBackgroundBlurPasses(rect, rect, rect, effect, true, 1);
+      expect(plan.passes).toEqual([]);
+      expect(plan.scratch).toEqual({ width: 0, height: 0 });
+    }
+    expect(backdropMargin(1e-4)).toBe(0);
+    expect(backdropMargin(0)).toBe(0);
+  });
+
+  it('backdropMargin covers the blur read region on every side', () => {
+    const sigmas = [
+      0.001, 0.2, 0.5, 1, 1.7, 3, 5.5, 10, 10.67, 11, 15, 20, 21.4, 33, 47, 64, 90, 128, 170, 200,
+      256,
+    ];
+    let checked = 0;
+    for (const sigma of sigmas) {
+      const margin = backdropMargin(sigma);
+      expect(Number.isSafeInteger(margin)).toBe(true);
+      for (let x = -37; x <= 37; x += 1)
+        for (const [y, width, height] of [
+          [x * 3 - 5, 1, 1],
+          [-x, 17, 9],
+          [x + 64, 40, 31],
+        ] as const) {
+          const rect = { x, y, width, height };
+          const read = blurReadRegion(rect, sigma, [0, 0]);
+          expect(read.x0).toBeGreaterThanOrEqual(x - margin);
+          expect(read.y0).toBeGreaterThanOrEqual(y - margin);
+          expect(read.x1).toBeLessThanOrEqual(x + width + margin);
+          expect(read.y1).toBeLessThanOrEqual(y + height + margin);
+          checked += 1;
+        }
+    }
+    expect(checked).toBe(sigmas.length * 75 * 3);
   });
 });
