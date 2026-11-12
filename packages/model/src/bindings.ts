@@ -148,8 +148,11 @@ export function samePaint(a: Paint, b: Paint): boolean {
 export function boundValue(node: NodeV8, key: BindingKey): Paint | number | null {
   const record = node as Partial<Record<string, unknown>>;
   switch (key) {
-    case 'fill':
-      return (record.fill as Paint | null | undefined) ?? null;
+    case 'fill': {
+      // V-35: a `fill` binding holds the top fill's paint (fills are bottom first).
+      const fills = record.fills as readonly { paint: Paint }[] | undefined;
+      return fills?.at(-1)?.paint ?? null;
+    }
     case 'stroke': {
       const stroke = record.stroke as { color: Paint } | null | undefined;
       return stroke?.color ?? null;
@@ -226,8 +229,17 @@ export function withBoundValue(
   const record = node as unknown as Record<string, unknown>;
   const stroke = record.stroke as Record<string, unknown> | null | undefined;
   switch (key) {
-    case 'fill':
-      return typeof value === 'number' ? null : ({ ...node, fill: value } as NodeV8);
+    case 'fill': {
+      // V-35: the top fill's paint, or one fill of the paint when the node has none.
+      if (typeof value === 'number') return null;
+      const fills = (record.fills as readonly Record<string, unknown>[] | undefined) ?? [];
+      const top = fills.at(-1);
+      const next =
+        top === undefined
+          ? [{ paint: value, visible: true, opacity: 1, blendMode: 'normal' }]
+          : [...fills.slice(0, -1), { ...top, paint: value }];
+      return { ...node, fills: next } as unknown as NodeV8;
+    }
     case 'stroke':
       if (typeof value === 'number') return null;
       return { ...node, stroke: { ...(stroke ?? defaultStroke(node)), color: value } } as NodeV8;

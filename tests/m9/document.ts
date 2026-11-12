@@ -279,6 +279,18 @@ export function generateM9V2Document(seed = M9_V2_SEED): M9GeneratedDocument {
   // --- Sources.
   const constraints = { horizontal: 'start', vertical: 'start' };
   const node = (id: string, parent: string, frame: Frame, rest: Record<string, unknown>): Node => {
+    // V35-S1: a `fill` paint is written as the one fill it stands for, in its place.
+    const fields: Record<string, unknown> = {};
+    for (const [key, field] of Object.entries(rest)) {
+      if (key !== 'fill') fields[key] = field;
+      else {
+        fields.fills =
+          field === null ? [] : [{ paint: field, visible: true, opacity: 1, blendMode: 'normal' }];
+      }
+    }
+    const container = ['group', 'maskGroup', 'frame', 'symbol', 'instance'].includes(
+      rest.type as string,
+    );
     const value = {
       id,
       name: id,
@@ -288,7 +300,8 @@ export function generateM9V2Document(seed = M9_V2_SEED): M9GeneratedDocument {
       constraints,
       opacity: 1,
       visible: true,
-      ...rest,
+      ...fields,
+      blendMode: container ? 'passThrough' : 'normal',
       // Schema v7 (E41-S1): no effects.
       effects: [],
     } as unknown as Node;
@@ -455,6 +468,7 @@ export function generateM9V2Document(seed = M9_V2_SEED): M9GeneratedDocument {
       constraints: rest.constraints,
       opacity: rest.opacity,
       visible: rest.visible,
+      blendMode: 'normal',
       effects: [],
     };
   };
@@ -478,6 +492,8 @@ export function generateM9V2Document(seed = M9_V2_SEED): M9GeneratedDocument {
             },
           }
         : {},
+      blendMode: 'passThrough',
+      effects: [],
     };
     instances.push(id);
   }

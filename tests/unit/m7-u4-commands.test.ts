@@ -199,10 +199,11 @@ function detachedNodes(
       visible: node.visible,
       type: 'frame',
       children: result.expansion.children.map((id) => copyOf.get(id)!),
-      fill: source.fill,
+      fills: source.fills,
       stroke: source.stroke,
       // The instance's effects, or else its source's (E41-S10).
       effects: node.effects.length > 0 ? node.effects : source.effects,
+      blendMode: node.blendMode,
     },
   };
   for (const [key, copy] of result.expansion.nodes) {
@@ -280,9 +281,10 @@ describe('createSymbol (M7-A07)', () => {
       visible: true,
       type: 'symbol',
       children: ['r1', 'r2'],
-      fill: null,
+      fills: [],
       stroke: null,
       effects: [],
+      blendMode: 'passThrough',
     } as NodeV8;
     expect(text(target)).toBe(
       expectedText(
@@ -331,9 +333,10 @@ describe('createSymbol (M7-A07)', () => {
             visible: true,
             type: 'symbol',
             children: [line!],
-            fill: null,
+            fills: [],
             stroke: null,
             effects: [],
+            blendMode: 'passThrough',
           },
           [line!]: {
             ...before.nodes[line!]!,
@@ -444,6 +447,7 @@ describe('createInstance (M7-A07)', () => {
     symbol: 's1',
     textOverrides: {},
     effects: [],
+    blendMode: 'passThrough',
     ...extra,
   });
 
@@ -684,7 +688,12 @@ describe('setNodeProps and setFrames on instances and symbols (M7-A07, section 5
     ok(target, { type: 'setNodeProps', id: 's1', props: { fill: green, stroke: null, name: 'S' } });
     expect(text(target)).toBe(
       expectedText(before, {
-        s1: { ...before.nodes.s1!, fill: green, stroke: null, name: 'S' } as NodeV8,
+        s1: {
+          ...before.nodes.s1!,
+          fills: [{ paint: green, visible: true, opacity: 1, blendMode: 'normal' as const }],
+          stroke: null,
+          name: 'S',
+        } as NodeV8,
       }),
     );
     fails(
@@ -942,9 +951,10 @@ describe('detachInstances (M7-A09)', () => {
       visible: true,
       type: 'frame',
       children: ['n1', 'n2', 'n5'],
-      fill: s1.fill,
+      fills: s1.fills,
       stroke: s1.stroke,
       effects: s1.effects,
+      blendMode: 'passThrough',
     });
     expect(text(target)).toBe(expectedText(before, nodes));
     expect(target.query({ type: 'selection' })).toEqual(['i1']);
@@ -1025,7 +1035,7 @@ describe('detachInstances (M7-A09)', () => {
       ...rest,
       type: 'frame',
       children: [],
-      fill: null,
+      fills: [],
       stroke: null,
     });
     expect(text(target)).toBe(expectedText(before, detachedNodes(before, 'i3', [])));

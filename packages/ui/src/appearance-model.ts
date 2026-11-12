@@ -49,9 +49,9 @@ const STROKE_TYPES: ReadonlySet<NodeV8['type']> = new Set([...FILL_TYPES, 'line'
 /** The `setStyle` keys a node type takes (editor-core's `PROPS`). */
 export function styleKeys(type: NodeV8['type']): readonly (keyof StyleProps)[] {
   const keys: (keyof StyleProps)[] = [];
-  if (FILL_TYPES.has(type)) keys.push('fill');
+  if (FILL_TYPES.has(type)) keys.push('fill', 'fills');
   if (STROKE_TYPES.has(type)) keys.push('stroke');
-  keys.push('opacity');
+  keys.push('opacity', 'blendMode');
   if (type === 'rectangle') keys.push('cornerRadii');
   return keys;
 }
@@ -75,9 +75,12 @@ export function common<T>(
   return found === null ? { state: 'none' } : { state: 'one', value: found.value };
 }
 
-/** A node's fill paint, or null (none, or a type without fill). */
+/**
+ * A node's fill paint: its top fill's (V-35 fills are bottom first), or null (none, or a type
+ * without fills).
+ */
 export const fillOf = (node: NodeV8): Paint | null =>
-  'fill' in node && FILL_TYPES.has(node.type) ? node.fill : null;
+  'fills' in node && FILL_TYPES.has(node.type) ? (node.fills.at(-1)?.paint ?? null) : null;
 
 /** A node's stroke, or null. */
 export const strokeOf = (node: NodeV8): Stroke | null =>

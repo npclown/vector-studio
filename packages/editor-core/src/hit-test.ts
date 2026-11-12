@@ -1,3 +1,4 @@
+import { hasVisibleFill } from './fills.js';
 import type { DocumentV8, Frame, NodeV8, PathData } from '@vector-studio/model';
 import {
   apply,
@@ -387,7 +388,7 @@ export function hitPart(
     inFill = () => insideFill(point, flat, geometry.fillRule === 'evenodd');
     lines = () => flat;
   }
-  const hasFill = node.fill !== null;
+  const hasFill = 'fills' in node && hasVisibleFill(node.fills);
   if (paint) {
     if (node.stroke !== null && radius > 0 && nearOutline(point, lines(), radius)) return 'stroke';
     return hasFill && inFill() ? 'fill' : null;
@@ -514,7 +515,7 @@ function visitHits(
     const inside = insideBox(local, box);
     if (node.type === 'instance') {
       const source = tree.node(node.symbol);
-      fill = source?.type === 'symbol' && source.fill !== null;
+      fill = source?.type === 'symbol' && hasVisibleFill(source.fills);
       stroke = source?.type === 'symbol' ? source.stroke : null;
       if (source !== undefined) painted = source;
       // An instance's content is always clipped to its box, so outside it nothing inside hits.
@@ -525,7 +526,7 @@ function visitHits(
         as = owner ?? node.id;
       }
     } else {
-      fill = node.fill !== null;
+      fill = hasVisibleFill(node.fills);
       stroke = node.stroke;
       content = node.children;
     }

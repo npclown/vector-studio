@@ -501,6 +501,7 @@ describe('M6b-A04 the first text creates the node in one step (section 7.1)', ()
       align: 'left',
       letterSpacing: 0,
       lineHeight: 1.2,
+      blendMode: 'normal',
       effects: [],
     });
     expect(pageChildren(target)).toEqual(['t', 'r', 'g', 'fr', 'n1']);

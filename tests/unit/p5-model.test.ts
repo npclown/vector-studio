@@ -12,7 +12,7 @@ import {
   type ParseResult,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
-import { v7Text } from '../support/schema-v7.js';
+import { v7Text, v8Node } from '../support/schema-v7.js';
 // @ts-expect-error The repository's executable boundary policy is JavaScript tooling.
 import { boundaries, evaluatePackageBoundaries } from '../../tooling/boundary-policy.mjs';
 
@@ -197,8 +197,9 @@ describe('P5-A06 JSON round trip', () => {
       'visible',
       'type',
       'path',
-      'fill',
+      'fills',
       'stroke',
+      'blendMode',
       'effects',
     ]);
     expect(text.endsWith('}\n')).toBe(true);
@@ -541,7 +542,8 @@ describe('validateNode', () => {
       effects: [],
     };
     const result = validateNode(node);
-    expect(result.ok && result.node).toEqual(node);
+    // The v8 reader takes a legacy `fill` until v8 is released (V35-S1).
+    expect(result.ok && result.node).toEqual(v8Node(node));
     expect(failure(validateNode({ ...node, opacity: 2 }) as ParseResult)).toEqual({
       code: 'document.invalid-field',
       path: '/opacity',
@@ -576,7 +578,7 @@ describe('P5-A08 no session state in the document', () => {
     expect(found.filter((key) => FORBIDDEN.test(key))).toEqual([]);
     // `dash` since M4-U1 (M4-M1: every migrated stroke has `dash: null`), `effects` since E41-U4.
     const schema = new Set(
-      'schemaVersion id pages nodes name children parent frame x y width height rotation constraints horizontal vertical opacity visible type cornerRadii fill stroke color r g b a cap join miterLimit dash path verbs points fillRule customType data effects'.split(
+      'schemaVersion id pages nodes name children parent frame x y width height rotation constraints horizontal vertical opacity visible type cornerRadii fills paint blendMode stroke color r g b a cap join miterLimit dash path verbs points fillRule customType data effects'.split(
         ' ',
       ),
     );

@@ -184,6 +184,12 @@ export type EditorOptions = Readonly<{
    */
   projectEffects?: boolean | 'v1';
   /**
+   * V-35 contract, V35-P4: when true, the scene the editor projects to an attached renderer
+   * carries blend modes, which needs a renderer on `blend: 'v0'`. Defaults to false: every node
+   * and fill draws as `normal`.
+   */
+  projectBlend?: boolean;
+  /**
    * V-25 slice 4: when true, the drawing tools create a node in the innermost frame under the
    * press point (inside the scope when it holds the point), and a select-tool move that ends with
    * the pointer over a frame moves the dragged nodes into it, or out of their frame onto the
@@ -365,6 +371,10 @@ const DOCUMENT_COMMANDS = new Set([
   'addEffect',
   'setEffect',
   'removeEffect',
+  'addFill',
+  'setFill',
+  'removeFill',
+  'moveFill',
   'ungroupNodes',
   'moveNodes',
   'createSymbol',
@@ -500,6 +510,7 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.boolean-too-large',
   'editor.boolean-failed',
   'editor.effect-limit',
+  'editor.fill-limit',
   'editor.invalid-svg',
   'editor.empty-svg',
 ]);
@@ -885,6 +896,8 @@ class EditorCore implements Editor {
   private readonly layout: TextLayouter | undefined;
   /** E41-S6: whether the projector emits node effects (`EditorOptions.projectEffects`). */
   private readonly projectEffects: EffectProjection;
+  /** V35-P4: whether the projector emits blend modes (`EditorOptions.projectBlend`). */
+  private readonly projectBlend: boolean;
 
   /**
    * The IDs of `returned` that a draw on `drawnOn` accepted: `drawIds` and `freshId` skip only
@@ -990,6 +1003,7 @@ class EditorCore implements Editor {
       options.projectEffects === true || options.projectEffects === 'v1'
         ? options.projectEffects
         : false;
+    this.projectBlend = options.projectBlend === true;
     this.snapshot = this.buildSnapshot();
     this.tools.set(
       'select',
@@ -1351,6 +1365,18 @@ class EditorCore implements Editor {
       this.undoStack.push(entry);
       this.redoStack = [];
       this.changeDocument(result.document, 'command', result.touched);
+      // V35-C4: a group with a blend mode other than `passThrough` loses it on ungroup.
+      if (command.type === 'ungroupNodes') {
+        const group = base.nodes[command.id];
+        if (group !== undefined && group.blendMode !== 'passThrough') {
+          this.emit({
+            type: 'diagnostic',
+            code: 'editor.ungroup-blend',
+            reason: 'blend-dropped',
+            nodeIds: [command.id],
+          });
+        }
+      }
       // The pasted roots become the selection (section 6).
       if (command.type === 'paste' || selects) this.setSelectionState(selected);
       return { ok: true, ids: result.ids ?? result.created };
@@ -1837,6 +1863,7 @@ class EditorCore implements Editor {
       // The editor's layout cache (M6c-Q2 (a)); without a port text projects nothing (M6c-P3).
       this.layout,
       this.projectEffects,
+      this.projectBlend,
     );
     this.projector = projector;
     this.renderer = renderer;

@@ -33,6 +33,7 @@ import {
 } from '../../packages/editor-core/src/text.js';
 import { createFakeTextLayout, type FakeTextLayout } from '../support/fake-text-layout.js';
 import { RecordingRenderer } from '../support/p5-recording-renderer.js';
+import { v8Node } from '../support/schema-v7.js';
 
 // MVP M6c-U1 (docs/plans/mvp-m6c-gpu-text-contract.md, section 4; criterion M6c-A02): text nodes
 // project as E28 `text` leaves from the editor's layout (M6c-P1, P2), expanded instance text
@@ -148,16 +149,14 @@ function layouter(port: FakeTextLayout = createFakeTextLayout()): TextLayouter {
 }
 
 function project(document: DocumentV8, page = 'p1', layout: TextLayouter = layouter()) {
-  return projectPage(
-    document,
-    page,
-    none,
-    new Set(),
-    undefined,
-    new ExpansionCache(),
-    undefined,
-    layout,
-  );
+  // The v6 test document in the v8 node shape the projector reads (V35-S1).
+  const v8 = {
+    ...document,
+    nodes: Object.fromEntries(
+      Object.entries(document.nodes).map(([id, node]) => [id, v8Node(node as Loose)]),
+    ),
+  } as unknown as DocumentV8;
+  return projectPage(v8, page, none, new Set(), undefined, new ExpansionCache(), undefined, layout);
 }
 
 function leaf(projection: PageProjection, id: string): RenderNodeSnapshot {

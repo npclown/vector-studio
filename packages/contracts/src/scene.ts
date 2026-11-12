@@ -152,6 +152,29 @@ export type SceneEffect =
  * background blur), is `invalid-value`.
  */
 export const SCENE_MAX_EFFECTS = 8;
+/**
+ * V-35 contract (docs/plans/viz-v35-fills-blend-contract.md), V35-K1: the W3C Compositing Level 1
+ * blend modes, and `passThrough`, which only a container takes. Absent means `normal` on a leaf
+ * and `passThrough` on a container.
+ */
+export type SceneBlendMode =
+  | 'normal'
+  | 'multiply'
+  | 'screen'
+  | 'overlay'
+  | 'darken'
+  | 'lighten'
+  | 'colorDodge'
+  | 'colorBurn'
+  | 'hardLight'
+  | 'softLight'
+  | 'difference'
+  | 'exclusion'
+  | 'hue'
+  | 'saturation'
+  | 'color'
+  | 'luminosity'
+  | 'passThrough';
 export type SceneNodeBase = Readonly<{
   id: string;
   parentId: string | null;
@@ -165,6 +188,12 @@ export type SceneNodeBase = Readonly<{
    * unit carries its effects on its outer container.
    */
   effects?: readonly SceneEffect[];
+  /**
+   * V35-K1: the node's blend mode; absent is the default (`normal` on a leaf, `passThrough` on a
+   * container). A non-default mode needs the renderer's `blend: 'v0'` (V35-K2), else it is
+   * `unsupported-feature`; `passThrough` on a non-container is `invalid-value`.
+   */
+  blendMode?: SceneBlendMode;
 }>;
 export type RenderNodeSnapshot = SceneNodeBase &
   (

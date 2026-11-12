@@ -746,9 +746,11 @@ describe('M7-U2 review follow-ups (S3)', () => {
     const computed = cache.computed;
     const edited = current();
     expect(cache.computed).toBe(computed);
-    expect(edited?.ok && (edited.expansion.nodes.get('s1-r') as { fill: unknown }).fill).toEqual(
-      fill,
-    );
+    expect(
+      edited?.ok &&
+        (edited.expansion.nodes.get('s1-r') as unknown as { fills: { paint: unknown }[] }).fills[0]!
+          .paint,
+    ).toEqual(fill);
     expect(target.execute({ type: 'undo' }).ok).toBe(true);
     const undone = current();
     expect(undone).toEqual(before);

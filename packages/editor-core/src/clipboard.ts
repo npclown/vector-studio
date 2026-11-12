@@ -1,3 +1,4 @@
+import { frameSceneCount } from './fills.js';
 import {
   isValidId,
   scanJson,
@@ -719,11 +720,7 @@ function resolveInstances(
     if (carried === undefined) {
       const nodes = subtreeOf(fragment.sourceNodes, node.symbol);
       const root = nodes[0] as SymbolNodeV8;
-      const count =
-        2 +
-        (root.fill === null ? 0 : 1) +
-        (root.stroke === null ? 0 : 1) +
-        sceneCount(nodes.slice(1));
+      const count = frameSceneCount(root.fills, root.stroke) + sceneCount(nodes.slice(1));
       carried = { nodes, count };
       carriedOf.set(node.symbol, carried);
     }
@@ -961,7 +958,8 @@ export function paste(
           // The effective opacity, as `detachInstances` writes it (MVP M4 contract, section 5).
           opacity: node.opacity * how.source.opacity,
           children: (how.expansion?.children ?? []).map((child) => map.get(child)!),
-          fill: how.source.fill,
+          // V35-S4: the source's fills; the instance keeps its own mode.
+          fills: how.source.fills,
           stroke: how.source.stroke,
           // E41-S10: the effects the instance drew with, its own or else its source's.
           effects: node.effects.length > 0 ? node.effects : how.source.effects,
