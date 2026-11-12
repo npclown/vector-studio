@@ -1,4 +1,4 @@
-import type { Color, DocumentV7, Gradient, NodeV7, Paint } from '@vector-studio/model';
+import type { Color, DocumentV8, Gradient, NodeV8, Paint } from '@vector-studio/model';
 import type { Tool, ToolContext } from './editor.js';
 import type { ExpansionCache } from './expansion.js';
 import { paintHitAt, type CustomGeometry, type PaintHit } from './hit-test.js';
@@ -60,7 +60,7 @@ export function paintColorAt(paint: Paint, unit: PagePoint): Color {
 
 /** The paint the hit part shows, or null (a text node's first run colour for its box). */
 function hitPaint(hit: PaintHit): Paint | null {
-  const node: NodeV7 = hit.node;
+  const node: NodeV8 = hit.node;
   if (node.type === 'text') return hit.part === 'fill' ? (node.runs[0]?.color ?? null) : null;
   if (hit.part === 'stroke')
     return 'stroke' in node && node.stroke !== null ? node.stroke.color : null;
@@ -72,7 +72,7 @@ function hitPaint(hit: PaintHit): Paint | null {
  * and ancestor opacity are not applied (V39-Q5).
  */
 export function sampleColor(
-  document: DocumentV7,
+  document: DocumentV8,
   page: string,
   point: PagePoint,
   zoom: number,
@@ -87,7 +87,7 @@ export function sampleColor(
 }
 
 /** Whether a node takes the picked colour as a fill (E7), else as a stroke colour. */
-function takesFill(node: NodeV7): boolean {
+function takesFill(node: NodeV8): boolean {
   return 'fill' in node;
 }
 
@@ -97,7 +97,7 @@ function takesFill(node: NodeV7): boolean {
  * run colour over its whole text. Groups and instances take nothing. Empty when nothing applies.
  */
 export function eyedropperCommands(
-  document: DocumentV7,
+  document: DocumentV8,
   ids: readonly string[],
   color: Color,
   stroke: boolean,

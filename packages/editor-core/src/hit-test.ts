@@ -1,4 +1,4 @@
-import type { DocumentV7, Frame, NodeV7, PathData } from '@vector-studio/model';
+import type { DocumentV8, Frame, NodeV8, PathData } from '@vector-studio/model';
 import {
   apply,
   boundsOfPoints,
@@ -30,7 +30,7 @@ import type { PagePoint } from './types.js';
 // editor's expansion cache, would be hit inside its content clip, and the hit names the instance.
 
 /** Frame-local path geometry for a custom node (its extension's `toScene`), or null. */
-export type CustomGeometry = (node: NodeV7) => PathData | null;
+export type CustomGeometry = (node: NodeV8) => PathData | null;
 
 export type Polyline = { points: PagePoint[]; closed: boolean };
 
@@ -266,7 +266,7 @@ function insideEllipse(p: PagePoint, frame: Frame): boolean {
  * each arrowhead as an open polyline (`line`) or a closed triangle (`triangle`). A line without
  * a stroke, of stroke width 0 or of zero length has no arrowheads.
  */
-function lineOutline(node: Extract<NodeV7, { type: 'line' }>): {
+function lineOutline(node: Extract<NodeV8, { type: 'line' }>): {
   lines: Polyline[];
   triangles: Polyline[];
 } {
@@ -294,7 +294,7 @@ function lineOutline(node: Extract<NodeV7, { type: 'line' }>): {
 }
 
 /** A point in a node's parent space, turned into its unrotated frame (a rigid map). */
-function intoFrame(node: NodeV7, parentPoint: PagePoint): PagePoint {
+function intoFrame(node: NodeV8, parentPoint: PagePoint): PagePoint {
   if (node.rotation === 0) return parentPoint;
   const cx = node.frame.x + node.frame.width / 2;
   const cy = node.frame.y + node.frame.height / 2;
@@ -307,7 +307,7 @@ function intoFrame(node: NodeV7, parentPoint: PagePoint): PagePoint {
  * 4.4; M1 contract, section 6). Containers never hit here; `visible` of the node itself counts.
  */
 export function hitsNode(
-  node: NodeV7,
+  node: NodeV8,
   parentPoint: PagePoint,
   zoom: number,
   custom: CustomGeometry,
@@ -324,7 +324,7 @@ export type HitPart = 'fill' | 'stroke';
  * contract, E6) the part drawn on top wins: the stroke within half its width, else the fill.
  */
 export function hitPart(
-  node: NodeV7,
+  node: NodeV8,
   parentPoint: PagePoint,
   zoom: number,
   custom: CustomGeometry,
@@ -381,7 +381,7 @@ export function hitPart(
 }
 
 /** Whether `point`, in a mask group's local space, is inside its source's fill region. */
-function insideMask(source: NodeV7 | undefined, point: PagePoint, zoom: number): boolean {
+function insideMask(source: NodeV8 | undefined, point: PagePoint, zoom: number): boolean {
   if (source?.type !== 'path') return false;
   // Fill, opacity and visibility of the source are ignored; its fill rule applies.
   const lines = flatten(source.path, source.frame, true, 0.25 / zoom);
@@ -405,7 +405,7 @@ function expansionTree(expansion: Expansion): TreeView {
  * What a hit painted (V-39 contract, E6): the node whose paint shows there (an instance's source
  * for its background and border), the part, and the point in that node's frame unit box.
  */
-export type PaintHit = Readonly<{ node: NodeV7; part: HitPart; unit: PagePoint }>;
+export type PaintHit = Readonly<{ node: NodeV8; part: HitPart; unit: PagePoint }>;
 
 function unitOf(x: number, y: number, frame: Frame): PagePoint {
   return {
@@ -423,7 +423,7 @@ function unitOf(x: number, y: number, frame: Frame): PagePoint {
  * A frame hit on both its border and its background is visited twice.
  */
 function visitHits(
-  document: DocumentV7,
+  document: DocumentV8,
   page: string,
   point: PagePoint,
   zoom: number,
@@ -445,7 +445,7 @@ function visitHits(
   ): boolean => {
     const node = view.node(id);
     if (node === undefined || !node.visible) return false;
-    const hit = (painted: NodeV7, part: HitPart, unit: PagePoint) =>
+    const hit = (painted: NodeV8, part: HitPart, unit: PagePoint) =>
       clip() && take(owner ?? id, { node: painted, part, unit });
     if (!isContainer(node) && node.type !== 'instance') {
       const part = hitPart(node, parentPoint, zoom, custom, paint);
@@ -485,8 +485,8 @@ function visitHits(
     // A frame paints its background, its children inside its rect, then its border; an
     // instance paints its source's background and border around its expansion.
     let fill: boolean;
-    let painted: NodeV7 = node;
-    let stroke: Extract<NodeV7, { type: 'frame' }>['stroke'];
+    let painted: NodeV8 = node;
+    let stroke: Extract<NodeV8, { type: 'frame' }>['stroke'];
     let content: readonly string[] = [];
     let within = view;
     let as = owner;
@@ -545,7 +545,7 @@ function visitHits(
  * `expansions` is the editor's expansion cache, shared with the projector (M7-X4).
  */
 export function deepestHit(
-  document: DocumentV7,
+  document: DocumentV8,
   page: string,
   point: PagePoint,
   zoom: number,
@@ -573,7 +573,7 @@ export function deepestHit(
  * stack of M2 contract, section 5, before its selection targets are taken).
  */
 export function hitsAt(
-  document: DocumentV7,
+  document: DocumentV8,
   page: string,
   point: PagePoint,
   zoom: number,
@@ -603,7 +603,7 @@ export function hitsAt(
  * nothing is painted there.
  */
 export function paintHitAt(
-  document: DocumentV7,
+  document: DocumentV8,
   page: string,
   point: PagePoint,
   zoom: number,
@@ -639,7 +639,7 @@ export function paintHitAt(
  * passes a scope only for a hit strictly inside its subtree; otherwise the page rule applies.
  */
 export function selectionTarget(
-  document: DocumentV7,
+  document: DocumentV8,
   id: string,
   scope: string | null = null,
 ): string | null {
@@ -655,7 +655,7 @@ export function selectionTarget(
 
 /** The chain from a hit node up to its selection target, innermost first; empty for no target. */
 export function targetChain(
-  document: DocumentV7,
+  document: DocumentV8,
   id: string,
   scope: string | null = null,
 ): string[] {
@@ -696,7 +696,7 @@ function contains(box: Frame, frame: Frame): boolean {
  * candidate as a leaf. Children of other containers are not candidates.
  */
 export function marqueeHits(
-  document: DocumentV7,
+  document: DocumentV8,
   page: string,
   box: Frame,
   scope: string | null = null,
@@ -726,7 +726,7 @@ export function marqueeHits(
  * contract, section 6), or null when there are none. A path counts its curve's box, not the
  * handles in its frame, and a group the bounds of its children's (V-26, `contentCorners`).
  */
-export function boundsOf(document: DocumentV7, ids: readonly string[]): Frame | null {
+export function boundsOf(document: DocumentV8, ids: readonly string[]): Frame | null {
   const tree = documentTree(document);
   const lookup = (id: string) => tree.node(id);
   const points: PagePoint[] = [];

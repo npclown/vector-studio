@@ -4,8 +4,8 @@ import type { RenderNodeSnapshot } from '@vector-studio/contracts';
 import {
   parseDocument,
   validateDocument,
-  type DocumentV7,
-  type NodeV7,
+  type DocumentV8,
+  type NodeV8,
   type PathData,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
@@ -134,7 +134,7 @@ const line = (id: string, parent: string, extra: Loose = {}): Loose => ({
  * A document of `nodes` (the first `roots` on page `p`, default every parent `p` node), written
  * at v6 and upgraded to v7 with `effects: []` on every node (E41-S1).
  */
-function doc(nodes: Loose[], pages: Loose[] | null = null): DocumentV7 {
+function doc(nodes: Loose[], pages: Loose[] | null = null): DocumentV8 {
   const map = Object.fromEntries(nodes.map((node) => [node.id as string, node]));
   return v7Value({
     schemaVersion: 6,
@@ -143,16 +143,16 @@ function doc(nodes: Loose[], pages: Loose[] | null = null): DocumentV7 {
       { id: 'p', name: 'P', children: nodes.filter((n) => n.parent === 'p').map((n) => n.id) },
     ],
     nodes: map,
-  }) as unknown as DocumentV7;
+  }) as unknown as DocumentV8;
 }
 
-function valid(document: DocumentV7): DocumentV7 {
+function valid(document: DocumentV8): DocumentV8 {
   const result = validateDocument(document);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
 }
 
-function parsed(text: string): DocumentV7 {
+function parsed(text: string): DocumentV8 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -164,8 +164,8 @@ const unitTriangle: PathData = {
   fillRule: 'nonzero',
 };
 /** The custom projection the M4-A04 baseline was recorded with. */
-const custom = (node: NodeV7) => (node.type === 'custom' ? unitTriangle : null);
-const project = (document: DocumentV7, page = 'p') => projectPage(document, page, custom).nodes;
+const custom = (node: NodeV8) => (node.type === 'custom' ? unitTriangle : null);
+const project = (document: DocumentV8, page = 'p') => projectPage(document, page, custom).nodes;
 
 function mirror(): RetainedSceneMirror {
   return new RetainedSceneMirror(undefined, {
@@ -181,7 +181,7 @@ function mirror(): RetainedSceneMirror {
 }
 
 /** Applies every page's projection to a mirror with every feature on; returns the statuses. */
-function accepted(document: DocumentV7): string[] {
+function accepted(document: DocumentV8): string[] {
   return document.pages.map((page) => {
     const projection = projectPage(document, page.id, custom);
     const result = mirror().replaceSnapshot({

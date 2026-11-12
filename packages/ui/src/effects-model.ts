@@ -1,4 +1,4 @@
-import type { Color, Command, CommandResult, DocumentV7, NodeV7 } from '@vector-studio/react';
+import type { Color, Command, CommandResult, DocumentV8, NodeV8 } from '@vector-studio/react';
 import { numberText, parseHex, parseNumber, type Common } from './appearance-model.js';
 
 // E41-U7 (E41 contract, section 6): the property panel's "Effects" section. Each row is one
@@ -41,7 +41,7 @@ export const EFFECT_RADIUS_RANGE = Object.freeze([0, 1000] as const);
 export const EFFECT_OFFSET_RANGE = Object.freeze([-10_000, 10_000] as const);
 
 /** The rows for the selected nodes, one per index up to the longest list. */
-export function effectRows(nodes: readonly NodeV7[]): readonly EffectRow[] {
+export function effectRows(nodes: readonly NodeV8[]): readonly EffectRow[] {
   const length = Math.max(0, ...nodes.map((node) => node.effects.length));
   const rows: EffectRow[] = [];
   for (let index = 0; index < length; index += 1) {
@@ -72,28 +72,28 @@ export const effectLabel = (kind: EffectKind): string =>
  * Whether a selected node is a mask group's source (its first child): its effects stay in the
  * document but do not render (E41 contract, section 3), so the panel shows them disabled.
  */
-export function isMaskSource(document: DocumentV7, node: NodeV7): boolean {
+export function isMaskSource(document: DocumentV8, node: NodeV8): boolean {
   const owner = Object.hasOwn(document.nodes, node.parent)
     ? document.nodes[node.parent]
     : undefined;
   return owner?.type === 'maskGroup' && owner.children[0] === node.id;
 }
 
-const ids = (nodes: readonly NodeV7[]) => nodes.map((node) => node.id);
+const ids = (nodes: readonly NodeV8[]) => nodes.map((node) => node.id);
 
 export const addEffectCommand = (
-  nodes: readonly NodeV7[],
+  nodes: readonly NodeV8[],
   kind: 'dropShadow' | 'layerBlur',
 ): Command => ({ type: 'addEffect', ids: ids(nodes), kind });
 
-export const removeEffectCommand = (nodes: readonly NodeV7[], index: number): Command => ({
+export const removeEffectCommand = (nodes: readonly NodeV8[], index: number): Command => ({
   type: 'removeEffect',
   ids: ids(nodes),
   index,
 });
 
 /** The visible toggle: shows every holder when any is hidden (or they differ), else hides. */
-export function toggleEffectCommand(nodes: readonly NodeV7[], row: EffectRow): Command {
+export function toggleEffectCommand(nodes: readonly NodeV8[], row: EffectRow): Command {
   const visible = !(row.visible.state === 'one' && row.visible.value);
   return { type: 'setEffect', ids: ids(nodes), index: row.index, patch: { visible } };
 }
@@ -102,7 +102,7 @@ export type EffectNumberKey = 'offsetX' | 'offsetY' | 'radius';
 
 /** A number field's commit, or null when the text cannot be a value in S3's range. */
 export function effectNumberCommand(
-  nodes: readonly NodeV7[],
+  nodes: readonly NodeV8[],
   row: EffectRow,
   key: EffectNumberKey,
   text: string,
@@ -115,7 +115,7 @@ export function effectNumberCommand(
 
 /** A shadow colour from a hex field or picker, keeping the shown alpha (opaque when mixed). */
 export function effectColorCommand(
-  nodes: readonly NodeV7[],
+  nodes: readonly NodeV8[],
   row: EffectRow,
   hex: string,
 ): Command | null {
@@ -130,7 +130,7 @@ export const opacityText = (color: Common<Color>): string | null =>
 
 /** An opacity field's commit (0 to 100 %), keeping the shown colour; null when not a value. */
 export function effectOpacityCommand(
-  nodes: readonly NodeV7[],
+  nodes: readonly NodeV8[],
   row: EffectRow,
   text: string,
 ): Command | null {

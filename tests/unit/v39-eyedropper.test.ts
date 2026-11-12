@@ -5,7 +5,7 @@ import {
   type Editor,
   type PagePoint,
 } from '@vector-studio/editor-core';
-import type { Color, DocumentV7, Gradient, NodeV7, TextNodeV7 } from '@vector-studio/model';
+import type { Color, DocumentV8, Gradient, NodeV8, TextNodeV8 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import { paintColorAt } from '../../packages/editor-core/src/eyedropper.js';
 
@@ -30,7 +30,7 @@ function ok(target: Editor, command: Command): readonly string[] {
 }
 
 const sample = (target: Editor, point: PagePoint) => target.query({ type: 'sampleColor', point });
-const node = (target: Editor, id: string) => target.query({ type: 'node', id }) as NodeV7;
+const node = (target: Editor, id: string) => target.query({ type: 'node', id }) as NodeV8;
 
 function rect(target: Editor, x: number, y: number, fill: Color | Gradient | null = red): string {
   return ok(target, {
@@ -66,7 +66,7 @@ function withText(): Editor {
   const id = rect(target, 0, 0);
   const document = target.query({ type: 'document' });
   const base = document.nodes[id]!;
-  const text: TextNodeV7 = {
+  const text: TextNodeV8 = {
     id: 't',
     name: 'Text',
     parent: base.parent,
@@ -87,7 +87,7 @@ function withText(): Editor {
     effects: [],
   };
   const page = document.pages[0]!;
-  const next: DocumentV7 = {
+  const next: DocumentV8 = {
     ...document,
     pages: [{ ...page, children: [...page.children, 't'] }],
     nodes: { ...document.nodes, t: text },
@@ -276,7 +276,7 @@ describe('V39-A05 the eyedropper tool (E7)', () => {
     press(target, { x: 450, y: 50 });
     expect(node(target, a)).toMatchObject({ fill: blue });
     expect((node(target, line) as { stroke: { color: Color } }).stroke.color).toEqual(blue);
-    expect((node(target, 't') as TextNodeV7).runs).toEqual([
+    expect((node(target, 't') as TextNodeV8).runs).toEqual([
       { text: 'abcd', family: 'Inter', size: 16, color: blue },
     ]);
     ok(target, { type: 'setStyle', ids: [blueRect], style: { fill: green } });
@@ -285,7 +285,7 @@ describe('V39-A05 the eyedropper tool (E7)', () => {
     const stroke = (node(target, a) as { stroke: { color: Color; width: number } }).stroke;
     expect(stroke.color).toEqual(green);
     expect(node(target, a)).toMatchObject({ fill: blue });
-    expect((node(target, 't') as TextNodeV7).runs[0]!.color).toEqual(green);
+    expect((node(target, 't') as TextNodeV8).runs[0]!.color).toEqual(green);
   });
 
   it('skips groups; a press on nothing does nothing; Escape returns to select', () => {
@@ -335,7 +335,7 @@ describe('V39-A05 the eyedropper tool (E7)', () => {
   it('without a layout port, an auto-width text node is skipped and the rest applies', () => {
     const target = withText();
     const document = target.query({ type: 'document' });
-    const auto = { ...(document.nodes.t as TextNodeV7), sizing: 'autoWidth' as const };
+    const auto = { ...(document.nodes.t as TextNodeV8), sizing: 'autoWidth' as const };
     ok(target, {
       type: 'loadDocument',
       document: { ...document, nodes: { ...document.nodes, t: auto } },
@@ -347,7 +347,7 @@ describe('V39-A05 the eyedropper tool (E7)', () => {
     ok(target, { type: 'setTool', tool: 'eyedropper' });
     press(target, { x: 450, y: 50 });
     expect(node(target, a)).toMatchObject({ fill: blue });
-    expect((node(target, 't') as TextNodeV7).runs[0]!.color).toEqual(green);
+    expect((node(target, 't') as TextNodeV8).runs[0]!.color).toEqual(green);
   });
 
   it('with nothing selected only records the pick', () => {

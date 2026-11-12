@@ -64,9 +64,10 @@ const loaded = loadScenarioDocument('m9-v2');
 /**
  * Pinned digest of the canonical generated v2 document (U1); a change is a new version. The
  * M9-U1 pre-run fix (run boundaries at word starts) changed it from 6104db99…0407, and schema v7
- * (E41-U4: `effects: []` on every node, E41-S1) from cae67383…895c.
+ * (E41-U4: `effects: []` on every node, E41-S1) from cae67383…895c, and schema v8 (the v8
+ * scaffold of 2026-11-12) from 876b1868…dfd89.
  */
-const M9_V2_SHA256 = '876b18687fb0aa58a478ba8c369df7c68f734d8099267ee187b62677fb5dfd89';
+const M9_V2_SHA256 = '2f74ad3be7ff3664b378e5a99715c848b71dfa1fb77a48ab2c9d1f5bb4fd9275';
 /** The section 3.1 counts, pinned. */
 const COUNTS = {
   documentNodes: 10_000,
@@ -92,22 +93,22 @@ const DRAWN_LEAVES = 6_809;
 /**
  * The configuration hashes at DPR 1, five repetitions: the v1 ones as at 75be15b, re-pinned at
  * E41-U4, where the loaded documents became schema v7 (E41-S1) and so did each configuration's
- * `schemaVersion` and document digest.
+ * `schemaVersion` and document digest, and again at the v8 scaffold (2026-11-12) for v8.
  */
 const V1_HASHES = {
-  'e26-mixed-view-edit-10k/v1': '3b2e8d79cfb1cd1b3c799159a854c9324743e48d6111827b633e5addbf3c7291',
-  'e26-mixed-all-edit-10k/v1': '21ec60ae53592a0ea3900e4b3301fb5252639a036e0d342af91d70f2be46b5ad',
-  'e26-mixed-all-pan-10k/v1': '106c223da6ea735c5fe1e63e85515ad0ff8d9cdef6dd5c14d4b28c760255b000',
-  'e26-simple-stress-10k/v1': '7a3bcd6ebf93111cdf2526e09836a2c87df5e2229ac65c81223dd271e97a68c0',
-  'e26-pointer-busy-10k/v1': '66639ed274ebf79e11afc251898a6245706cad3df39981bd59235526e6187ab5',
+  'e26-mixed-view-edit-10k/v1': '68becdb1e8f2aeff40f584ad03b0ed7b9eb581b10a2485142ca423d391085f7f',
+  'e26-mixed-all-edit-10k/v1': '1b705292b0827cea5b55d27a6e56bf8de68738f7957d51b4a857f25eaac999fe',
+  'e26-mixed-all-pan-10k/v1': 'd498d6d424e7be5b0f6fccfb046db5874a74ff1ca3ead8e8e71559fcedae1e16',
+  'e26-simple-stress-10k/v1': '9dadf652cb33762d015140734a6524da90a74d7684ad2ba2f2fe514661539494',
+  'e26-pointer-busy-10k/v1': '3e1f82b533b8e71ae297601725ab17608524862cff6df1ed68802441ef42090e',
 };
 const V2_HASHES = {
-  'e26-mixed-view-edit-10k/v2': '7cc090a1faca8e0d8a58485d91427c9e5551f1a3315f003a590f15ba6a2d9bca',
-  'e26-mixed-all-edit-10k/v2': '88ff140aa76c844c79bc292480a95b8a34f9123b11b2e574ee20952c63ddcc5f',
-  'e26-mixed-all-pan-10k/v2': '01ab1947f725155eeeb601aef1876875d93f3aea58ef4437412b6d829c91204f',
-  'e26-simple-stress-10k/v2': '7e2df9bff756f2e1c5c6f89b07dc4b2b91f41d614c9c5a168ac87069d4f71f0b',
-  'e26-pointer-busy-10k/v2': '7aff707c276cf3d01b425a86867fd3aa63b403368b6e7dba0aaa954dd5af8e86',
-  'm9-typing-10k/v1': 'c4951691f7191e24515bf8db6d50de824511b2d02dbb11184d3688ac69370851',
+  'e26-mixed-view-edit-10k/v2': '7e7ab91e760d65c516c9cba29484aedbb8ce14a759fe7a1e80d626f59966ffda',
+  'e26-mixed-all-edit-10k/v2': '7a2838c0e6db5a586c6682aba417388abc812b998b7d2c87493c5c7a4e862a96',
+  'e26-mixed-all-pan-10k/v2': '4cc6bdd2a003785b9fa9c28d88b48789bcd066ff34e3790d01f4ed6fedbbf6de',
+  'e26-simple-stress-10k/v2': 'ec3cba8e56bfb16aaff4fa80f52438c53c987bd7da6d9788678514325921ec53',
+  'e26-pointer-busy-10k/v2': '2b0d21397fadd5421c1a131cd5773efda6a5c6d65a3238af9074e1ec1e4112d0',
+  'm9-typing-10k/v1': '1bd8f1f8a76cd52792e06a12bd7bd7d90c94b1de2f4618389b37c93c86a8e579',
 };
 
 /** Generating, projecting and hashing 10,000 nodes takes seconds. */
@@ -124,7 +125,7 @@ describe('M9-A01: the v2 document', () => {
       expect(m9DocumentSha256(generateM9V2Document(M9_V2_SEED + 1))).not.toBe(M9_V2_SHA256);
       const parsed = parseDocument(JSON.stringify(generated));
       expect(parsed.ok).toBe(true);
-      expect(generated.schemaVersion).toBe(7);
+      expect(generated.schemaVersion).toBe(8);
       // Built at the current version: parsing changes nothing.
       if (parsed.ok) expect(JSON.parse(JSON.stringify(parsed.document))).toEqual(generated);
     },
@@ -325,7 +326,7 @@ describe('M9-A02: the M9 scenarios', () => {
             ? M9_V2_SHA256
             : 'dc5cf1a75b00e460fa638ec2197024287671beced964522a03d093ded541fae1',
         );
-        expect(configuration.schemaVersion).toBe(7);
+        expect(configuration.schemaVersion).toBe(8);
         if (scenario.document === 'm9-v2') {
           expect(configuration.m9.expanded).toEqual(['f1', 'g3']);
           expect(configuration.m9.layerRows).toBe(655);
