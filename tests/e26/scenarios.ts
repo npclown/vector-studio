@@ -90,13 +90,17 @@ export type E26ScenarioId =
   | M9ScenarioId
   | V20Ui0ScenarioId
   | E41ScenarioId
-  | V35ScenarioId;
+  | V35ScenarioId
+  | V36ScenarioId;
 
 /** E41-U7c (E41 contract, section 5.6, E41-A10): the `e41-cards` scenarios. */
 export type E41ScenarioId = 'e41-cards-view/v1' | 'e41-cards-drag/v1';
 
 /** V35-U5 (V-35 contract, V35-A10): the `v35-cards` scenarios. */
 export type V35ScenarioId = 'v35-cards-view/v1' | 'v35-cards-drag/v1';
+
+/** V36-U4 (V-36 contract, V36-A10): the `v36-glass` scenarios. */
+export type V36ScenarioId = 'v36-glass-view/v1' | 'v36-glass-drag/v1';
 
 /** The M9 scenarios (M9 contract, section 3.2). */
 export type M9ScenarioId =
@@ -122,7 +126,7 @@ export type V20Ui0ScenarioId =
 
 export type E26Scenario = Readonly<{
   id: E26ScenarioId;
-  document: 'm1-a13' | 'stress' | 'm9-v2' | 'e41-cards' | 'v35-cards';
+  document: 'm1-a13' | 'stress' | 'm9-v2' | 'e41-cards' | 'v35-cards' | 'v36-glass';
   seed: number;
   camera: 'typical' | 'fitted';
   interaction: 'edit-drag' | 'pan-zoom' | 'latency-drag' | 'typing';
@@ -162,7 +166,7 @@ const seedOf = (document: E26Scenario['document']) =>
       ? M9_V2_SEED
       : document === 'e41-cards'
         ? E41_CARDS.seed
-        : document === 'v35-cards'
+        : document === 'v35-cards' || document === 'v36-glass'
           ? E41_CARDS.seed
           : E26_STRESS.seed;
 
@@ -459,6 +463,64 @@ export function generateV35CardsDocument() {
 export const V35_SCENARIOS: readonly E26Scenario[] = Object.freeze([
   frame('v35-cards-view/v1', 'v35-cards', 'fitted', 'pan-zoom', 16.7),
   frame('v35-cards-drag/v1', 'v35-cards', 'fitted', 'edit-drag', 16.7),
+]);
+
+// ---------------------------------------------------------------------------------------------
+// V36-U4 (V-36 contract, section 8, V36-A10): the `v36-glass` scene and its two scenarios.
+
+/**
+ * The `v36-glass` scene: `e41-cards`' 50 cards (same grid, geometry, header colours and effects,
+ * so the fitted camera and the dragged card are the same), where every fifth card (index 0, 5,
+ * ...; 10 cards) is a glass card: its background's one fill is white at alpha 0.3, and the card
+ * root (a group on the page, so its composite is in the main pass, V-36 section 5.3) appends one
+ * inner shadow (the editor's default, V-36 section 6) and a background blur of radius 20 to
+ * `e41-cards`' effects. The glass cards at index 0, 10, ... keep their layer blur (section 5.1:
+ * `h` then comes from the unblurred content). Every card stays an effect root: 50 effect roots,
+ * 10 of them background-blur roots, none nested.
+ */
+export const V36_GLASS = Object.freeze({
+  glassEvery: 5,
+  /** Background-blur roots: one per glass card. */
+  glassCards: 10,
+  fill: Object.freeze({ r: 1, g: 1, b: 1, a: 0.3 }),
+  innerShadow: Object.freeze({
+    kind: 'innerShadow' as const,
+    visible: true,
+    color: Object.freeze({ r: 0, g: 0, b: 0, a: 0.25 }),
+    offsetX: 0,
+    offsetY: 4,
+    radius: 4,
+  }),
+  backgroundBlur: Object.freeze({ kind: 'backgroundBlur' as const, visible: true, radius: 20 }),
+});
+
+/** The `v36-glass` document at the current schema (v8): the e41 cards with 10 glass cards. */
+export function generateV36GlassDocument() {
+  const document = generateE41CardsDocument() as unknown as {
+    schemaVersion: number;
+    id: string;
+    nodes: Record<string, Record<string, unknown>>;
+  };
+  document.id = 'v36-glass';
+  for (let i = 0; i < E41_CARDS.count; i += V36_GLASS.glassEvery) {
+    const id = e41CardId(i);
+    const card = document.nodes[id]!;
+    card.effects = [
+      ...(card.effects as unknown[]),
+      { ...V36_GLASS.innerShadow, color: { ...V36_GLASS.innerShadow.color } },
+      { ...V36_GLASS.backgroundBlur },
+    ];
+    document.nodes[`${id}-bg`]!.fills = [
+      { paint: { ...V36_GLASS.fill }, visible: true, opacity: 1, blendMode: 'normal' },
+    ];
+  }
+  return document;
+}
+
+/** The two `v36-glass` scenarios, as `e41-cards`' (fitted camera, 16.7 ms ceiling). */
+export const V36_SCENARIOS: readonly E26Scenario[] = Object.freeze([
+  frame('v36-glass-view/v1', 'v36-glass', 'fitted', 'pan-zoom', 16.7),
+  frame('v36-glass-drag/v1', 'v36-glass', 'fitted', 'edit-drag', 16.7),
 ]);
 
 // ---------------------------------------------------------------------------------------------
@@ -824,7 +886,9 @@ export function loadScenarioDocument(
           ? generateE41CardsDocument()
           : document === 'v35-cards'
             ? generateV35CardsDocument()
-            : generateStressDocument();
+            : document === 'v36-glass'
+              ? generateV36GlassDocument()
+              : generateStressDocument();
   const parsed = parseDocument(JSON.stringify(generated));
   if (!parsed.ok) throw new Error(`parse: ${parsed.code} ${parsed.path}`);
   const pageId =
@@ -832,7 +896,7 @@ export function loadScenarioDocument(
       ? 'page-1'
       : document === 'm9-v2'
         ? M9_V2_PAGE
-        : document === 'e41-cards' || document === 'v35-cards'
+        : document === 'e41-cards' || document === 'v35-cards' || document === 'v36-glass'
           ? 'cards-page'
           : 'stress-page';
   // M9-U1: the v2 page's text projects through the committed font's recorded layouts.
