@@ -1,6 +1,6 @@
 # V-32 contract: images (paste, drop, place, image fill)
 
-Status: **ADOPTED 2026-11-12** (review round 2 READY WITH FOLLOW-UPS, follow-ups applied, section 12), Full tier. Visualization-track item [V-32](d9-visualization-track.md#status-index), item 2 of the Figma gap list the user asked for on 2026-11-12 ("1~10번까지 다 진행해줘"). The request lifts the `requirements.md` deferral "Images are deferred". The open choices in section 9 take the recommended option under the user's standing instruction of 2026-10-24 unless the user picks otherwise. Identifiers use the prefix **V32-**.
+Status: **DONE 2026-11-12** ([exit record](../evidence/v32/exit-2026-11-12.md)); adopted 2026-11-12 (review round 2 READY WITH FOLLOW-UPS, follow-ups applied, section 12), Full tier. Visualization-track item [V-32](d9-visualization-track.md#status-index), item 2 of the Figma gap list the user asked for on 2026-11-12 ("1~10번까지 다 진행해줘"). The request lifts the `requirements.md` deferral "Images are deferred". The open choices in section 9 take the recommended option under the user's standing instruction of 2026-10-24 unless the user picks otherwise. Identifiers use the prefix **V32-**.
 
 It changes shared surface, so every unit is Full tier:
 
@@ -163,7 +163,10 @@ type ImageSourceResult =
 ## 11. Record
 
 - **U3 scope (2026-11-12).** U3 (#578) brings forward from U2 the scene types and their validation (V32-S1 to S3), the port type (V32-P1) and the two diagnostic codes, since the renderer needs them; A02 is U3's. U2 keeps the model, projector, commands, clipboard and SVG export.
-- (U5 fills the rest.)
+- **Implementation reviews (2026-11-12).** U3: r1 NOT READY (B1 polling, B2 E23 under `paints: 'image'`, F1 to F11), r2 READY WITH FOLLOW-UPS (N1 to N3), applied in `e5491738` and `41dbc9dc`. U2: r1 NOT READY (B1 quadratic paste merge, B2 SVG export repeating the base64 per use), r2 READY WITH FOLLOW-UPS (trusted fragment table, `imageDataBytes` doc), applied before #591. U4: r1 NOT READY (B1 GIF frame past the pixel cap, B2 PNG export decoding at full size unchecked, F1 to F8), applied in `ba677a94`; r2 NOT READY (an XMP APP1 reset the JPEG orientation), applied in `60d1760c`; r3 READY WITH FOLLOW-UPS (non-blocking, listed in the exit record).
+- **U2 and U4 (2026-11-12).** Merged together in #591 (`4534b546`) at the coordinator's request. Reference PC headed run on `fb9073ba` (Chrome 157.0.8103.51, Edge 157.0.4341.46): `v32-image-flow` 4/4 (A07 PNG, A08), with the m8-next-host, e41-booleans, v31-lock-hide, v35-next-host and v37-next-host regressions passing.
+- **GPU recheck after V-35's blend renderer (2026-11-12).** Reference PC, Chrome 157.0.8103.51, `main` `6e6eb1f8`: `v32-image-paint` + `e23-gradient-paint` 17/17.
+- **U5 (2026-11-12).** Exit record [docs/evidence/v32/exit-2026-11-12.md](../evidence/v32/exit-2026-11-12.md): A01 to A10 PASS, with the disclosures listed there.
 
 ## 12. Review rounds
 
