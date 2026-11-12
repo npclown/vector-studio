@@ -21,6 +21,7 @@ import {
   pasteTargetOf,
 } from './clipboard.js';
 import { buildExportScene, exportSceneToSvg } from './export.js';
+import { isSvgText, svgToFragment, type SvgTextRun } from './svg-import.js';
 import { ExpansionCache, expansionFailure } from './expansion.js';
 import {
   applyEdit,
@@ -466,6 +467,8 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.boolean-too-large',
   'editor.boolean-failed',
   'editor.effect-limit',
+  'editor.invalid-svg',
+  'editor.empty-svg',
 ]);
 
 /**
@@ -1234,7 +1237,11 @@ class EditorCore implements Editor {
     if (command.type === 'paste') {
       const source = pasteSource(command, this.clipboard);
       if (typeof source !== 'string') return source;
-      if (!this.isFragmentSource(command, source)) return this.pastePlainText(command, source);
+      if (!this.isFragmentSource(command, source)) {
+        // V-33 (V33-P1): unmarked SVG text imports as nodes instead of creating a text node.
+        if (isSvgText(source)) return this.pasteSvg(command, source);
+        return this.pastePlainText(command, source);
+      }
     }
     if (DOCUMENT_COMMANDS.has(command.type)) {
       // A host command during a drag would leave the gesture's base stale, so it applies to the
@@ -3248,6 +3255,44 @@ class EditorCore implements Editor {
   private isFragmentSource(command: Extract<Command, { type: 'paste' }>, source: string): boolean {
     if (command.text === undefined && this.clipboardPlain) return false;
     return isFragmentText(source);
+  }
+
+  /**
+   * `paste` of unmarked SVG text outside text edit mode (V-33 contract, V33-P1): `svgToFragment`
+   * with the layout port as its measure and the text style family as its default family, then
+   * the fragment paste centred on `pointer`, else `at`, else the viewport centre
+   * (`editor.no-viewport-size` without one). An SVG with text and no port fails with
+   * `editor.no-text-layout`; conversion failures are `editor.invalid-svg` and
+   * `editor.empty-svg`.
+   */
+  private pasteSvg(command: Extract<Command, { type: 'paste' }>, source: string): CommandResult {
+    const centre = command.pointer ?? command.at ?? this.viewportCentre();
+    if (centre === null) return failure('editor.no-viewport-size');
+    const layouts = this.textLayouts;
+    const converted = svgToFragment(source, {
+      defaultFamily: this.textStyle.family,
+      ...(layouts === null
+        ? {}
+        : {
+            layout: (runs: readonly SvgTextRun[]) => {
+              const result = layouts.layoutRequest({
+                runs,
+                width: null,
+                align: 'left',
+                letterSpacing: 0,
+                lineHeight: TEXT_LINE_HEIGHT,
+              });
+              return {
+                width: result.width,
+                height: result.height,
+                baseline: result.lines[0]?.baseline ?? 0,
+              };
+            },
+          }),
+    });
+    if (!converted.ok) return converted;
+    if (converted.hasText && layouts === null) return failure('editor.no-text-layout');
+    return this.run({ type: 'paste', text: converted.fragment, at: centre });
   }
 
   /**

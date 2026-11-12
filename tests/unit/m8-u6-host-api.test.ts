@@ -116,13 +116,27 @@ const ADDED: Readonly<Record<keyof typeof AT_17A2B0A, readonly string[]>> = {
     'ExtensionCommandBuilder',
     'ExtensionSummary',
     'StarCreateArgs',
+    // V-33 (SVG import) adds the converter and its types.
+    'SvgImport',
+    'SvgImportOptions',
+    'SvgTextMeasure',
+    'SvgTextRun',
     'extensionCommand',
+    'isSvgText',
+    'svgToFragment',
   ],
   react: [
     // V-30 (export) adds the PNG export.
     'ExportPngOptions',
+    // V-33 (SVG import) adds the file import.
+    'ImportSvgFilesOptions',
+    'SVG_FILE_OFFSET',
+    'SvgFileImport',
+    'SvgFileLike',
     'exportPng',
     'extensionCommand',
+    'importSvgFiles',
+    'isSvgFile',
     'useActivePage',
     'useEditorQuery',
     'useHistory',
@@ -147,6 +161,8 @@ const ADDED: Readonly<Record<keyof typeof AT_17A2B0A, readonly string[]>> = {
     'EditorToolbarProps',
     // V-30 (export).
     'ExportPanel',
+    // V-33 (SVG import).
+    'ImportPanel',
     'LayerTree',
     'LayerTreeProps',
     'PageList',
@@ -167,6 +183,7 @@ const ADDED: Readonly<Record<keyof typeof AT_17A2B0A, readonly string[]>> = {
     'ToolbarSecondaryRow',
     'UiExtension',
     'ZoomMenu',
+    'importMessages',
     'resolvePanels',
     'selectForContextMenu',
     'usePanelErrors',

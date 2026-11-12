@@ -9,6 +9,14 @@ export {
 export { createCounterIdSource } from './ids.js';
 export { starExtension, type StarCreateArgs } from './star.js';
 export { extensionCommand, type ExtensionCommandBuilder } from './extension-command.js';
+export {
+  isSvgText,
+  svgToFragment,
+  type SvgImport,
+  type SvgImportOptions,
+  type SvgTextMeasure,
+  type SvgTextRun,
+} from './svg-import.js';
 export type * from './types.js';
 
 // MVP M8 contract, M8-T1 (M8-Q2 (a)): every `model` and `contracts` type in the reach of this

@@ -15,6 +15,9 @@ export {
   EditorProvider,
   exportPng,
   extensionCommand,
+  importSvgFiles,
+  isSvgFile,
+  SVG_FILE_OFFSET,
   useActivePage,
   useEditor,
   useEditorCommands,
@@ -83,6 +86,7 @@ export type {
   GroupNodeV7,
   HistoryState,
   IdSource,
+  ImportSvgFilesOptions,
   InputEvent,
   InstanceNodeV5,
   InstanceNodeV7,
@@ -171,6 +175,12 @@ export type {
   StrokeJoin,
   StrokePatch,
   StyleProps,
+  SvgFileImport,
+  SvgFileLike,
+  SvgImport,
+  SvgImportOptions,
+  SvgTextMeasure,
+  SvgTextRun,
   SymbolNodeV6,
   SymbolNodeV7,
   TextAffinity,
@@ -241,3 +251,7 @@ export {
 
 // V-30 (export): the Export section, PNG at a scale or SVG, of the selection or the page.
 export { ExportPanel } from './export-panel.js';
+
+// V-33 (SVG import): the Import section, SVG files as editable nodes.
+export { ImportPanel } from './import-panel.js';
+export { importMessages } from './import-model.js';

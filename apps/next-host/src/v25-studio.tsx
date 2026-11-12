@@ -2,6 +2,7 @@ import {
   EditorPanels,
   EditorToolbar,
   ExportPanel,
+  ImportPanel,
   LayerTree,
   PageList,
   PropertyPanel,
@@ -167,6 +168,7 @@ export function StudioShell({ canvas, fileControls, ...status }: StudioShellProp
         <PropertyPanel />
         <PathDebugPanel />
         <EditorPanels />
+        <ImportPanel />
         <ExportPanel />
       </aside>
       <StudioStatus {...status} />

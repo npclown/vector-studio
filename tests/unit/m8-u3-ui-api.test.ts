@@ -32,6 +32,8 @@ const OWN_VALUES = [
   'EditorToolbar',
   // V-30 (export).
   'ExportPanel',
+  // V-33 (SVG import).
+  'ImportPanel',
   'LayerTree',
   'PageList',
   'PanelBoundary',
@@ -41,6 +43,7 @@ const OWN_VALUES = [
   'ToolbarPrimaryRow',
   'ToolbarSecondaryRow',
   'ZoomMenu',
+  'importMessages',
   'resolvePanels',
   'selectForContextMenu',
   'usePanelErrors',
