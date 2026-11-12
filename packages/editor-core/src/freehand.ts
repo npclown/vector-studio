@@ -47,7 +47,7 @@ export function dedupe(points: readonly PagePoint[], minStep: number): PagePoint
 
 /**
  * A moving-average smoothing of the samples over a window measured in distance: each sample is
- * averaged with the neighbours whose distance along the stroke is within `reach`, the same count
+ * averaged with its neighbours while the window's two ends are within 2 × `reach` of each other, the same count
  * on both sides (so the window is symmetric), at most `maxRadius` each side. Dense, jittery
  * samples are averaged; sparse samples (a quick flick, spaced more than `reach` apart) are kept as
  * drawn, so a sparse loop is not pulled toward its centre (V-40 review B1). The end points of an
@@ -72,15 +72,11 @@ export function smooth(
     const limit = closed
       ? Math.min(maxRadius, Math.floor((n - 1) / 4))
       : Math.min(maxRadius, i, n - 1 - i);
+    // The window grows while its two ends are within 2 × `reach` of each other in a straight
+    // line: jitter, which lengthens the path along the samples, barely changes that span, so it
+    // does not shrink the window (V-40 review r3), while sparse samples stop it at once.
     let r = 0;
-    let back = 0;
-    let ahead = 0;
-    while (r < limit) {
-      back += dist(at(i - r), at(i - r - 1));
-      ahead += dist(at(i + r), at(i + r + 1));
-      if (back > reach || ahead > reach) break;
-      r += 1;
-    }
+    while (r < limit && dist(at(i - r - 1), at(i + r + 1)) <= 2 * reach) r += 1;
     let sx = 0;
     let sy = 0;
     for (let k = -r; k <= r; k += 1) {
@@ -288,8 +284,11 @@ export function fitCubics(
 export const FREEHAND = Object.freeze({
   /** Samples closer than this to the previous one are dropped. */
   minStepPx: 1,
-  /** The moving-average window: neighbours within this distance along the stroke. */
-  smoothPx: 3,
+  /**
+   * The moving-average window: neighbours within this straight-line distance. It takes out
+   * jitter of about ±2 px at the 1 to 2 px sample spacing of an ordinary drag.
+   */
+  smoothPx: 6,
   /** The fit tolerance: every smoothed sample is within this distance of the curve. */
   tolerancePx: 2.5,
   /** A stroke that ends this close to its start closes the path. */
@@ -297,6 +296,20 @@ export const FREEHAND = Object.freeze({
   /** A stroke shorter than this (total length) makes no path: it is a click. */
   minLengthPx: 3,
 });
+
+function boxDiagonal(points: readonly Vec[]): number {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const p of points) {
+    minX = Math.min(minX, p.x);
+    maxX = Math.max(maxX, p.x);
+    minY = Math.min(minY, p.y);
+    maxY = Math.max(maxY, p.y);
+  }
+  return points.length === 0 ? 0 : Math.hypot(maxX - minX, maxY - minY);
+}
 
 function polylineLength(points: readonly Vec[]): number {
   let total = 0;
@@ -328,7 +341,9 @@ export function freehandPath(samples: readonly PagePoint[], zoom: number): PathD
       points.pop();
     }
   }
-  const smoothed = smooth(points, FREEHAND.smoothPx / z, closed);
+  let smoothed = smooth(points, FREEHAND.smoothPx / z, closed);
+  // A stroke smaller than the window (a tiny scribble) would average away: it is fitted as drawn.
+  if (boxDiagonal(smoothed) < 0.5 * boxDiagonal(points)) smoothed = points.slice();
   const loop = closed ? [...smoothed, smoothed[0]!] : smoothed;
   const curves = fitCubics(loop, FREEHAND.tolerancePx / z, closed);
   if (curves.length === 0) return null;

@@ -128,10 +128,55 @@ describe('V-40 freehand geometry', () => {
     expect(data.points.at(-2)).toBe(200);
   });
 
-  it('smooths hand jitter away: a jittered stroke fits with no more curves than a clean one plus 2', () => {
-    const clean = freehandPath(wave(2), 1)!;
-    const jittered = freehandPath(wave(2, 1.5), 1)!;
-    expect(jittered.verbs.length).toBeLessThanOrEqual(clean.verbs.length + 2);
+  it('smooths hand jitter of ±2 px at 1 and 2 px spacing (review r3)', () => {
+    // A seeded uniform noise generator (mulberry32), so the test is deterministic.
+    let seed = 7;
+    const random = () => {
+      seed = (seed + 0x6d2b79f5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const shapes: [string, (t: number) => PagePoint, boolean][] = [
+      ['line', (t) => ({ x: 300 * t, y: 50 }), false],
+      ['s-curve', (t) => ({ x: 400 * t, y: 100 + 60 * Math.sin(2 * Math.PI * t) }), false],
+      [
+        'circle',
+        (t) => ({
+          x: 100 + 80 * Math.cos(2 * Math.PI * t),
+          y: 100 + 80 * Math.sin(2 * Math.PI * t),
+        }),
+        true,
+      ],
+    ];
+    for (const spacing of [1, 2]) {
+      for (const [name, at, closed] of shapes) {
+        const count = Math.round(500 / spacing);
+        const truth: PagePoint[] = [];
+        const noisy: PagePoint[] = [];
+        for (let i = 0; i <= count; i += 1) {
+          const p = at(i / count);
+          truth.push(p);
+          noisy.push({ x: p.x + (random() * 2 - 1) * 2, y: p.y + (random() * 2 - 1) * 2 });
+        }
+        if (closed) noisy[count] = noisy[0]!;
+        const label = `${name} at ${spacing} px`;
+        // The smoothing itself removes at least 40 % of the noise (RMS against the true curve).
+        const rms = (points: readonly PagePoint[]) =>
+          Math.sqrt(
+            points.reduce(
+              (sum, p, i) => sum + (p.x - truth[i]!.x) ** 2 + (p.y - truth[i]!.y) ** 2,
+              0,
+            ) / points.length,
+          );
+        const smoothed = smooth(noisy, FREEHAND.smoothPx, false);
+        expect(rms(smoothed), label).toBeLessThan(0.6 * rms(noisy));
+        // And the fitted path stays a handful of cubics.
+        const clean = freehandPath(truth, 1)!;
+        const fitted = freehandPath(noisy, 1)!;
+        expect(fitted.verbs.length, label).toBeLessThanOrEqual(clean.verbs.length + 8);
+      }
+    }
   });
 
   it('closes a stroke that ends near its start, with the last cubic ending on the start', () => {

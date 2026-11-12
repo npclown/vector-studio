@@ -59,7 +59,7 @@ const cases: [string, PathData][] = [
   ['closed loop', freehandPath(loop(), 1)!],
   ['scribble', freehandPath(scribble(), 1)!],
   ['scribble at zoom 4', freehandPath(scribble(), 4)!],
-  // Sparse input, fitted unsmoothed (review r2): a quick loop and a quick flick.
+  // Sparse input, spaced beyond the smoothing reach (review r2): a quick loop and a quick flick.
   ...[5, 6, 7, 9].map(
     (count) =>
       [
