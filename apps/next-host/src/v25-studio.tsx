@@ -2,6 +2,7 @@ import {
   EditorPanels,
   EditorToolbar,
   ExportPanel,
+  ImportPanel,
   LayerTree,
   PageList,
   PropertyPanel,
@@ -13,6 +14,7 @@ import {
 import { useEffect, useState, type ReactNode } from 'react';
 import { ArtboardLabels, ArtboardList, ArtboardPresets } from './v25-artboards';
 import { PathDebugPanel } from './v25-path-debug';
+import { ViewToggles } from './v38-rulers';
 
 // V-25 (editor UI usability, slice 1): next-host's full-window "studio" layout, the default for a
 // person opening the page. The canvas fills the space between a top bar (file controls, the
@@ -144,6 +146,7 @@ export function StudioShell({ canvas, fileControls, ...status }: StudioShellProp
         </div>
         <EditorToolbar />
         <div className="vs-topbar-end">
+          <ViewToggles />
           <ZoomMenu />
         </div>
       </header>
@@ -171,6 +174,7 @@ export function StudioShell({ canvas, fileControls, ...status }: StudioShellProp
         {nothingSelected && <StylesPanel />}
         <PathDebugPanel />
         <EditorPanels />
+        <ImportPanel />
         <ExportPanel />
       </aside>
       <StudioStatus {...status} />
@@ -325,9 +329,30 @@ const STUDIO_CSS = `
 .vs-layers li > button[data-testid^='layer-name-']:first-child { margin-left: 16px; }
 .vs-layers li > button[data-testid^='layer-toggle-'] { width: 16px; padding: 0; color: var(--vs-muted); }
 .vs-layers li > span { color: var(--vs-muted); font-size: 11px; }
-.vs-layers li > button[data-testid^='layer-visible-'] { color: var(--vs-muted); font-size: 11px; visibility: hidden; }
-.vs-layers li:hover > button[data-testid^='layer-visible-'],
-.vs-layers li[style*='opacity: 0.5'] > button[data-testid^='layer-visible-'] { visibility: visible; }
+/* V31-U1: lock and eye buttons, revealed on hover or focus by opacity; an active one stays. */
+.vs-layers li > button[data-layer-flag] {
+  width: 20px;
+  height: 20px;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--vs-muted);
+  background: transparent !important;
+  opacity: 0;
+}
+.vs-layers li:hover > button[data-layer-flag],
+.vs-layers li:focus-within > button[data-layer-flag],
+.vs-layers li > button[data-layer-flag][data-active='true'] { opacity: 1; }
+.vs-layers li > button[data-layer-flag]:hover { color: inherit; }
+.vs-layers [data-layer-flag-text] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 .vs-layers li > input { flex: 1; width: auto !important; }
 
 .vs-right [data-testid='appearance-panel'] > p { padding: 12px; color: var(--vs-muted); margin: 0; }

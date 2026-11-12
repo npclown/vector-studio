@@ -1,5 +1,7 @@
 import { normalizeRotation, type DocumentV8, type Frame } from '@vector-studio/model';
+import { isTranslation } from './geometry.js';
 import { boundsOf } from './hit-test.js';
+import { layoutGridLines } from './layout-grid.js';
 import { ancestors, childrenOf, documentTree, isFrameLike, spaceOf, subtree } from './tree.js';
 import type { PagePoint, Segment, SnapOverlay } from './types.js';
 
@@ -29,7 +31,40 @@ export type Candidate = Readonly<{ id: string; order: number; box: Box; rotation
 export type SnapSet = Readonly<{
   candidates: readonly Candidate[];
   sorted: Readonly<Record<Axis, readonly Candidate[]>>;
+  /** V-38 (V38-N1): the guides and layout-grid lines, align targets on their axis only. */
+  lines?: readonly LineCandidate[];
 }>;
+
+/**
+ * A line candidate (V-38 contract, V38-N1): a page guide (`frame` null, over the whole page) or a
+ * layout-grid line of a frame (offered only while the gesture's box meets `frame`, and drawn
+ * across it). `order` continues the candidate order after every node candidate.
+ */
+export type LineCandidate = Readonly<{
+  axis: Axis;
+  value: number;
+  order: number;
+  frame: Box | null;
+}>;
+
+/** The most layout-grid lines one candidate set holds (V38-N1). */
+export const MAX_SNAP_GRID_LINES = 20_000;
+
+/** Options of `snapSet`. */
+export type SnapSetOptions = Readonly<{
+  /** Whether layout-grid lines are candidates (the session `layoutGrids` flag); default true. */
+  layoutGrids?: boolean;
+}>;
+
+/** Whether two closed boxes meet. */
+function meets(a: Box, b: Box): boolean {
+  return a.left <= b.right && b.left <= a.right && a.top <= b.bottom && b.top <= a.bottom;
+}
+
+/** The line candidates a gesture with raw box `box` is offered (V38-N1). */
+function linesFor(set: SnapSet, box: Box): readonly LineCandidate[] {
+  return (set.lines ?? []).filter((line) => line.frame === null || meets(line.frame, box));
+}
 
 export function boxOfFrame(frame: Frame): Box {
   return {
@@ -80,6 +115,7 @@ export function snapSet(
   page: string,
   scope: string | null,
   moving: readonly string[],
+  options: SnapSetOptions = {},
 ): SnapSet {
   const tree = documentTree(document);
   const included = new Set<string>(childrenOf(tree, scope ?? page));
@@ -97,6 +133,8 @@ export function snapSet(
     }
   }
   const candidates: Candidate[] = [];
+  // V38-N1: the frames whose layout grids are line candidates, in pre-order.
+  const gridFrames: { id: string; matrix: readonly number[]; width: number; height: number }[] = [];
   // Pre-order of the page; a hidden node hides its subtree, so the walk skips it.
   const stack = [...childrenOf(tree, page)].reverse();
   let order = 0;
@@ -117,6 +155,17 @@ export function snapSet(
       });
       order += 1;
     }
+    if (
+      options.layoutGrids !== false &&
+      (node.type === 'frame' || node.type === 'symbol') &&
+      (node.layoutGrids?.length ?? 0) > 0 &&
+      !excluded.has(id)
+    ) {
+      const { matrix } = spaceOf(tree, id);
+      if (isTranslation(matrix)) {
+        gridFrames.push({ id, matrix, width: node.frame.width, height: node.frame.height });
+      }
+    }
     const children = childrenOf(tree, id);
     for (let i = children.length - 1; i >= 0; i -= 1) stack.push(children[i]!);
   }
@@ -126,7 +175,32 @@ export function snapSet(
       const [bl, bh] = lowHigh(b.box, axis);
       return al - bl || ah - bh || a.order - b.order;
     });
-  return { candidates, sorted: { x: by('x'), y: by('y') } };
+  const lines: LineCandidate[] = [];
+  const pageGuides = document.pages.find((entry) => entry.id === page)?.guides ?? [];
+  for (const guide of pageGuides) {
+    lines.push({ axis: guide.axis, value: guide.value, order: order++, frame: null });
+  }
+  let gridLines = 0;
+  for (const entry of gridFrames) {
+    const node = tree.node(entry.id)!;
+    if (node.type !== 'frame' && node.type !== 'symbol') continue;
+    const [dx, dy] = [entry.matrix[4]!, entry.matrix[5]!];
+    const frame: Box = { left: dx, top: dy, right: dx + entry.width, bottom: dy + entry.height };
+    const own: LineCandidate[] = [];
+    for (const grid of node.layoutGrids ?? []) {
+      if (!grid.visible) continue;
+      for (const line of layoutGridLines(entry.width, entry.height, grid).lines) {
+        const value = line.value + (line.axis === 'x' ? dx : dy);
+        own.push({ axis: line.axis, value, order: order + own.length, frame });
+      }
+    }
+    // V38-N1: the walk stops at the first frame whose lines would pass the bound.
+    if (gridLines + own.length > MAX_SNAP_GRID_LINES) break;
+    gridLines += own.length;
+    order += own.length;
+    lines.push(...own);
+  }
+  return { candidates, sorted: { x: by('x'), y: by('y') }, lines };
 }
 
 /** The moving value `value` with its index on the axis. */
@@ -174,6 +248,7 @@ export function chooseAxis(
   moving: readonly MovingValue[],
   threshold: number,
   spacing: Box | null,
+  lines: readonly LineCandidate[] = [],
 ): AxisChoice | null {
   let best: Ranked | null = null;
   const offer = (choice: AxisChoice, key: readonly number[]) => {
@@ -189,6 +264,17 @@ export function chooseAxis(
             const o = c - m;
             offer({ kind: 'align', o }, [Math.abs(o), 0, c, index, candidate.order]);
           }
+        }
+      }
+    }
+    // V38-N1: a line is an align target on its own axis, after every node in candidate order.
+    for (const line of lines) {
+      if (line.axis !== axis) continue;
+      const c = line.value;
+      for (const { index, value: m } of moving) {
+        if (Math.abs(c - m) <= threshold) {
+          const o = c - m;
+          offer({ kind: 'align', o }, [Math.abs(o), 0, c, index, line.order]);
         }
       }
     }
@@ -273,7 +359,13 @@ const point = (axis: Axis, along: number, across: number): PagePoint =>
   axis === 'x' ? { x: along, y: across } : { x: across, y: along };
 
 /** The guides of an axis snapped by an align offer, ordered by value. */
-function guidesOf(set: SnapSet, axis: Axis, values: readonly number[], snapped: Box): Segment[] {
+function guidesOf(
+  set: SnapSet,
+  axis: Axis,
+  values: readonly number[],
+  snapped: Box,
+  lines: readonly LineCandidate[],
+): Segment[] {
   const distinct = [...new Set(values)].sort((a, b) => a - b);
   const guides: Segment[] = [];
   for (const v of distinct) {
@@ -284,6 +376,15 @@ function guidesOf(set: SnapSet, axis: Axis, values: readonly number[], snapped: 
       if (!valuesOf(candidate.box, axis).some((c) => Math.abs(c - v) <= e)) continue;
       matched = true;
       const [cl, ch] = crossOf(candidate.box, axis);
+      low = Math.min(low, cl);
+      high = Math.max(high, ch);
+    }
+    // V38-N1: a guide is drawn across the snapped box, a grid line across its frame too.
+    for (const line of lines) {
+      if (line.axis !== axis || Math.abs(line.value - v) > e) continue;
+      matched = true;
+      if (line.frame === null) continue;
+      const [cl, ch] = crossOf(line.frame, axis);
       low = Math.min(low, cl);
       high = Math.max(high, ch);
     }
@@ -349,8 +450,11 @@ export function snapBox(set: SnapSet, input: SnapInput, threshold: number): Snap
     return indices.map((index) => ({ index, value: values[index] }));
   };
   const spacing = input.spacing ? input.box : null;
-  const x = chooseAxis(set, 'x', moving('x', input.x), threshold, spacing);
-  const y = chooseAxis(set, 'y', moving('y', input.y), threshold, spacing);
+  // V38-N1: a grid line needs the gesture's raw box B to meet its frame; for a resize B is the
+  // resized box (`snapped` with no offset), not the pre-gesture box moved by the pointer delta.
+  const lines = linesFor(set, input.snapped?.(0, 0) ?? input.box);
+  const x = chooseAxis(set, 'x', moving('x', input.x), threshold, spacing, lines);
+  const y = chooseAxis(set, 'y', moving('y', input.y), threshold, spacing, lines);
   const ox = x?.o ?? 0;
   const oy = y?.o ?? 0;
   if (x === null && y === null) return { ox, oy, overlay: null };
@@ -360,8 +464,8 @@ export function snapBox(set: SnapSet, input: SnapInput, threshold: number): Snap
     return indices.map((index) => values[index] + o);
   };
   const guides = [
-    ...(x?.kind === 'align' ? guidesOf(set, 'x', offered('x', input.x, ox), snapped) : []),
-    ...(y?.kind === 'align' ? guidesOf(set, 'y', offered('y', input.y, oy), snapped) : []),
+    ...(x?.kind === 'align' ? guidesOf(set, 'x', offered('x', input.x, ox), snapped, lines) : []),
+    ...(y?.kind === 'align' ? guidesOf(set, 'y', offered('y', input.y, oy), snapped, lines) : []),
   ];
   const gaps = [
     ...(x === null ? [] : gapsOf('x', x, snapped)),

@@ -15,6 +15,9 @@ export {
   EditorProvider,
   exportPng,
   extensionCommand,
+  importSvgFiles,
+  isSvgFile,
+  SVG_FILE_OFFSET,
   useActivePage,
   useEditor,
   useEditorCommands,
@@ -49,13 +52,21 @@ export type {
   CustomNodeV6,
   CustomNodeV8,
   Dash,
+  DropShadowEffect,
+  Effect,
+  BandLayoutGrid,
+  Guide,
+  LayoutGrid,
+  LayoutGridBand,
+  LayoutGridGeometry,
+  LayoutGridLine,
+  UniformLayoutGrid,
   DiagnosticEvent,
   DistributeAxis,
   DocumentChangeCause,
   DocumentCommand,
   DocumentErrorCode,
   DocumentV8,
-  DropShadowEffect,
   Editor,
   EditorCanvasProps,
   EditorErrorCode,
@@ -63,7 +74,6 @@ export type {
   EditorOptions,
   EditorProviderProps,
   EditorSnapshot,
-  Effect,
   EllipseNodeV6,
   EllipseNodeV8,
   ExportNode,
@@ -87,6 +97,7 @@ export type {
   GroupNodeV8,
   HistoryState,
   IdSource,
+  ImportSvgFilesOptions,
   InputEvent,
   InstanceNodeV5,
   InstanceNodeV8,
@@ -101,6 +112,8 @@ export type {
   NodeBaseV2,
   NodeBindings,
   NodeEffects,
+  NodeLock,
+  NodeLayoutGrids,
   NodeProps,
   NodeV8,
   PagePoint,
@@ -176,6 +189,12 @@ export type {
   StrokeJoin,
   StrokePatch,
   StyleProps,
+  SvgFileImport,
+  SvgFileLike,
+  SvgImport,
+  SvgImportOptions,
+  SvgTextMeasure,
+  SvgTextRun,
   SymbolNodeV6,
   SymbolNodeV8,
   TextAffinity,
@@ -249,6 +268,10 @@ export {
 
 // V-30 (export): the Export section, PNG at a scale or SVG, of the selection or the page.
 export { ExportPanel } from './export-panel.js';
+
+// V-33 (SVG import): the Import section, SVG files as editable nodes.
+export { ImportPanel } from './import-panel.js';
+export { importMessages } from './import-model.js';
 
 // V-39 (styles and variables): the Local styles panel.
 export { StylesPanel } from './styles-panel.js';

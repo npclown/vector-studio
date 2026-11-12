@@ -30,6 +30,24 @@ import {
   type EffectRow,
 } from './effects-model.js';
 import { withShortcut } from './editor-toolbar-model.js';
+import {
+  GRID_ALIGNS,
+  GRID_NUMBER_LABELS,
+  GRID_TYPES,
+  addGridCommand,
+  gridAlignCommand,
+  gridColorCommand,
+  gridNumberCommand,
+  gridNumberKeys,
+  gridNumberText,
+  gridOpacityCommand,
+  gridOpacityText,
+  gridTypeCommand,
+  layoutGridTarget,
+  removeGridCommand,
+  toggleGridCommand,
+  type GridHolder,
+} from './layout-grid-model.js';
 import { AppearancePanel } from './appearance-panel.js';
 import { ColorWell, Swatches } from './color-controls.js';
 import { Choice, Row, TextField } from './fields.js';
@@ -627,6 +645,109 @@ function EffectsSection({
 }
 
 /**
+ * V-38 (contract, V38-U1): the layout grids of one selected frame or symbol: add a grid, columns
+ * or rows, and per grid a visible checkbox, type, colour, opacity, its numbers and remove; each
+ * edit is one `setNodeProps` of the whole list.
+ */
+function LayoutGridSection({ node, run }: { node: GridHolder; run: Run }) {
+  const grids = node.layoutGrids ?? [];
+  const send = (command: Command | null) => command !== null && run(command);
+  return (
+    <Section legend="Layout grid">
+      <Row>
+        {GRID_TYPES.map((type) => (
+          <button
+            key={type}
+            type="button"
+            data-testid={`layout-grid-add-${type}`}
+            onClick={() => void run(addGridCommand(node, type))}
+          >
+            + {type === 'grid' ? 'Grid' : type === 'columns' ? 'Columns' : 'Rows'}
+          </button>
+        ))}
+      </Row>
+      {grids.map((grid, index) => {
+        const name = `Layout grid ${index + 1}`;
+        const identity = `${node.id} ${index} ${JSON.stringify(grid)}`;
+        const colour = colorHex(grid.color);
+        return (
+          <div
+            key={index}
+            role="group"
+            aria-label={name}
+            data-testid={`layout-grid-${index}`}
+            data-type={grid.type}
+            style={{ ...ROW_STYLE, marginBottom: 4 }}
+          >
+            <input
+              type="checkbox"
+              aria-label={`${name} visible`}
+              data-testid={`layout-grid-${index}-visible`}
+              checked={grid.visible}
+              onChange={() => void send(toggleGridCommand(node, index))}
+            />
+            <Choice
+              label={`${name} type`}
+              value={grid.type}
+              options={GRID_TYPES}
+              onChange={(type) => void send(gridTypeCommand(node, index, type))}
+            />
+            {grid.type !== 'grid' && (
+              <Choice
+                label={`${name} alignment`}
+                value={grid.align}
+                options={GRID_ALIGNS}
+                onChange={(align) => void send(gridAlignCommand(node, index, align))}
+              />
+            )}
+            {gridNumberKeys(grid).map((key) => (
+              <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <span aria-hidden="true" style={{ opacity: 0.6 }}>
+                  {GRID_NUMBER_LABELS[key]}
+                </span>
+                <TextField
+                  identity={identity}
+                  label={`${name} ${GRID_NUMBER_LABELS[key].toLowerCase()}`}
+                  value={gridNumberText(grid, key)}
+                  commit={(text) => send(gridNumberCommand(node, index, key, text))}
+                />
+              </label>
+            ))}
+            <TextField
+              identity={identity}
+              label={`${name} colour`}
+              value={colour}
+              commit={(hex) => send(gridColorCommand(node, index, hex))}
+            />
+            <ColorWell
+              label={`${name} colour picker`}
+              testId={`layout-grid-${index}-colour-picker`}
+              value={colour}
+              commit={(hex) => send(gridColorCommand(node, index, hex))}
+            />
+            <TextField
+              identity={identity}
+              label={`${name} opacity`}
+              value={gridOpacityText(grid)}
+              commit={(text) => send(gridOpacityCommand(node, index, text))}
+            />
+            <button
+              type="button"
+              aria-label={`Remove ${name}`}
+              title={`Remove ${name.toLowerCase()}`}
+              data-testid={`layout-grid-${index}-remove`}
+              onClick={() => void run(removeGridCommand(node, index))}
+            >
+              −
+            </button>
+          </div>
+        );
+      })}
+    </Section>
+  );
+}
+
+/**
  * E41-U3b (E41 contract, section 6): union, subtract, intersect and exclude for a qualifying
  * selection (section 2.1), each `property-boolean-<op>`; the command selects its result.
  */
@@ -703,6 +824,7 @@ export function PropertySections() {
   };
   const constrained = constrainedNodes(document, nodes);
   const texts = textNodes(nodes);
+  const gridHolder = layoutGridTarget(nodes);
   return (
     <div style={{ fontSize: 13 }}>
       <TransformSection nodes={nodes} target={transformTarget(nodes, handles, page)} run={run} />
@@ -723,6 +845,7 @@ export function PropertySections() {
         />
       )}
       <EffectsSection document={document} nodes={nodes} run={run} />
+      {gridHolder !== null && <LayoutGridSection node={gridHolder} run={run} />}
       <BooleanSection document={document} selection={selection} keymap={keymap} run={run} />
       <SymbolSection
         document={document}

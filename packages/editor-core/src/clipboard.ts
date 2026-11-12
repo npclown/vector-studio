@@ -48,6 +48,9 @@ import {
 } from './tree.js';
 import type { DocumentCommand } from './types.js';
 
+/** The schema version that first has a frame or symbol `layoutGrids` (V38-S2). */
+const LAYOUT_GRIDS_SINCE = 8;
+
 // The clipboard fragment (MVP M2 contract, section 6; MVP M7 contract, section 6): `copy`
 // serializes subtrees as marked text, `paste` parses it with the model's JSON and node rules plus
 // the fragment rules and inserts the subtrees with fresh IDs (section 4.3, S8). Fragment version
@@ -297,6 +300,9 @@ function readFields(
     // Below schema v7 a node has no `effects`, which the v6 to v7 migration adds empty (E41-S1).
     const effectsWritten = schemaVersion < 7 && isRecord(raw) && Object.hasOwn(raw, 'effects');
     if (schemaVersion < 7 && isRecord(candidate)) candidate = { ...candidate, effects: [] };
+    // Below LAYOUT_GRIDS_SINCE a frame or symbol has no `layoutGrids` key (V38-S2).
+    const gridsWritten =
+      schemaVersion < LAYOUT_GRIDS_SINCE && isRecord(raw) && Object.hasOwn(raw, 'layoutGrids');
     if (older) {
       const rest = { ...(candidate as Record<string, unknown>) };
       delete rest.textOverrides;
@@ -325,6 +331,7 @@ function readFields(
     if (!result.ok) return fail(result.code, mapPath(name, key, result.path));
     // As an older document reads it, `effects` is an unknown key there.
     if (effectsWritten) return fail('document.invalid-field', mapPath(name, key, '/effects'));
+    if (gridsWritten) return fail('document.invalid-field', mapPath(name, key, '/layoutGrids'));
     if (result.node.id !== key) return fail('document.invalid-field', mapPath(name, key, '/id'));
     read.push([key, result.node]);
   }
@@ -617,7 +624,8 @@ function subtreeOf(nodes: Readonly<Record<string, NodeV8>>, root: string): NodeV
 /**
  * The content of a source for the content match of section 6, rule (2), as canonical text: its
  * size, `fill`, `stroke`, `opacity` (M4-Q18 (a): it reaches every instance under M4-Q15 (a)),
- * children and every descendant; its placement, name, constraints and visibility do not count.
+ * children and every descendant; its placement, name, constraints and visibility do not count,
+ * nor the lock of any node (V31-S2).
  */
 function contentText(nodes: readonly NodeV8[]): string {
   const [root, ...rest] = nodes as [SymbolNodeV8, ...NodeV8[]];
@@ -630,7 +638,14 @@ function contentText(nodes: readonly NodeV8[]): string {
     constraints: START,
     visible: true,
   };
-  return JSON.stringify(canonicalNodes(new Map([normalized, ...rest].map((n) => [n.id, n]))));
+  // V31-S2: no node's lock counts in the match.
+  const unlocked = [normalized, ...rest].map((n) => {
+    if (n.locked === undefined) return n;
+    const copy: Record<string, unknown> = { ...n };
+    delete copy.locked;
+    return copy as NodeV8;
+  });
+  return JSON.stringify(canonicalNodes(new Map(unlocked.map((n) => [n.id, n]))));
 }
 
 /** How a pasted instance names its source (M7 contract, section 6, M7-Q9 (a)). */
@@ -941,6 +956,8 @@ export function paste(
           stroke: how.source.stroke,
           // E41-S10: the effects the instance drew with, its own or else its source's.
           effects: node.effects.length > 0 ? node.effects : how.source.effects,
+          // V-38 contract, V38-S2: the source's layout grids.
+          ...(how.source.layoutGrids === undefined ? {} : { layoutGrids: how.source.layoutGrids }),
           // V39-E4: as `detachInstances`, the source's paint bindings and the instance's own.
           ...detachedBindings(how.source, node as InstanceNodeV8),
         });

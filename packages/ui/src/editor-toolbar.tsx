@@ -1,4 +1,5 @@
 import {
+  useEditor,
   useEditorCommands,
   useEditorQuery,
   useEditorSelector,
@@ -23,6 +24,8 @@ import {
   actionShortcut,
   actionTitle,
   nextMenuIndex,
+  polygonSidesCommit,
+  polygonSidesStep,
   shortcutFor,
   toolTitle,
   withShortcut,
@@ -69,6 +72,41 @@ function useRefusal(): [string | null, (result: CommandResult | null) => void] {
     (result) =>
       setRefusal(result !== null && !result.ok ? (booleanNotice(result) ?? result.code) : null),
   ];
+}
+
+/** `#RRGGBB` of a picked colour's straight channels (V-39 contract, V39-U1). */
+export function pickedHex(color: Readonly<{ r: number; g: number; b: number }>): string {
+  const byte = (v: number) =>
+    Math.round(Math.min(1, Math.max(0, v)) * 255)
+      .toString(16)
+      .padStart(2, '0');
+  return `#${byte(color.r)}${byte(color.g)}${byte(color.b)}`.toUpperCase();
+}
+
+const pickedOf = (snapshot: EditorSnapshot) => snapshot.pickedColor;
+
+/**
+ * V39-U1: an eyedropper pick with nothing selected copies `#RRGGBB` (best effort) and shows
+ * `Copied #RRGGBB` for 2 s. Each pick is a new snapshot value, so picking one colour twice
+ * shows the notice again.
+ */
+function usePickNotice(): string | null {
+  const editor = useEditor();
+  const picked = useEditorSelector(pickedOf);
+  const first = useRef(picked);
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (picked === null || picked === first.current) return;
+    // The eyedropper keeps the selection, so the current one is the one it applied to.
+    if (editor.getSnapshot().selection.length > 0) return;
+    const hex = pickedHex(picked);
+    const clipboard = (globalThis as { navigator?: Navigator }).navigator?.clipboard;
+    clipboard?.writeText(hex).catch(() => {});
+    setNotice(`Copied ${hex}`);
+    const timer = setTimeout(() => setNotice(null), 2000);
+    return () => clearTimeout(timer);
+  }, [editor, picked]);
+  return notice;
 }
 
 function IconButton({
@@ -129,6 +167,7 @@ export function EditorToolbar({ children }: EditorToolbarProps) {
   const extensions = useEditorQuery(EXTENSIONS);
   const keymap = useEditorQuery(KEYMAP);
   const [refusal, show] = useRefusal();
+  const picked = usePickNotice();
   const edits = editActions({ selection, history, first, pathOverlay });
   const byId = new Map(
     [...edits, ...symbolActions(selection, types)].map((button) => [button.testId, button]),
@@ -158,6 +197,7 @@ export function EditorToolbar({ children }: EditorToolbarProps) {
           />
         ))}
       </span>
+      {tool === 'polygon' ? <PolygonSidesField onResult={show} /> : null}
       {groups.map(([label, ids]) => (
         <span key={label} role="group" aria-label={label} style={ROW}>
           <Divider />
@@ -190,12 +230,66 @@ export function EditorToolbar({ children }: EditorToolbarProps) {
         ))}
       </span>
       {children}
+      {picked === null ? null : (
+        <output role="status" className="vs-notice" data-testid="eyedropper-notice">
+          {picked}
+        </output>
+      )}
       {refusal === null ? null : (
         <output role="status" className="vs-refusal" data-testid="toolbar-refusal">
           {refusal}
         </output>
       )}
     </div>
+  );
+}
+
+const polygonSidesOf = (snapshot: EditorSnapshot): number => snapshot.polygonSides;
+
+/**
+ * V-40: the polygon tool's side count (`polygon-sides`, 3 to 60), shown while the polygon tool is
+ * active. Typed text applies on Enter or blur (Escape reverts it); ArrowUp and ArrowDown step the
+ * count at once. A value outside the range or not a whole number is refused by `setPolygonSides`
+ * (the refusal shows), and the field shows the session's count again.
+ */
+function PolygonSidesField({ onResult }: Readonly<{ onResult: (result: CommandResult) => void }>) {
+  const execute = useEditorCommands();
+  const sides = useEditorSelector(polygonSidesOf);
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => {
+    const value = polygonSidesCommit(draft, sides);
+    setDraft(null);
+    if (value !== null) onResult(execute({ type: 'setPolygonSides', sides: value }));
+  };
+  return (
+    <span role="group" aria-label="polygon" style={ROW}>
+      <Divider />
+      <label className="vs-polygon-sides" style={ROW}>
+        Sides
+        <input
+          data-testid="polygon-sides"
+          type="number"
+          min={3}
+          max={60}
+          step={1}
+          value={draft ?? String(sides)}
+          style={{ width: '3.5em' }}
+          onChange={(event) => setDraft(event.currentTarget.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') commit();
+            if (event.key === 'Escape') setDraft(null);
+            // ArrowUp and ArrowDown step the session count by one at once (within 3 to 60).
+            if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+              event.preventDefault();
+              const next = polygonSidesStep(sides, event.key);
+              setDraft(null);
+              if (next !== null) onResult(execute({ type: 'setPolygonSides', sides: next }));
+            }
+          }}
+        />
+      </label>
+    </span>
   );
 }
 

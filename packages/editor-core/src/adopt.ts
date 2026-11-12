@@ -35,7 +35,10 @@ function frameIn(
   for (let i = children.length - 1; i >= 0; i -= 1) {
     const id = children[i]!;
     const node = document.nodes[id];
-    if (node === undefined || exclude.has(id) || node.visible === false) continue;
+    // V31-E4: nothing is adopted into a locked frame (a locked group locks its subtree).
+    if (node === undefined || exclude.has(id) || node.visible === false || node.locked === true) {
+      continue;
+    }
     if (node.type === 'frame') {
       if (insideFrame(tree, id, point)) return frameIn(document, tree, id, point, exclude) ?? id;
     } else if (node.type === 'group') {

@@ -35,14 +35,14 @@ The MVP requirements below describe the intended editor, not a claim that the gr
 - Rectangle and rounded rectangle
 - Ellipse
 - Line and arrow
-- Open and closed cubic Bezier path
+- Open and closed cubic Bezier path, drawn with the pen, the freehand pencil or the polygon tool (V-40)
 - Rich text
 - Group
 - Frame
 - Mask group
 - Simplified symbol and symbol instance
 
-Images are deferred.
+Images are supported as an image fill paint since 2026-11-12 (requested by the user; [V-32 contract](plans/viz-v32-image-contract.md)): pasting, dropping or placing a PNG, JPEG, WebP or GIF image creates a rectangle filled with it, and any fillable shape can take an image fill (fill, fit, stretch or tile). Image strokes, crop mode, image adjustments and animated images are deferred.
 
 ## Path editing
 
@@ -70,7 +70,7 @@ Non-destructive boolean groups, stroke outlining, and path simplification are de
 
 ## Containers
 
-Frames can contain nested children, have background and border, clip their content, act as future export or animation-scene boundaries, and support basic resize constraints. Auto layout is deferred.
+Frames can contain nested children, have background and border, clip their content, act as future export or animation-scene boundaries, and support basic resize constraints. Auto layout (direction, gap, padding, alignment, hug and fill sizing) is supported since the user's request of 2026-11-12, which lifted its deferral ([V-34](plans/viz-v34-auto-layout-contract.md)); wrap, absolute-positioned children and min/max sizes stay deferred.
 
 Groups scale their children proportionally when resized.
 
@@ -112,6 +112,7 @@ Multiple fills and blend modes are deferred.
 - Grouping and layer reordering
 - Align and distribute
 - Snapping to object/frame edges and centers, equal spacing, and rotation angles
+- Rulers, page guides and frame layout grids (grid, columns, rows), with snapping to guides and grid lines (since 2026-11-12, requested by the user; [V-38 contract](plans/viz-v38-rulers-guides-grids-contract.md))
 - Zoom and pan
 - Copy and paste
 - Undo and redo
@@ -153,12 +154,12 @@ Decided 2026-10-24 for P3 ([E11-Q3 (a)](plans/d9-e11-p3-c03-c05-closure-contract
 
 Initially, trusted extensions are registered by the host at build time. They may contribute node definitions, tools, commands, shortcuts, and UI panels. Extensions use commands, queries, and events rather than mutating the store or renderer directly.
 
-Untrusted plugins, sandbox execution, a marketplace, import, raster editing, animation, and real-time collaboration are deferred. Export to PNG (at a scale) and SVG of the page, the selection or an artboard is supported since 2026-11-09 (requested by the user; [V-30 export contract](plans/viz-v30-export-contract.md)); other formats (JPEG, PDF) and export settings stored in the document stay deferred.
+Untrusted plugins, sandbox execution, a marketplace, import of formats other than SVG, raster editing, animation, and real-time collaboration are deferred. Export to PNG (at a scale) and SVG of the page, the selection or an artboard is supported since 2026-11-09 (requested by the user; [V-30 export contract](plans/viz-v30-export-contract.md)); other formats (JPEG, PDF) and export settings stored in the document stay deferred. SVG import is supported since 2026-11-12 (requested by the user): SVG markup pasted on the canvas, SVG files pasted, dropped on the canvas or chosen in an Import section become editable paths, rectangles, ellipses, groups, mask groups and text ([V-33 SVG import contract](plans/viz-v33-svg-import-contract.md)); raster content, patterns, masks, filters and markers in an SVG are dropped and reported.
 
 Future considerations (recorded 2026-11-04 at the user's request; no work is scheduled). Today's extension surface ([host API guide](host-api.md#extensions)) covers path-shaped custom node types that use the node's own fill and stroke, commands, tools, key bindings and UI panels; import or export (deferred above) could later be built as extension commands on the public commands and queries. These need engine or core changes first, because the scene contract or the extension boundary has no place for them:
 
-- New paint types beyond solid, linear and radial (for example patterns, image fills, conic or mesh gradients).
+- New paint types beyond solid, linear, radial and image (for example patterns, conic or mesh gradients).
 - Effects and filters beyond E41's drop shadow and layer blur (for example blend modes).
-- Non-path content such as raster image nodes, and any renderer-side extension (custom shaders, direct renderer access).
+- Non-path content other than image fills, and any renderer-side extension (custom shaders, direct renderer access).
 
 A plugin contract is planned when the first concrete need for one of these appears. It would cover a renderer-side extension port for registering paints and effects, extension versioning and compatibility rules, and, only if untrusted plugins are wanted, runtime installation and a sandbox, which stay deferred until then.

@@ -17,10 +17,13 @@ export const BUILT_IN_TOOLS: readonly ToolName[] = Object.freeze([
   'select',
   'rectangle',
   'ellipse',
+  'polygon',
   'line',
   'frame',
   'path',
+  'pencil',
   'text',
+  'eyedropper',
 ]);
 
 /** The built-in tools, then each extension tool by ID, extensions in query order (sorted). */

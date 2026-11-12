@@ -198,6 +198,8 @@ Only `text/plain` is read (as M2 section 6; `text/html` is never read). CRLF, CR
 
 `paste { text, at?, pointer? }`: a fragment pastes as M2 and M7 say (`pointer` ignored). Unmarked text that is non-empty after normalization creates an `autoWidth` text node in `textStyle` whose box centre is `pointer`, else `at`, else the viewport centre (`editor.no-viewport-size` without one), in the M2 paste target, as one step, selected, edit mode not entered. Empty text keeps `editor.unsupported-clipboard`. No port: `editor.no-text-layout`. **`pointer`:** `EditorCanvas` keeps the client point of the last `pointermove` over the canvas, clears it on `pointerleave`, and maps it at paste time with `editor.getSnapshot().viewport` (M2-I4).
 
+Amended by the [V-33 SVG import contract](viz-v33-svg-import-contract.md), V33-P1 (2026-11-12): unmarked text that is SVG (`isSvgText`) imports as nodes instead of creating a text node, here and in 9.4; in edit mode it stays plain text.
+
 ### 9.4 `paste {}` without text
 
 The in-memory clipboard is used (M2 section 6): a fragment pastes as M2 and M7 outside edit mode and as 9.2 in it; plain text (from an edit-mode copy) is inserted in edit mode and creates a node by 9.3 outside it; none is `editor.empty-clipboard`.
