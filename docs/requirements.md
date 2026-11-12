@@ -97,8 +97,9 @@ A mask group uses its first path as the mask for its remaining children.
 - Independent rectangle corner radii
 
 - Drop shadows and layer blur ([E41](plans/d9-e41-boolean-effects-contract.md))
+- Inner shadows and background blur ([V-36](plans/viz-v36-inner-shadow-background-blur-contract.md)); background blur shows only on layers outside groups with opacity or effects
 
-Multiple fills, inner shadows, background blur, and blend modes are deferred.
+Multiple fills and blend modes are deferred.
 
 ## Editing behavior
 
