@@ -19,7 +19,7 @@ import {
   fillOf,
   fillPaintOf,
   imageModeCommand,
-  imageThumbnailSrc,
+  imageThumbnailBlob,
   isGradient,
   isImagePaint,
   leadColor,
@@ -109,11 +109,12 @@ describe('V32-H3 appearance model: the image kind', () => {
     expect(leadImage([null, RED, paint])).toBe(paint);
     expect(leadImage([RED])).toBeNull();
     const table = target.query({ type: 'document' }).images;
-    expect(imageThumbnailSrc(table, paint.image)).toBe(
-      `data:image/png;base64,${entry(asset).data}`,
-    );
-    expect(imageThumbnailSrc(table, 'missing')).toBeNull();
-    expect(imageThumbnailSrc(undefined, paint.image)).toBeNull();
+    const blob = imageThumbnailBlob(table, paint.image)!;
+    expect(blob.type).toBe('image/png');
+    expect(blob.size).toBe(Buffer.from(entry(asset).data, 'base64').length);
+    expect(imageThumbnailBlob(table, 'missing')).toBeNull();
+    expect(imageThumbnailBlob(undefined, paint.image)).toBeNull();
+    expect(imageThumbnailBlob({ k: { ...entry(asset), data: '%%%' } }, 'k')).toBeNull();
   });
 
   it('builds the scale mode and tile scale commands', () => {
@@ -167,7 +168,8 @@ describe('V32-H3 appearance panel markup', () => {
     expect(type[1]).toContain('>Image</option>');
     expect(type[1]).toMatch(/<option value="image" selected="">Image<\/option>/u);
     expect(html).toContain('data-testid="fill-image-thumbnail"');
-    expect(html).toContain(`src="data:image/png;base64,${entry(asset).data}"`);
+    // The thumbnail's object URL is made in an effect, so the markup has no `data:` string.
+    expect(html).not.toContain('base64,');
     expect(html).toContain('Choose image…');
     const mode = select(html, 'Fill scale mode')!;
     expect(mode[1]).toMatch(/<option value="fill" selected="">Fill<\/option>/u);
@@ -231,5 +233,8 @@ describe('V32-H3 layer row and toolbar', () => {
     expect(placeImageTitle(false)).toBe('Place image (Ctrl+Shift+K)');
     expect(placeImageTitle(true)).toBe('Place image (⌘+Shift+K)');
     expect(imageNoticeText(['a.txt', 'b.bmp'])).toBe('Skipped: a.txt, b.bmp');
+    expect(imageNoticeText(['a'], 'editor.image-too-large')).toBe(
+      'Not placed (editor.image-too-large): a',
+    );
   });
 });

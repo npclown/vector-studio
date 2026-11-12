@@ -92,6 +92,59 @@ export function decodeSize(width: number, height: number): { width: number; heig
   };
 }
 
+/** What a decode of an asset needs, or why it cannot be made (V32-H1: checked before any decode). */
+export type DecodePlan =
+  | Readonly<{
+      ok: true;
+      blob: Blob;
+      options: Readonly<Record<string, unknown>>;
+      /** The size the bitmap must have: the header's, downscaled to the side cap. */
+      width: number;
+      height: number;
+    }>
+  | Readonly<{ ok: false; reason: 'decode-failed' | 'too-large' }>;
+
+/**
+ * V32-H1 and V32-E4: the checks and `createImageBitmap` options shared by the port and the PNG
+ * export. The header must be one of the four types and agree with the asset's type and declared
+ * size, and be within the V32-M1 caps; the decode is at most `MAX_SIDE` per side.
+ */
+export function planDecode(asset: ImageAsset): DecodePlan {
+  let data: Uint8Array;
+  try {
+    data = base64ToBytes(asset.data);
+  } catch {
+    return { ok: false, reason: 'decode-failed' };
+  }
+  const header = readImageHeader(data);
+  if (header === null || header.mimeType !== asset.mimeType) {
+    return { ok: false, reason: 'decode-failed' };
+  }
+  if (!withinImageCaps(header.width, header.height)) return { ok: false, reason: 'too-large' };
+  if (header.width !== asset.width || header.height !== asset.height) {
+    return { ok: false, reason: 'decode-failed' };
+  }
+  const size = decodeSize(header.width, header.height);
+  const resized = size.width !== header.width || size.height !== header.height;
+  return {
+    ok: true,
+    blob: new Blob([data as BlobPart], { type: asset.mimeType }),
+    options: {
+      colorSpaceConversion: 'none',
+      premultiplyAlpha: 'none',
+      imageOrientation: 'from-image',
+      ...(resized
+        ? { resizeWidth: size.width, resizeHeight: size.height, resizeQuality: 'high' }
+        : {}),
+    },
+    width: size.width,
+    height: size.height,
+  };
+}
+
+/** The decodes the port runs at once; the rest wait their turn (V32-H1). */
+export const IMAGE_DECODE_CONCURRENCY = 3;
+
 /**
  * V32-H1: an `ImageSourcePort` over the images of `getDocument()`. A key the document does not
  * hold is `failed` `unknown-image`. The first request of a key starts its decode and answers
@@ -153,37 +206,17 @@ export function createImageSource(
     // Off the caller's stack: `request` returns before any decoding work.
     await Promise.resolve();
     try {
-      const data = base64ToBytes(asset.data);
-      const header = readImageHeader(data);
-      if (header === null || header.mimeType !== asset.mimeType) {
-        settle(key, { status: 'failed', reason: 'decode-failed' });
+      const plan = planDecode(asset);
+      if (!plan.ok) {
+        settle(key, { status: 'failed', reason: plan.reason });
         return;
       }
-      if (!withinImageCaps(header.width, header.height)) {
-        settle(key, { status: 'failed', reason: 'too-large' });
-        return;
-      }
-      if (header.width !== asset.width || header.height !== asset.height) {
-        settle(key, { status: 'failed', reason: 'decode-failed' });
-        return;
-      }
-      const size = decodeSize(header.width, header.height);
-      const resized = size.width !== header.width || size.height !== header.height;
-      const bitmap = await host.createImageBitmap(
-        new Blob([data as BlobPart], { type: asset.mimeType }),
-        {
-          colorSpaceConversion: 'none',
-          premultiplyAlpha: 'none',
-          imageOrientation: 'from-image',
-          ...(resized
-            ? { resizeWidth: size.width, resizeHeight: size.height, resizeQuality: 'high' }
-            : {}),
-        },
-      );
+      const bitmap = await host.createImageBitmap(plan.blob, plan.options);
       try {
         const { width, height } = bitmap;
-        if (!(width >= 1 && height >= 1 && width <= MAX_SIDE && height <= MAX_SIDE)) {
-          settle(key, { status: 'failed', reason: 'too-large' });
+        // The bitmap is the size the header predicts, or the header lied (GIF frames, EXIF).
+        if (width !== plan.width || height !== plan.height) {
+          settle(key, { status: 'failed', reason: 'decode-failed' });
           return;
         }
         const pixels = host.readPixels(bitmap);
@@ -197,6 +230,20 @@ export function createImageSource(
       }
     } catch {
       settle(key, { status: 'failed', reason: 'decode-failed' });
+    }
+  };
+
+  // At most `IMAGE_DECODE_CONCURRENCY` decodes at once; a key waits `pending` in the queue.
+  let running = 0;
+  let queue: (() => Promise<void>)[] = [];
+  const pump = () => {
+    while (running < IMAGE_DECODE_CONCURRENCY && queue.length > 0) {
+      const next = queue.shift()!;
+      running += 1;
+      void next().finally(() => {
+        running -= 1;
+        pump();
+      });
     }
   };
 
@@ -222,7 +269,8 @@ export function createImageSource(
       }
       if (asset === undefined) return { status: 'failed', reason: 'unknown-image' };
       entries.set(key, { status: 'pending' });
-      void decode(key, asset);
+      queue.push(() => decode(key, asset));
+      pump();
       return { status: 'pending' };
     },
     subscribe(listener) {
@@ -237,6 +285,7 @@ export function createImageSource(
       cancelNotify = null;
       changed.clear();
       entries.clear();
+      queue = [];
       listeners.clear();
       bytes = 0;
     },

@@ -546,15 +546,35 @@ function Surface({
   const [file, setFile] = useState('');
   // V-32 (V32-H1): the image source over the editor's document, and the renderer factory that
   // gives the service it, so image fills draw. One per editor, stable across renders.
-  const createRenderer = useMemo(
-    () => createWebGpuRenderer(createImageSource(() => editor.getSnapshot().document)),
+  const imageSource = useMemo(
+    () => createImageSource(() => editor.getSnapshot().document),
     [editor],
   );
+  const createRenderer = useMemo(() => createWebGpuRenderer(imageSource), [imageSource]);
+  // The source is released when the editor changes or the page unmounts. A development remount
+  // (strict mode) runs the cleanup and the effect back to back, so the release waits a task and
+  // the effect cancels it.
+  const releasing = useRef<{
+    source: typeof imageSource;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
+  useEffect(() => {
+    // Only a release of this same source is cancelled: another source's is left to run.
+    if (releasing.current?.source === imageSource) clearTimeout(releasing.current.timer);
+    return () => {
+      releasing.current = {
+        source: imageSource,
+        timer: setTimeout(() => imageSource.dispose(), 0),
+      };
+    };
+  }, [imageSource]);
   // V32-H2: files a paste, drop or picker skipped show as a file status line.
   useEffect(
     () =>
       subscribeImageNotices(editor, (notice) =>
-        setFile(`${notice.code}: ${notice.files.join(', ')}`),
+        setFile(
+          `${notice.code}${notice.reason === undefined ? '' : ` (${notice.reason})`}: ${notice.files.join(', ')}`,
+        ),
       ),
     [editor],
   );

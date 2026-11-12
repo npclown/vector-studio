@@ -180,7 +180,7 @@ type ImageSourceResult =
 - **Amendment (2026-11-12, U4).** Points the contract left open, as implemented:
   - The E1 header parser lives in `@vector-studio/react` (react cannot import the model), with the V32-M1/M2 caps mirrored there.
   - `editor.image-unsupported-file` reaches the host through react's `subscribeImageNotices`, since the editor has no host-raised diagnostics; next-host shows it as text.
-  - A place or drop of more than 32 files places the first 32 and names the rest in the notice. SVG files dropped still import as before.
+  - A place or drop of more than 32 files places the first 32 and names the rest in the notice. A refused `insertImages` raises `editor.image-place-failed` (the refusal code as `reason`). The GIF header size is the screen grown to the first frame; PNG `eXIf` orientation is applied like JPEG's (a bitmap that differs from the header's size fails `decode-failed`). SVG files dropped still import as before.
   - "Place image" is on the studio toolbar. Ctrl/Cmd+Shift+K is handled in the canvas keydown, inside the user activation.
-  - PNG export decodes at full size. A mixed wrap pair uses `repeat-x` or `repeat-y`.
+  - PNG export decodes with the V32-H1 options and checks (header, caps, declared size, at most 4096 per side, a few decodes at a time); an image that fails them is left out. A mixed wrap pair uses `repeat-x` or `repeat-y`.
   - "Choose image…" keeps the fill's current scale mode.

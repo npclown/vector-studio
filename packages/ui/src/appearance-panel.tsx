@@ -27,7 +27,7 @@ import {
   IMAGE_SCALE_MODE_LABELS,
   IMAGE_SCALE_MODES,
   imageModeCommand,
-  imageThumbnailSrc,
+  imageThumbnailBlob,
   isGradient,
   isImagePaint,
   isSolid,
@@ -217,6 +217,31 @@ type ImageSupport = Readonly<{
 }>;
 
 /**
+ * The object URL of image `key`'s thumbnail, made when the table entry changes and revoked when
+ * it does or the panel unmounts; null until then (an object URL needs an effect, so the first
+ * render and a server render have none).
+ */
+function useThumbnailUrl(
+  images: Readonly<Record<string, ImageAsset>> | undefined,
+  key: string | null,
+): string | null {
+  const entry = key === null || images === undefined ? undefined : images[key];
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const blob = key === null ? null : imageThumbnailBlob(images, key);
+    if (blob === null || typeof URL.createObjectURL !== 'function') {
+      setUrl(null);
+      return undefined;
+    }
+    const made = URL.createObjectURL(blob);
+    setUrl(made);
+    return () => URL.revokeObjectURL(made);
+    // The entry is the data the blob is made from; `images` itself changes with every edit.
+  }, [entry, key]);
+  return url;
+}
+
+/**
  * The image fill's controls (V32-H3): a thumbnail of the first selected image, "Choose image…",
  * the scale mode and, for Tile, the scale in percent (100 is the image's own size).
  */
@@ -231,18 +256,15 @@ function ImageControls({
   const modes = new Set(paints.map((paint) => (isImagePaint(paint) ? paint.scaleMode : null)));
   const scales = new Set(paints.map((paint) => (isImagePaint(paint) ? paint.scale : null)));
   const mode = modes.size === 1 ? [...modes][0]! : null;
-  const src = useMemo(
-    () => (lead === null ? null : imageThumbnailSrc(image.images, lead.image)),
-    [lead?.image, image.images],
-  );
+  const src = useThumbnailUrl(image.images, lead?.image ?? null);
   return (
     <>
       <Row>
-        {src !== null && (
+        {lead !== null && (
           <img
             data-testid="fill-image-thumbnail"
             alt="Fill image"
-            src={src}
+            src={src ?? undefined}
             width={32}
             height={32}
             style={{ objectFit: 'contain', background: '#8883' }}

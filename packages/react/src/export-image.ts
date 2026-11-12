@@ -10,7 +10,7 @@ import type {
   ScenePaint,
   ScenePathGeometry,
 } from '@vector-studio/editor-core';
-import { base64ToBytes } from './image-header.js';
+import { planDecode } from './image-source.js';
 
 // V-30 export contract (docs/plans/viz-v30-export-contract.md), section 3: a PNG of the export
 // scene painted with Canvas 2D in the page's document, so the fonts registered for text layout
@@ -184,33 +184,43 @@ function imageKeys(scene: ExportScene): string[] {
   return [...keys];
 }
 
+/** V32-E4: the decodes an export runs at once. */
+const EXPORT_DECODE_CONCURRENCY = 3;
+
 /**
- * V32-E4: awaits a decode of each image the scene's fills name, with the V32-H1 options (no
- * colour conversion, straight alpha, EXIF orientation). A key that is not in the scene's table or
- * fails to decode is left out, and its paint draws nothing; the export still succeeds.
+ * V32-E4: awaits a decode of each image the scene's fills name, with the checks and the V32-H1
+ * options of the image source (header and caps, no colour conversion, straight alpha, EXIF
+ * orientation, at most 4096 per side). A key that is not in the scene's table, fails a check or
+ * fails to decode is left out, and its paint draws nothing; the export still succeeds. At most
+ * `EXPORT_DECODE_CONCURRENCY` decodes run at once, and the bitmaps are closed on failure.
  */
 async function decodeImages(scene: ExportScene): Promise<Map<string, ImageBitmap>> {
   const out = new Map<string, ImageBitmap>();
   const table = scene.images;
   if (table === undefined) return out;
-  await Promise.all(
-    imageKeys(scene).map(async (key) => {
-      const asset = Object.hasOwn(table, key) ? table[key] : undefined;
-      if (asset === undefined) return;
-      try {
-        const blob = new Blob([base64ToBytes(asset.data) as BlobPart], { type: asset.mimeType });
-        out.set(
-          key,
-          await createImageBitmap(blob, {
-            colorSpaceConversion: 'none',
-            premultiplyAlpha: 'none',
-            imageOrientation: 'from-image',
-          }),
-        );
-      } catch {
-        // A failed decode leaves the paint out (V32-E4).
+  const keys = imageKeys(scene);
+  const one = async (key: string) => {
+    const asset = Object.hasOwn(table, key) ? table[key] : undefined;
+    if (asset === undefined) return;
+    try {
+      const plan = planDecode(asset);
+      if (!plan.ok) return;
+      const bitmap = await createImageBitmap(plan.blob, plan.options as ImageBitmapOptions);
+      if (bitmap.width !== plan.width || bitmap.height !== plan.height) {
+        bitmap.close();
+        return;
       }
-    }),
+      out.set(key, bitmap);
+    } catch {
+      // A failed decode leaves the paint out (V32-E4).
+    }
+  };
+  let next = 0;
+  const worker = async () => {
+    while (next < keys.length) await one(keys[next++]!);
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(EXPORT_DECODE_CONCURRENCY, keys.length) }, () => worker()),
   );
   return out;
 }

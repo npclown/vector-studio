@@ -19,7 +19,29 @@ export function makeAsset(
   height = 32,
   mimeType: ImageAsset['mimeType'] = 'image/png',
 ): AssetInput {
-  const bytes = Buffer.from([...MAGIC[mimeType], seed, seed, seed, seed, seed, seed, seed, seed]);
+  // A PNG carries a real IHDR of its size, so that a host's header check reads the declared size.
+  const be32 = (value: number) => [
+    value >>> 24,
+    (value >>> 16) & 255,
+    (value >>> 8) & 255,
+    value & 255,
+  ];
+  const ihdr =
+    mimeType === 'image/png'
+      ? [...be32(13), ...Buffer.from('IHDR'), ...be32(width), ...be32(height), 8, 6, 0, 0, 0]
+      : [];
+  const bytes = Buffer.from([
+    ...MAGIC[mimeType],
+    ...ihdr,
+    seed,
+    seed,
+    seed,
+    seed,
+    seed,
+    seed,
+    seed,
+    seed,
+  ]);
   const key = createHash('sha256').update(bytes).digest('hex');
   return { key, mimeType, width, height, data: bytes.toString('base64') };
 }

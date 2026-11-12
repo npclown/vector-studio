@@ -124,7 +124,7 @@ function useImageNotice(): string | null {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const unsubscribe = subscribeImageNotices(editor, (value) => {
-      setNotice(imageNoticeText(value.files));
+      setNotice(imageNoticeText(value.files, value.reason));
       clearTimeout(timer);
       timer = setTimeout(() => setNotice(null), 4000);
     });

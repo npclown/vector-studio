@@ -50,13 +50,54 @@ function png(bytes: Uint8Array): ImageHeader | null {
   const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
   if (bytes.length < 24 || signature.some((value, index) => bytes[index] !== value)) return null;
   if (u32be(bytes, 8) !== 13 || !ascii(bytes, 12, 'IHDR')) return null;
-  return { mimeType: 'image/png', width: u32be(bytes, 16), height: u32be(bytes, 20) };
+  const width = u32be(bytes, 16);
+  const height = u32be(bytes, 20);
+  // The eXIf chunk (before the first IDAT) orients the image, as Chromium applies it.
+  let orientation = 1;
+  let at = 33;
+  while (at + 12 <= bytes.length) {
+    const length = u32be(bytes, at);
+    if (ascii(bytes, at + 4, 'IDAT')) break;
+    if (ascii(bytes, at + 4, 'eXIf')) {
+      orientation = tiffOrientation(bytes, at + 8, Math.min(at + 8 + length, bytes.length));
+      break;
+    }
+    at += 12 + length;
+  }
+  return orientation >= 5
+    ? { mimeType: 'image/png', width: height, height: width }
+    : { mimeType: 'image/png', width, height };
 }
 
 function gif(bytes: Uint8Array): ImageHeader | null {
-  if (bytes.length < 10 || !(ascii(bytes, 0, 'GIF87a') || ascii(bytes, 0, 'GIF89a'))) return null;
-  // The logical screen descriptor: width and height as 16-bit little endian.
-  return { mimeType: 'image/gif', width: u16le(bytes, 6), height: u16le(bytes, 8) };
+  if (bytes.length < 13 || !(ascii(bytes, 0, 'GIF87a') || ascii(bytes, 0, 'GIF89a'))) return null;
+  // The logical screen descriptor: width and height as 16-bit little endian. Chromium grows the
+  // image to the first frame's bounds, so the size is the union of the screen and that frame.
+  const screenWidth = u16le(bytes, 6);
+  const screenHeight = u16le(bytes, 8);
+  const flags = bytes[10]!;
+  let at = 13 + (flags & 0x80 ? 3 * 2 ** ((flags & 7) + 1) : 0);
+  while (at < bytes.length) {
+    const block = bytes[at]!;
+    if (block === 0x3b) break;
+    if (block === 0x2c) {
+      if (at + 10 > bytes.length) return null;
+      return {
+        mimeType: 'image/gif',
+        width: Math.max(screenWidth, u16le(bytes, at + 1) + u16le(bytes, at + 5)),
+        height: Math.max(screenHeight, u16le(bytes, at + 3) + u16le(bytes, at + 7)),
+      };
+    }
+    if (block !== 0x21) return null;
+    // An extension: a label, then data sub-blocks up to a zero-length one.
+    at += 2;
+    while (at < bytes.length && bytes[at] !== 0) at += bytes[at]! + 1;
+    at += 1;
+  }
+  // No frame before the end: nothing a decoder grows the screen with.
+  return at <= bytes.length
+    ? { mimeType: 'image/gif', width: screenWidth, height: screenHeight }
+    : null;
 }
 
 function webp(bytes: Uint8Array): ImageHeader | null {
@@ -89,7 +130,12 @@ function webp(bytes: Uint8Array): ImageHeader | null {
 /** The orientation (1 to 8) of an Exif APP1 payload starting at `start` (`Exif\0\0`), or 1. */
 function exifOrientation(bytes: Uint8Array, start: number, end: number): number {
   if (!ascii(bytes, start, 'Exif\0\0') || end - start < 14) return 1;
-  const tiff = start + 6;
+  return tiffOrientation(bytes, start + 6, end);
+}
+
+/** The orientation (1 to 8) of the TIFF structure at `tiff` ending at `end`, or 1. */
+function tiffOrientation(bytes: Uint8Array, tiff: number, end: number): number {
+  if (end - tiff < 8) return 1;
   const little = ascii(bytes, tiff, 'II');
   if (!little && !ascii(bytes, tiff, 'MM')) return 1;
   const u16 = (at: number) => (little ? u16le(bytes, at) : u16be(bytes, at));
@@ -157,7 +203,7 @@ function jpeg(bytes: Uint8Array): ImageHeader | null {
 
 /**
  * V32-E1: the type and size of an image from its file header: PNG IHDR, JPEG SOF with the EXIF
- * orientation applied, the GIF screen descriptor, WebP VP8, VP8L and VP8X. Null when `bytes`
+ * orientation applied, PNG with its eXIf orientation applied, GIF (the screen grown to the first frame), WebP VP8, VP8L and VP8X. Null when `bytes`
  * is not one of those or its header is cut short. The sizes are as the header states them and
  * may be 0 or beyond the V32-M1 caps; `withinImageCaps` checks those.
  */

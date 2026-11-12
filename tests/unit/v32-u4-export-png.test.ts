@@ -14,6 +14,7 @@ import { axisBands, exportPng } from '../../packages/react/src/export-image.js';
 import { makeAsset } from '../support/v32-images.js';
 
 const asset = makeAsset(7, 64, 32);
+const big = makeAsset(8, 8000, 4000);
 
 type Call = readonly [string, ...unknown[]];
 
@@ -202,5 +203,54 @@ describe('V32-E4 PNG export of image paints', () => {
     expect(log.filter((call) => call[0] === 'createImageBitmap')).toHaveLength(1);
     expect(drawn(log)).toHaveLength(2);
     expect(closed).toBe(1);
+  });
+
+  it('decodes a large image downscaled to 4096 per side with the H1 options', async () => {
+    decode = () => Promise.resolve({ width: 4096, height: 2048, close: () => (closed += 1) });
+    const target = createEditor({ ids: createCounterIdSource('n') });
+    ok(target, { type: 'setViewportSize', width: 800, height: 600 });
+    ok(target, { type: 'insertImages', assets: [big] });
+    await exportPng(target);
+    expect(log.find((call) => call[0] === 'createImageBitmap')![1]).toEqual({
+      colorSpaceConversion: 'none',
+      premultiplyAlpha: 'none',
+      imageOrientation: 'from-image',
+      resizeWidth: 4096,
+      resizeHeight: 2048,
+      resizeQuality: 'high',
+    });
+    expect(drawn(log)).toHaveLength(1);
+  });
+
+  it('leaves out and closes a bitmap that is not the size the header predicts', async () => {
+    // The header says 64 × 32; the decoder made 65 × 32.
+    decode = () => Promise.resolve({ width: 65, height: 32, close: () => (closed += 1) });
+    const blob = await exportPng(scene('stretch'));
+    expect(blob).toBeInstanceOf(Blob);
+    expect(drawn(log)).toEqual([]);
+    expect(closed).toBe(1);
+  });
+
+  it('skips an image whose bytes fail the header check without decoding it', async () => {
+    const target = scene('stretch');
+    const document = target.query({ type: 'document' });
+    const key = Object.keys(document.images!)[0]!;
+    // The document names an image whose bytes are not an image.
+    const broken = {
+      ...document,
+      images: {
+        [key]: { ...document.images![key]!, data: Buffer.from('not an image').toString('base64') },
+      },
+    };
+    const spy = vi
+      .spyOn(target, 'query')
+      .mockImplementation(((q: { type: string }) =>
+        q.type === 'document' ? broken : undefined) as never);
+    try {
+      await exportPng(target).catch(() => undefined);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(log.filter((call) => call[0] === 'createImageBitmap')).toEqual([]);
   });
 });

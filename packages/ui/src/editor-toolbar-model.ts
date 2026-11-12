@@ -252,6 +252,8 @@ export function placeImageTitle(mac: boolean): string {
 }
 
 /** V32-H2: the toolbar's line for skipped image files (`editor.image-unsupported-file`). */
-export function imageNoticeText(files: readonly string[]): string {
-  return `Skipped: ${files.join(', ')}`;
+export function imageNoticeText(files: readonly string[], reason?: string): string {
+  return reason === undefined
+    ? `Skipped: ${files.join(', ')}`
+    : `Not placed (${reason}): ${files.join(', ')}`;
 }

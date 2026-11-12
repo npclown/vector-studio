@@ -375,14 +375,25 @@ export function leadImage(paints: readonly (FillPaint | null)[]): ImagePaint | n
   return paints.find(isImagePaint) ?? null;
 }
 
-/** The `data:` URL of image `key` in the document's table, for the thumbnail, or null. */
-export function imageThumbnailSrc(
+/**
+ * The thumbnail source of image `key` in the document's table as a `Blob`, or null when the table
+ * lacks the key or its data is not base64. The panel shows it through a per-key object URL that it
+ * revokes, so a 32 MiB image is not written into the DOM as a `data:` string.
+ */
+export function imageThumbnailBlob(
   images: Readonly<Record<string, ImageAsset>> | undefined,
   key: string,
-): string | null {
+): Blob | null {
   if (images === undefined || !Object.hasOwn(images, key)) return null;
   const asset = images[key]!;
-  return `data:${asset.mimeType};base64,${asset.data}`;
+  try {
+    const binary = atob(asset.data);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return new Blob([bytes], { type: asset.mimeType });
+  } catch {
+    return null;
+  }
 }
 
 /** The `setImagePaint` of a scale mode choice over `ids` (V32-E2). */

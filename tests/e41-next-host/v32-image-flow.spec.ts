@@ -79,6 +79,12 @@ const MAGENTA: Rgba = [255, 0, 255, 255];
 
 /** 64 × 32, four flat quadrants: red, green over blue, yellow (V32-A06's test image). */
 const QUADRANTS = png(64, 32, (x, y) => (y < 16 ? (x < 32 ? RED : GREEN) : x < 32 ? BLUE : YELLOW));
+/**
+ * 64 × 32 in four columns of 16: red, green, blue, yellow. `fill` crops the outer columns
+ * (the 100 × 100 box shows image columns 16 to 48), `stretch` shows all four, so a point near the
+ * box edge tells them apart.
+ */
+const STRIPES = png(64, 32, (x) => [RED, GREEN, BLUE, YELLOW][x >> 4]!);
 const FLAT = png(20, 20, () => MAGENTA);
 /** The probe point of each quadrant, in image pixels and its colour. */
 const QUADRANT_PROBES: readonly (readonly [number, number, Rgba])[] = [
@@ -402,22 +408,22 @@ test('V32-A08 paste, drop, Place image, image fill and mode, undo, reload', asyn
   // A real key press changes the select, so the chooser opens inside a user activation.
   await type.focus();
   const [filled] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press('I')]);
-  await filled.setFiles({ name: 'fill.png', mimeType: 'image/png', buffer: QUADRANTS });
+  await filled.setFiles({ name: 'fill.png', mimeType: 'image/png', buffer: STRIPES });
   await expect(page.getByLabel('Fill scale mode', { exact: true })).toHaveValue('fill');
   now = await snapshot(page);
   expect(now.undoDepth).toBe(depth + 1);
   expect(now.images).toHaveLength(1);
   await expect(page.getByTestId('fill-image-thumbnail')).toBeVisible();
   await expect(page.getByTestId(`layer-image-${ellipse}`)).toBeVisible();
-  // `fill`: the 64 × 32 image covers the 100 × 100 box (scale 3.125, centred), cropping its left
-  // and right quarters; the box's quadrants still show one image quadrant each.
+  // `fill`: the 64 × 32 image covers the 100 × 100 box (scale 3.125, centred), cropping its outer
+  // columns: the box shows green then blue only, and the points near its edges are those.
   const inside = (u: number, v: number): Point => ({ x: 200 + u, y: 100 + v });
   await probe(
     [
-      [inside(30, 30), RED],
-      [inside(70, 30), GREEN],
-      [inside(30, 70), BLUE],
-      [inside(70, 70), YELLOW],
+      [inside(10, 50), GREEN],
+      [inside(30, 50), GREEN],
+      [inside(70, 50), BLUE],
+      [inside(90, 50), BLUE],
     ],
     'ellipse, fill',
   );
@@ -425,12 +431,13 @@ test('V32-A08 paste, drop, Place image, image fill and mode, undo, reload', asyn
   now = await snapshot(page);
   expect(now.undoDepth).toBe(depth + 2);
   expect(paintOf(now, ellipse!).scaleMode).toBe('stretch');
+  // `stretch` shows the four columns: the edge points are red and yellow, which `fill` cropped.
   await probe(
     [
-      [inside(30, 30), RED],
-      [inside(70, 30), GREEN],
-      [inside(30, 70), BLUE],
-      [inside(70, 70), YELLOW],
+      [inside(10, 50), RED],
+      [inside(30, 50), GREEN],
+      [inside(70, 50), BLUE],
+      [inside(90, 50), YELLOW],
     ],
     'ellipse, stretch',
   );
@@ -452,6 +459,8 @@ test('V32-A08 paste, drop, Place image, image fill and mode, undo, reload', asyn
   expect(now.undoDepth).toBe(depth);
   expect(now.images).toEqual([]);
   expect(paintOf(now, ellipse!)).toEqual({ r: 1, g: 0, b: 1, a: 1 });
+  // The undone fill draws as the colour again (after the image is gone from the table).
+  await probe([[inside(10, 50), MAGENTA]], 'ellipse, after undo');
   // Redo the four steps for the reload below.
   for (let step = 0; step < 4; step += 1) await page.keyboard.press('ControlOrMeta+Shift+Z');
   now = await snapshot(page);
@@ -472,9 +481,9 @@ test('V32-A08 paste, drop, Place image, image fill and mode, undo, reload', asyn
   expect(restored.nodes[ellipse!]).toEqual(before);
   if (await rendererReady(page)) {
     await ok(page, { type: 'setViewport', camera: { position: { x: -50, y: -50 }, zoom: 1 } });
-    // Tile at 50%: a 32 × 16 repeat from the box's top-left, red in its first 16 × 8; the point
-    // (40, 52) of the box is 8 right and 4 down in a repeat, and inside the ellipse.
-    await expectDrawn(page, [[{ x: 240, y: 152 }, RED]], 'ellipse after the reload');
+    // Tile at 50%: a 32 × 16 repeat from the box's top-left, red in its first 8 columns; the point
+    // (38, 52) of the box is 6 right and 4 down in a repeat, and inside the ellipse.
+    await expectDrawn(page, [[{ x: 238, y: 152 }, RED]], 'ellipse after the reload');
   }
   expect(errors).toEqual([]);
 });

@@ -5,6 +5,7 @@ import type { ImageAsset } from '@vector-studio/editor-core';
 import {
   createImageSource,
   decodeSize,
+  planDecode,
   type ImageSourceHost,
 } from '../../packages/react/src/image-source.js';
 
@@ -276,9 +277,78 @@ describe('V32-H1 image source', () => {
     expect(source.request('k')).toEqual({ status: 'failed', reason: 'unknown-image' });
   });
 
+  it('fails decode-failed when the bitmap is not the size the header predicts', async () => {
+    // The header says 8 × 8; the decoder (a GIF frame, an EXIF turn) made a 9 × 8 bitmap.
+    nextSize = { width: 9, height: 8 };
+    const f = fake();
+    const source = createImageSource(() => ({ images: { k: asset(8, 8) } }), { host: f.host });
+    source.request('k');
+    await settle();
+    f.tasks();
+    expect(source.request('k')).toEqual({ status: 'failed', reason: 'decode-failed' });
+    expect(f.closed).toEqual([9]);
+  });
+
+  it('runs at most three decodes at once and the rest in turn', async () => {
+    nextSize = { width: 8, height: 8 };
+    const releases: (() => void)[] = [];
+    let active = 0;
+    let peak = 0;
+    const f = fake();
+    const host: ImageSourceHost = {
+      ...f.host,
+      createImageBitmap: () => {
+        active += 1;
+        peak = Math.max(peak, active);
+        return new Promise((resolve) => {
+          releases.push(() => {
+            active -= 1;
+            resolve({ width: 8, height: 8 });
+          });
+        });
+      },
+    };
+    const images = Object.fromEntries(['a', 'b', 'c', 'd', 'e'].map((k) => [k, asset(8, 8)]));
+    const source = createImageSource(() => ({ images }), { host });
+    for (const k of Object.keys(images)) expect(source.request(k)).toEqual({ status: 'pending' });
+    await settle();
+    expect(releases).toHaveLength(3);
+    for (const release of releases.splice(0)) release();
+    await settle();
+    expect(releases).toHaveLength(2);
+    for (const release of releases.splice(0)) release();
+    await settle();
+    expect(peak).toBe(3);
+    expect(source.request('e').status).toBe('ready');
+  });
+
   it('names the implementation and the port version', () => {
     const source = createImageSource(() => ({}), { host: fake().host });
     expect(source.portVersion).toBe(0);
     expect(source.operationId).toBe('create-image-bitmap/v0');
+  });
+});
+
+describe('V32-H1 and V32-E4 decode plan', () => {
+  it('refuses before any decode what the caps or the declared size forbid', () => {
+    expect(planDecode(asset(20000, 20000))).toEqual({ ok: false, reason: 'too-large' });
+    expect(planDecode(asset(8, 8, { width: 9, height: 8 }))).toEqual({
+      ok: false,
+      reason: 'decode-failed',
+    });
+    expect(planDecode({ ...asset(8, 8), data: 'bm90IGFuIGltYWdl' })).toEqual({
+      ok: false,
+      reason: 'decode-failed',
+    });
+    expect(planDecode({ ...asset(8, 8), data: '%%%' })).toEqual({
+      ok: false,
+      reason: 'decode-failed',
+    });
+  });
+
+  it('plans the downscaled size and the H1 options', () => {
+    const plan = planDecode(asset(8000, 4000));
+    expect(plan).toMatchObject({ ok: true, width: 4096, height: 2048 });
+    if (plan.ok) expect(plan.options).toMatchObject({ resizeWidth: 4096, resizeQuality: 'high' });
   });
 });

@@ -335,6 +335,45 @@ describe('V32-H2 drop', () => {
     expect(rectangles(target)).toHaveLength(1);
   });
 
+  it('drops a placement whose text edit mode began while the files were read', async () => {
+    const { target, notices } = host();
+    const [id] = ok(target, {
+      type: 'createText',
+      frame: { x: 0, y: 0, width: 10, height: 10 },
+      runs: [{ text: 'x', family: 'Test', size: 10, color: { r: 0, g: 0, b: 0, a: 1 } }],
+    });
+    const bytes = pngBytes(8, 8);
+    const late: ImageFileLike = {
+      name: 'late.png',
+      type: 'image/png',
+      size: bytes.length,
+      arrayBuffer: () => {
+        // The user starts editing text while the file is being read.
+        ok(target, { type: 'enterTextEdit', id: id!, anchor: 1, focus: 1 });
+        return Promise.resolve(bytes.slice().buffer);
+      },
+    };
+    const outcome = await placeImageFiles(target, [late]);
+    expect(outcome.result).toBeNull();
+    expect(target.getSnapshot().textEdit).not.toBeNull();
+    expect(rectangles(target)).toHaveLength(0);
+    expect(notices).toEqual([]);
+  });
+
+  it('raises editor.image-place-failed when insertImages is refused', async () => {
+    const { target, notices } = host();
+    const execute = target.execute.bind(target);
+    target.execute = (command) =>
+      command.type === 'insertImages'
+        ? { ok: false, code: 'editor.image-too-large', message: 'x' }
+        : execute(command);
+    const outcome = await placeImageFiles(target, [file('big.png', pngBytes(8, 8))]);
+    expect(outcome.result).toMatchObject({ ok: false });
+    expect(notices).toEqual([
+      { code: 'editor.image-place-failed', files: ['big'], reason: 'editor.image-too-large' },
+    ]);
+  });
+
   it('prevents a drop that is not files and does nothing', async () => {
     const { input, commands } = host();
     let prevented = 0;

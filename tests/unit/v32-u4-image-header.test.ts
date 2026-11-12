@@ -53,6 +53,42 @@ function gifBytes(width: number, height: number, version = '89a'): Uint8Array {
   return Uint8Array.from([...text(`GIF${version}`), ...le16(width), ...le16(height), 0, 0, 0]);
 }
 
+/** A GIF with a screen, optional global colour table and extension, and one frame. */
+function gifFrame(
+  screen: [number, number],
+  frame: { left: number; top: number; width: number; height: number },
+  options: { table?: boolean; extension?: boolean } = {},
+): Uint8Array {
+  const table = options.table === true;
+  return Uint8Array.from([
+    ...text('GIF89a'),
+    ...le16(screen[0]),
+    ...le16(screen[1]),
+    table ? 0x80 : 0,
+    0,
+    0,
+    // A 2-colour table (flags 0x80, size bits 0).
+    ...(table ? [0, 0, 0, 255, 255, 255] : []),
+    // A graphic control extension (label F9) of one 4-byte sub-block.
+    ...(options.extension === true ? [0x21, 0xf9, 4, 0, 0, 0, 0, 0] : []),
+    0x2c,
+    ...le16(frame.left),
+    ...le16(frame.top),
+    ...le16(frame.width),
+    ...le16(frame.height),
+    0,
+  ]);
+}
+
+/** A PNG with an eXIf chunk (little endian TIFF, one Orientation entry) before the IDAT. */
+function pngWithExif(width: number, height: number, orientation: number): Uint8Array {
+  const base = [...pngBytes(width, height)];
+  const tiff = exif(orientation, true).slice(10);
+  const chunk = [...be32(tiff.length), ...text('eXIf'), ...tiff, 0, 0, 0, 0];
+  const idat = [...be32(0), ...text('IDAT'), 0, 0, 0, 0];
+  return Uint8Array.from([...base.slice(0, 33), ...chunk, ...idat]);
+}
+
 /** A little or big endian Exif APP1 segment with one Orientation entry. */
 function exif(orientation: number, little: boolean): number[] {
   const u16 = (value: number) => (little ? le16(value) : be16(value));
@@ -253,6 +289,41 @@ describe('V32-E1 header parser', () => {
     });
     expect(readImageHeader(gifBytes(1, 65535, '87a'))).toMatchObject({ width: 1, height: 65535 });
     expect(readImageHeader(gifBytes(5, 5, '90a'))).toBeNull();
+  });
+
+  it('grows the GIF to the first frame (global table and extensions skipped)', () => {
+    expect(
+      readImageHeader(gifFrame([2, 2], { left: 0, top: 0, width: 9000, height: 9000 })),
+    ).toEqual({
+      mimeType: 'image/gif',
+      width: 9000,
+      height: 9000,
+    });
+    const placed = gifFrame(
+      [10, 10],
+      { left: 5, top: 7, width: 20, height: 4 },
+      { table: true, extension: true },
+    );
+    expect(readImageHeader(placed)).toMatchObject({ width: 25, height: 11 });
+    // A frame inside the screen leaves the screen.
+    expect(
+      readImageHeader(gifFrame([10, 10], { left: 1, top: 1, width: 3, height: 3 })),
+    ).toMatchObject({ width: 10, height: 10 });
+    // Cut short before the descriptor, or a block that is none: rejected.
+    expect(
+      readImageHeader(gifFrame([2, 2], { left: 0, top: 0, width: 1, height: 1 }).subarray(0, 18)),
+    ).toBeNull();
+    const bad = gifFrame([2, 2], { left: 0, top: 0, width: 1, height: 1 });
+    bad[13] = 0x55;
+    expect(readImageHeader(bad)).toBeNull();
+  });
+
+  it('applies the PNG eXIf orientation like JPEG', () => {
+    expect(readImageHeader(pngWithExif(40, 20, 1))).toMatchObject({ width: 40, height: 20 });
+    expect(readImageHeader(pngWithExif(40, 20, 6))).toMatchObject({ width: 20, height: 40 });
+    expect(readImageHeader(pngWithExif(40, 20, 3))).toMatchObject({ width: 40, height: 20 });
+    // An eXIf chunk after the first IDAT is not read.
+    expect(readImageHeader(pngBytes(40, 20))).toMatchObject({ width: 40, height: 20 });
   });
 
   it('reads WebP VP8, VP8L and VP8X', () => {

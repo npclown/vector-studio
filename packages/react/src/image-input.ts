@@ -10,10 +10,18 @@ import { imageAssetFromBlob, type ImageBlobLike } from './image-header.js';
 /** The code of the notice for skipped files (V32-H2). */
 export const IMAGE_UNSUPPORTED_FILE_CODE = 'editor.image-unsupported-file';
 
-/** The notice raised when files were skipped: their names, in the order they came. */
+/** The code of the notice for files whose `insertImages` was refused (for example the table cap). */
+export const IMAGE_PLACE_FAILED_CODE = 'editor.image-place-failed';
+
+/**
+ * The notice raised when files were skipped (`editor.image-unsupported-file`) or when placing
+ * them was refused (`editor.image-place-failed`, with the command's refusal code as `reason`):
+ * the file names, in the order they came.
+ */
 export type ImageNotice = Readonly<{
-  code: typeof IMAGE_UNSUPPORTED_FILE_CODE;
+  code: typeof IMAGE_UNSUPPORTED_FILE_CODE | typeof IMAGE_PLACE_FAILED_CODE;
   files: readonly string[];
+  reason?: string;
 }>;
 
 /** A file as the placement reads it: the DOM `File` fits. */
@@ -65,9 +73,12 @@ export function subscribeImageNotices(
 }
 
 /** Raises the V32-H2 notice for `files` (names) to the subscribers of `editor`. */
-export function raiseImageNotice(editor: Editor, files: readonly string[]): void {
+export function raiseImageNotice(editor: Editor, files: readonly string[], failure?: string): void {
   if (files.length === 0) return;
-  const notice: ImageNotice = { code: IMAGE_UNSUPPORTED_FILE_CODE, files: [...files] };
+  const notice: ImageNotice =
+    failure === undefined
+      ? { code: IMAGE_UNSUPPORTED_FILE_CODE, files: [...files] }
+      : { code: IMAGE_PLACE_FAILED_CODE, files: [...files], reason: failure };
   for (const listener of [...(listeners.get(editor) ?? [])]) {
     try {
       listener(notice);
@@ -99,8 +110,10 @@ const baseName = (name: string): string => {
 /**
  * V32-H2: places `files` as image rectangles in one `insertImages` (one undo step): each file's
  * header is read and its bytes hashed (V32-E1), the first image is centred on `at` (else the
- * viewport centre) and each later one is 20 page units further. Text edit mode is exited before
- * the command. Files over 32 MiB, whose header does not parse, that cannot be read, or past the
+ * viewport centre) and each later one is 20 page units further. Text edit mode that is on when
+ * the command is about to run is exited, unless it began while the files were being read, which
+ * drops the placement (as for an SVG file read, V33-P2). A refused command raises
+ * `editor.image-place-failed`. Files over 32 MiB, whose header does not parse, that cannot be read, or past the
  * 32nd are skipped and raised as `editor.image-unsupported-file`. Resolves when the command ran.
  */
 export async function placeImageFiles(
@@ -110,6 +123,7 @@ export async function placeImageFiles(
 ): Promise<PlaceImagesOutcome> {
   const chosen = Array.from(files);
   if (chosen.length === 0) return { result: null, skipped: [] };
+  const editingAtStart = editor.getSnapshot().textEdit !== null;
   const read = await Promise.all(
     chosen.slice(0, IMAGE_PLACE_LIMIT).map((file) =>
       imageAssetFromBlob(file).then(
@@ -131,13 +145,18 @@ export async function placeImageFiles(
   });
   raiseImageNotice(editor, skipped);
   if (assets.length === 0) return { result: null, skipped };
-  if (editor.getSnapshot().textEdit !== null) editor.execute({ type: 'exitTextEdit' });
+  if (editor.getSnapshot().textEdit !== null) {
+    // Edit mode that began while the files were read keeps the text; the late placement is dropped.
+    if (!editingAtStart) return { result: null, skipped };
+    editor.execute({ type: 'exitTextEdit' });
+  }
   const result = editor.execute({
     type: 'insertImages',
     assets,
     names,
     ...(options.at === undefined ? {} : { at: options.at }),
   });
+  if (!result.ok) raiseImageNotice(editor, names, result.code);
   return { result, skipped };
 }
 
