@@ -67,16 +67,17 @@ For an effect root `N` with a visible background blur of σ, composited into its
 
 `P ← (G_σ ∗ D) × h × o  over  P`, clipped by `N`'s ancestor clip chain (E41-Q8 (a)),
 
-then `R` composites as in E41 (with `N`'s blend mode when V-35 lands; the background blur itself is source-over). Under an opaque part nothing changes; under a translucent fill the blurred backdrop shows through, Figma's frosted glass. A 0 % fill shows no blur (`h` = 0). `N`'s drop shadows are in `R`, so under E41-Q6 (a) they show through the glass over the blurred backdrop (V36-Q5 (a), fixture G9); with a layer blur, `h` comes from the unblurred `L`. With σ below `EFFECT_SIGMA_EPSILON_PX` there is no snapshot, split or pass.
+then `R` composites as in E41 (with `N`'s blend mode, V-35, over `P` as the background blur left it; the background blur itself is source-over). Under an opaque part nothing changes; under a translucent fill the blurred backdrop shows through, Figma's frosted glass. A 0 % fill shows no blur (`h` = 0). `N`'s drop shadows are in `R`, so under E41-Q6 (a) they show through the glass over the blurred backdrop (V36-Q5 (a), fixture G9); with a layer blur, `h` comes from the unblurred `L`. With σ below `EFFECT_SIGMA_EPSILON_PX` there is no snapshot, split or pass.
 
 ### 5.2 Passes
 
 At `N`'s composite slot in the parent's pass:
 
-1. **Snapshot.** V-35's backdrop snapshot (V35-K4 in `docs/plans/viz-v35-fills-blend-contract.md`: `snapshotBackdrop(encoder, parent, rect, margin)` in `renderer-webgpu/src/backdrop-pipeline.ts`, plan field `backdrop: { margin }` in `renderer-core/src/backdrop-plan.ts`) with `rect = O` (`N`'s output bound) and `margin` the level-0 extent of E41-K4's read chain for σ (downsample, taps and bilinear slack; `backdropMargin(σ_px)`), clamped to `P`: a single-sample `D` and its device origin. The snapshot ends and resumes the parent pass as V-35 specifies; its extra texture usages are set only under `effects: 'v1'` or V-35's blend option, so E41-A06 holds.
-2. **Blur.** E41-K4's chain on `D` with every edge `clamp` (Q3: only `P`'s edge is ever reached), into `B` at `O`.
+1. **Snapshot.** V-35's backdrop snapshot (V35-K4 in `docs/plans/viz-v35-fills-blend-contract.md`, as amended there: `snapshotBackdrop(encoder, parent, rect, margin, into, record)` in `renderer-webgpu/src/backdrop-pipeline.ts`, which fills the root's snapshot texture `into` and returns it, or null for an empty rectangle; the caller ends the parent pass before it and resumes it after; packet field `backdrop: { margin }`) with `rect = O` (`N`'s output bound inside `P`) and `margin = backdropMargin(σ_px)`, a bound on the level-0 extent of E41-K4's read chain for σ beyond `O` (downsample blocks, taps and bilinear slack), clamped to `P`: a single-sample `D` and its device origin. The main target's snapshot usage is V-35's (amended 2026-11-12, U3): the backend creates V-35's snapshot pipeline and gives the main attachment `TEXTURE_BINDING` under `effects: 'v1'` as under V-35's `blend: 'v0'` (scene validation still refuses blend modes without `blend: 'v0'`), so E41-A06 holds for the other options.
+2. **Blur.** E41-K4's chain on `D` (surface `backdrop`), its first reader with every edge `clamp` (Q3: only `P`'s edge is ever reached), into `B` (surface `blurred`) at `O`.
 3. **Coverage.** A `coverage` pass reading `L` (scale 127 / c) multiplies `B` by `h`.
-4. **Composite.** `B` draws with `effect-composite-v0` at `o`, with the root's clip state and stencil variant, then `R` as before.
+4. **Blend roots.** When `N` is also a V-35 blend root, a `merge` pass at scale `o` draws `B` over `D` inside `O`, so the blend composite of `R` reads `P` as the background blur left it.
+5. **Composite.** The parent pass resumes; `B` draws with `effect-composite-v0` at `o`, with the root's clip state and stencil variant, then `R` as before (with its mode for a blend root).
 
 ### 5.3 Top-level roots (V36-Q2 (a))
 
@@ -84,7 +85,7 @@ The snapshot with a margin reads the main target only. A background blur draws o
 
 ### 5.4 Fallbacks
 
-`backgroundBlurSkipped` counts a root whose blur is not drawn: nested (5.3), past V-35's per-frame split limit, or on a `'v1'` renderer without U3. When the `harden`, `innerTint` or `coverage` pipeline is unavailable, roots draw as E41 section 5.3 says (content without effects).
+`backgroundBlurSkipped` counts a root whose blur is not drawn: nested (5.3), when the backdrop snapshot pipeline is unavailable (V35-K7) or its snapshot rectangle is empty, or on a `'v1'` renderer without U3. The backend exposes it beside E41's `effectPasses` (a per-generation count of drawn roots per frame, read by tests and benches); a host-visible statistic is backlog. V-35 has no per-frame split limit (amended 2026-11-12, U3): a background-blur root costs one split per frame, counted in V35-K8's split counter, and is not counted in V35-K6's 64-blend-root limit; its bytes count in the budget (5.5). When the `harden`, `innerTint` or `coverage` pipeline is unavailable, roots draw as E41 section 5.3 says (content without effects).
 
 ### 5.5 Budget
 
@@ -106,7 +107,7 @@ E41 section 5.4 with: each inner shadow's `H` counts in the scratch term, `4 × 
 | V36-A03 | Planner against the CPU oracle of 4.1 (pass-by-pass twin, binary64): 1-3 inner shadows with drop shadows and layer blur, σ 0, an offset past the shape, a leaf at c 0.5, a container root, downsampled σ, cut sides (K1b: no inner-shadow band along a cut side, against an oracle on the uncut `L`); K1 cull reach; background-blur pass list, margin and budget per 5.5 | Unit (renderer-core, renderer-webgpu) |
 | V36-A04 | GPU against the CPU oracle (E41-A05's method and tolerances; the oracle hardens the exact `L` read back, and the headed run may exclude texels with `0 < α(L) < 2/255`, where the 127× gain amplifies device differences; for background blur the oracle reads `D` from a capture without `N`): G1 inner shadow on a rectangle, G2 rotated 30°, G3 two inner shadows and a drop shadow on a 50 %-alpha fill, G4 on text, G5 background blur radius 20 of a 30 % fill over stripes, G6 G5 in a clipping frame, G7 G5 at the target edge, radius 40 (downsampled, clamp), G8 an inner-shadowed group holding a mask group across the target edge, G9 background blur with a drop shadow on a leaf at opacity 0.5 | SwiftShader in the container; headed reference PC |
 | V36-A05 | Identity: E41's F1-F12 and scenes without the new kinds give byte-identical captures under `'v0'` and `'v1'` and before and after the module re-pin; scenes without effects unchanged (E41-A06) | SwiftShader, headed |
-| V36-A06 | Fallbacks: a nested background blur, one past the split limit and one on a pre-U3 renderer draw without the blur and count `backgroundBlurSkipped`; pipeline failure per 5.4 | GPU spec, unit |
+| V36-A06 | Fallbacks: a nested background blur, one without the snapshot pipeline and one on a pre-U3 renderer draw without the blur and count `backgroundBlurSkipped`; pipeline failure per 5.4 | GPU spec, unit |
 | V36-A07 | Invalidation and resources: editing either kind costs 0 port calls and 0 geometry builds (E41-A07); `D` and `B` in accounting, released after submission, on device loss and dispose (E41-A09) | Unit, GPU counters |
 | V36-A08 | Commands: defaults, limits and notice, kind changes and their refusals, multi-select across families, undo | Unit (editor-core) |
 | V36-A09 | next-host: add, edit, hide and remove an inner shadow and a background blur from the panel, pixel probes show each; the nested message shows inside a 50 % group | Headed, Chrome and Edge |
@@ -130,14 +131,14 @@ G1 to G9 above in `tests/gpu/e41-effects.spec.ts` beside F1-F12, and a `v36-glas
 | --- | --- | --- |
 | U1 | This contract, requirements.md, track row | Independent review READY |
 | U2 | Inner shadow end to end: model kinds (v8), scene, gate and projector `'v1'`, K1-K3, the pre-U3 fallback, commands, panel (inner shadow only), hosts on `'v1'`, host-api.md, SwiftShader G1-G4, G8 | V36-A01-A03, A05, A07, A08 (inner-shadow half), A06's pre-U3 case (a `backgroundBlur` scene on `'v1'`, unit); CI |
-| U3 | Background blur: snapshot use, 5.2 passes, 5.3-5.5 (including `backgroundBlurSkipped` as a host-visible frame statistic; U2 keeps it a tests-only counter like E41's `effectPasses`), panel kind and message | V36-A02-A04, A06, A07 (background half); CI |
+| U3 | Background blur: snapshot use, 5.2 passes, 5.3-5.5 (`backgroundBlurSkipped` stays a counter beside `effectPasses`, see 5.4), panel kind and message | V36-A02-A04, A06, A07 (background half); CI |
 | U4 | Headed A04/A09 on the reference PC, `v36-glass` bench, evidence index and exit record | V36-A04, A09, A10; user accepts |
 
 U2 can merge before V-35; U3 follows V-35's snapshot (or Q4 (a)'s fallback).
 
 ## 11. Risks
 
-- **Pass splits.** Each background blur ends and resumes the main pass and copies its backdrop: bandwidth with MSAA stored. A10 measures it; V-35's split limit bounds it.
+- **Pass splits.** Each background blur ends and resumes the main pass and copies its backdrop: bandwidth with MSAA stored. A10 measures it; the 96 MiB budget bounds its bytes (V-35 has no split limit).
 - **Hardened edges.** `h` saturates at alpha 1/127, so antialiased edges of very faint content look harder than `α(L)` would; this matches Figma's export and is disclosed.
 - **Schema race.** v8 is shared by the Figma-gap items; the U2 PR rebases onto whatever v8 is on `main` at its merge slot.
 
