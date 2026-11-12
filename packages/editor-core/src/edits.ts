@@ -22,6 +22,7 @@ import {
 import { booleanNodes } from './boolean-command.js';
 import { paste } from './clipboard.js';
 import { addEffect, removeEffect, setEffect } from './effect-commands.js';
+import { addFill, moveFill, removeFill, setFill } from './fill-commands.js';
 import { Draft, fail, type Failure } from './draft.js';
 import { defaultBlendMode, paintFill } from './fills.js';
 import { ExpansionCache, expansionFailure } from './expansion.js';
@@ -374,6 +375,14 @@ export function applyEdit(
       return setEffect(document, command, context, custom, finish);
     case 'removeEffect':
       return removeEffect(document, command, context, custom, finish);
+    case 'addFill':
+      return addFill(document, command, context, custom, finish);
+    case 'setFill':
+      return setFill(document, command, context, custom, finish);
+    case 'removeFill':
+      return removeFill(document, command, context, custom, finish);
+    case 'moveFill':
+      return moveFill(document, command, context, custom, finish);
     case 'createSymbol':
       return createSymbol(document, command, context, finish);
     case 'createInstance':

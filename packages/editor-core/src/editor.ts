@@ -350,6 +350,10 @@ const DOCUMENT_COMMANDS = new Set([
   'addEffect',
   'setEffect',
   'removeEffect',
+  'addFill',
+  'setFill',
+  'removeFill',
+  'moveFill',
   'ungroupNodes',
   'moveNodes',
   'createSymbol',
@@ -472,6 +476,7 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.boolean-too-large',
   'editor.boolean-failed',
   'editor.effect-limit',
+  'editor.fill-limit',
 ]);
 
 /**

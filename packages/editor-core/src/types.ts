@@ -3,6 +3,7 @@ import type {
   RenderCamera,
   RendererSceneSynchronization,
   SceneAffine,
+  SceneBlendMode,
   SceneClip,
   ScenePaint,
   ScenePathGeometry,
@@ -24,6 +25,9 @@ import type {
   NodeV8,
   PageV2,
   Paint,
+  BlendMode,
+  ContainerBlendMode,
+  Fill,
   PathVerb,
   Stroke,
   TextNodeV8,
@@ -225,7 +229,11 @@ export type SnapOverlay = Readonly<{
 /** A prop that the node's type does not have is `editor.invalid-command`. */
 export type NodeProps = Readonly<{
   name?: string;
+  /** V35-S5: replaces all fills by this one fill (opacity 1, `normal`), or none. */
   fill?: Paint | null;
+  /** V35-S5: replaces the fills; with `fill` it is `editor.invalid-command`. */
+  fills?: readonly Fill[];
+  blendMode?: ContainerBlendMode;
   stroke?: Stroke | null;
   opacity?: number;
   visible?: boolean;
@@ -252,6 +260,9 @@ export type StrokePatch = Readonly<Partial<Stroke>>;
  */
 export type StyleProps = Readonly<{
   fill?: Paint | null;
+  fills?: readonly Fill[];
+  /** V35-C1: `passThrough` applies to groups, mask groups, frames, symbols and instances only. */
+  blendMode?: ContainerBlendMode;
   stroke?: StrokePatch | null;
   opacity?: number;
   cornerRadii?: CornerRadii;
@@ -277,6 +288,7 @@ export type DocumentCommand =
       frame: Frame;
       name?: string;
       fill?: Paint | null;
+      fills?: readonly Fill[];
       stroke?: Stroke | null;
       cornerRadii?: CornerRadii;
     }> &
@@ -286,6 +298,7 @@ export type DocumentCommand =
       frame: Frame;
       name?: string;
       fill?: Paint | null;
+      fills?: readonly Fill[];
       stroke?: Stroke | null;
     }> &
       Placement)
@@ -305,6 +318,7 @@ export type DocumentCommand =
       frame: Frame;
       name?: string;
       fill?: Paint | null;
+      fills?: readonly Fill[];
       stroke?: Stroke | null;
     }> &
       Placement)
@@ -316,6 +330,7 @@ export type DocumentCommand =
       fillRule?: FillRule;
       name?: string;
       fill?: Paint | null;
+      fills?: readonly Fill[];
       stroke?: Stroke | null;
     }> &
       Placement)
@@ -327,6 +342,7 @@ export type DocumentCommand =
       data?: JsonValue;
       name?: string;
       fill?: Paint | null;
+      fills?: readonly Fill[];
       stroke?: Stroke | null;
     }> &
       Placement)
@@ -363,6 +379,27 @@ export type DocumentCommand =
     }>
   /** Removes the effect at `index` of each listed node that has one. */
   | Readonly<{ type: 'removeEffect'; ids: readonly string[]; index: number }>
+  /**
+   * V-35 contract, V35-C1: appends a fill (the default paint, opacity 1, `normal`) to each
+   * listed node that takes fills (one step); at 16 fills it refuses with `editor.fill-limit`.
+   */
+  | Readonly<{ type: 'addFill'; ids: readonly string[] }>
+  /** Patches the fill at `index` (bottom first) of each listed node that has one. */
+  | Readonly<{
+      type: 'setFill';
+      ids: readonly string[];
+      index: number;
+      patch: Readonly<{
+        paint?: Paint;
+        visible?: boolean;
+        opacity?: number;
+        blendMode?: BlendMode;
+      }>;
+    }>
+  /** Removes the fill at `index` of each listed node that has one. */
+  | Readonly<{ type: 'removeFill'; ids: readonly string[]; index: number }>
+  /** Moves the fill at `from` to `to` on each listed node that has both indices. */
+  | Readonly<{ type: 'moveFill'; ids: readonly string[]; from: number; to: number }>
   /** E41 contract, section 2: replaces sibling shapes by one path, the `op` of their areas. */
   | Readonly<{
       type: 'booleanNodes';
@@ -666,7 +703,9 @@ export type EditorErrorCode =
   | 'editor.boolean-too-large'
   | 'editor.boolean-failed'
   // E41 contract, section 6.
-  | 'editor.effect-limit';
+  | 'editor.effect-limit'
+  /** V-35 contract, V35-C1: `addFill` past 16 fills. */
+  | 'editor.fill-limit';
 
 /**
  * `consumed` is present on `input` results only (M2-I3): whether navigation, the tool or a key
@@ -819,7 +858,13 @@ export type SelectionHandles = Readonly<{
  * are turned into their outline paths) or text. `transform` is parent-local, page-space for a
  * root. Nodes with `visible: false` are not in the scene, except a mask source, which only clips.
  */
-export type ExportNode = Readonly<{ id: string; transform: SceneAffine; opacity: number }> &
+export type ExportNode = Readonly<{
+  id: string;
+  transform: SceneAffine;
+  opacity: number;
+  /** V35-E1: the scene node's blend mode, absent for the default of its kind. */
+  blendMode?: SceneBlendMode;
+}> &
   (
     | Readonly<{ kind: 'container'; children: readonly string[]; clip: SceneClip }>
     | Readonly<{
