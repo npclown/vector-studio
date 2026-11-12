@@ -6,6 +6,8 @@ import type {
   DocumentV8,
   Effect,
   Fill,
+  FillPaint,
+  ImagePaint,
   JsonValue,
   LayoutGrid,
   LayoutFields,
@@ -39,6 +41,15 @@ function paint(value: Paint): Ordered {
     stops: value.stops.map((stop) => ({ offset: stop.offset, color: color(stop.color) })),
     spread: value.spread,
   };
+}
+
+/** V32-M3 key order: `kind, image, scaleMode, scale`. */
+function imagePaint(value: ImagePaint): Ordered {
+  return { kind: 'image', image: value.image, scaleMode: value.scaleMode, scale: value.scale };
+}
+
+function fillPaint(value: FillPaint): Ordered {
+  return 'kind' in value && value.kind === 'image' ? imagePaint(value) : paint(value);
 }
 
 function dash(value: Dash): Ordered {
@@ -126,7 +137,7 @@ function effect(value: Effect): Ordered {
 /** V35-S2 key order: `paint, visible, opacity, blendMode`. */
 function fill(value: Fill): Ordered {
   return {
-    paint: paint(value.paint),
+    paint: fillPaint(value.paint),
     visible: value.visible,
     opacity: value.opacity,
     blendMode: value.blendMode,
@@ -306,6 +317,7 @@ function nodeV6(value: NodeV6): Ordered {
  * persistence envelope (MVP M5 contract, M5-E3). Not exported from the package.
  */
 export function orderedDocument(document: DocumentV8): Ordered {
+  const images = document.images;
   return {
     schemaVersion: document.schemaVersion,
     id: document.id,
@@ -333,6 +345,28 @@ export function orderedDocument(document: DocumentV8): Ordered {
         .sort(compareCodeUnits)
         .map((key) => [key, nodeV8(document.nodes[key]!)]),
     ),
+    // V32-M1: the image table after the nodes, keys in code unit order; omitted when empty, so a
+    // document without images serializes as before V-32.
+    ...(images === undefined || Object.keys(images).length === 0
+      ? {}
+      : {
+          images: Object.fromEntries(
+            Object.keys(images)
+              .sort(compareCodeUnits)
+              .map((key) => {
+                const asset = images[key]!;
+                return [
+                  key,
+                  {
+                    mimeType: asset.mimeType,
+                    width: asset.width,
+                    height: asset.height,
+                    data: asset.data,
+                  },
+                ];
+              }),
+          ),
+        }),
   };
 }
 

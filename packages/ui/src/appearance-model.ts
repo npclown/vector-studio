@@ -79,8 +79,11 @@ export function common<T>(
  * A node's fill paint: its top fill's (V-35 fills are bottom first), or null (none, or a type
  * without fills).
  */
-export const fillOf = (node: NodeV8): Paint | null =>
-  'fills' in node && FILL_TYPES.has(node.type) ? (node.fills.at(-1)?.paint ?? null) : null;
+export const fillOf = (node: NodeV8): Paint | null => {
+  const paint = 'fills' in node && FILL_TYPES.has(node.type) ? node.fills.at(-1)?.paint : undefined;
+  // V-32: an image paint is not a `Paint`; the panel shows it as no colour until its own UI (U4).
+  return paint === undefined || ('kind' in paint && paint.kind === 'image') ? null : paint;
+};
 
 /** A node's stroke, or null. */
 export const strokeOf = (node: NodeV8): Stroke | null =>

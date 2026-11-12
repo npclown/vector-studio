@@ -19,6 +19,8 @@ import type {
   BindingRef,
   Bindings,
   BlendMode,
+  ImageAsset,
+  ImageMimeType,
   Color,
   ColorStyle,
   ContainerBlendMode,
@@ -50,6 +52,9 @@ import type {
   JsonValue,
   NodeV1,
   Paint,
+  FillPaint,
+  ImagePaint,
+  ImageScaleMode,
   PageV1,
   PathData,
   PathStroke,
@@ -115,7 +120,13 @@ export type ParseResultV5 = Readonly<{ ok: true; document: DocumentV5 }> | Model
 
 /** The result of `validateFragmentTree`: a node map, never a document. */
 export type FragmentTreeResult =
-  Readonly<{ ok: true; nodes: Readonly<Record<string, NodeV8>> }> | ModelFailure;
+  | Readonly<{
+      ok: true;
+      nodes: Readonly<Record<string, NodeV8>>;
+      /** V32-M4: the holder's `images`, normalized, when it carried any. */
+      images?: Readonly<Record<string, ImageAsset>>;
+    }>
+  | ModelFailure;
 
 export type NodeResult =
   | Readonly<{ ok: true; node: NodeV8 }>
@@ -137,6 +148,15 @@ export const MAX_DASH_ENTRIES = 16;
 export const MAX_EFFECTS = 8;
 /** V35-S3: the most fills a node holds. */
 export const MAX_FILLS = 16;
+
+/** V32-M1: the largest side of an image asset, in pixels. */
+export const MAX_IMAGE_SIDE = 32768;
+/** V32-M1: the most pixels of one image asset. */
+export const MAX_IMAGE_PIXELS = 2 ** 26;
+/** V32-M2: the most decoded bytes of one image asset. */
+export const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
+/** V32-M2: the most decoded bytes of a document's whole image table. */
+export const MAX_IMAGE_TABLE_BYTES = 256 * 1024 * 1024;
 
 /** The largest effect radius, and the largest shadow offset magnitude (E41-S3). */
 export const MAX_EFFECT_RADIUS = 1000;
@@ -265,12 +285,30 @@ export function validateAnyDocument(value: unknown): ParseResult {
  * nesting and the base tree depth still run. Returns the normalized node map, never a document;
  * no document entry point skips these rules.
  */
-export function validateFragmentTree(value: unknown): FragmentTreeResult {
+export function validateFragmentTree(
+  value: unknown,
+  /**
+   * V32-M4: an `images` table a previous `validateFragmentTree` returned, used as the holder's
+   * table without validating it again. Any other object is validated like a holder's `images`.
+   */
+  checked?: Readonly<Record<string, ImageAsset>>,
+): FragmentTreeResult {
   const version = checkVersion(value, [8]);
   if (version !== null) return version;
   try {
-    const tree = readTree(value as Record<string, unknown>, V8, false);
-    return { ok: true, nodes: tree.nodes };
+    const holder = value as Record<string, unknown>;
+    const tree = readTree(holder, V8, false);
+    // V32-M4: image paints name entries of the fragment's own `images`.
+    const images =
+      checked !== undefined
+        ? VALIDATED_TABLES.has(checked)
+          ? checked
+          : readImages(checked, ['images'])
+        : Object.hasOwn(holder, 'images')
+          ? readImages(holder.images, ['images'])
+          : undefined;
+    checkImageKeys(tree.nodes, images);
+    return { ok: true, nodes: tree.nodes, ...(images === undefined ? {} : { images }) };
   } catch (error) {
     if (error instanceof Failure) return { ok: false, code: error.code, path: pointer(error.path) };
     throw error;
@@ -840,6 +878,11 @@ type Schema = Readonly<{
    * holds.
    */
   autoLayout?: 'read';
+  /**
+   * V-32 (V32-M1): the document's optional `images` table, read only at v8 (`V8`). Every other
+   * schema leaves it unset, so there the key is unknown and an absent table stays absent in the v8 result.
+   */
+  images?: 'read';
 }>;
 
 const V4_TYPES = Object.keys(NODE_KEYS_V2) as NodeTypeKey[];
@@ -905,6 +948,7 @@ const V8: Schema = {
   layout: 'read',
   tables: 'read',
   autoLayout: 'read',
+  images: 'read',
 };
 /** v8 nodes of an input below v6, already migrated: v8 fields, the older opacity rule. */
 const V8_OLDER_OPACITY: Schema = { ...V8, ...OLDER };
@@ -929,6 +973,53 @@ function readPaint(value: unknown, path: Path): Paint {
   if (hasExactKeys(value, COLOR_KEYS)) return readColor(value, path);
   if (hasExactKeys(value, GRADIENT_KEYS)) return readGradient(value, path);
   invalid(path);
+}
+
+const IMAGE_PAINT_KEYS = ['kind', 'image', 'scaleMode', 'scale'] as const;
+const IMAGE_SCALE_MODES: readonly ImageScaleMode[] = ['fill', 'fit', 'stretch', 'tile'];
+const MIN_IMAGE_SCALE = 0.01;
+const MAX_IMAGE_SCALE = 100;
+
+/**
+ * V32-M3: a fill slot's paint, a `Paint` or an image paint (exactly `kind, image, scaleMode,
+ * scale`). Whether `image` names a table entry is checked with the document (V32-M4).
+ */
+function readFillPaint(value: unknown, path: Path): FillPaint {
+  if (!hasExactKeys(value, IMAGE_PAINT_KEYS) || value.kind !== 'image') {
+    return readPaint(value, path);
+  }
+  if (typeof value.image !== 'string' || !IMAGE_KEY.test(value.image)) {
+    invalid([...path, 'image']);
+  }
+  return {
+    kind: 'image',
+    image: value.image,
+    scaleMode: readEnum(value.scaleMode, IMAGE_SCALE_MODES, [...path, 'scaleMode']),
+    scale: readNumber(value.scale, [...path, 'scale'], MIN_IMAGE_SCALE, MAX_IMAGE_SCALE),
+  };
+}
+
+/** V32-M3: whether a fill paint is an image paint. */
+export function isImagePaint(paint: FillPaint): paint is ImagePaint {
+  return 'kind' in paint && paint.kind === 'image';
+}
+
+/**
+ * V32-M4: every image paint of `nodes` names an entry of `images` (absent means none), else
+ * `document.invalid-field` at the paint's `image`.
+ */
+function checkImageKeys(nodes: DocumentV8['nodes'], images: DocumentV8['images']): void {
+  for (const [key, node] of Object.entries(nodes)) {
+    if (!('fills' in node)) continue;
+    node.fills.forEach((fill, index) => {
+      if (
+        isImagePaint(fill.paint) &&
+        !(images !== undefined && Object.hasOwn(images, fill.paint.image))
+      ) {
+        invalid(['nodes', key, 'fills', index, 'paint', 'image']);
+      }
+    });
+  }
 }
 
 /**
@@ -1294,7 +1385,7 @@ function readFills(value: unknown, path: Path): Fill[] {
   return readArray(value, path, (entry, entryPath): Fill => {
     const record = readRecord(entry, ['paint', 'visible', 'opacity', 'blendMode'], entryPath);
     return {
-      paint: readPaint(record.paint, [...entryPath, 'paint']),
+      paint: readFillPaint(record.paint, [...entryPath, 'paint']),
       visible: readBoolean(record.visible, [...entryPath, 'visible']),
       opacity: readNumber(record.opacity, [...entryPath, 'opacity'], 0, 1),
       blendMode: readEnum(record.blendMode, BLEND_MODES, [...entryPath, 'blendMode']),
@@ -1804,6 +1895,12 @@ type Tree<D extends { pages: unknown; nodes: unknown } = DocumentV8> = Readonly<
 /** A v8 document read with the schema of its source version (an older one when migrating). */
 function readDocumentV8(value: Record<string, unknown>, schema: Schema): DocumentV8 {
   const { id, colorStyles, variables, pages, nodes } = readTree(value, schema, true);
+  // V32-M1: absent stays absent, which means no images.
+  const images =
+    schema.images === 'read' && Object.hasOwn(value, 'images')
+      ? readImages(value.images, ['images'])
+      : undefined;
+  checkImageKeys(nodes, images);
   return {
     schemaVersion: 8,
     id,
@@ -1811,7 +1908,130 @@ function readDocumentV8(value: Record<string, unknown>, schema: Schema): Documen
     ...(variables === undefined ? {} : { variables }),
     pages,
     nodes,
+    ...(images === undefined ? {} : { images }),
   };
+}
+
+const IMAGE_KEY = /^[0-9a-f]{64}$/u;
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/u;
+const IMAGE_MIME_TYPES: readonly ImageMimeType[] = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+];
+const IMAGE_ASSET_KEYS = ['mimeType', 'width', 'height', 'data'] as const;
+
+/**
+ * V32-M1, M2: the image table, keys in code unit order. Each key is 64 lowercase hex characters
+ * (not re-hashed); each asset has exactly `mimeType`, `width`, `height`, `data`; the base64 is
+ * checked for alphabet, padding and length, and only its first 16 bytes are decoded, for the
+ * format's magic bytes. The decoded sizes are bounded per asset and for the table.
+ */
+/** Tables `readImages` returned, which `validateFragmentTree` may take without re-reading. */
+const VALIDATED_TABLES = new WeakSet<object>();
+
+function readImages(value: unknown, path: Path): Record<string, ImageAsset> {
+  if (!isPlainObject(value)) invalid(path);
+  const images: Record<string, ImageAsset> = {};
+  let total = 0;
+  for (const key of Object.keys(value).sort(compareKeys)) {
+    const assetPath = [...path, key];
+    if (!IMAGE_KEY.test(key)) invalid(assetPath);
+    const record = readRecord(value[key], IMAGE_ASSET_KEYS, assetPath);
+    const mimeType = record.mimeType as ImageMimeType;
+    if (!IMAGE_MIME_TYPES.includes(mimeType)) invalid([...assetPath, 'mimeType']);
+    const width = readImageSide(record.width, [...assetPath, 'width']);
+    const height = readImageSide(record.height, [...assetPath, 'height']);
+    if (width * height > MAX_IMAGE_PIXELS) invalid([...assetPath, 'height']);
+    const dataPath = [...assetPath, 'data'];
+    const data = readString(record.data, dataPath);
+    const bytes = base64Length(data);
+    if (bytes === null || bytes === 0 || bytes > MAX_IMAGE_BYTES) invalid(dataPath);
+    if (!hasImageMagic(mimeType, data)) invalid(dataPath);
+    total += bytes;
+    if (total > MAX_IMAGE_TABLE_BYTES) invalid(assetPath);
+    images[key] = { mimeType, width, height, data };
+  }
+  VALIDATED_TABLES.add(images);
+  return images;
+}
+
+/**
+ * V32-E1: one asset of the image table checked with the rules of `parseDocument` (V32-M1, M2) for
+ * its key and fields, or null. The returned asset is a normalized copy.
+ */
+export function validateImageAsset(key: unknown, value: unknown): ImageAsset | null {
+  if (typeof key !== 'string') return null;
+  try {
+    const table = readImages(Object.fromEntries([[key, value]]), []);
+    return Object.hasOwn(table, key) ? table[key]! : null;
+  } catch (error) {
+    if (error instanceof Failure) return null;
+    throw error;
+  }
+}
+
+/**
+ * V32-M2: the decoded size in bytes of an asset's base64 `data`, which must already be valid (a
+ * parsed document's or a command's checked asset); other strings give a meaningless size.
+ */
+export function imageDataBytes(data: string): number {
+  // From the length and padding only: callers pass data a parse or command already validated.
+  const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0;
+  return Math.max(0, (data.length / 4) * 3 - padding);
+}
+
+function readImageSide(value: unknown, path: Path): number {
+  const side = readNumber(value, path, 1, MAX_IMAGE_SIDE);
+  if (!Number.isInteger(side)) invalid(path);
+  return side;
+}
+
+/** The decoded length of padded standard base64, or null when the text is not such base64. */
+function base64Length(data: string): number | null {
+  if (data.length % 4 !== 0 || !BASE64.test(data)) return null;
+  const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0;
+  return (data.length / 4) * 3 - padding;
+}
+
+const BASE64_DIGITS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/** Decodes padded standard base64 already checked by `base64Length` (the model has no DOM). */
+function decodeBase64(data: string): number[] {
+  const bytes: number[] = [];
+  for (let index = 0; index + 4 <= data.length; index += 4) {
+    const digits = [...data.slice(index, index + 4)].map((char) =>
+      char === '=' ? 0 : BASE64_DIGITS.indexOf(char),
+    );
+    const value = (digits[0]! << 18) | (digits[1]! << 12) | (digits[2]! << 6) | digits[3]!;
+    bytes.push((value >> 16) & 0xff);
+    if (data[index + 2] !== '=') bytes.push((value >> 8) & 0xff);
+    if (data[index + 3] !== '=') bytes.push(value & 0xff);
+  }
+  return bytes;
+}
+
+/** V32-M2: the first bytes of the decoded data match the format. */
+function hasImageMagic(mimeType: ImageMimeType, data: string): boolean {
+  const head = decodeBase64(data.slice(0, 24));
+  const byte = (index: number) => head[index] ?? -1;
+  const text = (from: number, to: number) =>
+    String.fromCharCode(...head.slice(from, Math.min(to, head.length)));
+  switch (mimeType) {
+    case 'image/png':
+      return byte(0) === 0x89 && text(1, 4) === 'PNG';
+    case 'image/jpeg':
+      return byte(0) === 0xff && byte(1) === 0xd8 && byte(2) === 0xff;
+    case 'image/gif':
+      return text(0, 4) === 'GIF8';
+    case 'image/webp':
+      return text(0, 4) === 'RIFF' && text(8, 12) === 'WEBP';
+  }
+}
+
+function compareKeys(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 /**
@@ -1826,7 +2046,13 @@ function readTree(value: Record<string, unknown>, schema: Schema, references: bo
     schema.tables === 'read' && references && isPlainObject(value)
       ? (['colorStyles', 'variables'] as const).filter((key) => Object.hasOwn(value, key))
       : [];
-  const record = readRecord(value, ['schemaVersion', 'id', ...optional, 'pages', 'nodes'], []);
+  // V32-M1: a v8 document may carry `images`, which `readDocumentV8` reads.
+  const images = schema.images === 'read' && isPlainObject(value) && Object.hasOwn(value, 'images');
+  const record = readRecord(
+    value,
+    ['schemaVersion', 'id', ...optional, 'pages', 'nodes', ...(images ? ['images'] : [])],
+    [],
+  );
   const id = readIdV2(record.id, ['id']);
   if (!Array.isArray(record.pages) || record.pages.length === 0) invalid(['pages']);
   const pages = readArray(record.pages, ['pages'], (entry, entryPath) =>

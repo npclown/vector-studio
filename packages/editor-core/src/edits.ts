@@ -5,10 +5,10 @@ import {
   validateNode,
   type DocumentV8,
   type Fill,
+  type FillPaint,
   type Frame,
   type NodeV8,
   type PageV2,
-  type Paint,
   type Stroke,
   type SymbolNodeV8,
   type TextNodeV8,
@@ -24,6 +24,7 @@ import { booleanNodes } from './boolean-command.js';
 import { paste } from './clipboard.js';
 import { addEffect, removeEffect, setEffect } from './effect-commands.js';
 import { addFill, moveFill, removeFill, setFill } from './fill-commands.js';
+import { insertImages, setImageFill, setImagePaint } from './image-commands.js';
 import { tableCommand } from './table-commands.js';
 import { defaultBlendMode, paintFill } from './fills.js';
 import { hugSizing, inferAutoLayout } from './auto-layout.js';
@@ -166,7 +167,7 @@ function withFills(
   if (!Object.hasOwn(props, 'fill')) return props;
   if (Object.hasOwn(props, 'fills')) return fail('editor.invalid-command', `${prefix}/fills`);
   const { fill, ...rest } = props;
-  return { ...rest, fills: fill === null ? [] : [paintFill(fill as Paint)] };
+  return { ...rest, fills: fill === null ? [] : [paintFill(fill as FillPaint)] };
 }
 
 /**
@@ -183,8 +184,8 @@ function fillPath(path: string | undefined, fromFill: boolean): string | undefin
 
 /** The `fills` of a created node from the command's `fill` or `fills` (V35-S5). */
 function createdFills(
-  command: Readonly<{ fill?: Paint | null; fills?: readonly Fill[] }>,
-  fallback: Paint | null,
+  command: Readonly<{ fill?: FillPaint | null; fills?: readonly Fill[] }>,
+  fallback: FillPaint | null,
 ): unknown {
   if (command.fills !== undefined) return command.fills;
   const paint = command.fill === undefined ? fallback : command.fill;
@@ -434,6 +435,12 @@ export function applyEdit(
       return removeFill(document, command, context, custom, finish);
     case 'moveFill':
       return moveFill(document, command, context, custom, finish);
+    case 'insertImages':
+      return insertImages(document, command, context, custom, finish);
+    case 'setImageFill':
+      return setImageFill(document, command, context, custom, finish);
+    case 'setImagePaint':
+      return setImagePaint(document, command, context, custom, finish);
     case 'createColorStyle':
     case 'updateColorStyle':
     case 'removeColorStyle':

@@ -1,11 +1,13 @@
 import { frameSceneCount } from './fills.js';
 import {
+  isImagePaint,
   isValidId,
   scanJson,
   serializeDocument,
   validateFragmentTree,
   validateNode,
   type DocumentV8,
+  type ImageAsset,
   type InstanceNodeV8,
   type NodeV8,
   type SymbolNodeV8,
@@ -65,6 +67,8 @@ export const FRAGMENT_MARKER = 'vector-studio/fragment';
 export const FRAGMENT_VERSION = 2;
 const FRAGMENT_KEYS_V1: readonly string[] = ['fragmentVersion', 'schemaVersion', 'roots', 'nodes'];
 const FRAGMENT_KEYS_V2: readonly string[] = [...FRAGMENT_KEYS_V1, 'sources', 'sourceNodes'];
+/** V-32 (V32-E3): the optional key of a version 2 fragment holding the image entries it names. */
+const FRAGMENT_KEY_IMAGES = 'images';
 const START = { horizontal: 'start', vertical: 'start' } as const;
 
 export type Copied = Readonly<{
@@ -88,6 +92,8 @@ type Fragment = Readonly<{
    */
   sourceNodes: Readonly<Record<string, NodeV8>>;
   sourceHolder: string;
+  /** V32-E3: the image entries the fragment carries (validated), absent without any. */
+  images?: Readonly<Record<string, ImageAsset>>;
 }>;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -168,6 +174,25 @@ export function copyFragment(
     for (const id of subtree(tree, source)) carried.set(id, document.nodes[id]!);
     carried.set(source, { ...document.nodes[source]!, parent: '' });
   }
+  // V32-E3: the table entries the copied and carried nodes name, in key order; absent without.
+  const named = new Set<string>();
+  for (const map of [nodes, carried]) {
+    for (const node of map.values()) {
+      if (!('fills' in node)) continue;
+      for (const fill of node.fills) if (isImagePaint(fill.paint)) named.add(fill.paint.image);
+    }
+  }
+  const images =
+    named.size === 0 || document.images === undefined
+      ? {}
+      : {
+          images: Object.fromEntries(
+            [...named]
+              .filter((key) => Object.hasOwn(document.images!, key))
+              .sort(byCodeUnits)
+              .map((key) => [key, document.images![key]!]),
+          ),
+        };
   const body = JSON.stringify({
     fragmentVersion: FRAGMENT_VERSION,
     schemaVersion: 8,
@@ -175,6 +200,7 @@ export function copyFragment(
     nodes: canonicalNodes(nodes),
     sources,
     sourceNodes: canonicalNodes(carried),
+    ...images,
   });
   return { text: `${FRAGMENT_MARKER}\n${body}`, roots, sources };
 }
@@ -441,13 +467,19 @@ function treeRules(
   name: string,
   { read, holder }: ReadMap,
   roots: readonly string[],
+  images: Readonly<Record<string, ImageAsset>> | undefined,
 ): Readonly<{ nodes: Readonly<Record<string, NodeV8>> }> | Failure {
-  const tree = validateFragmentTree({
-    schemaVersion: 8,
-    id: holder,
-    pages: [{ id: holder, name: '', children: [...roots] }],
-    nodes: Object.fromEntries(read),
-  });
+  const tree = validateFragmentTree(
+    {
+      schemaVersion: 8,
+      id: holder,
+      pages: [{ id: holder, name: '', children: [...roots] }],
+      nodes: Object.fromEntries(read),
+      // V32-M4: image paints name entries of the fragment's own `images` (validated once by the
+      // caller).
+    },
+    images,
+  );
   if (tree.ok) return { nodes: tree.nodes };
   const path = tree.path.startsWith('/nodes/') ? `/${name}${tree.path.slice(6)}` : tree.path;
   return fail(tree.code, path);
@@ -495,8 +527,14 @@ export function parseFragment(text: string, custom: CustomRules): Fragment | Fai
     );
   }
   if (!isRecord(value)) return fail('editor.invalid-clipboard', '');
-  const keys = value.fragmentVersion === 2 ? FRAGMENT_KEYS_V2 : FRAGMENT_KEYS_V1;
-  for (const key of keys) {
+  // V32-E3: a version 2 fragment may carry `images`.
+  const keys =
+    value.fragmentVersion === 2
+      ? Object.hasOwn(value, FRAGMENT_KEY_IMAGES)
+        ? [...FRAGMENT_KEYS_V2, FRAGMENT_KEY_IMAGES]
+        : FRAGMENT_KEYS_V2
+      : FRAGMENT_KEYS_V1;
+  for (const key of keys.filter((entry) => entry !== FRAGMENT_KEY_IMAGES)) {
     if (!Object.hasOwn(value, key)) return fail('editor.invalid-clipboard', pointer([key]));
   }
   for (const key of Object.keys(value)) {
@@ -589,10 +627,37 @@ export function parseFragment(text: string, custom: CustomRules): Fragment | Fai
   }
 
   // The model's tree rules, each map on its own holder page, never one merged node map.
-  const validated = treeRules('nodes', main, [...rootSet]);
+  // V32-E3: the fragment's `images`, validated once (the model's table rules).
+  let images: Readonly<Record<string, ImageAsset>> | undefined;
+  if (Object.hasOwn(value, FRAGMENT_KEY_IMAGES)) {
+    const table = validateFragmentTree({
+      schemaVersion: 8,
+      id: main.holder,
+      pages: [{ id: main.holder, name: '', children: [] }],
+      nodes: {},
+      images: value[FRAGMENT_KEY_IMAGES],
+    });
+    if (!table.ok) return fail(table.code, table.path);
+    images = table.images;
+  }
+  const validated = treeRules('nodes', main, [...rootSet], images);
   if ('ok' in validated) return validated;
-  const validatedSources = treeRules('sourceNodes', side, [...sourceSet]);
+  const validatedSources = treeRules('sourceNodes', side, [...sourceSet], images);
   if ('ok' in validatedSources) return validatedSources;
+  // V32-E3: the table holds only the entries the nodes and the carried sources name; one nothing
+  // names is `document.invalid-field` at its entry, so a paste merges no unnamed entry.
+  if (images !== undefined) {
+    const named = new Set<string>();
+    for (const map of [validated.nodes, validatedSources.nodes]) {
+      for (const node of Object.values(map)) {
+        if (!('fills' in node)) continue;
+        for (const fill of node.fills) if (isImagePaint(fill.paint)) named.add(fill.paint.image);
+      }
+    }
+    for (const key of Object.keys(images)) {
+      if (!named.has(key)) return fail('document.invalid-field', pointer(['images', key]));
+    }
+  }
   const frozen = deepFreeze(validated.nodes);
   const frozenSources = deepFreeze(validatedSources.nodes);
   for (const [name, map] of [
@@ -610,6 +675,7 @@ export function parseFragment(text: string, custom: CustomRules): Fragment | Fai
     sources: [...sourceSet],
     sourceNodes: frozenSources,
     sourceHolder: side.holder,
+    ...(images === undefined ? {} : { images }),
   };
 }
 
@@ -878,6 +944,22 @@ export function paste(
   const resolved = resolveInstances(document, fragment, originals, links, context, custom);
   if ('ok' in resolved) return resolved;
 
+  // V32-E3: the fragment's image entries join the table; an entry under a key the document holds
+  // with other content is `editor.image-invalid` (at the fragment's entry), and the table's size
+  // is checked by `finish` (`editor.image-too-large`).
+  // The table is copied once and keys are added to the copy (never a spread per entry).
+  let merged = document.images;
+  let copy: Record<string, ImageAsset> | undefined;
+  for (const [key, asset] of Object.entries(fragment.images ?? {})) {
+    const held = merged !== undefined && Object.hasOwn(merged, key) ? merged[key] : undefined;
+    if (held === undefined) {
+      copy ??= { ...merged };
+      copy[key] = asset;
+      merged = copy;
+    } else if (JSON.stringify(held) !== JSON.stringify(asset)) {
+      return fail('editor.image-invalid', pointer(['images', key]));
+    }
+  }
   const tree = documentTree(document);
   const target = pasteTarget(tree, context);
   const onPage = tree.page(target) !== undefined;
@@ -926,6 +1008,7 @@ export function paste(
       expandedCopyOf.set(id, map);
     }
     const draft = new Draft(document);
+    draft.setImages(merged);
     for (const id of originals) {
       const node = fragment.nodes[id]!;
       const root = rootSet.has(id);

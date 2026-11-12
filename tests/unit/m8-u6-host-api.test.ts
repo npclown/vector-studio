@@ -115,6 +115,8 @@ const ADDED: Readonly<Record<keyof typeof AT_17A2B0A, readonly string[]>> = {
     'ExportScene',
     'ExtensionCommandBuilder',
     'ExtensionSummary',
+    // V-32 (images) adds the command input of an image asset.
+    'ImageAssetInput',
     // V-38 (rulers, guides and layout grids) adds the layout-grid geometry.
     'LayoutGridBand',
     'LayoutGridGeometry',

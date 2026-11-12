@@ -1,5 +1,11 @@
 import type { PagePoint, TextStyle } from '@vector-studio/editor-core';
-import type { Color, DocumentV8, NodeV8, Paint } from '@vector-studio/model';
+import {
+  isImagePaint,
+  type Color,
+  type DocumentV8,
+  type NodeV8,
+  type Paint,
+} from '@vector-studio/model';
 import { nodePageCorners } from './m2-geometry';
 
 // V-25 slice 7 (readable default text colour): in the studio layout a text tool press picks the
@@ -70,6 +76,7 @@ function opaqueFill(node: NodeV8, inherited: number): Color | null {
   const fills = 'fills' in node ? node.fills : [];
   const fill = [...fills].reverse().find((entry) => entry.visible && entry.opacity > 0);
   if (fill === undefined) return null;
+  if (isImagePaint(fill.paint)) return null;
   const color = paintColor(fill.paint);
   return color.a * fill.opacity * node.opacity * inherited >= 0.5 ? color : null;
 }

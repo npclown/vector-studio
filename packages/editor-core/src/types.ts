@@ -33,6 +33,10 @@ import type {
   BlendMode,
   ContainerBlendMode,
   Fill,
+  FillPaint,
+  ImageAsset,
+  ImageMimeType,
+  ImageScaleMode,
   PathVerb,
   Stroke,
   TextNodeV8,
@@ -254,7 +258,7 @@ export type SnapOverlay = Readonly<{
 export type NodeProps = Readonly<{
   name?: string;
   /** V35-S5: replaces all fills by this one fill (opacity 1, `normal`), or none. */
-  fill?: Paint | null;
+  fill?: FillPaint | null;
   /** V35-S5: replaces the fills; with `fill` it is `editor.invalid-command`. */
   fills?: readonly Fill[];
   blendMode?: ContainerBlendMode;
@@ -287,7 +291,7 @@ export type StrokePatch = Readonly<Partial<Stroke>>;
  * node whose type has that prop, and other nodes are left unchanged; `stroke: null` removes it.
  */
 export type StyleProps = Readonly<{
-  fill?: Paint | null;
+  fill?: FillPaint | null;
   fills?: readonly Fill[];
   /** V35-C1: `passThrough` applies to groups, mask groups, frames, symbols and instances only. */
   blendMode?: ContainerBlendMode;
@@ -309,13 +313,26 @@ export type Placement = Readonly<{
   index?: number;
 }>;
 
+/**
+ * V-32 contract, V32-E1: an image asset as a command takes it. The host reads `width` and
+ * `height` from the file header and computes `key`, the lowercase hex SHA-256 of the decoded
+ * bytes, so commands stay synchronous.
+ */
+export type ImageAssetInput = Readonly<{
+  key: string;
+  mimeType: ImageMimeType;
+  width: number;
+  height: number;
+  data: string;
+}>;
+
 /** Commands that change the document; each successful one is one transaction. */
 export type DocumentCommand =
   | (Readonly<{
       type: 'createRectangle';
       frame: Frame;
       name?: string;
-      fill?: Paint | null;
+      fill?: FillPaint | null;
       fills?: readonly Fill[];
       stroke?: Stroke | null;
       cornerRadii?: CornerRadii;
@@ -325,7 +342,7 @@ export type DocumentCommand =
       type: 'createEllipse';
       frame: Frame;
       name?: string;
-      fill?: Paint | null;
+      fill?: FillPaint | null;
       fills?: readonly Fill[];
       stroke?: Stroke | null;
     }> &
@@ -345,7 +362,7 @@ export type DocumentCommand =
       type: 'createFrame';
       frame: Frame;
       name?: string;
-      fill?: Paint | null;
+      fill?: FillPaint | null;
       fills?: readonly Fill[];
       stroke?: Stroke | null;
     }> &
@@ -357,7 +374,7 @@ export type DocumentCommand =
       points: readonly number[];
       fillRule?: FillRule;
       name?: string;
-      fill?: Paint | null;
+      fill?: FillPaint | null;
       fills?: readonly Fill[];
       stroke?: Stroke | null;
     }> &
@@ -369,7 +386,7 @@ export type DocumentCommand =
       /** Defaults to the extension's `defaults()`. */
       data?: JsonValue;
       name?: string;
-      fill?: Paint | null;
+      fill?: FillPaint | null;
       fills?: readonly Fill[];
       stroke?: Stroke | null;
     }> &
@@ -430,7 +447,7 @@ export type DocumentCommand =
       ids: readonly string[];
       index: number;
       patch: Readonly<{
-        paint?: Paint;
+        paint?: FillPaint;
         visible?: boolean;
         opacity?: number;
         blendMode?: BlendMode;
@@ -614,6 +631,37 @@ export type DocumentCommand =
    * document, as one step; with no frame change no step is recorded.
    */
   | Readonly<{ type: 'refitText'; ids?: readonly string[] }>
+  // V-32 contract, V32-E2: images.
+  /**
+   * Adds one rectangle per asset with the image as its fill, at the image's natural size, to the
+   * active page (or the frame under `at` with `adoptIntoFrames`); the first is centred on `at`
+   * (default: the viewport centre), the next ones offset by (20, 20) each. `names` has one name
+   * per asset. The new rectangles become the selection. Returns their IDs.
+   */
+  | Readonly<{
+      type: 'insertImages';
+      assets: readonly ImageAssetInput[];
+      at?: PagePoint;
+      names?: readonly string[];
+    }>
+  /**
+   * Sets the topmost fill's paint of each listed node that takes fills to the image (adding a
+   * fill when it has none; mode `fill` by default). Nodes without fills are skipped; none
+   * qualifying is `editor.image-no-target`. Returns empty `ids`.
+   */
+  | Readonly<{
+      type: 'setImageFill';
+      ids: readonly string[];
+      asset: ImageAssetInput;
+      scaleMode?: ImageScaleMode;
+    }>
+  /** Changes mode or scale of each listed node whose topmost fill is an image paint. */
+  | Readonly<{
+      type: 'setImagePaint';
+      ids: readonly string[];
+      scaleMode?: ImageScaleMode;
+      scale?: number;
+    }>
   // V-39 contract, section 3: colour styles, variables, modes and bindings. A change of a
   // style's paint, a variable's value or the active mode rewrites every bound node (E1).
   /** Appends a colour style; returns its ID. */
@@ -826,7 +874,12 @@ export type EditorErrorCode =
   | 'editor.table-limit'
   | 'editor.last-mode'
   /** V-35 contract, V35-C1: `addFill` past 16 fills. */
-  | 'editor.fill-limit';
+  | 'editor.fill-limit'
+  // V-32 contract, V32-E1, M4: an invalid asset, a dangling image key, or a key with other data;
+  // the image table over its limit; `setImageFill` or `setImagePaint` with no target node.
+  | 'editor.image-invalid'
+  | 'editor.image-too-large'
+  | 'editor.image-no-target';
 
 /**
  * `consumed` is present on `input` results only (M2-I3): whether navigation, the tool or a key
@@ -1030,6 +1083,11 @@ export type ExportScene = Readonly<{
   nodes: ReadonlyMap<string, ExportNode>;
   /** The roots in paint order, back to front. */
   rootOrder: readonly string[];
+  /**
+   * V32-E4: the document's image entries that the nodes' image paints name; absent without any.
+   * An image paint's `image` is a key of it.
+   */
+  images?: Readonly<Record<string, ImageAsset>>;
 }>;
 
 export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'committedDocument' }

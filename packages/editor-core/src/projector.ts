@@ -8,6 +8,7 @@ import type {
   SceneBlendMode,
   SceneEffect,
   SceneIdentity,
+  SceneImagePaint,
   SceneRejectionReason,
   ScenePathGeometry,
   ScenePaint,
@@ -21,7 +22,9 @@ import type {
   DocumentV8,
   Effect,
   Fill,
+  FillPaint,
   Frame,
+  ImageAsset,
   LineNodeV8,
   NodeV8,
   Paint,
@@ -30,7 +33,7 @@ import type {
   TextNodeV8,
 } from '@vector-studio/model';
 import { fillDraws } from './fills.js';
-import { MAX_FILLS } from '@vector-studio/model';
+import { MAX_FILLS, isImagePaint } from '@vector-studio/model';
 import { ExpansionCache, type Expansion, type ExpansionResult } from './expansion.js';
 import { localTransform } from './geometry.js';
 import { lineDashes, type LineDash } from './line-dash.js';
@@ -194,12 +197,36 @@ class Outline {
 type PathContent = Pick<Extract<RenderNodeSnapshot, { kind: 'path' }>, 'geometry' | 'style'>;
 
 /**
+ * V32-S4: the image table a projection resolves image paints against, or null when the projector
+ * does not project images (`EditorOptions.projectImages` off): then an image fill projects as no
+ * fill. A document without images passes `{}`.
+ */
+export type ImageProjection = Readonly<Record<string, ImageAsset>> | null;
+
+/**
  * M4-P1 (MVP M4 contract, section 3): a colour passes through unchanged; a gradient, stored in
  * the unit box of the node's frame, is composed into the box `w × h` of node-local space,
  * `transform = diag(w*, h*) · T` with an axis of size 0 folded as 1 (E23, gradient space).
+ *
+ * V32-M5, S4: with a fill-slot paint, an image paint composes through `images` into the scene
+ * image paint for the box `w × h` (see `composeImagePaint`), or null: no table (the option is
+ * off), no entry, or a box with a zero axis.
  */
-export function composePaint(paint: Paint, width: number, height: number): ScenePaint {
+export function composePaint(paint: Paint, width: number, height: number): ScenePaint;
+export function composePaint(
+  paint: FillPaint,
+  width: number,
+  height: number,
+  images: ImageProjection,
+): ScenePaint | null;
+export function composePaint(
+  paint: FillPaint,
+  width: number,
+  height: number,
+  images: ImageProjection = null,
+): ScenePaint | null {
   if (!('kind' in paint)) return paint;
+  if (paint.kind === 'image') return composeImagePaint(paint, width, height, images);
   const sx = width > 0 ? width : 1;
   const sy = height > 0 ? height : 1;
   const [a, b, c, d, e, f] = paint.transform;
@@ -208,6 +235,62 @@ export function composePaint(paint: Paint, width: number, height: number): Scene
     transform: [sx * a + 0, sy * b + 0, sx * c + 0, sy * d + 0, sx * e + 0, sy * f + 0],
     stops: paint.stops.map((stop) => ({ offset: stop.offset, color: stop.color })),
     spread: paint.spread,
+  };
+}
+
+/**
+ * V32-M5, S4: the scene image paint of `paint` in a node box `w × h` (image `iw × ih`, from
+ * `images`). The transform maps the image's unit square to node-local space: `stretch` the box;
+ * `fill` the image scaled by `max(w/iw, h/ih)` and centred, `fit` by `min` and centred; `tile`
+ * `iw·scale × ih·scale` from the top-left. Wraps: `stretch`, `fill` extend on both axes; `fit`
+ * extends on the axis the image spans and decals the letterboxed one (both extend when the
+ * aspects match); `tile` repeats on both. Null for a zero-size axis, no table or no entry.
+ */
+function composeImagePaint(
+  paint: Extract<FillPaint, { kind: 'image' }>,
+  width: number,
+  height: number,
+  images: ImageProjection,
+): SceneImagePaint | null {
+  if (images === null || !Object.hasOwn(images, paint.image)) return null;
+  if (!(width > 0) || !(height > 0)) return null;
+  const { width: iw, height: ih } = images[paint.image]!;
+  const image = paint.image;
+  if (paint.scaleMode === 'stretch') {
+    return {
+      kind: 'image',
+      image,
+      transform: [width, 0, 0, height, 0, 0],
+      wrapX: 'extend',
+      wrapY: 'extend',
+    };
+  }
+  if (paint.scaleMode === 'tile') {
+    const w = iw * paint.scale;
+    const h = ih * paint.scale;
+    return {
+      kind: 'image',
+      image,
+      transform: [w, 0, 0, h, 0, 0],
+      wrapX: 'repeat',
+      wrapY: 'repeat',
+    };
+  }
+  const fit = paint.scaleMode === 'fit';
+  const s = fit ? Math.min(width / iw, height / ih) : Math.max(width / iw, height / ih);
+  const w = iw * s;
+  const h = ih * s;
+  const transform = [w, 0, 0, h, (width - w) / 2 + 0, (height - h) / 2 + 0] as const;
+  if (!fit) return { kind: 'image', image, transform, wrapX: 'extend', wrapY: 'extend' };
+  // The aspects match when `width · ih = height · iw`; otherwise the smaller ratio's axis spans.
+  const left = width * ih;
+  const right = height * iw;
+  return {
+    kind: 'image',
+    image,
+    transform,
+    wrapX: left <= right ? 'extend' : 'decal',
+    wrapY: left >= right ? 'extend' : 'decal',
   };
 }
 
@@ -614,13 +697,23 @@ function containerBlend(mode: ContainerBlendMode, emit: boolean): { blendMode?: 
   return blendField(mode, true, emit);
 }
 
-/** V35-P1: `paint` composed in the box `w × h` with its alpha multiplied by `opacity`. */
-export function composeFillPaint(fill: Fill, width: number, height: number): ScenePaint {
-  const paint = composePaint(fill.paint, width, height);
+/**
+ * V35-P1: `paint` composed in the box `w × h` with its alpha multiplied by `opacity`. An image
+ * paint has no alpha of its own in the scene (V32-S1), so its fill opacity does not enter here:
+ * it goes to the opacity of the fill's own leaf (`imageLeafOpacity`, V32-M5 as implemented).
+ * Null is no fill (V32-S4).
+ */
+export function composeFillPaint(
+  fill: Fill,
+  width: number,
+  height: number,
+  images: ImageProjection = null,
+): ScenePaint | null {
+  const paint = composePaint(fill.paint, width, height, images);
+  if (paint === null) return null;
   const opacity = fill.opacity;
   if (opacity === 1) return paint;
   if (!('kind' in paint)) return { ...paint, a: paint.a * opacity };
-  // The model has no image paint until V-32 U2b, which owns its fill opacity.
   if (paint.kind === 'image') return paint;
   return {
     ...paint,
@@ -629,6 +722,22 @@ export function composeFillPaint(fill: Fill, width: number, height: number): Sce
       color: { ...stop.color, a: stop.color.a * opacity },
     })),
   };
+}
+
+/**
+ * The opacity of the leaf that draws `fill` on its own: an image fill's opacity (the scene image
+ * paint has no alpha), 1 for a colour or gradient, whose alpha is folded into the paint.
+ */
+export function imageLeafOpacity(fill: Fill): number {
+  return isImagePaint(fill.paint) ? fill.opacity : 1;
+}
+
+/**
+ * Whether the fill must draw as a leaf of its own: an image fill below full opacity does, since
+ * its opacity is the leaf's.
+ */
+function needsOwnLeaf(fill: Fill): boolean {
+  return imageLeafOpacity(fill) !== 1;
 }
 
 type LeafContent =
@@ -706,7 +815,19 @@ export function strokeLeafId(nodeId: string): string {
 }
 
 /** What a leaf projection emits: effects (E41-S6), blend modes (V35-P4), as a mask source. */
-export type LeafEmit = Readonly<{ effects: EffectProjection; blend: boolean; mask: boolean }>;
+export type LeafEmit = Readonly<{
+  effects: EffectProjection;
+  blend: boolean;
+  mask: boolean;
+  /** V32-S4: the image table to project image fills with, or null/absent for none. */
+  images?: ImageProjection;
+}>;
+
+/**
+ * V32-S2: a mask source's paint is ignored (E23-K5) and never requested from the port, so an
+ * image fill of one is replaced by an opaque colour: the source still covers its fill area.
+ */
+const MASK_IMAGE_COVERAGE: ScenePaint = { r: 0, g: 0, b: 0, a: 1 };
 
 /**
  * The scene snapshots of leaf `node` under the scene parent `parentId`, its own node first, or
@@ -764,21 +885,30 @@ export function projectLeaf(
       if (emit.mask) {
         // V35-P2b: the source's fill area only, as one leaf without a mode.
         const first = drawing[0]?.fill;
+        const held = first ?? node.fills[0];
+        // A fill that does not draw keeps its raw paint (V35-P2b: no opacity folded in).
         const paint =
-          first !== undefined
-            ? composeFillPaint(first, width, height)
-            : node.fills[0] !== undefined
-              ? composePaint(node.fills[0].paint, width, height)
-              : null;
+          held === undefined
+            ? null
+            : isImagePaint(held.paint)
+              ? width > 0 && height > 0
+                ? MASK_IMAGE_COVERAGE
+                : null
+              : first === undefined
+                ? composePaint(held.paint, width, height)
+                : composeFillPaint(first, width, height);
         const content = filledContent(node, custom, paint, node.stroke);
         return content === null ? null : [{ ...base, ...content }];
       }
       if (
         drawing.length === 0 ||
-        (drawing.length === 1 && drawing[0]!.fill.blendMode === 'normal')
+        (drawing.length === 1 &&
+          drawing[0]!.fill.blendMode === 'normal' &&
+          !needsOwnLeaf(drawing[0]!.fill))
       ) {
         const first = drawing[0]?.fill;
-        const paint = first === undefined ? null : composeFillPaint(first, width, height);
+        const paint =
+          first === undefined ? null : composeFillPaint(first, width, height, emit.images ?? null);
         const content = filledContent(node, custom, paint, node.stroke);
         return content === null
           ? null
@@ -788,11 +918,17 @@ export function projectLeaf(
       const inner = { parentId: node.id, transform: IDENTITY_TRANSFORM, visible: true, opacity: 1 };
       const leaves: RenderNodeSnapshot[] = [];
       for (const { fill, index } of drawing) {
-        const content = filledContent(node, custom, composeFillPaint(fill, width, height), null);
+        const content = filledContent(
+          node,
+          custom,
+          composeFillPaint(fill, width, height, emit.images ?? null),
+          null,
+        );
         if (content === null) return null;
         leaves.push({
           id: fillLeafId(node.id, index),
           ...inner,
+          opacity: imageLeafOpacity(fill),
           ...blendField(fill.blendMode, false, blend),
           ...content,
         });
@@ -845,8 +981,12 @@ export function projectNode(
   layout?: TextLayouter,
   effects = false,
   blend = false,
+  images: ImageProjection = null,
 ): RenderNodeSnapshot | null {
-  return projectLeaf(node, custom, parentId, layout, { effects, blend, mask: false })?.[0] ?? null;
+  return (
+    projectLeaf(node, custom, parentId, layout, { effects, blend, mask: false, images })?.[0] ??
+    null
+  );
 }
 
 type ContainerSnapshot = Extract<RenderNodeSnapshot, { kind: 'container' }>;
@@ -881,6 +1021,7 @@ function frameSnapshots(
   children: readonly string[],
   effects: EffectProjection,
   blend: boolean,
+  images: ImageProjection = null,
 ): RenderNodeSnapshot[] {
   const { width, height } = node.frame;
   const content = frameContentId(node.id);
@@ -894,10 +1035,11 @@ function frameSnapshots(
       id: index === 0 ? frameBackgroundId(node.id) : `${frameBackgroundId(node.id)}${index}`,
       parentId: content,
       ...inner,
+      opacity: imageLeafOpacity(fill),
       ...blendField(fill.blendMode, false, blend),
       kind: 'primitive',
       geometry: rectangle,
-      style: { fill: composeFillPaint(fill, width, height), stroke: null },
+      style: { fill: composeFillPaint(fill, width, height, images), stroke: null },
     });
   });
   // M4-P3: the border is a primitive as a rectangle is, else the M4-P4 outline with no fill.
@@ -1082,6 +1224,7 @@ function projectExpanded(
   textless: string[],
   effects: EffectProjection,
   blend: boolean,
+  images: ImageProjection,
 ): string[] {
   const walk = (ids: readonly string[], parentId: string, maskSource?: string): string[] => {
     const projected: string[] = [];
@@ -1112,7 +1255,14 @@ function projectExpanded(
           reusedFrom(old, node, parentId, children, id === maskSource) ??
           keepEqual(
             node.type === 'frame'
-              ? frameSnapshots({ ...node, id: scene }, parentId, sceneChildren, emit, emitBlend)
+              ? frameSnapshots(
+                  { ...node, id: scene },
+                  parentId,
+                  sceneChildren,
+                  emit,
+                  emitBlend,
+                  images,
+                )
               : [groupSnapshot(scene, node, parentId, sceneChildren, emit, emitBlend)],
             old?.snapshots,
           );
@@ -1125,6 +1275,7 @@ function projectExpanded(
             effects,
             blend,
             mask: id === maskSource,
+            images,
           });
           if (leaf === null) {
             if (node.type === 'text') textless.push(scene);
@@ -1173,7 +1324,10 @@ export function projectPage(
   layout?: TextLayouter,
   effects: EffectProjection = false,
   blend = false,
+  projectImages = false,
 ): PageProjection {
+  // V32-S4: the document's table when images project, else none (image fills project as no fill).
+  const images: ImageProjection = projectImages ? (document.images ?? {}) : null;
   const built = new Map<string, RenderNodeSnapshot>();
   const order: string[] = [];
   const units: string[] = [];
@@ -1217,6 +1371,7 @@ export function projectPage(
       missing,
       effects,
       blend,
+      images,
     );
     textless.push(...missing);
     // The instance's own frame nodes: its placement, the source's fill and stroke.
@@ -1240,6 +1395,7 @@ export function projectPage(
         roots,
         !masked && effects,
         blend && !masked,
+        images,
       ),
       entry?.snapshots.slice(0, 3 + MAX_FILLS),
     );
@@ -1293,7 +1449,7 @@ export function projectPage(
           reusedFrom(memo?.get(id), node, parentId, children, id === maskSource) ??
           (frameLike
             ? keepEqual(
-                frameSnapshots(node, parentId, children, emit, emitBlend),
+                frameSnapshots(node, parentId, children, emit, emitBlend, images),
                 memo?.get(id)?.snapshots,
               )
             : [groupSnapshot(id, node, parentId, children, emit, emitBlend)]);
@@ -1311,7 +1467,12 @@ export function projectPage(
         const reuse = reusedFrom(old, node, parentId, null, id === maskSource);
         const leaf =
           reuse ??
-          projectLeaf(node, custom, parentId, layout, { effects, blend, mask: id === maskSource });
+          projectLeaf(node, custom, parentId, layout, {
+            effects,
+            blend,
+            mask: id === maskSource,
+            images,
+          });
         if (leaf === null) {
           if (node.type === 'text') textless.push(id);
           continue;
@@ -1452,6 +1613,10 @@ export class SceneProjector {
   private readonly effects: EffectProjection;
   /** V35-P4: whether snapshots carry blend modes; fixed for the projector's life. */
   private readonly blend: boolean;
+  /** V32-S4: whether snapshots carry image paints; fixed for the projector's life. */
+  private readonly images: boolean;
+  /** Whether the off-option notice was raised for the current page (V32-S4). */
+  private imagesReported = false;
 
   /**
    * `expansions` is the editor's one expansion cache, shared with its checks and hit testing
@@ -1459,7 +1624,10 @@ export class SceneProjector {
    * layout cache; without it text projects nothing (M6c contract, M6c-P2 and P3). With
    * `effects`, snapshots carry node effects (E41 contract, E41-S5 and S6); off by default, so
    * that a renderer on `effects: 'none'` never meets them. With `blend`, snapshots carry blend
-   * modes (V-35 contract, V35-P4), for a renderer on `blend: 'v0'`.
+   * modes (V-35 contract, V35-P4), for a renderer on `blend: 'v0'`. With `images`, image fills
+   * project as scene image paints (V-32 contract, V32-S4), for a renderer on `paints: 'image'`;
+   * without it they project as no fill and the first projection of the page raises
+   * `editor.renderer-unsupported` naming them.
    */
   constructor(
     renderer: RendererSceneSynchronization,
@@ -1469,6 +1637,7 @@ export class SceneProjector {
     layout?: TextLayouter,
     effects: EffectProjection = false,
     blend = false,
+    images = false,
   ) {
     this.renderer = renderer;
     this.custom = custom;
@@ -1477,6 +1646,7 @@ export class SceneProjector {
     this.layout = layout;
     this.effects = effects;
     this.blend = blend;
+    this.images = images;
   }
 
   get active(): boolean {
@@ -1491,6 +1661,7 @@ export class SceneProjector {
    */
   replace(document: DocumentV8, page: string, touched: readonly string[] = []): void {
     this.textReported = false;
+    this.imagesReported = false;
     this.sendSnapshot(document, page, touched);
   }
 
@@ -1596,7 +1767,10 @@ export class SceneProjector {
     if (this.excluded.size !== excluded) this.scoped = false;
     const split = this.split;
     if (this.identity === null || this.base === null || this.page !== page) {
-      if (this.page !== page) this.textReported = false;
+      if (this.page !== page) {
+        this.textReported = false;
+        this.imagesReported = false;
+      }
       if (split !== null) split.path = 'snapshot';
       this.sendSnapshot(document, page);
       return;
@@ -2076,8 +2250,10 @@ export class SceneProjector {
       this.layout,
       this.effects,
       this.blend,
+      this.images,
     );
     this.noteTextless(projection.textless);
+    this.noteImages(document, projection.units);
 
     // Removals: scene IDs a walked unit no longer has, and the held subtrees of units that left
     // a walked child list without being projected elsewhere. Memo entries of deleted units go
@@ -2169,6 +2345,7 @@ export class SceneProjector {
       this.layout,
       this.effects,
       this.blend,
+      this.images,
     );
     const expected = this.differences(oracle, this.goneFrom(oracle));
     const expectedMet = [...oracle.invalid].sort();
@@ -2257,9 +2434,11 @@ export class SceneProjector {
       this.layout,
       this.effects,
       this.blend,
+      this.images,
     );
     this.noteInvalid(new Set(projection.invalid), omit);
     this.noteTextless(projection.textless);
+    this.noteImages(document, projection.units);
     return projection;
   }
 
@@ -2276,6 +2455,53 @@ export class SceneProjector {
       code: 'editor.text-unavailable',
       reason: 'no-text-layout',
       nodeIds: [...textless].sort(),
+    });
+  }
+
+  /**
+   * V32-S4: without the images option, the first projection of the page that holds a visible
+   * image fill raises `editor.renderer-unsupported` (`unsupported-feature`) with those document
+   * node IDs, sorted; later ones raise nothing until `replace` (attach, load, page switch). An
+   * instance counts through its source's fills and its expansion (a symbol of any page); mask
+   * sources do not count, since they project as coverage.
+   */
+  private noteImages(document: DocumentV8, units: readonly string[]): void {
+    if (this.images || this.imagesReported) return;
+    const named: string[] = [];
+    for (const id of units) {
+      const node = document.nodes[id];
+      if (node === undefined) continue;
+      const draws = (candidate: NodeV8, nodes: (id: string) => NodeV8 | undefined) => {
+        if (!('fills' in candidate)) return false;
+        if (!candidate.fills.some((fill) => fillDraws(fill) && isImagePaint(fill.paint))) {
+          return false;
+        }
+        const parent = nodes(candidate.parent);
+        return !(parent?.type === 'maskGroup' && parent.children[0] === candidate.id);
+      };
+      const own = (key: string) =>
+        Object.hasOwn(document.nodes, key) ? document.nodes[key] : undefined;
+      if (node.type !== 'instance') {
+        if (draws(node, own)) named.push(id);
+        continue;
+      }
+      const source = own(node.symbol);
+      const expansion = this.expansions.expand(document, id);
+      const expanded =
+        expansion !== null && expansion.ok
+          ? [...expansion.expansion.nodes.values()].some((inner) =>
+              draws(inner, (key) => expansion.expansion.nodes.get(key)),
+            )
+          : false;
+      if ((source !== undefined && draws(source, own)) || expanded) named.push(id);
+    }
+    if (named.length === 0) return;
+    this.imagesReported = true;
+    this.report({
+      type: 'diagnostic',
+      code: 'editor.renderer-unsupported',
+      reason: 'unsupported-feature',
+      nodeIds: named.sort(),
     });
   }
 
