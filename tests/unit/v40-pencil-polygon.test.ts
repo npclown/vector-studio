@@ -16,6 +16,10 @@ import {
   polygonPath,
   smooth,
 } from '../../packages/editor-core/src/freehand.js';
+import {
+  polygonSidesCommit,
+  polygonSidesStep,
+} from '../../packages/ui/src/editor-toolbar-model.js';
 
 // V-40 (Figma gap item 10; contract docs/plans/viz-v40-pencil-polygon-contract.md): the pencil
 // tool (freehand stroke smoothed and fitted with cubics) and the polygon tool (a regular polygon
@@ -140,6 +144,31 @@ describe('V-40 freehand geometry', () => {
       const p = { x: 100 + 50 * Math.cos(angle), y: 100 + 50 * Math.sin(angle) };
       expect(nearest(curve, p)).toBeLessThan(FREEHAND.tolerancePx + 1);
     }
+  });
+
+  it('keeps the size of a sparse loop (review B1): a quick flick is not pulled to its centroid', () => {
+    for (const count of [5, 6, 8, 16]) {
+      const samples = circle(count).map((p) => ({ x: (p.x - 100) * 0.6 + 100, y: p.y }));
+      const data = freehandPath(samples, 1);
+      if (data === null) continue;
+      const xs = data.points.filter((_, i) => i % 2 === 0);
+      expect(Math.max(...xs) - Math.min(...xs), `${count} samples`).toBeGreaterThan(50);
+    }
+    // The reviewer's square loop makes a real shape, not a point.
+    const square = freehandPath(
+      [
+        { x: 0, y: 0 },
+        { x: 20, y: 0 },
+        { x: 20, y: 20 },
+        { x: 0, y: 20 },
+        { x: 0, y: 5 },
+        { x: 0, y: 0.5 },
+        { x: 0.2, y: 0.1 },
+      ],
+      1,
+    )!;
+    const ys = square.points.filter((_, i) => i % 2 === 1);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(15);
   });
 
   it('leaves a stroke open when it ends away from its start', () => {
@@ -304,6 +333,74 @@ describe('V-40 pencil tool', () => {
       event: { kind: 'keydown', key: 'P', repeat: false, composing: false, modifiers: shift },
     });
     expect(target.query({ type: 'tool' })).toBe('pencil');
+  });
+});
+
+describe('V-40 drawing options', () => {
+  function framed(tool: 'pencil' | 'polygon') {
+    const target = editor(tool, { adoptIntoFrames: true });
+    const frame = target.execute({
+      type: 'createFrame',
+      frame: { x: 0, y: 0, width: 400, height: 400 },
+    });
+    if (!frame.ok) throw new Error(frame.code);
+    return { target, frame: frame.ids[0]! };
+  }
+
+  it('creates the pencil path in the frame under the press with adoptIntoFrames', () => {
+    const { target, frame } = framed('pencil');
+    drag(
+      target,
+      wave(2).map((p) => ({ x: p.x + 50, y: p.y + 50 })),
+    );
+    expect(paths(target)[0]!.parent).toBe(frame);
+  });
+
+  it('creates the polygon in the frame under the press with adoptIntoFrames', () => {
+    const { target, frame } = framed('polygon');
+    drag(target, [
+      { x: 50, y: 50 },
+      { x: 150, y: 150 },
+    ]);
+    expect(paths(target)[0]!.parent).toBe(frame);
+  });
+
+  it('draws on the page when the press is outside every frame', () => {
+    const { target } = framed('polygon');
+    drag(target, [
+      { x: 500, y: 500 },
+      { x: 600, y: 600 },
+    ]);
+    expect(paths(target)[0]!.parent).toBe(target.getSnapshot().activePage);
+  });
+
+  it('shows no snap guide while Shift squares the polygon (review S4)', () => {
+    const target = editor('polygon');
+    target.execute({ type: 'createRectangle', frame: { x: 200, y: 0, width: 50, height: 50 } });
+    target.execute({ type: 'setTool', tool: 'polygon' });
+    send(target, 'pointerdown', { x: 0, y: 0 }, shift);
+    send(target, 'pointermove', { x: 199, y: 49 }, shift);
+    expect(target.query({ type: 'snap' })).toBeNull();
+    send(target, 'pointerup', { x: 199, y: 49 }, shift);
+  });
+});
+
+describe('V-40 Sides field model', () => {
+  it('sends typed text on commit only when it differs from the count', () => {
+    expect(polygonSidesCommit(null, 3)).toBeNull();
+    expect(polygonSidesCommit('  ', 3)).toBeNull();
+    expect(polygonSidesCommit('3', 3)).toBeNull();
+    expect(polygonSidesCommit('20', 3)).toBe(20);
+    // Out of range is sent, so the command refuses it and the refusal shows.
+    expect(polygonSidesCommit('2', 3)).toBe(2);
+  });
+
+  it('steps by one with the arrow keys within 3 to 60', () => {
+    expect(polygonSidesStep(3, 'ArrowUp')).toBe(4);
+    expect(polygonSidesStep(3, 'ArrowDown')).toBeNull();
+    expect(polygonSidesStep(60, 'ArrowUp')).toBeNull();
+    expect(polygonSidesStep(10, 'ArrowDown')).toBe(9);
+    expect(polygonSidesStep(10, 'Enter')).toBeNull();
   });
 });
 

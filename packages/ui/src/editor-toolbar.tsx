@@ -23,6 +23,8 @@ import {
   actionShortcut,
   actionTitle,
   nextMenuIndex,
+  polygonSidesCommit,
+  polygonSidesStep,
   shortcutFor,
   toolTitle,
   withShortcut,
@@ -204,20 +206,18 @@ const polygonSidesOf = (snapshot: EditorSnapshot): number => snapshot.polygonSid
 
 /**
  * V-40: the polygon tool's side count (`polygon-sides`, 3 to 60), shown while the polygon tool is
- * active. A value outside the range or not a whole number is refused by `setPolygonSides`, and
- * the field shows the session's count again.
+ * active. Typed text applies on Enter or blur (Escape reverts it); ArrowUp and ArrowDown step the
+ * count at once. A value outside the range or not a whole number is refused by `setPolygonSides`
+ * (the refusal shows), and the field shows the session's count again.
  */
 function PolygonSidesField({ onResult }: Readonly<{ onResult: (result: CommandResult) => void }>) {
   const execute = useEditorCommands();
   const sides = useEditorSelector(polygonSidesOf);
   const [draft, setDraft] = useState<string | null>(null);
   const commit = () => {
-    if (draft === null) return;
-    const value = Number(draft);
+    const value = polygonSidesCommit(draft, sides);
     setDraft(null);
-    if (draft.trim() !== '' && value !== sides) {
-      onResult(execute({ type: 'setPolygonSides', sides: value }));
-    }
+    if (value !== null) onResult(execute({ type: 'setPolygonSides', sides: value }));
   };
   return (
     <span role="group" aria-label="polygon" style={ROW}>
@@ -232,19 +232,18 @@ function PolygonSidesField({ onResult }: Readonly<{ onResult: (result: CommandRe
           step={1}
           value={draft ?? String(sides)}
           style={{ width: '3.5em' }}
-          onChange={(event) => {
-            const text = event.currentTarget.value;
-            // The spinner arrows step by one: apply at once; typed text applies on Enter or blur.
-            const value = Number(text);
-            if (Number.isInteger(value) && Math.abs(value - sides) === 1) {
-              setDraft(null);
-              onResult(execute({ type: 'setPolygonSides', sides: value }));
-            } else setDraft(text);
-          }}
+          onChange={(event) => setDraft(event.currentTarget.value)}
           onBlur={commit}
           onKeyDown={(event) => {
             if (event.key === 'Enter') commit();
             if (event.key === 'Escape') setDraft(null);
+            // ArrowUp and ArrowDown step the session count by one at once (within 3 to 60).
+            if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+              event.preventDefault();
+              const next = polygonSidesStep(sides, event.key);
+              setDraft(null);
+              if (next !== null) onResult(execute({ type: 'setPolygonSides', sides: next }));
+            }
           }}
         />
       </label>

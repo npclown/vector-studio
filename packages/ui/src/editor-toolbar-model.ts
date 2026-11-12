@@ -223,3 +223,21 @@ export function nextMenuIndex(
       return null;
   }
 }
+
+/**
+ * V-40: the side count the polygon Sides field sends for typed `draft` text on Enter or blur, or
+ * null to send nothing (no draft, empty text, or the current count). Out-of-range or fractional
+ * values are sent, so `setPolygonSides` refuses them and the refusal shows.
+ */
+export function polygonSidesCommit(draft: string | null, sides: number): number | null {
+  if (draft === null || draft.trim() === '') return null;
+  const value = Number(draft);
+  return value === sides ? null : value;
+}
+
+/** V-40: the count ArrowUp or ArrowDown in the Sides field steps to, or null outside 3 to 60. */
+export function polygonSidesStep(sides: number, key: string): number | null {
+  if (key !== 'ArrowUp' && key !== 'ArrowDown') return null;
+  const next = sides + (key === 'ArrowUp' ? 1 : -1);
+  return next >= 3 && next <= 60 ? next : null;
+}

@@ -747,6 +747,8 @@ export function createPencilTool(options: DrawOptions = {}): Tool {
       drag.parent = null;
       result = context.gesture.replace([command(null)]);
     }
+    // Refused on the page too: no stale preview stays in the document.
+    if (!result.ok) context.gesture.replace([]);
     drag.id = result.ok ? (result.ids[0] ?? null) : null;
   }
 
@@ -846,6 +848,7 @@ export function createPolygonTool(sides: PolygonSides, options: DrawOptions = {}
       drag.parent = null;
       result = context.gesture.replace([command(null)]);
     }
+    if (!result.ok) context.gesture.replace([]);
     drag.id = result.ok ? (result.ids[0] ?? null) : null;
   }
 
@@ -878,8 +881,12 @@ export function createPolygonTool(sides: PolygonSides, options: DrawOptions = {}
         return true;
       }
       if (!isMoveOrUp(event) || drag === null) return false;
-      // The dragged corner snaps (M2 section 4.2), as the box tools' does; Shift squares the box.
-      const end = snappedPoint(context, event.point, event.modifiers, drag.candidates);
+      // The dragged corner snaps (M2 section 4.2), as the box tools' does; Shift squares the box
+      // instead, without snapping (as the line tool's Shift), so no guide marks a point the
+      // square's corner is not on.
+      const end = event.modifiers.shift
+        ? { point: event.point, overlay: null }
+        : snappedPoint(context, event.point, event.modifiers, drag.candidates);
       drag.end = end.point;
       drag.shift = event.modifiers.shift;
       show(context);

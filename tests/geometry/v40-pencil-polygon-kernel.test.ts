@@ -5,6 +5,7 @@ import {
   createFillMeshPort,
   createStrokeMeshPort,
 } from '../../packages/geometry-wasm/src/index.js';
+import { createCounterIdSource, createEditor } from '../../packages/editor-core/src/index.js';
 import {
   freehandPath,
   polygonPath,
@@ -68,8 +69,31 @@ const cases: [string, PathData][] = [
   ['polygon 5 square', polygonPath({ x: 0, y: 0, width: 120, height: 120 }, 5)!],
 ];
 
+/**
+ * The geometry the renderer receives for the path `createPath` stores from `data` (review B2):
+ * the stored unit points times the frame size, as the projector's `pathGeometry` does, in the
+ * node's own space. The command's grid snapping does not survive this round trip.
+ */
+function stored(data: PathData): PathData {
+  const editor = createEditor({ ids: createCounterIdSource('n') });
+  const result = editor.execute({ type: 'createPath', verbs: data.verbs, points: data.points });
+  if (!result.ok) throw new Error(result.code);
+  const node = editor.getSnapshot().document.nodes[result.ids[0]!]!;
+  if (node.type !== 'path') throw new Error('not a path');
+  const { width, height } = node.frame;
+  return {
+    verbs: node.path.verbs,
+    points: node.path.points.map((value, i) => value * (i % 2 === 0 ? width : height) + 0),
+  };
+}
+
 describe('V-40 pencil and polygon paths on the real kernel', () => {
-  it.each(cases)('%s: fill and 1 px stroke of each join build', async (_, data) => {
+  it.each(
+    cases.flatMap(([name, data]) => [
+      [`${name} (command points)`, data] as [string, PathData],
+      [`${name} (stored, as projected)`, stored(data)] as [string, PathData],
+    ]),
+  )('%s: fill and 1 px stroke of each join build', async (_, data) => {
     const fillPort = await createFillMeshPort(module);
     const strokePort = await createStrokeMeshPort(module);
     const verbs = Uint8Array.from(data.verbs, (verb) => PATH_VERB_CODES[verb]);
