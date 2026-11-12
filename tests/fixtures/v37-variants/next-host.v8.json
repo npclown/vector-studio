@@ -38,13 +38,21 @@
         0,
         0
       ],
-      "fill": {
-        "r": 1,
-        "g": 0,
-        "b": 0,
-        "a": 1
-      },
+      "fills": [
+        {
+          "paint": {
+            "r": 1,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          },
+          "visible": true,
+          "opacity": 1,
+          "blendMode": "normal"
+        }
+      ],
       "stroke": null,
+      "blendMode": "normal",
       "effects": []
     },
     "sA": {
@@ -68,8 +76,9 @@
       "children": [
         "rA"
       ],
-      "fill": null,
+      "fills": [],
       "stroke": null,
+      "blendMode": "passThrough",
       "effects": []
     },
     "rB": {
@@ -96,13 +105,21 @@
         0,
         0
       ],
-      "fill": {
-        "r": 0,
-        "g": 1,
-        "b": 0,
-        "a": 1
-      },
+      "fills": [
+        {
+          "paint": {
+            "r": 0,
+            "g": 1,
+            "b": 0,
+            "a": 1
+          },
+          "visible": true,
+          "opacity": 1,
+          "blendMode": "normal"
+        }
+      ],
       "stroke": null,
+      "blendMode": "normal",
       "effects": []
     },
     "sB": {
@@ -126,8 +143,9 @@
       "children": [
         "rB"
       ],
-      "fill": null,
+      "fills": [],
       "stroke": null,
+      "blendMode": "passThrough",
       "effects": []
     },
     "rC": {
@@ -154,13 +172,21 @@
         0,
         0
       ],
-      "fill": {
-        "r": 0,
-        "g": 0,
-        "b": 1,
-        "a": 1
-      },
+      "fills": [
+        {
+          "paint": {
+            "r": 0,
+            "g": 0,
+            "b": 1,
+            "a": 1
+          },
+          "visible": true,
+          "opacity": 1,
+          "blendMode": "normal"
+        }
+      ],
       "stroke": null,
+      "blendMode": "normal",
       "effects": []
     },
     "sC": {
@@ -184,8 +210,9 @@
       "children": [
         "rC"
       ],
-      "fill": null,
+      "fills": [],
       "stroke": null,
+      "blendMode": "passThrough",
       "effects": []
     },
     "inst": {
@@ -208,6 +235,7 @@
       "type": "instance",
       "symbol": "sA",
       "textOverrides": {},
+      "blendMode": "passThrough",
       "effects": []
     }
   }

@@ -43,11 +43,11 @@ const OWN_VALUES = [
   'ToolbarPrimaryRow',
   'ToolbarSecondaryRow',
   'ZoomMenu',
-  'importMessages',
   // V-37 (variants and overrides): the focused layer of an instance.
   'clearInstanceFocus',
   'focusInstanceAt',
   'getInstanceFocus',
+  'importMessages',
   'resolvePanels',
   'selectForContextMenu',
   'setInstanceFocus',

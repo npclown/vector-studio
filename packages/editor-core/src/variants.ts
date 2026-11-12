@@ -46,7 +46,7 @@ const START = { horizontal: 'start', vertical: 'start' } as const;
 const SET_BORDER = { r: 0x97 / 255, g: 0x47 / 255, b: 1, a: 1 } as const;
 /** The room a new set leaves around its variants (section 4.1). */
 const SET_MARGIN = 20;
-const OVERRIDE_FIELDS = ['fill', 'stroke', 'opacity', 'visible', 'effects'] as const;
+const OVERRIDE_FIELDS = ['fills', 'stroke', 'opacity', 'visible', 'effects'] as const;
 
 const escaped = (key: string) => key.replaceAll('~', '~0').replaceAll('/', '~1');
 const unchanged = (document: DocumentV8): EditResult => ({
@@ -159,7 +159,7 @@ function buildSet(
     visible: true,
     type: 'symbolSet',
     children: members,
-    fill: null,
+    fills: [],
     stroke: {
       color: SET_BORDER,
       width: 1,
@@ -169,6 +169,7 @@ function buildSet(
       dash: { pattern: [4, 4], phase: 0 },
     },
     effects: [],
+    blendMode: 'passThrough',
   };
   const draft = new Draft(document);
   draft.set(set);
@@ -278,7 +279,7 @@ function nodeAtPath(
 
 /** Whether `field` of an override applies to `target`, the source itself when `root` (V37-S3). */
 function applies(field: string, target: NodeV8, root: boolean): boolean {
-  return field === 'fill' || field === 'stroke' ? field in target : !root;
+  return field === 'fills' || field === 'stroke' ? field in target : !root;
 }
 
 /** The value of override field `field` the node has itself. */

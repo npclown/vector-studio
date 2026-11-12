@@ -3,7 +3,12 @@
 // and SVG export of an overridden instance (V37-A03, A04, A05, A09, A11).
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { validateDocument, type DocumentV8, type InstanceNodeV8 } from '@vector-studio/model';
+import {
+  validateDocument,
+  type Color,
+  type DocumentV8,
+  type InstanceNodeV8,
+} from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   createEditor,
@@ -25,6 +30,8 @@ const GOOD = readFileSync(
   path.resolve(import.meta.dirname, '../fixtures/v37-variants/variants.v8.json'),
   'utf8',
 );
+/** One normal fill of `paint`, V-35's list form. */
+const fl = (paint: Color) => [{ paint, visible: true, opacity: 1, blendMode: 'normal' as const }];
 const GREEN = { r: 0, g: 1, b: 0, a: 1 };
 const PURPLE = { r: 0.5, g: 0, b: 0.5, a: 1 };
 
@@ -104,7 +111,7 @@ describe('V37-A03 the override step (V37-X1)', () => {
     const r1 = expansion.nodes.get('r1')!;
     expect(r1.frame.width).toBe(100);
     expect(r1.frame.height).toBe(80);
-    expect(r1).toMatchObject({ fill: GREEN, opacity: 0.5, visible: false });
+    expect(r1).toMatchObject({ fills: fl(GREEN), opacity: 0.5, visible: false });
   });
 
   it('fails the expansion when an overridden node fails the field rules (V37-X3)', () => {
@@ -113,9 +120,9 @@ describe('V37-A03 the override step (V37-X1)', () => {
     const document = withOverrides(build(), { r1: { opacity: 5 } });
     const result = expandInstance(document, 'inst1');
     expect(result).toMatchObject({ ok: false, code: 'editor.invalid-expansion', node: 'r1' });
-    const ignored = withOverrides(build(), { t1: { fill: GREEN } });
+    const ignored = withOverrides(build(), { t1: { fills: fl(GREEN) } });
     expect(expandInstance(ignored, 'inst1')!.ok).toBe(true);
-    expect('fill' in expanded(ignored).nodes.get('t1')!).toBe(false);
+    expect('fills' in expanded(ignored).nodes.get('t1')!).toBe(false);
   });
 });
 
@@ -123,7 +130,7 @@ describe('V37-A04 source edits propagate to fields without an override', () => {
   it('keeps an overridden field and follows the source on the others', () => {
     const target = editorOf(
       build((value) => {
-        value.nodes.inst1.overrides = { r1: { fill: GREEN } };
+        value.nodes.inst1.overrides = { r1: { fills: fl(GREEN) } };
       }),
     );
     const stroke = {
@@ -139,12 +146,12 @@ describe('V37-A04 source edits propagate to fields without an override', () => {
     ).toBe(true);
     const document = target.query({ type: 'document' });
     const r1 = expanded(document).nodes.get('r1')!;
-    expect(r1).toMatchObject({ fill: GREEN, stroke });
+    expect(r1).toMatchObject({ fills: fl(GREEN), stroke });
     expect(target.execute({ type: 'setNodeProps', id: 'r1', props: { opacity: 0.4 } }).ok).toBe(
       true,
     );
     expect(expanded(target.query({ type: 'document' })).nodes.get('r1')).toMatchObject({
-      fill: GREEN,
+      fills: fl(GREEN),
       opacity: 0.4,
     });
   });
@@ -157,11 +164,11 @@ describe('V37-A04 source edits propagate to fields without an override', () => {
           n.id.startsWith('inst1'),
         ),
       );
-    // The fixture's `sA` override is `fill: null`, so no red background; the source is red.
+    // The fixture's `sA` override is `fills: []`, so no red background; the source is red.
     const bare = withOverrides(document, { t1: { opacity: 1 } });
     expect(dump(bare)).toContain('"r":1,"g":0,"b":0');
     expect(dump(document)).not.toBe(dump(bare));
-    const purple = withOverrides(document, { sA: { fill: PURPLE } });
+    const purple = withOverrides(document, { sA: { fills: fl(PURPLE) } });
     expect(dump(purple)).toContain('"r":0.5,"g":0,"b":0.5');
   });
 });
@@ -194,7 +201,7 @@ describe('V37-A05 the cache key (V37-X2)', () => {
     // The source-key override is no child: it recomputes no subtree.
     const source = withOverrides(removed, {
       ...instanceOf(removed).overrides,
-      sA: { fill: PURPLE },
+      sA: { fills: fl(PURPLE) },
     });
     const third = cache.expand(source, 'inst1');
     expect(cache.computed).toBe(4);
@@ -212,7 +219,7 @@ describe('V37-X4 key upkeep', () => {
   it('drops the key of a node that leaves the source, and the map when empty', () => {
     const target = editorOf(
       build((value) => {
-        value.nodes.inst1.overrides = { r1: { fill: GREEN }, t1: { opacity: 0.5 } };
+        value.nodes.inst1.overrides = { r1: { fills: fl(GREEN) }, t1: { opacity: 0.5 } };
       }),
     );
     const document = run(target, { type: 'deleteNodes', ids: ['r1'] });
@@ -226,7 +233,7 @@ describe('V37-X4 key upkeep', () => {
   it('drops the key of a node moved out of the source', () => {
     const target = editorOf(
       build((value) => {
-        value.nodes.inst1.overrides = { r1: { fill: GREEN, opacity: 0.5 } };
+        value.nodes.inst1.overrides = { r1: { fills: fl(GREEN), opacity: 0.5 } };
       }),
     );
     const moved = run(target, { type: 'moveNodes', ids: ['r1'], parent: 'page-1', index: 3 });
@@ -254,6 +261,7 @@ describe('V37-X4 key upkeep', () => {
       stroke: null,
       startArrow: 'none',
       endArrow: 'none',
+      blendMode: 'normal',
       effects: [],
     });
     const result = draft.finish(() => null, { refit: false });
@@ -270,15 +278,15 @@ describe('V37-X4 key upkeep', () => {
       miterLimit: 4,
       dash: null,
     };
-    const kept = retyped({ r1: { fill: GREEN, stroke, opacity: 0.5 } });
+    const kept = retyped({ r1: { fills: fl(GREEN), stroke, opacity: 0.5 } });
     expect(instanceOf(kept).overrides).toEqual({ r1: { stroke, opacity: 0.5 } });
     expect(validateDocument(JSON.parse(JSON.stringify(kept))).ok).toBe(true);
   });
 
   it('removes an override left empty, and the map when none is left', () => {
-    const two = retyped({ r1: { fill: GREEN }, t1: { opacity: 0.5 } });
+    const two = retyped({ r1: { fills: fl(GREEN) }, t1: { opacity: 0.5 } });
     expect(instanceOf(two).overrides).toEqual({ t1: { opacity: 0.5 } });
-    const none = retyped({ r1: { fill: GREEN } });
+    const none = retyped({ r1: { fills: fl(GREEN) } });
     expect(Object.hasOwn(instanceOf(none), 'overrides')).toBe(false);
     expect(validateDocument(JSON.parse(JSON.stringify(none))).ok).toBe(true);
   });
@@ -293,12 +301,12 @@ describe('V37-A09 detach bakes the overrides', () => {
     const document = target.query({ type: 'document' });
     const frame = document.nodes.inst1!;
     expect(frame.type).toBe('frame');
-    // The source-key override `fill: null` replaces the source's red background.
-    expect(frame).toMatchObject({ fill: null });
+    // The source-key override `fills: []` replaces the source's red background.
+    expect(frame).toMatchObject({ fills: [] });
     const [first, second] = (frame as unknown as { children: string[] }).children.map(
       (id) => document.nodes[id]!,
     );
-    expect(first).toMatchObject({ fill: GREEN, opacity: 0.5, visible: false });
+    expect(first).toMatchObject({ fills: fl(GREEN), opacity: 0.5, visible: false });
     expect(second).toMatchObject({ opacity: 0.25 });
     expect(target.query({ type: 'exportSvg', ids: ['inst1'] })).toBe(before);
   });
@@ -306,9 +314,9 @@ describe('V37-A09 detach bakes the overrides', () => {
   it('projects the detached frame as the instance did, scene IDs mapped', () => {
     const open = build((value) => {
       value.nodes.inst1.overrides = {
-        r1: { fill: GREEN, opacity: 0.5 },
+        r1: { fills: fl(GREEN), opacity: 0.5 },
         t1: { opacity: 0.25 },
-        sA: { fill: PURPLE },
+        sA: { fills: fl(PURPLE) },
       };
     });
     const dump = (document: DocumentV8) => {
@@ -366,7 +374,7 @@ describe('V37-A09 detach bakes the overrides', () => {
     expect(frame.type).toBe('frame');
     expect(frame.stroke.color).toEqual(PURPLE);
     expect(document.nodes[frame.children[0]!]).toMatchObject({
-      fill: GREEN,
+      fills: fl(GREEN),
       opacity: 0.5,
       visible: false,
     });
@@ -377,7 +385,7 @@ describe('V37-A09 detach bakes the overrides', () => {
 describe('V37-A11 projection and SVG export show the overrides', () => {
   it('projects the overridden paint, and a hidden node as not visible', () => {
     const document = build((value) => {
-      value.nodes.inst1.overrides = { r1: { fill: GREEN, visible: false } };
+      value.nodes.inst1.overrides = { r1: { fills: fl(GREEN), visible: false } };
     });
     const snapshot = (value: DocumentV8) => {
       const nodes = projectPage(value, 'page-1', noCustom).nodes;
@@ -394,7 +402,7 @@ describe('V37-A11 projection and SVG export show the overrides', () => {
   it('writes the override fill, stroke and opacity into the SVG', () => {
     const target = editorOf(
       build((value) => {
-        value.nodes.inst1.overrides = { r1: { fill: GREEN, opacity: 0.5, stroke: null } };
+        value.nodes.inst1.overrides = { r1: { fills: fl(GREEN), opacity: 0.5, stroke: null } };
       }),
     );
     const svg = target.query({ type: 'exportSvg', ids: ['inst1'] })!;
@@ -449,7 +457,7 @@ describe('V37-B1 the expansion cap counts what overrides add', () => {
     };
     expect(expansionFailure(make(undefined), new ExpansionCache())).toBeNull();
     expect(expansionFailure(make({ src: { stroke: null } }), new ExpansionCache())).toBeNull();
-    const failure = expansionFailure(make({ src: { fill: GREEN } }), new ExpansionCache());
+    const failure = expansionFailure(make({ src: { fills: fl(GREEN) } }), new ExpansionCache());
     expect(failure).toMatchObject({ ok: false, code: 'editor.expansion-limit' });
     expect(MAX_EXPANDED_NODES).toBe(100_000);
   });

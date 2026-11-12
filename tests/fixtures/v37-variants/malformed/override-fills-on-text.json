@@ -49,23 +49,69 @@
           ]
         }
       },
+      "blendMode": "passThrough",
       "effects": [],
       "overrides": {
         "r1": {
-          "fill": {
-            "r": 2
-          }
-        },
-        "sA": {
-          "fill": null
-        },
-        "t1": {
-          "opacity": 0.25,
+          "fills": [
+            {
+              "paint": {
+                "r": 0,
+                "g": 1,
+                "b": 0,
+                "a": 1
+              },
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "normal"
+            }
+          ],
+          "stroke": {
+            "color": {
+              "r": 0,
+              "g": 0,
+              "b": 1,
+              "a": 1
+            },
+            "width": 2,
+            "cap": "butt",
+            "join": "round",
+            "miterLimit": 4,
+            "dash": null
+          },
+          "opacity": 0.5,
+          "visible": false,
           "effects": [
             {
-              "kind": "layerBlur",
+              "kind": "dropShadow",
               "visible": true,
-              "radius": 2
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0.5
+              },
+              "offsetX": 1,
+              "offsetY": 2,
+              "radius": 3
+            }
+          ]
+        },
+        "sA": {
+          "fills": []
+        },
+        "t1": {
+          "fills": [
+            {
+              "paint": {
+                "r": 1,
+                "g": 0,
+                "b": 0,
+                "a": 1
+              },
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "normal"
             }
           ]
         }
@@ -95,13 +141,21 @@
         0,
         0
       ],
-      "fill": {
-        "r": 1,
-        "g": 0,
-        "b": 0,
-        "a": 1
-      },
+      "fills": [
+        {
+          "paint": {
+            "r": 1,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          },
+          "visible": true,
+          "opacity": 1,
+          "blendMode": "normal"
+        }
+      ],
       "stroke": null,
+      "blendMode": "normal",
       "effects": []
     },
     "r2": {
@@ -128,8 +182,9 @@
         0,
         0
       ],
-      "fill": null,
+      "fills": [],
       "stroke": null,
+      "blendMode": "normal",
       "effects": []
     },
     "sA": {
@@ -154,13 +209,21 @@
         "r1",
         "t1"
       ],
-      "fill": {
-        "r": 1,
-        "g": 0,
-        "b": 0,
-        "a": 1
-      },
+      "fills": [
+        {
+          "paint": {
+            "r": 1,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          },
+          "visible": true,
+          "opacity": 1,
+          "blendMode": "normal"
+        }
+      ],
       "stroke": null,
+      "blendMode": "passThrough",
       "effects": [],
       "variant": {
         "Size": "Large",
@@ -188,8 +251,9 @@
       "children": [
         "r2"
       ],
-      "fill": null,
+      "fills": [],
       "stroke": null,
+      "blendMode": "passThrough",
       "effects": [],
       "variant": {
         "Size": "Large",
@@ -215,8 +279,9 @@
       "visible": true,
       "type": "symbol",
       "children": [],
-      "fill": null,
+      "fills": [],
       "stroke": null,
+      "blendMode": "passThrough",
       "effects": []
     },
     "set1": {
@@ -241,7 +306,7 @@
         "sA",
         "sB"
       ],
-      "fill": null,
+      "fills": [],
       "stroke": {
         "color": {
           "r": 0,
@@ -255,6 +320,7 @@
         "miterLimit": 4,
         "dash": null
       },
+      "blendMode": "passThrough",
       "effects": []
     },
     "t1": {
@@ -292,6 +358,7 @@
       "align": "left",
       "letterSpacing": 0,
       "lineHeight": 1.2,
+      "blendMode": "normal",
       "effects": []
     }
   }

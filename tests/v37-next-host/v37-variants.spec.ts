@@ -127,11 +127,18 @@ test('V37-A13 combine, switch a variant, focus a layer, override its fill, reset
   await fill.fill('#ff00ff');
   await fill.press('Enter');
   const overridden = await state(page);
-  expect(overridden.inst.overrides).toEqual({ rB: { fill: MAGENTA } });
+  expect(overridden.inst.overrides).toEqual({
+    rB: { fills: [{ paint: MAGENTA, visible: true, opacity: 1, blendMode: 'normal' }] },
+  });
   expect(overridden.undoDepth).toBe(steps + 1);
   await expect(page.getByTestId('instance-layer-rB')).toHaveAttribute('data-overridden', 'true');
   // The source rectangle itself is unchanged.
-  expect(overridden.nodes.rB!.fill).toEqual({ r: 0, g: 1, b: 0, a: 1 });
+  expect((overridden.nodes.rB!.fills as { paint: unknown }[])[0]!.paint).toEqual({
+    r: 0,
+    g: 1,
+    b: 0,
+    a: 1,
+  });
 
   // Reset the layer: the override is gone and the row is no longer marked.
   await page

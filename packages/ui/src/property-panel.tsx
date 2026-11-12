@@ -15,7 +15,7 @@ import {
   type TextNodeV8,
 } from '@vector-studio/react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { colorHex, parseNumber, type Common } from './appearance-model.js';
+import { colorHex, fillOf, parseNumber, type Common } from './appearance-model.js';
 import { booleanActions } from './boolean-model.js';
 import {
   addEffectCommand,
@@ -883,7 +883,7 @@ function LayerControlsSection({
   const controls = layerControls(document, id, layer);
   if (controls === null) return null;
   const { node } = controls;
-  const fillShown = 'fill' in node ? node.fill : null;
+  const fillShown = fillOf(node);
   const strokeShown = 'stroke' in node ? node.stroke : null;
   const fill = fillText(fillShown);
   const strokeText = strokeShown === null ? '' : fillText(strokeShown.color);

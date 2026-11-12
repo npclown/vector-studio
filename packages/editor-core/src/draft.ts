@@ -330,7 +330,7 @@ export class Draft implements WritableTree {
       const override = overrides[key]!;
       const fields: Record<string, unknown> = {};
       for (const [field, value] of Object.entries(override)) {
-        const own = field === 'fill' || field === 'stroke';
+        const own = field === 'fills' || field === 'stroke';
         if (own ? field in target : !isSource) fields[field] = value;
       }
       if (Object.keys(fields).length !== Object.keys(override).length) changed = true;

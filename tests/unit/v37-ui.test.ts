@@ -93,6 +93,8 @@ function runAction(target: Editor, action: PropertyAction) {
 const instance = (target: Editor, id = 'inst1') => docOf(target).nodes[id] as InstanceNodeV8;
 const RED = { r: 1, g: 0, b: 0, a: 1 };
 const GREEN = { r: 0, g: 1, b: 0, a: 1 };
+/** What a fill commit writes (V-35's list form, normal blend). */
+const ONE_GREEN = [{ paint: GREEN, visible: true, opacity: 1, blendMode: 'normal' as const }];
 
 describe('V37-U4 the instanceLayerAt query', () => {
   it('returns the deepest visible source node under the page point', () => {
@@ -434,21 +436,23 @@ describe('V37-A12 section 6.2: instances', () => {
     const fill = fillOverrideCommand(
       'inst',
       rect,
-      controls.node.type === 'rectangle' ? controls.node.fill : null,
+      controls.node.type === 'rectangle' ? (controls.node.fills.at(-1)?.paint ?? null) : null,
       '#00ff00',
     )!;
     expect(fill).toEqual({
       type: 'setInstanceOverride',
       id: 'inst',
       node: rect,
-      props: { fill: GREEN },
+      props: { fills: ONE_GREEN },
     });
     ok(target, fill);
-    expect(instance(target, 'inst').overrides).toEqual({ rA: { fill: GREEN } });
+    expect(instance(target, 'inst').overrides).toEqual({ rA: { fills: ONE_GREEN } });
     expect(fillOverrideCommand('inst', rect, null, 'green')).toBeNull();
-    expect(fillOverrideCommand('inst', rect, null, '')).toMatchObject({ props: { fill: null } });
-    const shown = layerControls(docOf(target), 'inst', rect)!.node as unknown as { fill: Paint };
-    expect(fillText(shown.fill)).toBe('#00ff00');
+    expect(fillOverrideCommand('inst', rect, null, '')).toMatchObject({ props: { fills: [] } });
+    const shown = layerControls(docOf(target), 'inst', rect)!.node as unknown as {
+      fills: { paint: Paint }[];
+    };
+    expect(fillText(shown.fills[0]!.paint)).toBe('#00ff00');
 
     // Stroke colour with no stroke starts from a 1-unit black stroke.
     const stroke = strokeOverrideCommand('inst', rect, null, '#ff0000')!;

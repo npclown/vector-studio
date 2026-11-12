@@ -797,7 +797,7 @@ export function instanceLayerAt(
     point,
     zoom,
     custom,
-    (hit, layer) => {
+    (hit, _paint, layer) => {
       if (hit !== id) return false;
       found = layer ?? instance.symbol;
       return true;

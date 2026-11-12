@@ -341,16 +341,23 @@ export function fillText(paint: Paint | null): string | null {
 const alphaOf = (paint: Paint | null): number =>
   paint === null || isGradient(paint) ? 1 : (paint as { a: number }).a;
 
-/** A fill field's commit: a hex keeps the shown alpha, an empty text removes the fill. */
+/**
+ * A fill field's commit, as the property panel's `fill` writes (V-35): the text replaces the
+ * layer's fills by one solid fill (a hex keeps the shown alpha), an empty text by none.
+ */
 export function fillOverrideCommand(
   id: string,
   layer: string,
   shown: Paint | null,
   text: string,
 ): Command | null {
-  if (text.trim() === '') return overrideCommand(id, layer, { fill: null });
+  if (text.trim() === '') return overrideCommand(id, layer, { fills: [] });
   const color = parseHex(text, alphaOf(shown));
-  return color === null ? null : overrideCommand(id, layer, { fill: color });
+  return color === null
+    ? null
+    : overrideCommand(id, layer, {
+        fills: [{ paint: color, visible: true, opacity: 1, blendMode: 'normal' }],
+      });
 }
 
 /** The stroke a colour edit starts from when the layer has none. */
@@ -404,6 +411,8 @@ const DEFAULT_BLUR: Effect = { kind: 'layerBlur', visible: true, radius: 4 };
 const PATCH_KEYS: Readonly<Record<Effect['kind'], readonly string[]>> = {
   dropShadow: ['visible', 'color', 'offsetX', 'offsetY', 'radius'],
   layerBlur: ['visible', 'radius'],
+  innerShadow: ['visible', 'color', 'offsetX', 'offsetY', 'radius'],
+  backgroundBlur: ['visible', 'radius'],
 };
 
 /**

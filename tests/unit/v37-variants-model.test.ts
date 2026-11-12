@@ -65,14 +65,14 @@ const MALFORMED: readonly (readonly [string, string, string])[] = [
   ['override-page-key', 'document.invalid-symbol', '/nodes/inst1/overrides/page-1'],
   ['override-empty-entry', 'document.invalid-field', '/nodes/inst1/overrides/r1'],
   ['override-unknown-field', 'document.invalid-field', '/nodes/inst1/overrides/r1/width'],
-  ['override-fill-on-text', 'document.invalid-field', '/nodes/inst1/overrides/t1/fill'],
+  ['override-fills-on-text', 'document.invalid-field', '/nodes/inst1/overrides/t1/fills'],
   ['override-stroke-on-text', 'document.invalid-field', '/nodes/inst1/overrides/t1/stroke'],
   ['override-opacity-on-source', 'document.invalid-field', '/nodes/inst1/overrides/sA/opacity'],
   ['override-visible-on-source', 'document.invalid-field', '/nodes/inst1/overrides/sA/visible'],
   ['override-effects-on-source', 'document.invalid-field', '/nodes/inst1/overrides/sA/effects'],
   ['override-opacity-2', 'document.invalid-field', '/nodes/inst1/overrides/r1/opacity'],
   ['override-visible-not-bool', 'document.invalid-field', '/nodes/inst1/overrides/r1/visible'],
-  ['override-fill-not-paint', 'document.invalid-field', '/nodes/inst1/overrides/r1/fill'],
+  ['override-fills-not-paint', 'document.invalid-field', '/nodes/inst1/overrides/r1/fills/0/paint'],
   ['override-two-blurs', 'document.invalid-field', '/nodes/inst1/overrides/r1/effects/1'],
   ['overrides-not-object', 'document.invalid-field', '/nodes/inst1/overrides'],
   ['overrides-on-symbol', 'document.invalid-field', '/nodes/sP/overrides'],
@@ -86,7 +86,7 @@ const KEY_RULES = new Set([
   'override-unknown-key',
   'override-other-source',
   'override-page-key',
-  'override-fill-on-text',
+  'override-fills-on-text',
   'override-stroke-on-text',
   'override-opacity-on-source',
   'override-visible-on-source',
@@ -95,6 +95,19 @@ const KEY_RULES = new Set([
 
 const failed = (result: { ok: boolean; code?: string; path?: string }) =>
   result.ok ? { code: 'none', path: '' } : { code: result.code, path: result.path };
+
+/** V-35's v7 node form: `fill` for `fills`, and no `blendMode`. Edits `value` and returns it. */
+function asV7Nodes(value: Json): Json {
+  for (const node of Object.values(value.nodes as Record<string, Json>)) {
+    if (Object.hasOwn(node, 'fills')) {
+      const fills = node.fills as Json[];
+      node.fill = fills.length === 0 ? null : fills[0]!.paint;
+      delete node.fills;
+    }
+    delete node.blendMode;
+  }
+  return value;
+}
 
 describe('V37-A01 round trips', () => {
   it('writes the variants document back byte for byte', () => {
@@ -132,6 +145,7 @@ describe('V37-A01 round trips', () => {
     const value = good();
     value.schemaVersion = 7;
     value.nodes.set1.type = 'frame';
+    asV7Nodes(value);
     for (const id of ['sA', 'sB']) delete value.nodes[id].variant;
     delete value.nodes.inst1.overrides;
     const results = [
@@ -143,9 +157,9 @@ describe('V37-A01 round trips', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.document.schemaVersion).toBe(8);
-      expect({ ...JSON.parse(serializeDocument(result.document)), schemaVersion: 7 }).toEqual(
-        value,
-      );
+      expect(
+        asV7Nodes({ ...JSON.parse(serializeDocument(result.document)), schemaVersion: 7 }),
+      ).toEqual(value);
       expect(JSON.stringify(result.document)).not.toMatch(/"variant"|"overrides"/);
     }
   });
@@ -169,14 +183,44 @@ describe('V37-A01 round trips', () => {
     ]);
     expect(Object.keys(good().nodes.sA).at(-1)).toBe('variant');
     expect(Object.keys(good().nodes.inst1).at(-1)).toBe('overrides');
-    // A set's keys are a frame's, `effects` last.
+    // A set's keys are a frame's, `effects` last (V-35 key order).
     expect(Object.keys(good().nodes.set1)).toEqual(Object.keys(good().nodes.set1).sort(() => 0));
-    expect(Object.keys(good().nodes.set1).slice(-4)).toEqual([
+    expect(Object.keys(good().nodes.set1).slice(-5)).toEqual([
       'children',
-      'fill',
+      'fills',
       'stroke',
+      'blendMode',
       'effects',
     ]);
+  });
+
+  it('reads an override written as `fill` by a v8 build before V-35 as V-35 reads a node, writes fills', () => {
+    const green = { r: 0, g: 1, b: 0, a: 1 };
+    const value = good();
+    value.nodes.inst1.overrides = { r1: { fill: green }, t1: { opacity: 0.5 } };
+    value.nodes.inst1.overrides.sA = { fill: null };
+    const result = validateDocument(value);
+    if (!result.ok) throw new Error(`read: ${result.code} at ${result.path}`);
+    const overrides = (result.document.nodes.inst1 as Json).overrides as Json;
+    expect(overrides.r1).toEqual({
+      fills: [{ paint: green, visible: true, opacity: 1, blendMode: 'normal' }],
+    });
+    expect(overrides.sA).toEqual({ fills: [] });
+    const text = serializeDocument(result.document);
+    expect(text).not.toMatch(/"fill":/);
+    const written = (JSON.parse(text) as Json).nodes.inst1.overrides as Json;
+    expect(Object.keys(written.r1)).toEqual(['fills']);
+    // Both keys, and a field V-37 leaves out (`blendMode`, V37-Q5), fail at the key.
+    value.nodes.inst1.overrides = { r1: { fill: green, fills: [] } };
+    expect(failed(validateDocument(value))).toEqual({
+      code: 'document.invalid-field',
+      path: '/nodes/inst1/overrides/r1/fill',
+    });
+    value.nodes.inst1.overrides = { r1: { blendMode: 'multiply' } };
+    expect(failed(validateDocument(value))).toEqual({
+      code: 'document.invalid-field',
+      path: '/nodes/inst1/overrides/r1/blendMode',
+    });
   });
 
   it('writes an override of one field as that field only', () => {
@@ -255,9 +299,9 @@ describe('V37-A02 malformed documents (V37-S1 to V37-S3)', () => {
     });
   });
 
-  it('accepts overrides on the source itself for fill and stroke, and on a frame or a group', () => {
+  it('accepts overrides on the source itself for fills and stroke, and on a frame or a group', () => {
     const value = good();
-    value.nodes.inst1.overrides.sA = { fill: null, stroke: null };
+    value.nodes.inst1.overrides.sA = { fills: [], stroke: null };
     expect(validateDocument(value).ok).toBe(true);
     // A group in the source takes opacity and visibility but neither fill nor stroke.
     value.nodes.g1 = {
@@ -267,16 +311,16 @@ describe('V37-A02 malformed documents (V37-S1 to V37-S3)', () => {
       parent: 'sA',
       children: [],
     };
-    for (const key of ['cornerRadii', 'fill', 'stroke']) delete value.nodes.g1[key];
+    for (const key of ['cornerRadii', 'fills', 'stroke']) delete value.nodes.g1[key];
     value.nodes.g1.children = ['r4'];
     value.nodes.r4 = { ...value.nodes.r1, id: 'r4', parent: 'g1' };
     value.nodes.sA.children.push('g1');
     value.nodes.inst1.overrides.g1 = { opacity: 0.5, visible: false, effects: [] };
     expect(validateDocument(value).ok).toBe(true);
-    value.nodes.inst1.overrides.g1 = { fill: null };
+    value.nodes.inst1.overrides.g1 = { fills: [] };
     expect(failed(validateDocument(value))).toEqual({
       code: 'document.invalid-field',
-      path: '/nodes/inst1/overrides/g1/fill',
+      path: '/nodes/inst1/overrides/g1/fills',
     });
   });
 
@@ -429,8 +473,8 @@ describe('V37-A02 fragments (V37 contract, section 5)', () => {
     expect(paste((v) => (v.nodes.inst1.overrides.r2 = { opacity: 0.5 }))).toEqual(
       bad('editor.invalid-clipboard', '/nodes/inst1/overrides/r2'),
     );
-    expect(paste((v) => (v.nodes.inst1.overrides.t1 = { fill: null }))).toEqual(
-      bad('editor.invalid-clipboard', '/nodes/inst1/overrides/t1/fill'),
+    expect(paste((v) => (v.nodes.inst1.overrides.t1 = { fills: [] }))).toEqual(
+      bad('editor.invalid-clipboard', '/nodes/inst1/overrides/t1/fills'),
     );
     expect(paste((v) => (v.nodes.inst1.overrides.sA = { visible: false }))).toEqual(
       bad('editor.invalid-clipboard', '/nodes/inst1/overrides/sA/visible'),

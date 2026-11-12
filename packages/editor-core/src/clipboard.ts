@@ -485,7 +485,7 @@ function overrideFailure(
     const target = map.get(name);
     if (target === undefined || (name !== symbol && !below(name))) return at;
     for (const field of Object.keys(overrides[name]!)) {
-      const own = field === 'fill' || field === 'stroke';
+      const own = field === 'fills' || field === 'stroke';
       if (own ? !(field in target) : name === symbol) return `${at}/${field}`;
     }
   }

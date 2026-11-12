@@ -140,20 +140,20 @@ function sameChildOverride(a: ChildOverride, b: ChildOverride): boolean {
 }
 
 /**
- * The fill and stroke an instance takes from its source: the source's own, unless the instance
+ * The fills and stroke an instance takes from its source: the source's own, unless the instance
  * overrides them under the source's key (V37-X1, M7 section 4.1).
  */
 export function sourceAppearance(
   instance: InstanceNodeV8,
   source: SymbolNodeV8,
-): Readonly<Pick<SymbolNodeV8, 'fill' | 'stroke'>> {
+): Readonly<Pick<SymbolNodeV8, 'fills' | 'stroke'>> {
   const overrides = instance.overrides;
   const own =
     overrides !== undefined && Object.hasOwn(overrides, source.id)
       ? overrides[source.id]
       : undefined;
   return {
-    fill: own?.fill !== undefined ? own.fill : source.fill,
+    fills: own?.fills !== undefined ? own.fills : source.fills,
     stroke: own?.stroke !== undefined ? own.stroke : source.stroke,
   };
 }
@@ -164,7 +164,7 @@ function applyOverride(node: NodeV8, override: ChildOverride): NodeV8 {
   if (override.text !== undefined && node.type === 'text') next.runs = override.text.runs;
   const props = override.props;
   if (props !== undefined) {
-    if (props.fill !== undefined && 'fill' in node) next.fill = props.fill;
+    if (props.fills !== undefined && 'fills' in node) next.fills = props.fills;
     if (props.stroke !== undefined && 'stroke' in node) next.stroke = props.stroke;
     if (props.opacity !== undefined) next.opacity = props.opacity;
     if (props.visible !== undefined) next.visible = props.visible;
@@ -202,10 +202,10 @@ export function sceneCount(objects: readonly NodeV8[]): number {
 }
 
 /**
- * The scene nodes an instance's overrides add to the count of its source (V37-X1): a source or a
- * frame whose own fill or stroke is null and which the instance gives a non-null one gains the
- * background or border node. An override that hides or clears is not subtracted (conservative).
- * `nodeAt` finds a node of the source subtree by ID.
+ * The scene nodes an instance's overrides add to the count of its source (V37-X1): the nodes a
+ * node projects as, with its overridden `fills` and `stroke` applied, beyond those it projects as
+ * without (V35-P2, P3: a background per drawing fill, a border). An override that hides or
+ * clears is not subtracted (conservative). `nodeAt` finds a node of the source subtree by ID.
  */
 export function overrideExtra(
   instance: InstanceNodeV8,
@@ -213,13 +213,18 @@ export function overrideExtra(
 ): number {
   const overrides = instance.overrides;
   if (overrides === undefined) return 0;
+  const count = (node: NodeV8) =>
+    node.type === 'frame' || node.type === 'symbol'
+      ? frameSceneCount(node.fills, node.stroke)
+      : leafSceneCount(node);
   let extra = 0;
   for (const key of Object.keys(overrides)) {
     const node = nodeAt(key);
-    if (node?.type !== 'frame' && node?.type !== 'symbol') continue;
-    const override = overrides[key]!;
-    if (node.fill === null && override.fill != null) extra += 1;
-    if (node.stroke === null && override.stroke != null) extra += 1;
+    if (node === undefined) continue;
+    const { fills, stroke } = overrides[key]!;
+    if (fills === undefined && stroke === undefined) continue;
+    const applied = applyOverride(node, { props: { fills, stroke } } as ChildOverride);
+    extra += Math.max(0, count(applied) - count(node));
   }
   return extra;
 }

@@ -49,6 +49,7 @@
           ]
         }
       },
+      "blendMode": "passThrough",
       "effects": [],
       "overrides": []
     },
@@ -76,13 +77,21 @@
         0,
         0
       ],
-      "fill": {
-        "r": 1,
-        "g": 0,
-        "b": 0,
-        "a": 1
-      },
+      "fills": [
+        {
+          "paint": {
+            "r": 1,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          },
+          "visible": true,
+          "opacity": 1,
+          "blendMode": "normal"
+        }
+      ],
       "stroke": null,
+      "blendMode": "normal",
       "effects": []
     },
     "r2": {
@@ -109,8 +118,9 @@
         0,
         0
       ],
-      "fill": null,
+      "fills": [],
       "stroke": null,
+      "blendMode": "normal",
       "effects": []
     },
     "sA": {
@@ -135,13 +145,21 @@
         "r1",
         "t1"
       ],
-      "fill": {
-        "r": 1,
-        "g": 0,
-        "b": 0,
-        "a": 1
-      },
+      "fills": [
+        {
+          "paint": {
+            "r": 1,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          },
+          "visible": true,
+          "opacity": 1,
+          "blendMode": "normal"
+        }
+      ],
       "stroke": null,
+      "blendMode": "passThrough",
       "effects": [],
       "variant": {
         "Size": "Large",
@@ -169,8 +187,9 @@
       "children": [
         "r2"
       ],
-      "fill": null,
+      "fills": [],
       "stroke": null,
+      "blendMode": "passThrough",
       "effects": [],
       "variant": {
         "Size": "Large",
@@ -196,8 +215,9 @@
       "visible": true,
       "type": "symbol",
       "children": [],
-      "fill": null,
+      "fills": [],
       "stroke": null,
+      "blendMode": "passThrough",
       "effects": []
     },
     "set1": {
@@ -222,7 +242,7 @@
         "sA",
         "sB"
       ],
-      "fill": null,
+      "fills": [],
       "stroke": {
         "color": {
           "r": 0,
@@ -236,6 +256,7 @@
         "miterLimit": 4,
         "dash": null
       },
+      "blendMode": "passThrough",
       "effects": []
     },
     "t1": {
@@ -273,6 +294,7 @@
       "align": "left",
       "letterSpacing": 0,
       "lineHeight": 1.2,
+      "blendMode": "normal",
       "effects": []
     }
   }

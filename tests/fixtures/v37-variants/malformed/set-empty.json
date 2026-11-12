@@ -33,6 +33,7 @@
       "type": "instance",
       "symbol": "sP",
       "textOverrides": {},
+      "blendMode": "passThrough",
       "effects": []
     },
     "sP": {
@@ -54,8 +55,9 @@
       "visible": true,
       "type": "symbol",
       "children": [],
-      "fill": null,
+      "fills": [],
       "stroke": null,
+      "blendMode": "passThrough",
       "effects": []
     },
     "set1": {
@@ -77,7 +79,7 @@
       "visible": true,
       "type": "symbolSet",
       "children": [],
-      "fill": null,
+      "fills": [],
       "stroke": {
         "color": {
           "r": 0,
@@ -91,6 +93,7 @@
         "miterLimit": 4,
         "dash": null
       },
+      "blendMode": "passThrough",
       "effects": []
     }
   }

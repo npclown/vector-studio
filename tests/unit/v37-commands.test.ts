@@ -21,6 +21,8 @@ const GOOD = readFileSync(
   path.resolve(import.meta.dirname, '../fixtures/v37-variants/variants.v8.json'),
   'utf8',
 );
+/** One normal fill of `paint`, V-35's list form. */
+const fl = (paint: Json) => [{ paint, visible: true, opacity: 1, blendMode: 'normal' }];
 const GREEN = { r: 0, g: 1, b: 0, a: 1 };
 const RED = { r: 1, g: 0, b: 0, a: 1 };
 
@@ -35,7 +37,7 @@ const rect = (id: string, parent: string, x = 0, y = 0, w = 10, h = 10): Json =>
   visible: true,
   type: 'rectangle',
   cornerRadii: [0, 0, 0, 0],
-  fill: RED,
+  fills: fl(RED),
   stroke: null,
   effects: [],
 });
@@ -45,7 +47,7 @@ const symbol = (id: string, parent: string, children: string[], x = 0, y = 0, na
   type: 'symbol',
   children,
   stroke: null,
-  fill: null,
+  fills: [],
   cornerRadii: undefined,
 });
 
@@ -113,7 +115,7 @@ function loose(): DocumentV8 {
         symbol: 'a',
         textOverrides: {},
         cornerRadii: undefined,
-        fill: undefined,
+        fills: undefined,
         stroke: undefined,
       },
     },
@@ -166,7 +168,7 @@ describe('V37-A06 combineAsVariants', () => {
       parent: 'p',
       rotation: 0,
       children: ['a', 'b', 'c'],
-      fill: null,
+      fills: [],
       constraints: { horizontal: 'start', vertical: 'start' },
     });
     // The union of the visual bounds (0..500, 0..40) grown by 20.
@@ -352,8 +354,8 @@ describe('V37-A07 setInstanceVariant', () => {
     const target = editorOf(
       richer((value) => {
         value.nodes.inst1.overrides = {
-          r1: { fill: GREEN, opacity: 0.5 },
-          sA: { fill: null },
+          r1: { fills: fl(GREEN), opacity: 0.5 },
+          sA: { fills: [] },
           t1: { opacity: 0.25 },
         };
         // The target's `Box` already has the carried opacity: that field is dropped.
@@ -365,9 +367,9 @@ describe('V37-A07 setInstanceVariant', () => {
     expect(instance.symbol).toBe('sC');
     expect(instance.frame).toEqual({ x: 0, y: 200, width: 60, height: 30 });
     expect(instance.overrides).toEqual({
-      c1: { fill: GREEN },
+      c1: { fills: fl(GREEN) },
       c2: { opacity: 0.25 },
-      sC: { fill: null },
+      sC: { fills: [] },
     });
     // The text override moved to the text node of the same path.
     expect(Object.keys(instance.textOverrides)).toEqual(['c2']);
@@ -388,7 +390,7 @@ describe('V37-A07 setInstanceVariant', () => {
     ok(target, run('inst1', { Size: 'Small' }));
     const instance = node(target, 'inst1');
     expect(instance.frame).toMatchObject({ width: 150, height: 40 });
-    expect(instance.overrides).toEqual({ c1: expect.any(Object), sC: { fill: null } });
+    expect(instance.overrides).toEqual({ c1: expect.any(Object), sC: { fills: [] } });
     expect(instance.textOverrides).toEqual({});
   });
 
@@ -435,8 +437,15 @@ describe('V37-A07 setInstanceVariant', () => {
         // The instance sits three groups deep, so it expands deeper than `sC` stands in its set.
         let holder = 'page-1';
         for (const id of ['h1', 'h2', 'h3']) {
-          value.nodes[id] = { ...value.nodes.r1, id, parent: holder, type: 'group', children: [] };
-          for (const key of ['cornerRadii', 'fill', 'stroke']) delete value.nodes[id][key];
+          value.nodes[id] = {
+            ...value.nodes.r1,
+            id,
+            parent: holder,
+            type: 'group',
+            blendMode: 'passThrough',
+            children: [],
+          };
+          for (const key of ['cornerRadii', 'fill', 'fills', 'stroke']) delete value.nodes[id][key];
           if (holder === 'page-1') {
             value.pages[0].children = value.pages[0].children.map((child: string) =>
               child === 'inst1' ? id : child,
@@ -455,9 +464,10 @@ describe('V37-A07 setInstanceVariant', () => {
             id,
             parent,
             type: 'group',
+            blendMode: 'passThrough',
             children: [],
           };
-          for (const key of ['cornerRadii', 'fill', 'stroke']) delete value.nodes[id][key];
+          for (const key of ['cornerRadii', 'fill', 'fills', 'stroke']) delete value.nodes[id][key];
           if (parent === 'sC') kids.push(id);
           else value.nodes[parent].children = [id];
           parent = id;
@@ -485,27 +495,30 @@ describe('V37-A08 setInstanceOverride and resetInstanceOverrides', () => {
     const target = editorOf(
       build((value) => (value.nodes.inst1.overrides = { t1: { opacity: 0.5 } })),
     );
-    oneStep(target, set('r1', { fill: GREEN }));
-    expect(node(target, 'inst1').overrides).toEqual({ r1: { fill: GREEN }, t1: { opacity: 0.5 } });
+    oneStep(target, set('r1', { fills: fl(GREEN) }));
+    expect(node(target, 'inst1').overrides).toEqual({
+      r1: { fills: fl(GREEN) },
+      t1: { opacity: 0.5 },
+    });
     oneStep(target, set('r1', { opacity: 0.4, visible: false }));
     expect(node(target, 'inst1').overrides.r1).toEqual({
-      fill: GREEN,
+      fills: fl(GREEN),
       opacity: 0.4,
       visible: false,
     });
     // The source's own fill is red: setting it back removes that field.
-    oneStep(target, set('r1', { fill: RED }));
+    oneStep(target, set('r1', { fills: fl(RED) }));
     expect(node(target, 'inst1').overrides.r1).toEqual({ opacity: 0.4, visible: false });
     oneStep(target, set('r1', { opacity: 1, visible: true }));
     expect(Object.keys(node(target, 'inst1').overrides)).toEqual(['t1']);
     // The source key takes fill and stroke; nothing is left as absent, not as `{}`.
     oneStep(target, set('t1', { opacity: 1 }));
     expect(Object.hasOwn(node(target, 'inst1'), 'overrides')).toBe(false);
-    ok(target, set('sA', { fill: GREEN }));
-    expect(node(target, 'inst1').overrides).toEqual({ sA: { fill: GREEN } });
+    ok(target, set('sA', { fills: fl(GREEN) }));
+    expect(node(target, 'inst1').overrides).toEqual({ sA: { fills: fl(GREEN) } });
     // A change of no value records no step.
     const steps = depth(target);
-    expect(target.execute(set('sA', { fill: GREEN }))).toEqual({ ok: true, ids: [] });
+    expect(target.execute(set('sA', { fills: fl(GREEN) }))).toEqual({ ok: true, ids: [] });
     expect(depth(target)).toBe(steps);
   });
 
@@ -520,6 +533,14 @@ describe('V37-A08 setInstanceOverride and resetInstanceOverrides', () => {
     );
     fails(target, set('r1', {}), 'editor.invalid-command', '/props');
     fails(target, set('r1', { width: 5 }), 'editor.invalid-command', '/props/width');
+    // V-35 rebase: the field is `fills`; `fill` and `blendMode` are not overridable (V37-Q5).
+    fails(target, set('r1', { fill: GREEN }), 'editor.invalid-command', '/props/fill');
+    fails(
+      target,
+      set('r1', { blendMode: 'multiply' }),
+      'editor.invalid-command',
+      '/props/blendMode',
+    );
     fails(target, set('r1', { opacity: undefined }), 'editor.invalid-command', '/props/opacity');
     fails(target, set('r1', { opacity: 1 }, 'zz'), 'editor.unknown-node');
     fails(target, set('r1', { opacity: 1 }, 'r1'), 'editor.not-an-instance');
@@ -534,9 +555,9 @@ describe('V37-A08 setInstanceOverride and resetInstanceOverrides', () => {
     );
     fails(
       target,
-      set('t1', { fill: null }),
+      set('t1', { fills: [] }),
       'document.invalid-field',
-      '/nodes/inst1/overrides/t1/fill',
+      '/nodes/inst1/overrides/t1/fills',
     );
     fails(
       target,
@@ -971,7 +992,7 @@ describe('V37-A10 the clipboard of variants and overrides', () => {
     // An override key outside the carried source subtree.
     const stray = structuredClone(linked);
     const [instance] = linked.roots as string[];
-    stray.nodes[instance!].overrides = { nowhere: { fill: GREEN } };
+    stray.nodes[instance!].overrides = { nowhere: { fills: fl(GREEN) } };
     const result = paste(stray);
     expect(result.ok).toBe(false);
     if (!result.ok) {
