@@ -1283,6 +1283,18 @@ class EditorCore implements Editor {
       this.undoStack.push(entry);
       this.redoStack = [];
       this.changeDocument(result.document, 'command', result.touched);
+      // V35-C4: a group with a blend mode other than `passThrough` loses it on ungroup.
+      if (command.type === 'ungroupNodes') {
+        const group = base.nodes[command.id];
+        if (group !== undefined && group.blendMode !== 'passThrough') {
+          this.emit({
+            type: 'diagnostic',
+            code: 'editor.ungroup-blend',
+            reason: 'blend-dropped',
+            nodeIds: [command.id],
+          });
+        }
+      }
       // The pasted roots become the selection (section 6).
       if (command.type === 'paste' || selects) this.setSelectionState(selected);
       return { ok: true, ids: result.ids ?? result.created };

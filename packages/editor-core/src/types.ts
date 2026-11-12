@@ -988,6 +988,16 @@ export type DiagnosticEvent =
       code: 'editor.text-unavailable';
       reason: 'no-text-layout';
       nodeIds: readonly string[];
+    }>
+  /**
+   * V-35 contract, V35-C4: `ungroupNodes` released the children of a group whose blend mode was
+   * not `passThrough`; the group's mode is gone with it. `nodeIds` is the removed group.
+   */
+  | Readonly<{
+      type: 'diagnostic';
+      code: 'editor.ungroup-blend';
+      reason: 'blend-dropped';
+      nodeIds: readonly string[];
     }>;
 
 export interface Editor {

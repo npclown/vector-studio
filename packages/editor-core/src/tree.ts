@@ -449,8 +449,8 @@ export function documentIsolationViolation(document: DocumentV8): string | null 
 /**
  * The first node a change from `base` to `document` makes break the isolation rule (section
  * 4.3), or null. Only these can: the subtrees of the nodes the change created, reparented or
- * retyped, of an instance whose source changed, and of a container or instance whose opacity it
- * lowered from 1, and every instance of each source that holds such a node or is one. Reported
+ * retyped, of an instance whose source changed, of a container or instance whose opacity it
+ * lowered from 1, and of a node it made isolate (a mode, effects or fills, V35-P6), and every instance of each source that holds such a node or is one. Reported
  * in `pages` order then page-tree pre-order.
  */
 export function isolationViolation(
@@ -459,6 +459,7 @@ export function isolationViolation(
   touched: Iterable<string>,
 ): string | null {
   const tree = documentTree(document);
+  const baseTree = documentTree(base);
   const changed: string[] = [];
   for (const id of touched) {
     if (!Object.hasOwn(document.nodes, id)) continue;
@@ -469,7 +470,10 @@ export function isolationViolation(
       before.parent !== node.parent ||
       before.type !== node.type ||
       (before.type === 'instance' && node.type === 'instance' && before.symbol !== node.symbol) ||
-      ((isContainer(node) || node.type === 'instance') && before.opacity === 1 && node.opacity < 1)
+      ((isContainer(node) || node.type === 'instance') &&
+        before.opacity === 1 &&
+        node.opacity < 1) ||
+      (!isolates(baseTree, before) && isolates(tree, node))
     ) {
       changed.push(id);
     }
