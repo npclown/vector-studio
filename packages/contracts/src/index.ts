@@ -4,3 +4,4 @@ export * from './renderer.js';
 export * from './resources.js';
 export * from './scene.js';
 export * from './text.js';
+export * from './image.js';

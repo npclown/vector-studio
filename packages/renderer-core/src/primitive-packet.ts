@@ -1,4 +1,4 @@
-import type { SceneColor, SceneVersion } from '@vector-studio/contracts';
+import type { ImageSourcePort, SceneColor, SceneVersion } from '@vector-studio/contracts';
 import type { ClipStateRecord, MaskBudgetNotice, MaskLevelRecord } from './clip-resolution.js';
 import type { EffectBudgetNotice } from './effect-plan.js';
 import type { DeviceRect, LayerResourceNotice } from './layer-plan.js';
@@ -54,6 +54,11 @@ export type PrimitiveDraw = Readonly<{
    * part's `primitives`); such a run uses the paint pipeline variant.
    */
   paint?: 'gradient';
+  /**
+   * V-32 contract (V32-K7): on a paint run whose primitives' fill is an image paint, its image
+   * key; every primitive of the run has the same one, and the backend binds its texture.
+   */
+  image?: string;
 }>;
 /**
  * E23 contract, U2: the frame's gradient records, present only when a drawn draw has one.
@@ -414,6 +419,11 @@ export interface PrimitiveFrameSource {
    * pipeline) at initialization and recovery. Optional; absent means false.
    */
   readonly requiresEffectPipeline?: boolean;
+  /**
+   * V-32 contract (V32-P1): the image source port the backend's texture store requests drawn
+   * image keys from. Optional; absent means image paints bind the transparent texture.
+   */
+  readonly imageSource?: ImageSourcePort;
   prepare(target: PrimitiveTarget): PrimitivePacket | null;
   acknowledge(receipt: PrimitiveReceipt): void;
 }

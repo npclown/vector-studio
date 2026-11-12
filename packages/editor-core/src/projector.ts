@@ -620,6 +620,8 @@ export function composeFillPaint(fill: Fill, width: number, height: number): Sce
   const opacity = fill.opacity;
   if (opacity === 1) return paint;
   if (!('kind' in paint)) return { ...paint, a: paint.a * opacity };
+  // The model has no image paint until V-32 U2b, which owns its fill opacity.
+  if (paint.kind === 'image') return paint;
   return {
     ...paint,
     stops: paint.stops.map((stop) => ({

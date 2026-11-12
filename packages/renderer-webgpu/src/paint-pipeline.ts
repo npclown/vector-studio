@@ -19,14 +19,21 @@ import {
 // clip modules, keys and pipelines are untouched (E23-A08); a draw whose paints are all solid
 // always uses its base or clip pipeline.
 
-export const PAINT_VARIANT_SUFFIX = '+paint-v0';
-export const PAINT_LAYOUT_KEY = 'e23-paint-v0';
+export const PAINT_VARIANT_SUFFIX = '+paint-v1';
+export const PAINT_LAYOUT_KEY = 'e23-paint-v1';
 export const PAINT_BIND_GROUP_INDEX = 2;
 /**
  * Binding 1 is the draw kind's index table: the scene binds one group over the primitive table
  * for analytic draws and one over the mesh table for mesh draws, both with this layout.
  */
-export const PAINT_BINDINGS = Object.freeze({ gradients: 0, indices: 1 });
+export const PAINT_BINDINGS = Object.freeze({
+  gradients: 0,
+  indices: 1,
+  /** V-32 (V32-K6): the draw's image texture, or a 1 × 1 transparent texture. */
+  image: 2,
+  clampSampler: 3,
+  repeatSampler: 4,
+});
 /** SCENE_MAX_GRADIENT_STOPS. */
 export const PAINT_MAX_STOPS = 16;
 /** The record: header, map (linear lanes, translation lanes), 16 offsets and 16 colours. */
@@ -59,8 +66,14 @@ struct GradientRecord {
 
 @group(${PAINT_BIND_GROUP_INDEX}) @binding(${PAINT_BINDINGS.gradients}) var<storage, read> gradients: array<GradientRecord>;
 @group(${PAINT_BIND_GROUP_INDEX}) @binding(${PAINT_BINDINGS.indices}) var<storage, read> ${table}: array<u32>;
+@group(${PAINT_BIND_GROUP_INDEX}) @binding(${PAINT_BINDINGS.image}) var paintImage: texture_2d<f32>;
+@group(${PAINT_BIND_GROUP_INDEX}) @binding(${PAINT_BINDINGS.clampSampler}) var paintClampSampler: sampler;
+@group(${PAINT_BIND_GROUP_INDEX}) @binding(${PAINT_BINDINGS.repeatSampler}) var paintRepeatSampler: sampler;
 
 const GRADIENT_RADIAL: u32 = 1u;
+const PAINT_IMAGE: u32 = 2u;
+const WRAP_DECAL: u32 = 1u;
+const WRAP_REPEAT: u32 = 2u;
 const SPREAD_REFLECT: u32 = 1u;
 const SPREAD_REPEAT: u32 = 2u;
 
@@ -76,6 +89,10 @@ fn paintValue(index: u32, solid: vec4f, pixel: vec2f) -> vec4f {
   let map = gradients[index].mapLinear;
   let document = pixel / (frame.zoom * frame.devicePixelRatio) - frame.originMinusCamera;
   let point = (map.xy * document.x + map.zw * document.y) + gradients[index].mapTranslation.xy;
+  if (header.x == PAINT_IMAGE) {
+    let jacobian = map / (frame.zoom * frame.devicePixelRatio);
+    return imageValue(header, gradients[index].offsets[0], jacobian, point);
+  }
   var t = select(point.x, length(point), header.x == GRADIENT_RADIAL);
   if (header.y == SPREAD_REPEAT) {
     t = t - floor(t);
@@ -101,6 +118,29 @@ fn paintValue(index: u32, solid: vec4f, pixel: vec2f) -> vec4f {
     }
   }
   return value;
+}
+
+// V-32 contract, V32-K1 and K2: the image sample at image point point, with the x wrap in
+// header.y and the y wrap in header.w. size holds the texture's width, height and mip level
+// count; jacobian the image-space change per pixel along x (xy) and y (zw). The level of detail
+// is analytic, so the sample is legal in non-uniform control flow.
+fn imageWrap(value: f32, mode: u32) -> f32 {
+  return select(value, value - floor(value), mode == WRAP_REPEAT);
+}
+
+fn imageValue(header: vec4u, size: vec4f, jacobian: vec4f, point: vec2f) -> vec4f {
+  let texels = max(length(jacobian.xy * size.xy), length(jacobian.zw * size.xy));
+  let lod = clamp(log2(max(texels, 1e-6)), 0.0, max(size.z - 1.0, 0.0));
+  let outsideX = point.x < 0.0 || point.x > 1.0;
+  let outsideY = point.y < 0.0 || point.y > 1.0;
+  if ((header.y == WRAP_DECAL && outsideX) || (header.w == WRAP_DECAL && outsideY)) {
+    return vec4f(0.0);
+  }
+  if (header.y == WRAP_REPEAT && header.w == WRAP_REPEAT) {
+    return textureSampleLevel(paintImage, paintRepeatSampler, point, lod);
+  }
+  let wrapped = vec2f(imageWrap(point.x, header.y), imageWrap(point.y, header.w));
+  return textureSampleLevel(paintImage, paintClampSampler, wrapped, lod);
 }
 `;
 }
@@ -240,6 +280,14 @@ export function createPaintBindGroupLayoutDescriptor(): GPUBindGroupLayoutDescri
     entries: [
       storage(PAINT_BINDINGS.gradients, GRADIENT_RECORD_SIZE),
       storage(PAINT_BINDINGS.indices, PAINT_INDEX_MIN_SIZE),
+      // V-32 (V32-K6): the image texture and its two samplers.
+      {
+        binding: PAINT_BINDINGS.image,
+        visibility: FRAGMENT_VISIBILITY,
+        texture: { sampleType: 'float', viewDimension: '2d' },
+      },
+      { binding: PAINT_BINDINGS.clampSampler, visibility: FRAGMENT_VISIBILITY, sampler: {} },
+      { binding: PAINT_BINDINGS.repeatSampler, visibility: FRAGMENT_VISIBILITY, sampler: {} },
     ],
   };
 }
@@ -271,8 +319,12 @@ const SPREAD_CODES: Readonly<Record<string, number>> = Object.freeze({
  * rounded each once). Null when a field is malformed, a lane is not a finite binary32, an
  * offset is outside [0, 1] or decreasing, or a colour lane is outside [0, 1].
  */
-export function packGradientRecord(record: GradientPaintRecord): Uint8Array | null {
+export function packGradientRecord(
+  record: GradientPaintRecord,
+  texture: ImageTextureSize | null = null,
+): Uint8Array | null {
   if (typeof record !== 'object' || record === null) return null;
+  if (record.kind === 'image') return packImageRecord(record, texture);
   const kind = KIND_CODES[record.kind];
   const spread = SPREAD_CODES[record.spread];
   const map: unknown = record.map;
@@ -316,6 +368,56 @@ export function packGradientRecord(record: GradientPaintRecord): Uint8Array | nu
     view.setFloat32(48 + index * 4, offset, true);
   }
   for (const [index, lane] of colorLanes.entries()) view.setFloat32(112 + index * 4, lane, true);
+  return bytes;
+}
+
+/** V-32 (V32-K2): a bound image texture's base size and mip level count. */
+export type ImageTextureSize = Readonly<{ width: number; height: number; levels: number }>;
+
+const WRAP_CODES: Readonly<Record<string, number>> = Object.freeze({
+  extend: 0,
+  decal: 1,
+  repeat: 2,
+});
+
+/**
+ * V-32 (V32-K8): an image record's bytes: header (2, x wrap, mip levels, y wrap), the map as a
+ * gradient's,
+ * and the texture's width, height and level count in the first offset lanes. Without a texture
+ * (pending, failed or over budget) the size is 1 × 1 with one level: the draw binds the
+ * transparent texture, so the paint contributes nothing (V32-K3). Null when malformed.
+ */
+function packImageRecord(
+  record: Extract<GradientPaintRecord, { kind: 'image' }>,
+  texture: ImageTextureSize | null,
+): Uint8Array | null {
+  const wrapX = WRAP_CODES[record.wrapX];
+  const wrapY = WRAP_CODES[record.wrapY];
+  const map: unknown = record.map;
+  if (
+    wrapX === undefined ||
+    wrapY === undefined ||
+    !Array.isArray(map) ||
+    map.length !== 6 ||
+    !(map as readonly unknown[]).every(
+      (lane) => typeof lane === 'number' && Number.isFinite(lane) && Math.fround(lane) === lane,
+    )
+  ) {
+    return null;
+  }
+  const size = texture ?? { width: 1, height: 1, levels: 1 };
+  const bytes = new Uint8Array(GRADIENT_RECORD_SIZE);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(0, 2, true);
+  view.setUint32(4, wrapX, true);
+  view.setUint32(8, size.levels, true);
+  view.setUint32(12, wrapY, true);
+  for (const [lane, value] of (map as readonly number[]).entries()) {
+    view.setFloat32(16 + lane * 4, value, true);
+  }
+  view.setFloat32(48, size.width, true);
+  view.setFloat32(52, size.height, true);
+  view.setFloat32(56, size.levels, true);
   return bytes;
 }
 

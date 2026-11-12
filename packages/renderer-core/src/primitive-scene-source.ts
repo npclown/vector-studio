@@ -1,4 +1,4 @@
-import { isSceneGradient } from '@vector-studio/contracts';
+import { isSceneColor, isSceneImagePaint } from '@vector-studio/contracts';
 import type {
   GlyphRasterPort,
   RenderNodeSnapshot,
@@ -686,7 +686,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
         const path = pathById.get(draw.nodeId)!;
         const role = draw.paint ?? 'fill';
         const paint = role === 'fill' ? path.node.style.fill : path.node.style.stroke?.color;
-        if (paint === null || paint === undefined || !isSceneGradient(paint)) continue;
+        if (paint === null || paint === undefined || isSceneColor(paint)) continue;
         const record = this.#gradients.recordOf(
           `mesh:${draw.nodeId}:${role}`,
           paint,
@@ -719,14 +719,16 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     // Primitive records, against the primitive origin; an out-of-range paint keeps index 0, whose
     // transparent solid lanes contribute nothing (E23-K8).
     const primitivePaints: { slot: number; fill: number; stroke: number }[] = [];
-    const paintFlags = visible.map((primitive) => {
+    // V-32 (V32-K7): a primitive with a paint record is tagged with its fill image's key, or ''
+    // without an image, so a run holds one image texture; `false` is an all-solid primitive.
+    const paintFlags: (string | false)[] = visible.map((primitive) => {
       const { fill, stroke } = primitive.node.style;
       const fillIndex =
-        fill !== null && isSceneGradient(fill)
+        fill !== null && !isSceneColor(fill)
           ? this.#gradients.indexOf(`primitive:${primitive.id}:fill`, fill, primitive.world, origin)
           : 0;
       const strokeIndex =
-        stroke !== null && isSceneGradient(stroke.color)
+        stroke !== null && !isSceneColor(stroke.color)
           ? this.#gradients.indexOf(
               `primitive:${primitive.id}:stroke`,
               stroke.color,
@@ -738,7 +740,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       primitivePaints.push(
         Object.freeze({ slot: primitive.slot, fill: fillIndex, stroke: strokeIndex }),
       );
-      return true;
+      return fill !== null && fillIndex !== 0 && isSceneImagePaint(fill) ? fill.image : '';
     });
 
     const grew = this.#ensureCapacities(highWater(this.#slotIds), visible.length);
@@ -3000,11 +3002,19 @@ function maskLevels(
   );
 }
 
+/** E23 U2 and V-32: the paint fields of a run from its first primitive's tag. */
+function paintFields(
+  tag: string | false | undefined,
+): Readonly<{ paint?: 'gradient'; image?: string }> {
+  if (tag === undefined || tag === false) return {};
+  return tag === '' ? { paint: 'gradient' } : { paint: 'gradient', image: tag };
+}
+
 function interleaveDraws(
   visible: readonly DerivedPrimitive[],
   meshSequences: readonly number[],
   states: readonly number[],
-  paints: readonly boolean[],
+  paints: readonly (string | false)[],
 ): Readonly<{ analytic: PrimitiveDraw[]; positions: number[] }> {
   const analytic: PrimitiveDraw[] = [];
   const positions: number[] = [];
@@ -3020,8 +3030,8 @@ function interleaveDraws(
           variant: 'analytic-v1' as const,
           // P4 contract, U2: present only on a clipped run, so P3 draws stay unchanged.
           ...(state === 0 ? {} : { clipState: state }),
-          // E23 contract, U2: present only on a gradient run.
-          ...(paints[runStart] === true ? { paint: 'gradient' as const } : {}),
+          // E23 contract, U2: present only on a gradient run; V-32: `image` on an image run.
+          ...paintFields(paints[runStart]),
         }),
       );
       runStart = next;
@@ -3244,7 +3254,7 @@ function interleaveLayerDraws(
     depth: number;
   }>[],
   states: readonly number[],
-  paints: readonly boolean[],
+  paints: readonly (string | false)[],
   layerCount: number,
 ): Readonly<{
   main: PrimitiveDraw[];
@@ -3277,7 +3287,7 @@ function interleaveLayerDraws(
         count: run.next - run.start,
         variant: 'analytic-v1' as const,
         ...(state === 0 ? {} : { clipState: state }),
-        ...(paints[run.start] === true ? { paint: 'gradient' as const } : {}),
+        ...paintFields(paints[run.start]),
       }),
     );
     run.start = -1;

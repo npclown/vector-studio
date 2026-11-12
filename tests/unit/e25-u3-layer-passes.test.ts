@@ -158,7 +158,8 @@ const layerEmpty = 'primitive/1/layer-empty-bind-group';
 describe('E25 U3 layer variant sources (section 4; E25-A08 hash part)', () => {
   it('keeps the base, clip and paint modules byte-identical to main', () => {
     // E23 U3 pins the base, clip and mask hashes; these are the paint modules' at 095abeb.
-    // E39-U2 re-baselined the mesh modules (cover quad, stencil fragment, no-discard flag).
+    // E39-U2 re-baselined the mesh modules (cover quad, stencil fragment, no-discard flag). V-32
+    // (V32-K6) re-baselined the paint modules (+paint-v1: the image branch and group 2 bindings).
     expect({
       analytic: hash(PRIMITIVE_ANALYTIC_SHADER),
       mesh: hash(MESH_FILL_SHADER),
@@ -173,10 +174,10 @@ describe('E25 U3 layer variant sources (section 4; E25-A08 hash part)', () => {
       mesh: '1986fd23ccd14b745c039d11afc938fdeec009768c7d2f266f38ce5010df59ee',
       analyticClip: '434bc1d2768c1b9d09c385a2ac4f524f3d6976e183fb9324e0612a7a176efc0d',
       meshClip: '0f07200d57b117259f9c9a09be743dc59280918c0adf42b44eeb0e4eb5dd535e',
-      analyticPaint: '4806c2ff765f81874b1c4e343642f84113cc2be4ddcba355a4479a644f2767f3',
-      analyticPaintClip: 'd5ca9dad0bb75815b3048d9276d2a57e63def756b9fb44149ee4042dc2720510',
-      meshPaint: '6b312b3bfeb7e6935159a3cae3946f286e5ab78c771d63d3afaf6666b46ba6b0',
-      meshPaintClip: '6e5485b85f620dfb61086431d172b353527222f427e3783768ec5145c0402c82',
+      analyticPaint: '6db0473154c502aad249a997fb26768b704542ef45ea56e83081c0fc17086787',
+      analyticPaintClip: '8ccb6dfa822d2b11485b61426ba4a7548861007ba43043648cacaa16d90c40c1',
+      meshPaint: 'b5eb6d5f914fc97003f781d3eaf7043f13c5b8df3babd84936cc7c96cd346cf0',
+      meshPaintClip: 'ef1f923c5a56ce6dcad84260424756c71be97ea9a1b58c76b249ddd312c8f838',
     });
   });
 
@@ -206,7 +207,7 @@ describe('E25 U3 layer variant sources (section 4; E25-A08 hash part)', () => {
   it('suffixes the variant keys and keys the composite by format, samples and stencil', () => {
     const analytic = primitivePipelineKey('bgra8unorm', 4, true);
     expect(layerVariantBaseKey(analytic, 'paint-clip')).toMatchObject({
-      shaderKey: 'p1-analytic-v1+paint-v0+clip-v0+layer-v0',
+      shaderKey: 'p1-analytic-v1+paint-v1+clip-v0+layer-v0',
     });
     expect(layerVariantBaseKey(analytic, 'clip').layoutKey).toContain('e25-layer-v0');
     expect(layerCompositePipelineKey('bgra8unorm', 4, true)).not.toEqual(
@@ -246,8 +247,8 @@ describe('E25 U3 pipeline creation', () => {
     expect(fixture.pipelineLabels.slice(50)).toEqual([
       composite,
       `${stencilP1}+clip-v0+layer-v0`,
-      `${stencilP1}+paint-v0+layer-v0`,
-      `${stencilP1}+paint-v0+clip-v0+layer-v0`,
+      `${stencilP1}+paint-v1+layer-v0`,
+      `${stencilP1}+paint-v1+clip-v0+layer-v0`,
       'vector-studio/p3-mesh-fill-4x+layer-v0',
       'vector-studio/p3-mesh-joint-4x+layer-v0',
       'vector-studio/p3-mesh-cover-nonzero-4x+layer-v0',
@@ -266,24 +267,24 @@ describe('E25 U3 pipeline creation', () => {
       'vector-studio/p3-mesh-cover-joint-fill-nonzero-4x+clip-v0+layer-v0',
       'vector-studio/p3-mesh-cover-joint-fill-evenodd-4x+clip-v0+layer-v0',
       'vector-studio/p3-mesh-cover-joint-stroke-4x+clip-v0+layer-v0',
-      'vector-studio/p3-mesh-fill-4x+paint-v0+layer-v0',
-      'vector-studio/p3-mesh-joint-4x+paint-v0+layer-v0',
-      'vector-studio/p3-mesh-cover-nonzero-4x+paint-v0+layer-v0',
-      'vector-studio/p3-mesh-cover-evenodd-4x+paint-v0+layer-v0',
-      'vector-studio/p3-mesh-cover-joint-both-nonzero-4x+paint-v0+layer-v0',
-      'vector-studio/p3-mesh-cover-joint-both-evenodd-4x+paint-v0+layer-v0',
-      'vector-studio/p3-mesh-cover-joint-fill-nonzero-4x+paint-v0+layer-v0',
-      'vector-studio/p3-mesh-cover-joint-fill-evenodd-4x+paint-v0+layer-v0',
-      'vector-studio/p3-mesh-cover-joint-stroke-4x+paint-v0+layer-v0',
-      'vector-studio/p3-mesh-fill-4x+paint-v0+clip-v0+layer-v0',
-      'vector-studio/p3-mesh-joint-4x+paint-v0+clip-v0+layer-v0',
-      'vector-studio/p3-mesh-cover-nonzero-4x+paint-v0+clip-v0+layer-v0',
-      'vector-studio/p3-mesh-cover-evenodd-4x+paint-v0+clip-v0+layer-v0',
-      'vector-studio/p3-mesh-cover-joint-both-nonzero-4x+paint-v0+clip-v0+layer-v0',
-      'vector-studio/p3-mesh-cover-joint-both-evenodd-4x+paint-v0+clip-v0+layer-v0',
-      'vector-studio/p3-mesh-cover-joint-fill-nonzero-4x+paint-v0+clip-v0+layer-v0',
-      'vector-studio/p3-mesh-cover-joint-fill-evenodd-4x+paint-v0+clip-v0+layer-v0',
-      'vector-studio/p3-mesh-cover-joint-stroke-4x+paint-v0+clip-v0+layer-v0',
+      'vector-studio/p3-mesh-fill-4x+paint-v1+layer-v0',
+      'vector-studio/p3-mesh-joint-4x+paint-v1+layer-v0',
+      'vector-studio/p3-mesh-cover-nonzero-4x+paint-v1+layer-v0',
+      'vector-studio/p3-mesh-cover-evenodd-4x+paint-v1+layer-v0',
+      'vector-studio/p3-mesh-cover-joint-both-nonzero-4x+paint-v1+layer-v0',
+      'vector-studio/p3-mesh-cover-joint-both-evenodd-4x+paint-v1+layer-v0',
+      'vector-studio/p3-mesh-cover-joint-fill-nonzero-4x+paint-v1+layer-v0',
+      'vector-studio/p3-mesh-cover-joint-fill-evenodd-4x+paint-v1+layer-v0',
+      'vector-studio/p3-mesh-cover-joint-stroke-4x+paint-v1+layer-v0',
+      'vector-studio/p3-mesh-fill-4x+paint-v1+clip-v0+layer-v0',
+      'vector-studio/p3-mesh-joint-4x+paint-v1+clip-v0+layer-v0',
+      'vector-studio/p3-mesh-cover-nonzero-4x+paint-v1+clip-v0+layer-v0',
+      'vector-studio/p3-mesh-cover-evenodd-4x+paint-v1+clip-v0+layer-v0',
+      'vector-studio/p3-mesh-cover-joint-both-nonzero-4x+paint-v1+clip-v0+layer-v0',
+      'vector-studio/p3-mesh-cover-joint-both-evenodd-4x+paint-v1+clip-v0+layer-v0',
+      'vector-studio/p3-mesh-cover-joint-fill-nonzero-4x+paint-v1+clip-v0+layer-v0',
+      'vector-studio/p3-mesh-cover-joint-fill-evenodd-4x+paint-v1+clip-v0+layer-v0',
+      'vector-studio/p3-mesh-cover-joint-stroke-4x+paint-v1+clip-v0+layer-v0',
     ]);
     const groups = (label: string) =>
       (
@@ -303,7 +304,7 @@ describe('E25 U3 pipeline creation', () => {
       'primitive/1/layer-empty-bind-group-layout',
       'vector-studio/e25-layer-layout',
     ]);
-    expect(groups(`${stencilP1}+paint-v0+clip-v0+layer-v0`)).toEqual([
+    expect(groups(`${stencilP1}+paint-v1+clip-v0+layer-v0`)).toEqual([
       'vector-studio/p1-primitive-packet-layout',
       'vector-studio/p4-clip-layout',
       'vector-studio/e23-paint-layout',
@@ -338,9 +339,9 @@ describe('E25 U3 pipeline creation', () => {
   const steps = [
     ['composite', 'e25-layer-composite'],
     ['analytic clip', 'primitive-stencil-4x+clip-v0+layer'],
-    ['analytic paint clip', 'primitive-stencil-4x+paint-v0+clip-v0+layer'],
+    ['analytic paint clip', 'primitive-stencil-4x+paint-v1+clip-v0+layer'],
     ['mesh', 'p3-mesh-fill-4x+layer'],
-    ['mesh joint paint clip', 'p3-mesh-joint-4x+paint-v0+clip-v0+layer'],
+    ['mesh joint paint clip', 'p3-mesh-joint-4x+paint-v1+clip-v0+layer'],
   ] as const;
 
   it.each(steps)(
@@ -661,7 +662,7 @@ describe('E25 U3 nesting, tiles, ties and variants', () => {
     submitted(scene.submitPrimitivePacket(prepared(h, target)));
     const end = fixture.calls.findIndex((call) => call[0] === 'end');
     expect(fixture.calls.slice(3, end).filter((call) => call[0] !== 'setVertexBuffer')).toEqual([
-      ['setPipeline', `${stencilP1}+paint-v0+layer-v0`],
+      ['setPipeline', `${stencilP1}+paint-v1+layer-v0`],
       ['setBindGroup', 0, 'primitive/1/arena-1/bind-group'],
       ['setIndexBuffer'],
       ['setBindGroup', 1, layerEmpty],
@@ -707,7 +708,7 @@ describe('E25 U3 fail-closed layers, identity and lifetime', () => {
       ['beginRenderPass', 'vector-studio/primitive-pass'],
       ['setPipeline', stencilP1],
       ['drawIndexed', 6, 1, 0, 0, 0],
-      ['setPipeline', `${stencilP1}+paint-v0`],
+      ['setPipeline', `${stencilP1}+paint-v1`],
       ['drawIndexed', 6, 1, 0, 0, 2],
     ]);
     expect(fixture.textures.some((texture) => texture.label.includes('layer'))).toBe(false);
@@ -1040,7 +1041,7 @@ describe('E25 U3 sample counts, stencil and state after composites', () => {
       ['setPipeline', stencilP1],
       ['setBindGroup', 0, 'primitive/1/arena-1/bind-group'],
       ['drawIndexed', 6, 1, 0, 0, 1],
-      ['setPipeline', `${stencilP1}+paint-v0+layer-v0`],
+      ['setPipeline', `${stencilP1}+paint-v1+layer-v0`],
       ['setBindGroup', 2, 'primitive/1/paint-primitives-2/bind-group'],
       ['drawIndexed', 6, 1, 0, 0, 2],
       ['setPipeline', `${stencilP1}+clip-v0+layer-v0`],

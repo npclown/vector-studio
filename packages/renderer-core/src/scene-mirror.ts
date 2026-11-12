@@ -266,7 +266,8 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     const pathStrokes = options.pathStrokes === 'supported' ? 'supported' : 'unsupported';
     const clips: ClipSupport =
       options.clips === 'supported' || options.clips === 'rect' ? options.clips : 'unsupported';
-    const paints: PaintSupport = options.paints === 'gradient' ? 'gradient' : 'solid';
+    const paints: PaintSupport =
+      options.paints === 'gradient' || options.paints === 'image' ? options.paints : 'solid';
     const dashes: DashSupport = options.dashes === 'supported' ? 'supported' : 'unsupported';
     const groupOpacity: GroupOpacitySupport =
       options.groupOpacity === 'supported' ? 'supported' : 'unsupported';

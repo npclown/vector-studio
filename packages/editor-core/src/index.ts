@@ -144,6 +144,8 @@ export type {
   SceneGradientSpread,
   SceneGradientStop,
   SceneIdentity,
+  SceneImagePaint,
+  SceneImageWrap,
   SceneNodeBase,
   ScenePaint,
   ScenePathGeometry,

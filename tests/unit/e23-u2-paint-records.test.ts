@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildGradientRecord,
   type GradientPaintRecord,
+  type GradientRecord,
 } from '../../packages/renderer-core/src/paint-records.js';
 import { PathMeshPipeline } from '../../packages/renderer-core/src/path-mesh-pipeline.js';
 import type {
@@ -133,7 +134,10 @@ describe('E23-A02 gradient records', () => {
         { offset: 0.7, color: blue },
       ],
     };
-    const record = buildGradientRecord(translucent, [1, 0, 0, 1, 0, 0], { x: 0, y: 0 })!;
+    const record = buildGradientRecord(translucent, [1, 0, 0, 1, 0, 0], {
+      x: 0,
+      y: 0,
+    }) as GradientRecord;
     expect(record.offsets).toEqual([Math.fround(0.1), Math.fround(0.7)]);
     expect(record.colors).toEqual([0.15, 0.5, 0, 0.5, 0, 0, 1, 1].map(Math.fround));
     expect(record.kind).toBe('linear');

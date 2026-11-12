@@ -1,3 +1,4 @@
+import type { ImageSourcePort } from '@vector-studio/contracts';
 import {
   ResourceAccounting,
   type PrimitiveSubmitResult,
@@ -209,6 +210,8 @@ export async function nativeScene(
     effectContentForTesting?: boolean;
     layerTileSizeForTesting?: number;
     sampleCount?: 1 | 4;
+    /** V-32 U3: the image source the paint pipeline's texture store requests from. */
+    imageSource?: ImageSourcePort;
   }> = {
     meshPipeline: true,
     clipPipeline: true,
