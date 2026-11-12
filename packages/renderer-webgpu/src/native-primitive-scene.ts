@@ -776,8 +776,6 @@ type ValidatedLayers = Readonly<{
   blends: readonly (LayerBlendFrame | null)[];
   /** V35-K4: the splits, keyed by pass (`-1` main, else `layer:tile`), then by blend root. */
   splits: ReadonlyMap<string, ReadonlyMap<number, BlendSplitFrame>>;
-  /** V35-K4: the number of splits of the frame. */
-  splitCount: number;
 }> | null;
 
 /** V35-K4: a blend root's snapshot in a frame, in device pixels. */
@@ -1101,6 +1099,21 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   readonly #blend: BlendPipelineState | null;
   /** V35-K8: backdrop splits so far (one per end-and-resume of a pass around a snapshot). */
   #blendSplits = 0;
+  /** V35-K8: the splits encoded in the frame being built, added at its submission. */
+  #frameSplits = 0;
+  /** @internal Tests only (V35-A05): blend composite draws per variant, submitted so far. */
+  #blendCompositeDraws: Record<BlendCompositeVariant, number> = {
+    plain: 0,
+    clip: 0,
+    shifted: 0,
+    'clip-shifted': 0,
+  };
+  #frameBlendCompositeDraws: Record<BlendCompositeVariant, number> = {
+    plain: 0,
+    clip: 0,
+    shifted: 0,
+    'clip-shifted': 0,
+  };
   readonly textPipelineAvailable: boolean;
   readonly #text: TextPipelineState | null;
   /** E28 section 4, Atlas pages: index i holds page i, as the packet's `pageCount` asks. */
@@ -1517,6 +1530,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       if (clip !== null) {
         this.#encodeMaskPasses(encoder, clip, arena, meshArena, transients);
       }
+      this.#frameSplits = 0;
+      for (const variant of BLEND_COMPOSITE_VARIANTS) this.#frameBlendCompositeDraws[variant] = 0;
       // E25 section 4, Pass order: the layers in post-order, after the mask passes.
       const layerFrame =
         layers === null
@@ -1662,6 +1677,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           // V35-K4: end the pass, copy the backdrop under the root's composite, resume.
           pass.end();
           remainingSplits -= 1;
+          this.#frameSplits += 1;
           snapshotBackdrop(
             encoder,
             mainParent,
@@ -1837,6 +1853,13 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         pass.drawIndexed(6, draw.count, 0, 0, draw.first);
       });
       drawMeshesAt(packet.draws.length);
+      if (remainingSplits > 0) {
+        // A planned split did not run (its slot drew nothing): the attachment is still stored
+        // unresolved, so an empty last segment resolves it (V35-K4).
+        pass.end();
+        remainingSplits = 0;
+        pass = beginMain(true);
+      }
       pass.end();
       if (capture !== null) {
         // E10 contract, sections 4 and 5: in this encoder, after the main pass, so the copy is
@@ -1881,7 +1904,10 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       if (layers !== null) {
         this.#layerPasses += layers.layers.length;
         this.#effectPasses += layers.effects.filter((effect) => effect?.result != null).length;
-        this.#blendSplits += layers.splitCount;
+        this.#blendSplits += this.#frameSplits;
+        for (const variant of BLEND_COMPOSITE_VARIANTS) {
+          this.#blendCompositeDraws[variant] += this.#frameBlendCompositeDraws[variant];
+        }
       }
       this.#observeCompletion();
       return Object.freeze({
@@ -2364,13 +2390,21 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   }
 
   /** E41 U5: effect roots submitted with their effects this generation, one per root and frame. */
-  /** V35-K8: backdrop splits so far, one per end-and-resume of a pass around a snapshot. */
+  public get effectPasses(): number {
+    return this.#effectPasses;
+  }
+
+  /**
+   * V35-K8: backdrop splits submitted so far, one per end-and-resume of a pass around a
+   * snapshot, counted where the split is encoded.
+   */
   public get blendSplits(): number {
     return this.#blendSplits;
   }
 
-  public get effectPasses(): number {
-    return this.#effectPasses;
+  /** @internal Tests only (V35-A05): blend composite draws submitted so far, per variant. */
+  public blendCompositeDrawsForTesting(): Readonly<Record<BlendCompositeVariant, number>> {
+    return Object.freeze({ ...this.#blendCompositeDraws });
   }
 
   /** E41 section 5.4: the device limit that bounds effect textures. */
@@ -3072,8 +3106,10 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       if (effect !== null && effect !== undefined && effect.result === null) return null;
       const composite = effect?.result ?? layer.bound;
       const region = layer.parent === -1 ? targetRect : layers[layer.parent]!.bound;
-      const snapshot = backdropRect(composite, margin, region);
-      return snapshot === null ? null : Object.freeze({ snapshot, margin });
+      // V35-K4: a margin is only offered over the main target; in a layer it is ignored.
+      const grown = layer.parent === -1 ? margin : 0;
+      const snapshot = backdropRect(composite, grown, region);
+      return snapshot === null ? null : Object.freeze({ snapshot, margin: grown });
     });
     const splitPlan = planBackdropSplits(
       layers.map((layer, index) => ({
@@ -3151,8 +3187,9 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       effects: Object.freeze(effects),
       scratch: Object.freeze(scratch.map((pair) => Object.freeze({ ...pair }))),
       blends: Object.freeze(blends),
-      splits,
-      splitCount: splitPlan.length,
+      splits: Object.freeze(
+        new Map([...splits].map(([key, entry]) => [key, Object.freeze(entry)] as const)),
+      ),
     });
   }
 
@@ -3473,6 +3510,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
                 if (planned === undefined || snapshot == null) return null;
                 pass.end();
                 remaining -= 1;
+                this.#frameSplits += 1;
                 snapshotBackdrop(
                   encoder,
                   parent,
@@ -3493,6 +3531,12 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           textPart: text.part,
           split,
         });
+        if (remaining > 0) {
+          // A planned split did not run: an empty last segment resolves the tile (V35-K4).
+          pass.end();
+          remaining = 0;
+          pass = begin(true);
+        }
         pass.end();
         encoder.copyTextureToTexture(
           { texture: copySource },
@@ -3830,7 +3874,22 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     const clipped = blended ? blendCompositeClip : compositeClip;
     if (plain === null || (state !== 0 && (clipped === null || clip === null))) return -1;
     const pipelines = this.#layer!;
-    pass.setPipeline(state === 0 ? plain : clipped!);
+    const chosen = state === 0 ? plain : clipped!;
+    if (blended && this.#blend !== null) {
+      const blend = this.#blend;
+      const variant: BlendCompositeVariant | null =
+        chosen === blend.plain
+          ? 'plain'
+          : chosen === blend.clip
+            ? 'clip'
+            : chosen === blend.shifted
+              ? 'shifted'
+              : chosen === blend.clipShifted
+                ? 'clip-shifted'
+                : null;
+      if (variant !== null) this.#frameBlendCompositeDraws[variant] += 1;
+    }
+    pass.setPipeline(chosen);
     pass.setBindGroup(0, frame.compositeGroups[layer]!);
     if (state === 0) pass.setBindGroup(CLIP_BIND_GROUP_INDEX, pipelines.emptyBindGroup);
     else {

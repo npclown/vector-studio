@@ -3267,7 +3267,6 @@ function compositeClipStates(
   });
 }
 
-/** E41: the packet record of a drawn effect root, spread into its layer entry. */
 /** V35-K3, K4: a drawn blend root's mode and backdrop request, for its packet layer. */
 function blendRecordOf(
   blend: BlendRootMode | undefined,
@@ -3277,6 +3276,7 @@ function blendRecordOf(
   return { blend, backdrop: scope.backdrop ?? Object.freeze({ margin: 0 }) };
 }
 
+/** E41: the packet record of a drawn effect root, spread into its layer entry. */
 function effectRecordOf(effect: EffectLayer | undefined): { effect?: LayerEffectRecord } {
   if (effect === undefined) return {};
   return {

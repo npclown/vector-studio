@@ -10,7 +10,10 @@ import type {
   SceneColor,
   SceneEffect,
 } from '@vector-studio/contracts';
-import type { E23GradientPaintApi } from '../../apps/playground/src/e23-gradient-paint.js';
+import type {
+  E23Frame,
+  E23GradientPaintApi,
+} from '../../apps/playground/src/e23-gradient-paint.js';
 import { decodeFrame } from '../support/p4-clip-oracle.js';
 import { blendOracle, compareBlend, cornerPixels } from '../support/v35-blend-oracle.js';
 
@@ -175,12 +178,50 @@ function multiFill(
   return [group(id, null, ids(fills), extra), ...fills];
 }
 
+type BlendVariant = 'plain' | 'clip' | 'shifted' | 'clip-shifted';
+
 type Fixture = Readonly<{
   name: string;
   nodes: readonly RenderNodeSnapshot[];
-  /** A07: the expected splits per frame, when the case checks them. */
+  /** A07: the splits per frame counted by hand, where the case has them. */
   splits?: (tile: number | null) => number;
+  /** The blend composite variants the case must draw with. */
+  variants?: readonly BlendVariant[];
 }>;
+
+type PacketLayers = NonNullable<NonNullable<E23Frame['packet']>['layers']>;
+
+/**
+ * A07: the splits a frame's packet asks for, counted from its layers: one for a blend root
+ * composited in the main pass, else one per tile of its parent's bound (E25's grid from the
+ * bound's origin, `tile` or 1024 pixels) that its composite rectangle meets.
+ */
+function packetSplits(layers: PacketLayers | null | undefined, tile: number | null): number {
+  if (layers === null || layers === undefined) return 0;
+  const size = tile ?? 1024;
+  let count = 0;
+  for (const layer of layers.layers) {
+    if (layer.blend === null) continue;
+    const rect = layer.effectOutput ?? layer.bound;
+    if (layer.parent === -1) {
+      const meets =
+        rect.x < WIDTH && rect.y < HEIGHT && rect.x + rect.width > 0 && rect.y + rect.height > 0;
+      count += meets ? 1 : 0;
+      continue;
+    }
+    const parent = layers.layers[layer.parent]!.bound;
+    for (let y = 0; y < parent.height; y += size) {
+      for (let x = 0; x < parent.width; x += size) {
+        const left = Math.max(rect.x, parent.x + x);
+        const top = Math.max(rect.y, parent.y + y);
+        const right = Math.min(rect.x + rect.width, parent.x + Math.min(x + size, parent.width));
+        const bottom = Math.min(rect.y + rect.height, parent.y + Math.min(y + size, parent.height));
+        if (left < right && top < bottom) count += 1;
+      }
+    }
+  }
+  return count;
+}
 
 const tilePasses = (
   bound: readonly [number, number, number, number],
@@ -258,6 +299,8 @@ function fixtures(): Fixture[] {
         rect('ei', 'e', [4, 4, 250, 300], { r: 0.2, g: 0.8, b: 0.3, a: 0.6 }),
         ...effectColumns,
       ],
+      // E41 U5b: every layer pass in an effect root draws with the shifted set.
+      variants: ['shifted'],
     },
     {
       // E41 U5b: L reaches past the target's left side, so its shadow is drawn from shifted
@@ -265,34 +308,59 @@ function fixtures(): Fixture[] {
       name: 'effect root past the target',
       nodes: [
         ...backdrop(),
-        group('s', null, ['si', 's1', 's2'], {
+        group('s', null, ['si', 's1', 's2', 'sc'], {
           effects: [{ kind: 'dropShadow', color: SHADE, offsetX: 40, offsetY: 0, sigma: 0 }],
         }),
         rect('si', 's', [-48, 40, 120, 220], { r: 0.2, g: 0.8, b: 0.3, a: 0.6 }),
         rect('s1', 's', [-40, 60, 60, 80], SOURCE_A, { blendMode: 'hardLight' }),
         rect('s2', 's', [-36, 160, 70, 80], SOURCE_B, { blendMode: 'color', opacity: 0.8 }),
+        // A clipped blend root that is also an effect root, in the effect root's shifted
+        // passes: the clip-shifted variant.
+        group('sc', 's', ['sce'], {
+          clip: { kind: 'rect', x: -30, y: 250, width: 60, height: 40 },
+        }),
+        group('sce', 'sc', ['s3'], {
+          blendMode: 'exclusion',
+          effects: [{ kind: 'dropShadow', color: SHADE, offsetX: 4, offsetY: 3, sigma: 0 }],
+        }),
+        rect('s3', 'sce', [-44, 244, 90, 60], SOURCE_A),
       ],
+      variants: ['shifted', 'clip-shifted'],
     },
     {
       name: 'clip',
       nodes: [
         ...backdrop(),
-        group('c', null, [...ids(clipColumns), 'cr'], {
+        group('c', null, [...ids(clipColumns), 'cr', 'ce'], {
           clip: { kind: 'rect', x: 20, y: 30, width: 400, height: 250 },
         }),
         ...clipColumns,
         group('cr', 'c', ids(rootChildren), { blendMode: 'difference', opacity: 0.9 }),
         ...rootChildren,
+        // A blend root that is also an effect root composites under its ancestors' clip
+        // (E41 U5c), across the clip's right edge: the clip variant.
+        group('ce', 'c', ['ce1'], {
+          blendMode: 'overlay',
+          effects: [{ kind: 'dropShadow', color: SHADE, offsetX: 6, offsetY: 5, sigma: 0 }],
+        }),
+        rect('ce1', 'ce', [380, 200, 80, 60], SOURCE_A),
       ],
+      variants: ['clip'],
     },
     {
       name: 'mask',
       nodes: [
         ...backdrop(),
-        group('k', null, ['ks', ...ids(maskColumns)], { clip: { kind: 'mask' } }),
+        group('k', null, ['ks', ...ids(maskColumns), 'ke'], { clip: { kind: 'mask' } }),
         rect('ks', 'k', [40, 50, 380, 200], { r: 1, g: 1, b: 1, a: 1 }),
         ...maskColumns,
+        group('ke', 'k', ['ke1'], {
+          blendMode: 'softLight',
+          effects: [{ kind: 'dropShadow', color: SHADE, offsetX: 6, offsetY: 5, sigma: 0 }],
+        }),
+        rect('ke1', 'ke', [390, 210, 70, 60], SOURCE_B),
       ],
+      variants: ['clip'],
     },
     {
       // R3: a multi-fill node blending through; isolated under opacity 0.5; under a drop shadow.
@@ -382,7 +450,20 @@ async function splitsPerFrame(page: Page, nodes: readonly RenderNodeSnapshot[]) 
     second.result.counters.statistics.framesSubmitted -
     first.result.counters.statistics.framesSubmitted;
   const splits = second.result.counters.blendSplits - first.result.counters.blendSplits;
-  return { frames, splits, perFrame: frames > 0 ? splits / frames : Number.NaN };
+  const draws = Object.fromEntries(
+    (['plain', 'clip', 'shifted', 'clip-shifted'] as const).map((variant) => [
+      variant,
+      second.result.counters.blendCompositeDraws[variant] -
+        first.result.counters.blendCompositeDraws[variant],
+    ]),
+  ) as Record<BlendVariant, number>;
+  return {
+    frames,
+    splits,
+    perFrame: frames > 0 ? splits / frames : Number.NaN,
+    draws,
+    packet: second.result.frame.packet,
+  };
 }
 
 function writeReport(name: string, report: unknown) {
@@ -436,11 +517,23 @@ for (const samples of [1, 4] as const) {
             .map((layer) => ({ nodeId: layer.nodeId, bound: layer.bound })),
           blendNotices: result.frame.packet?.layers?.blendNotices,
         };
-        if (fixture.splits !== undefined && variant !== 'production usage') {
-          const measured = await splitsPerFrame(page, fixture.nodes);
-          entry.splits = { ...measured, expected: fixture.splits(tile) };
-          if (measured.perFrame !== fixture.splits(tile)) {
-            failures.push(`${fixture.name} (${variant}): ${measured.perFrame} splits per frame`);
+        if (variant !== 'production usage') {
+          // A07: the splits counted where they run, against the packet's tile passes (and the
+          // hand count where the case has one); K5: the variants the case must draw with.
+          const { packet, ...measured } = await splitsPerFrame(page, fixture.nodes);
+          const fromPacket = packetSplits(packet?.layers, tile);
+          const byHand = fixture.splits?.(tile);
+          entry.splits = { ...measured, fromPacket, byHand };
+          if (measured.perFrame !== fromPacket || (byHand !== undefined && byHand !== fromPacket)) {
+            failures.push(
+              `${fixture.name} (${variant}): ${measured.perFrame} splits per frame, ` +
+                `${fromPacket} from the packet, ${byHand} by hand`,
+            );
+          }
+          for (const expected of fixture.variants ?? []) {
+            if (measured.draws[expected] === 0) {
+              failures.push(`${fixture.name} (${variant}): no ${expected} blend composite`);
+            }
           }
         }
         (report.cases as unknown[]).push(entry);
@@ -596,3 +689,87 @@ test('V35-A07 blend-mode and fill edits cost no geometry build', async ({ browse
   expect(failures, JSON.stringify(rows)).toEqual([]);
   await page.close();
 });
+
+/**
+ * V35-K4 with E17: stars (mesh fills through the stencil) drawn before and after a blend root in
+ * the same pass, in the main pass and in a layer's 64 px tiles. Away from the root, the frame
+ * equals the same scene with the root drawn `normal` (no split); under it, the R2 oracle.
+ */
+for (const samples of [1, 4] as const) {
+  test(`V35-K4 the E17 stencil across a split, main and tile passes, at ${samples}x`, async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const pages = { plain: await browser.newPage(), tiled: await browser.newPage() };
+    const plain = await open(pages.plain, { samples, blend: true });
+    const tiled = await open(pages.tiled, { samples, blend: true, tile: 64 });
+    const ROOT = [180, 40, 120, 200] as const;
+    const scene = (layered: boolean, mode: SceneBlendMode | undefined): RenderNodeSnapshot[] => {
+      const parent = layered ? 'w' : null;
+      const content = [
+        star('sa', parent, [20, 30], 150, { r: 0.1, g: 0.3, b: 0.9, a: 0.85 }),
+        rect('bx', parent, ROOT, SOURCE_B, mode === undefined ? {} : { blendMode: mode }),
+        star('sb', parent, [320, 30], 170, { r: 0.9, g: 0.5, b: 0.1, a: 0.9 }),
+        star('sc', parent, [360, 150], 120, { r: 0.2, g: 0.8, b: 0.4, a: 0.7 }),
+      ];
+      return [
+        ...backdrop(),
+        ...(layered ? [group('w', null, ids(content), { opacity: 0.95 })] : []),
+        ...content,
+      ];
+    };
+    const rootOnly = (layered: boolean) =>
+      scene(layered, 'multiply')
+        .filter((node) => node.kind !== 'path')
+        .map((node) => (node.kind === 'container' ? { ...node, children: ['bx'] } : node));
+    const inside = (x: number, y: number) =>
+      x >= ROOT[0] && x < ROOT[0] + ROOT[2] && y >= ROOT[1] && y < ROOT[1] + ROOT[3];
+    const failures: string[] = [];
+    const rows: Record<string, unknown> = {};
+    for (const [name, page, layered] of [
+      ['main pass', pages.plain, false],
+      ['tile passes', pages.tiled, true],
+    ] as const) {
+      const reference = await render(page, scene(layered, undefined));
+      const blended = await render(page, scene(layered, 'multiply'));
+      const { packet, ...measured } = await splitsPerFrame(page, scene(layered, 'multiply'));
+      const expectedSplits = packetSplits(packet?.layers, layered ? 64 : null);
+      const oracle = blendOracle(rootOnly(layered), WIDTH, HEIGHT);
+      const corners = cornerPixels(rootOnly(layered), WIDTH, HEIGHT);
+      let outsideWorst = 0;
+      let outsideAt: readonly number[] | null = null;
+      let insideWorst = 0;
+      for (let index = 0; index < WIDTH * HEIGHT; index += 1) {
+        const x = index % WIDTH;
+        const y = Math.floor(index / WIDTH);
+        for (let lane = 0; lane < 3; lane += 1) {
+          const actual = blended.rgba[index * 4 + lane]!;
+          // P1's corner rounding differs between the root drawn `normal` and blended.
+          if (corners[index] === 1) continue;
+          if (!inside(x, y)) {
+            const difference = Math.abs(actual - reference.rgba[index * 4 + lane]!);
+            if (difference > outsideWorst) {
+              outsideWorst = difference;
+              outsideAt = [x, y, lane, actual, reference.rgba[index * 4 + lane]!];
+            }
+          } else {
+            insideWorst = Math.max(
+              insideWorst,
+              Math.abs(actual - oracle.data[index * 4 + lane]! * 255),
+            );
+          }
+        }
+      }
+      rows[name] = { outsideWorst, outsideAt, insideWorst, ...measured, expectedSplits };
+      if (outsideWorst > 0) failures.push(`${name}: ${outsideWorst} away from the root`);
+      if (insideWorst > TOLERANCE) failures.push(`${name}: ${insideWorst} under the root`);
+      if (measured.perFrame !== expectedSplits || expectedSplits < (layered ? 2 : 1)) {
+        failures.push(`${name}: ${measured.perFrame} splits, ${expectedSplits} expected`);
+      }
+    }
+    writeReport(`k4-stencil-${samples}x`, { rows, failures });
+    expect([...plain.pageErrors, ...tiled.pageErrors]).toEqual([]);
+    expect(failures, JSON.stringify(rows)).toEqual([]);
+    await Promise.all(Object.values(pages).map((page) => page.close()));
+  });
+}

@@ -469,6 +469,19 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   }
 
   /**
+   * @internal Tests only (V35-A05): the current generation's blend composite draws so far, per
+   * variant (plain, clip and their shifted forms); zeros without the blend pipeline.
+   */
+  getBlendCompositeDrawsForTesting(): Readonly<
+    Record<'plain' | 'clip' | 'shifted' | 'clip-shifted', number>
+  > {
+    return (
+      this.#primitiveScene?.blendCompositeDrawsForTesting?.() ??
+      Object.freeze({ plain: 0, clip: 0, shifted: 0, 'clip-shifted': 0 })
+    );
+  }
+
+  /**
    * V35-K7: whether this generation draws blend roots with their mode; false before
    * initialization, for a source that does not ask for them, when the blend pipelines are
    * unavailable, or when the canvas could not be configured to be read at 1x.

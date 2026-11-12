@@ -160,6 +160,8 @@ export type E23Counters = Readonly<{
   effectPipelineAvailable: boolean;
   /** V35-K8: backdrop splits of the current generation so far. */
   blendSplits: number;
+  /** V35-A05: blend composite draws so far, per variant. */
+  blendCompositeDraws: Readonly<Record<'plain' | 'clip' | 'shifted' | 'clip-shifted', number>>;
   /** V35-K7: whether this generation draws blend roots with their mode. */
   blendPipelineAvailable: boolean;
   /** E28: glyph raster port calls and bitmaps uploaded by acknowledged packets. */
@@ -431,6 +433,7 @@ function counters(): E23Counters {
     effectPasses: backend.getEffectPassesForTesting(),
     effectPipelineAvailable: backend.effectPipelineAvailable,
     blendSplits: backend.getBlendSplitsForTesting(),
+    blendCompositeDraws: backend.getBlendCompositeDrawsForTesting(),
     blendPipelineAvailable: backend.blendPipelineAvailable,
     glyphRasterCalls: service!.getGlyphRasterCallsForTesting(),
     glyphUploads: service!.getGlyphUploadsForTesting(),

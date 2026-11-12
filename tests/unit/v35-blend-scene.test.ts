@@ -240,3 +240,69 @@ describe('V-35 U4 the main pass around a blend root (K4, A06, A07)', () => {
     creation.dispose();
   });
 });
+
+describe('V-35 U4 a blend root in a tiled layer (K4 per tile pass)', () => {
+  it('splits each tile pass it composites in; only the last segment of a tile resolves', async () => {
+    const fixture = nativeFixture();
+    const { scene, target, creation } = await nativeScene(fixture, {
+      ...withBlend,
+      meshPipeline: true,
+      layerTileSizeForTesting: 16,
+    });
+    const group: RenderNodeSnapshot = {
+      id: 'g',
+      parentId: null,
+      transform: [1, 0, 0, 1, 0, 0],
+      visible: true,
+      opacity: 0.5,
+      kind: 'container',
+      clip: null,
+      children: ['a', 'b'],
+    };
+    const packet = prepare(
+      [group, { ...box('a', 0), parentId: 'g' }, { ...box('b', 10, 'multiply'), parentId: 'g' }],
+      { ...target, blendLayers: true },
+    );
+    const parent = packet.layers!.layers.findIndex((layer) => layer.blend === undefined);
+    const bound = packet.layers!.layers[parent]!.bound;
+    // The parent's tiles of 16 px that the root's rectangle (x 10 to 30, y 40 to 60) meets.
+    const columns = new Set([10, 29].map((x) => Math.floor((x - bound.x) / 16))).size;
+    const rows = new Set([40, 59].map((y) => Math.floor((y - bound.y) / 16))).size;
+    expect(columns * rows).toBeGreaterThan(1);
+    fixture.calls.length = 0;
+    const encoders = vi.spyOn(fixture.device, 'createCommandEncoder');
+    submitted(scene.submitPrimitivePacket(packet));
+    type RecordedEncoder = { beginRenderPass: ReturnType<typeof vi.fn> };
+    const segments = encoders.mock.results
+      .flatMap((result) => (result.value as unknown as RecordedEncoder).beginRenderPass.mock.calls)
+      .map((call) => call[0] as GPURenderPassDescriptor)
+      .filter((descriptor) => descriptor.label === `vector-studio/layer-pass/${parent}`)
+      .map((descriptor) => {
+        const color = [...descriptor.colorAttachments][0]!;
+        return [
+          color.loadOp,
+          color.storeOp,
+          color.resolveTarget === undefined ? 'no-resolve' : 'resolve',
+          descriptor.depthStencilAttachment?.stencilLoadOp,
+          descriptor.depthStencilAttachment?.stencilStoreOp,
+        ].join(' ');
+      });
+    // Every tile: a cleared first segment that stores colour and stencil unresolved; if the root
+    // composites in it, a loaded last segment that resolves and discards.
+    const split = ['clear store no-resolve clear store', 'load discard resolve load discard'];
+    const whole = 'clear discard resolve clear discard';
+    const tiles: string[][] = [];
+    for (const segment of segments) {
+      if (segment.startsWith('clear')) tiles.push([segment]);
+      else tiles.at(-1)!.push(segment);
+    }
+    expect(tiles.filter((tile) => tile.join() === split.join())).toHaveLength(columns * rows);
+    expect(tiles.every((tile) => tile.join() === split.join() || tile.join() === whole)).toBe(true);
+    expect(scene.blendSplits).toBe(columns * rows);
+    const snapshots = fixture.calls.filter(
+      (call) => call[0] === 'beginRenderPass' && call[1] === 'vector-studio/backdrop-snapshot',
+    );
+    expect(snapshots).toHaveLength(columns * rows);
+    creation.dispose();
+  });
+});

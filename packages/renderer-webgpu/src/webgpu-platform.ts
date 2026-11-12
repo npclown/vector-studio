@@ -107,6 +107,10 @@ export interface WebGpuPrimitiveScenePort extends PrimitivePacketConsumer {
   readonly blendPipelineAvailable?: boolean;
   /** V35-K8: backdrop splits this generation has made, one per end-and-resume of a pass. */
   readonly blendSplits?: number;
+  /** @internal Tests only (V35-A05): blend composite draws submitted so far, per variant. */
+  blendCompositeDrawsForTesting?(): Readonly<
+    Record<'plain' | 'clip' | 'shifted' | 'clip-shifted', number>
+  >;
   setTarget(target: PrimitiveTarget): void;
   submitPrimitivePacket: PrimitivePacketConsumer['submitPrimitivePacket'];
   /**

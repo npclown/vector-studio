@@ -18,8 +18,6 @@ export const BACKDROP_SNAPSHOT_RECORD_SIZE = 16;
 const BACKDROP_SNAPSHOT_RENDER_STATE_KEY = 'replace/no-depth/no-cull/triangle-list-v1';
 
 const FRAGMENT_VISIBILITY = 0x2;
-/** RENDER_ATTACHMENT | TEXTURE_BINDING: a snapshot is drawn into, then read by the composite. */
-export const BACKDROP_SNAPSHOT_USAGE = 0x10 | 0x04;
 /** V35-K4: the usage an attachment needs to be read by the snapshot (TEXTURE_BINDING). */
 export const BACKDROP_PARENT_USAGE = 0x04;
 
