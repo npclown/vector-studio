@@ -15,7 +15,12 @@ import type {
   E23GradientPaintApi,
 } from '../../apps/playground/src/e23-gradient-paint.js';
 import { decodeFrame } from '../support/p4-clip-oracle.js';
-import { blendOracle, compareBlend, cornerPixels } from '../support/v35-blend-oracle.js';
+import {
+  blendOracle,
+  compareBlend,
+  cornerPixels,
+  excessSlack,
+} from '../support/v35-blend-oracle.js';
 
 declare global {
   interface Window {
@@ -537,7 +542,8 @@ for (const samples of [1, 4] as const) {
           }
         }
         (report.cases as unknown[]).push(entry);
-        if (comparison.worst > TOLERANCE) {
+        // Over the tolerance plus the oracle's one-step slack (V35-A05 amendment).
+        if (comparison.over > 0) {
           failures.push(
             `${fixture.name} (${variant}): worst ${comparison.worst} at ${JSON.stringify(comparison.at)}`,
           );
@@ -753,9 +759,10 @@ for (const samples of [1, 4] as const) {
               outsideAt = [x, y, lane, actual, reference.rgba[index * 4 + lane]!];
             }
           } else {
+            // Less the oracle's slack beyond one step (V35-A05 amendment).
             insideWorst = Math.max(
               insideWorst,
-              Math.abs(actual - oracle.data[index * 4 + lane]! * 255),
+              Math.abs(actual - oracle.data[index * 4 + lane]! * 255) - excessSlack(oracle, index),
             );
           }
         }

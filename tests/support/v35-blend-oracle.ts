@@ -13,8 +13,25 @@ import type { RenderNodeSnapshot, SceneBlendMode, SceneColor } from '@vector-stu
 //   pixel offsets, one per root (E41: the shadow `color · αL(p − offset)` under `L`).
 // Every target and layer is stored at 8 bits, as the GPU stores them, so the oracle quantizes
 // after each draw and each layer's content before its composite.
+//
+// One 8-bit step (V35-A05 amendment, 2026-11-12): a GPU's float-to-unorm conversion is exact
+// only to about 0.6 of a step (D3D12 and Vulkan), and ties differ between adapters: the band
+// colour 0.9 (229.5) is stored as 230 on SwiftShader and 229 on the reference PC's NVIDIA GPU.
+// Every mode then sees a backdrop and a stored `R` that may each be one step away from the
+// oracle's, and steep modes (colorBurn, colorDodge) multiply that step by up to about 3. So each
+// blend composite also records `slack`, the largest change of its result when the backdrop
+// colour and the source colour each move one step, carried through later composites. The
+// tolerance already holds one step, so the comparison allows the tolerance plus the slack beyond
+// one step: `tolerance + max(0, slack − 1)` in 1/255. For the gentle modes that adds at most a
+// fraction of a step; colorBurn and colorDodge get their amplification.
 
-export type BlendImage = { width: number; height: number; data: Float64Array };
+export type BlendImage = {
+  width: number;
+  height: number;
+  data: Float64Array;
+  /** Per pixel, the result's change (0 to 1) when stored inputs move one 8-bit step. */
+  slack: Float64Array;
+};
 
 type Mask = Uint8Array | null;
 type Rgb = readonly [number, number, number];
@@ -22,7 +39,12 @@ type Rgb = readonly [number, number, number];
 const quantize = (value: number) => Math.round(Math.min(Math.max(value, 0), 1) * 255) / 255;
 
 function image(width: number, height: number): BlendImage {
-  return { width, height, data: new Float64Array(width * height * 4) };
+  return {
+    width,
+    height,
+    data: new Float64Array(width * height * 4),
+    slack: new Float64Array(width * height),
+  };
 }
 
 function quantizeImage(target: BlendImage) {
@@ -114,10 +136,20 @@ export function blendColor(mode: SceneBlendMode, cb: Rgb, cs: Rgb): Rgb {
 }
 
 /** Composites premultiplied source `(ps, as)` onto `target` at `at` with `mode` (R2). */
-function compositePixel(target: BlendImage, at: number, ps: Rgb, as: number, mode: SceneBlendMode) {
+function compositePixel(
+  target: BlendImage,
+  at: number,
+  ps: Rgb,
+  as: number,
+  mode: SceneBlendMode,
+  carried = 0,
+) {
   if (as <= 0) return;
   const data = target.data;
   const ab = data[at + 3]!;
+  const pixel = at / 4;
+  // A later composite keeps (1 − αs) of what the target held, and so of its slack.
+  target.slack[pixel] = target.slack[pixel]! * (1 - as) + carried;
   if (mode === 'normal' || mode === 'passThrough') {
     for (let lane = 0; lane < 3; lane += 1)
       data[at + lane] = ps[lane]! + (1 - as) * data[at + lane]!;
@@ -128,6 +160,26 @@ function compositePixel(target: BlendImage, at: number, ps: Rgb, as: number, mod
   const cb: Rgb = ab > 0 ? [pb[0] / ab, pb[1] / ab, pb[2] / ab] : [0, 0, 0];
   const cs: Rgb = [ps[0] / as, ps[1] / as, ps[2] / as];
   const mixed = blendColor(mode, cb, cs);
+  // One step of the backdrop's and of the source's stored colour, through the mode.
+  const step = 1 / 255;
+  const db = ab > 0 ? step / ab : 0;
+  const ds = step / as;
+  const clamp = (value: number) => Math.min(1, Math.max(0, value));
+  let slack = 0;
+  for (const sb of [-db, 0, db]) {
+    for (const ss of [-ds, 0, ds]) {
+      if (sb === 0 && ss === 0) continue;
+      const moved = blendColor(
+        mode,
+        [clamp(cb[0] + sb), clamp(cb[1] + sb), clamp(cb[2] + sb)],
+        [clamp(cs[0] + ss), clamp(cs[1] + ss), clamp(cs[2] + ss)],
+      );
+      for (let lane = 0; lane < 3; lane += 1) {
+        slack = Math.max(slack, as * ab * Math.abs(moved[lane]! - mixed[lane]!));
+      }
+    }
+  }
+  target.slack[at / 4] = target.slack[at / 4]! + slack;
   for (let lane = 0; lane < 3; lane += 1) {
     data[at + lane] = as * (1 - ab) * cs[lane]! + as * ab * mixed[lane]! + (1 - as) * pb[lane]!;
   }
@@ -188,6 +240,8 @@ export function blendOracle(
   for (let y = 0; y < targetHeight; y += 1) {
     const from = ((y + MARGIN) * full.width + MARGIN) * 4;
     cropped.data.set(full.data.subarray(from, from + targetWidth * 4), y * targetWidth * 4);
+    const row = (y + MARGIN) * full.width + MARGIN;
+    cropped.slack.set(full.slack.subarray(row, row + targetWidth), y * targetWidth);
   }
   return cropped;
 }
@@ -220,7 +274,7 @@ function renderOracle(
         layer.data[at + 1]! * opacity,
         layer.data[at + 2]! * opacity,
       ];
-      compositePixel(target, at, ps, as, mode);
+      compositePixel(target, at, ps, as, mode, layer.slack[index]! * opacity);
     }
     quantizeImage(target);
   };
@@ -337,6 +391,9 @@ export type BlendComparison = Readonly<{
   /** The first pixels over the tolerance, for the report. */
   overAt: readonly (readonly [number, number])[];
   detail: Readonly<{ actual: readonly number[]; expected: readonly number[] }> | null;
+  /** The largest excess over the tolerance alone, and the slack (in 1/255) at the worst pixel. */
+  slackAtWorst: number;
+  maxSlack: number;
 }>;
 
 /** Compares RGBA8 `actual` with the oracle's premultiplied image over an opaque canvas. */
@@ -405,6 +462,10 @@ export function cornerPixels(
   return mask;
 }
 
+/** The slack at pixel `index` beyond the one step the tolerance holds, in 1/255. */
+export const excessSlack = (image: BlendImage, index: number): number =>
+  Math.max(0, image.slack[index]! * 255 - 1);
+
 export function compareBlend(
   actual: Uint8Array,
   expected: BlendImage,
@@ -425,7 +486,9 @@ export function compareBlend(
       );
       pixelWorst = Math.max(pixelWorst, difference);
     }
-    if (pixelWorst > tolerance) {
+    // The one-step slack of the modes this pixel went through (see the header).
+    const allowed = tolerance + excessSlack(expected, index);
+    if (pixelWorst > allowed) {
       over += 1;
       if (overAt.length < 64)
         overAt.push([index % expected.width, Math.floor(index / expected.width)]);
@@ -442,5 +505,20 @@ export function compareBlend(
       };
     }
   }
-  return { worst, at, over, overAt, detail };
+  let maxSlack = 0;
+  for (let index = 0; index < expected.width * expected.height; index += 1) {
+    if (excluded !== null && excluded[index] === 1) continue;
+    maxSlack = Math.max(maxSlack, expected.slack[index]! * 255);
+  }
+  const slackAtWorst = at === null ? 0 : expected.slack[at[1] * expected.width + at[0]]! * 255;
+  const round = (value: number) => Math.round(value * 100) / 100;
+  return {
+    worst,
+    at,
+    over,
+    overAt,
+    detail,
+    slackAtWorst: round(slackAtWorst),
+    maxSlack: round(maxSlack),
+  };
 }
