@@ -250,7 +250,7 @@ describe('V-40 freehand geometry', () => {
     const samples = wave(1, 0.8);
     const before = freehandPreview(samples.slice(0, 60), 1)!.points;
     const after = freehandPreview(samples.slice(0, 61), 1)!.points;
-    // Points more than the smoothing reach (3 px, about 3 samples here) behind the tip stay put.
+    // Points more than the smoothing window (ends within 6 px, at most 8 samples a side) behind the tip stay put.
     expect(after.slice(0, 2 * 55)).toEqual(before.slice(0, 2 * 55));
   });
 

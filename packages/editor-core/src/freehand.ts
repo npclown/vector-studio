@@ -285,7 +285,8 @@ export const FREEHAND = Object.freeze({
   /** Samples closer than this to the previous one are dropped. */
   minStepPx: 1,
   /**
-   * The moving-average window: neighbours within this straight-line distance. It takes out
+   * The moving-average window: its two ends within 2 × this of each other in a straight line. It
+   * takes out
    * jitter of about ±2 px at the 1 to 2 px sample spacing of an ordinary drag.
    */
   smoothPx: 6,
