@@ -52,6 +52,7 @@ export type {
   ModelErrorCode,
   NodeBaseV2,
   NodeEffects,
+  NodeLock,
   NodeV8,
   PageV1,
   PageV2,

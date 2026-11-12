@@ -321,9 +321,30 @@ const STUDIO_CSS = `
 .vs-layers li > button[data-testid^='layer-name-']:first-child { margin-left: 16px; }
 .vs-layers li > button[data-testid^='layer-toggle-'] { width: 16px; padding: 0; color: var(--vs-muted); }
 .vs-layers li > span { color: var(--vs-muted); font-size: 11px; }
-.vs-layers li > button[data-testid^='layer-visible-'] { color: var(--vs-muted); font-size: 11px; visibility: hidden; }
-.vs-layers li:hover > button[data-testid^='layer-visible-'],
-.vs-layers li[style*='opacity: 0.5'] > button[data-testid^='layer-visible-'] { visibility: visible; }
+/* V31-U1: lock and eye buttons, revealed on hover or focus by opacity; an active one stays. */
+.vs-layers li > button[data-layer-flag] {
+  width: 20px;
+  height: 20px;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--vs-muted);
+  background: transparent !important;
+  opacity: 0;
+}
+.vs-layers li:hover > button[data-layer-flag],
+.vs-layers li:focus-within > button[data-layer-flag],
+.vs-layers li > button[data-layer-flag][data-active='true'] { opacity: 1; }
+.vs-layers li > button[data-layer-flag]:hover { color: inherit; }
+.vs-layers [data-layer-flag-text] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 .vs-layers li > input { flex: 1; width: auto !important; }
 
 .vs-right [data-testid='appearance-panel'] > p { padding: 12px; color: var(--vs-muted); margin: 0; }

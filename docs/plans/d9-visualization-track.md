@@ -43,6 +43,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | V-31..V-40 shared | Document schema v8, one unreleased version for the ten gap-list items | Full | Active | Scaffold in review ([rule](viz-schema-v8.md)) |
 | V-36 | Inner shadow and background blur effects, on E41's effect roots and V-35's backdrop snapshot (Figma) | Full | Active | Contract adopted 2026-11-12 ([contract](viz-v36-inner-shadow-background-blur-contract.md)); V36-Q1 to Q5 (a) adopted as recommended |
 | V-37 | Component variants (component sets, variant switching) and property overrides of instance layers (Figma) | Full | Active | Contract APPROVED 2026-11-12 (r3 READY WITH FOLLOW-UPS applied) ([contract](viz-v37-variants-overrides-contract.md)) |
+| V-31 | Layer lock and hide: locked layers cannot be picked or transformed on the canvas, lock and eye buttons in the layer tree, `Mod+Shift+L` and `Mod+Shift+H` (Figma) | Full | Active | Contract APPROVED 2026-11-12; implementation in review ([contract](viz-v31-lock-hide-contract.md)) |
 
 ## V-1: path appearance editing
 

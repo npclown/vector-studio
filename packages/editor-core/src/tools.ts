@@ -31,6 +31,7 @@ import {
   type HandleBox,
 } from './handles.js';
 import {
+  anyLocked,
   boundsOf,
   deepestHit,
   hitsAt,
@@ -752,7 +753,10 @@ export function selectionHandles(
       handlePoint(box, bl),
     ],
     rotation: box.mode === 'single' ? normalizeRotation(box.turn) : 0,
-    handles: activeHandles(box.box).map((handle) => handlePoint(box, handle)),
+    // V31-E2: a selection with a locked node shows its outline without handles.
+    handles: anyLocked(document, selection)
+      ? []
+      : activeHandles(box.box).map((handle) => handlePoint(box, handle)),
     content:
       selection.length === 1
         ? contentBox(document.nodes[selection[0]!]!, (id) => document.nodes[id])
@@ -1320,7 +1324,10 @@ export function createSelectTool(
   ): void {
     if (state.kind !== 'idle') return;
     const document = context.query({ type: 'document' });
-    const selection = context.query({ type: 'selection' });
+    const held = context.query({ type: 'selection' });
+    // V31-E2: with a locked node selected a press acts as with an empty selection: no handles,
+    // no move or duplicate of the selection; Shift still toggles in the held selection.
+    const selection = anyLocked(document, held) ? [] : held;
     const zoom = zoomOf(context);
     const handles = handlesOff ? null : handlesOf(context, selection);
     // The node hit and its selection target (section 6), with the scope in place of the page
@@ -1464,9 +1471,7 @@ export function createSelectTool(
     }
     if (leaves) context.execute({ type: 'setScope', id: null });
     if (event.modifiers.shift) {
-      const ids = selection.includes(hit)
-        ? selection.filter((id) => id !== hit)
-        : [...selection, hit];
+      const ids = held.includes(hit) ? held.filter((id) => id !== hit) : [...held, hit];
       context.execute({ type: 'setSelection', ids });
       return;
     }
