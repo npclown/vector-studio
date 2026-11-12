@@ -47,6 +47,9 @@ import {
 } from './tree.js';
 import type { DocumentCommand } from './types.js';
 
+/** The schema version that first has a frame or symbol `layoutGrids` (V38-S2). */
+const LAYOUT_GRIDS_SINCE = 8;
+
 // The clipboard fragment (MVP M2 contract, section 6; MVP M7 contract, section 6): `copy`
 // serializes subtrees as marked text, `paste` parses it with the model's JSON and node rules plus
 // the fragment rules and inserts the subtrees with fresh IDs (section 4.3, S8). Fragment version
@@ -296,6 +299,9 @@ function readFields(
     // Below schema v7 a node has no `effects`, which the v6 to v7 migration adds empty (E41-S1).
     const effectsWritten = schemaVersion < 7 && isRecord(raw) && Object.hasOwn(raw, 'effects');
     if (schemaVersion < 7 && isRecord(candidate)) candidate = { ...candidate, effects: [] };
+    // Below LAYOUT_GRIDS_SINCE a frame or symbol has no `layoutGrids` key (V38-S2).
+    const gridsWritten =
+      schemaVersion < LAYOUT_GRIDS_SINCE && isRecord(raw) && Object.hasOwn(raw, 'layoutGrids');
     if (older) {
       const rest = { ...(candidate as Record<string, unknown>) };
       delete rest.textOverrides;
@@ -324,6 +330,7 @@ function readFields(
     if (!result.ok) return fail(result.code, mapPath(name, key, result.path));
     // As an older document reads it, `effects` is an unknown key there.
     if (effectsWritten) return fail('document.invalid-field', mapPath(name, key, '/effects'));
+    if (gridsWritten) return fail('document.invalid-field', mapPath(name, key, '/layoutGrids'));
     if (result.node.id !== key) return fail('document.invalid-field', mapPath(name, key, '/id'));
     read.push([key, result.node]);
   }
@@ -948,6 +955,8 @@ export function paste(
           stroke: how.source.stroke,
           // E41-S10: the effects the instance drew with, its own or else its source's.
           effects: node.effects.length > 0 ? node.effects : how.source.effects,
+          // V-38 contract, V38-S2: the source's layout grids.
+          ...(how.source.layoutGrids === undefined ? {} : { layoutGrids: how.source.layoutGrids }),
         });
       }
       // A root's mapped placement and a detached frame are validated again; the rest is as the

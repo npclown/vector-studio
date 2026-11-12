@@ -200,6 +200,7 @@ function playwrightKey(chord: string): string {
   const shifted: Record<string, string> = {
     '!': 'Digit1',
     '@': 'Digit2',
+    $: 'Digit4',
     ')': 'Digit0',
     '}': 'BracketRight',
     '{': 'BracketLeft',
@@ -464,6 +465,22 @@ test('M2-A13 section 7: every default chord reaches the editor', async ({ page }
   expect(await snapshotOf(page)).toMatchObject({ scope: ids.F, selection: [ids.g] });
   await step('Escape');
   expect(await snapshotOf(page)).toMatchObject({ scope: null, selection: [ids.F] });
+
+  // V-38 (contract, V38-C4): Shift+R toggles the rulers, Ctrl+Shift+$ the layout grids, and
+  // each back again.
+  const flags = () =>
+    page.evaluate(() => {
+      const value = window.__p5Host!.editor.getSnapshot();
+      return { rulers: value.rulersVisible, grids: value.layoutGridsVisible };
+    });
+  const initial = await flags();
+  await step('Shift+R');
+  expect((await flags()).rulers).toBe(!initial.rulers);
+  await step('Shift+R');
+  await step('Ctrl+Shift+$');
+  expect((await flags()).grids).toBe(!initial.grids);
+  await step('Ctrl+Shift+$');
+  expect(await flags()).toEqual(initial);
 
   // Every chord of the effective keymap (the defaults; no extension or host layer binds one)
   // was pressed and consumed.

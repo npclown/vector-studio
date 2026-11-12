@@ -74,6 +74,7 @@ import {
 } from '../src/v25-text-colour-default';
 import { textEditBox } from '../src/v25-text-box';
 import { SelectionOverlay } from '../src/overlay';
+import { GridsAndGuides, Rulers, useGuideDrag } from '../src/v38-rulers';
 import { createWebGpuRenderer } from '../src/webgpu-renderer';
 import type { ClusterRead, ClusterRect, FrameCrop, TextScene } from '../src/m6c-text-probe';
 import type {
@@ -693,18 +694,36 @@ function Surface({
   };
   // V-25 slice 10: the studio's right click menu on the canvas.
   const contextMenu = useStudioContextMenu(editor, studio);
+  // V-38: rulers on in the studio from the start; guides dragged from them (V38-H1, H2).
+  const canvasHostRef = useRef<HTMLDivElement>(null);
+  const guideDrag = useGuideDrag(editor, canvasHostRef);
+  useEffect(() => {
+    if (studio) editor.execute({ type: 'setRulersVisible', visible: true });
+  }, [editor, studio]);
   // V-25: the canvas host, at the fixed size of the M8 layout or the studio's measured size.
   const canvasHost = (size: StudioCanvasSize) => (
     <div
+      ref={canvasHostRef}
       data-testid="canvas-host"
       data-cursor={handleCursor?.kind ?? 'default'}
-      style={{ width: size.width, cursor: handleCursorCss(handleCursor) }}
-      onPointerMove={hover}
-      onPointerDownCapture={studio ? readableText : undefined}
+      style={{ width: size.width, cursor: guideDrag.cursor ?? handleCursorCss(handleCursor) }}
+      onPointerMove={(event) => {
+        hover(event);
+        if (studio) guideDrag.onPointerMove(event);
+      }}
+      onPointerDownCapture={
+        studio
+          ? (event) => {
+              guideDrag.onPointerDownCapture(event);
+              if (!event.isPropagationStopped()) readableText(event);
+            }
+          : undefined
+      }
       onContextMenu={contextMenu.onContextMenu}
       onPointerLeave={() => {
         setHandleCursor(null);
         setPenCursor(null);
+        guideDrag.onPointerLeave();
       }}
     >
       <EditorCanvas
@@ -719,6 +738,9 @@ function Surface({
         onPressChange={persistence.onPressChange}
         style={{ border: '1px solid #ccc' }}
       >
+        {studio ? (
+          <GridsAndGuides width={size.width} height={size.height} drag={guideDrag.drag} />
+        ) : null}
         <SelectionOverlay
           snapshot={snapshot}
           handles={handles}
@@ -730,6 +752,9 @@ function Surface({
           width={size.width}
           height={size.height}
         />
+        {studio ? (
+          <Rulers width={size.width} height={size.height} handles={handles} host={canvasHostRef} />
+        ) : null}
       </EditorCanvas>
       {contextMenu.menu}
     </div>

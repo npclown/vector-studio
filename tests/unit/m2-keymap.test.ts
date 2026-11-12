@@ -251,7 +251,7 @@ describe('M2-A11 default bindings run their actions through input', () => {
     const chords = keymap.map((binding) => binding.chord);
     expect(chords).toEqual([...chords].sort());
     // M2-U4 adds duplicate, nudge and reorder, M2-U5 Enter and Escape (section 7), E41-U3 the
-    // four booleans, V-31 lock and hide (V31-E5).
+    // four booleans, V-31 lock and hide (V31-E5), V-38 the rulers and layout grid toggles.
     expect(chords).toEqual([
       '-',
       '=',
@@ -270,6 +270,7 @@ describe('M2-A11 default bindings run their actions through input', () => {
       'Ctrl+KeyG',
       'Ctrl+KeyY',
       'Ctrl+KeyZ',
+      'Ctrl+Shift+$',
       'Ctrl+Shift+KeyG',
       'Ctrl+Shift+KeyH',
       'Ctrl+Shift+KeyL',
@@ -296,6 +297,7 @@ describe('M2-A11 default bindings run their actions through input', () => {
       'Shift+ArrowRight',
       'Shift+ArrowUp',
       'Shift+KeyP',
+      'Shift+KeyR',
     ]);
     expect(keymap.find((binding) => binding.chord === 'KeyR')).toEqual({
       chord: 'KeyR',
@@ -320,11 +322,12 @@ describe('M2-A11 Mod and key matching', () => {
     expect(() => editor({ platform: 'win' as never })).toThrow(/platform/u);
   });
 
-  it('the modifier set must equal the chord: Ctrl+Alt+Z and Shift+R do not match', () => {
+  it('the modifier set must equal the chord: Ctrl+Alt+Z and Shift+O do not match', () => {
     const target = editor();
     rect(target);
     expect(press(target, 'z', mods('ctrl', 'alt')).consumed).toBe(false);
-    expect(press(target, 'R', mods('shift')).consumed).toBe(false);
+    // V-38 binds Shift+R (`toggleRulers`), so Shift+O stands for an unbound shifted letter.
+    expect(press(target, 'O', mods('shift')).consumed).toBe(false);
     expect(target.query({ type: 'tool' })).toBe('select');
     expect(children(target)).toHaveLength(1);
   });
@@ -978,6 +981,19 @@ describe('M2-A11 rest (M2-U7): every default binding through input, and host-bou
       chord: 'Escape',
       key: 'Escape',
       check: (s) => expect(s.target.query({ type: 'selection' })).toEqual([]),
+    },
+    // V-38 contract, V38-C4.
+    {
+      chord: 'Shift+R',
+      key: 'R',
+      modifiers: mods('shift'),
+      check: (s) => expect(s.target.query({ type: 'rulersVisible' })).toBe(true),
+    },
+    {
+      chord: 'Ctrl+Shift+$',
+      key: '$',
+      modifiers: mods('ctrl', 'shift'),
+      check: (s) => expect(s.target.query({ type: 'layoutGridsVisible' })).toBe(false),
     },
   ];
 
