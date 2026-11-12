@@ -67,7 +67,7 @@ export type ModelErrorCode = Exclude<
 /** `path` is a JSON Pointer (RFC 6901) to the offending field; `''` is the whole document. */
 export type ModelFailure = Readonly<{ ok: false; code: ModelErrorCode; path: string }>;
 
-/** The latest schema version, which every validated document has (E41 contract, section 3). */
+/** The latest schema version, 8, which every validated document has (docs/plans/viz-schema-v8.md). */
 export type ParseResult = Readonly<{ ok: true; document: DocumentV8 }> | ModelFailure;
 
 /** The result of `migrateV5toV6`, the fifth step of the migration chain. */
@@ -794,7 +794,12 @@ const V6_TO_V7: Schema = {
   ...ADD_EFFECTS,
 };
 const V7: Schema = { ...V6_TO_V7, effects: 'read' };
-/** A v7 input read into v8: v7's fields (v8 has v7's shape so far). */
+/**
+ * A v7 input read into v8, and v8 itself: v7's fields, since v8 has v7's shape so far. An item
+ * adding a v8 field splits these two and adds its dimension to every schema that reads into v8
+ * (`V2_TO_V7` to `V6_TO_V7` too, which `validateAnyDocument` uses for older inputs); see
+ * docs/plans/viz-schema-v8.md, Where a field addition goes.
+ */
 const V7_TO_V8: Schema = V7;
 const V8: Schema = V7;
 /** v8 nodes of an input below v6, already migrated: v8 fields, the older opacity rule. */
@@ -1239,14 +1244,14 @@ function readPage(value: unknown, path: Path): PageV8 {
   };
 }
 
-/** A document's `id`, `pages` and `nodes`, typed as those of `D` (v7 unless migrating). */
+/** A document's `id`, `pages` and `nodes`, typed as those of `D` (v8 unless migrating). */
 type Tree<D extends { pages: unknown; nodes: unknown } = DocumentV8> = Readonly<{
   id: string;
   pages: D['pages'];
   nodes: D['nodes'];
 }>;
 
-/** A v7 document read with the schema of its source version (an older one when migrating). */
+/** A v8 document read with the schema of its source version (an older one when migrating). */
 function readDocumentV8(value: Record<string, unknown>, schema: Schema): DocumentV8 {
   return { schemaVersion: 8, ...readTree(value, schema, true) };
 }

@@ -1,6 +1,6 @@
 // Document schemas (P5 editor-slice plan, section 3; MVP M1 contract, section 2). The model imports
 // nothing, so these types mirror the matching `contracts` scene fields instead of importing them.
-// Schema v8 (2026-11-12, v7's shape so far) is the document the model returns and writes; the v1
+// Schema v8 (docs/plans/viz-schema-v8.md; v7's shape so far) is the document the model returns and writes; the v1
 // to v7 types describe the input of `migrateV1toV2` to `migrateV7toV8` only.
 
 export type JsonValue =
@@ -432,7 +432,7 @@ export type DocumentV7 = Readonly<{
   nodes: Readonly<Record<string, NodeV7>>;
 }>;
 
-// Document schema v8 (2026-11-12, the Figma gap-list items V-31 to V-40): introduced as v7's shape
+// Document schema v8 (docs/plans/viz-schema-v8.md, gap-list items V-31 to V-40): introduced as v7's shape
 // so the ten items can each add their fields to one unreleased version instead of bumping it in
 // turn. The v7 to v8 migration changes only `schemaVersion` until an item adds a field.
 

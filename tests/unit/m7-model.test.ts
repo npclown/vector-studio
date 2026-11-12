@@ -268,7 +268,7 @@ describe('M7-A01 migration v2 to v3', () => {
     });
   });
 
-  it('accepts versions 1 to 7 and validateDocument only 7 (since E41-U4)', async () => {
+  it('accepts versions 1 to 8 and validateDocument only 8 (since the v8 scaffold)', async () => {
     const v1 = JSON.parse(await read('p5-model/shapes.json')) as unknown;
     const v2 = JSON.parse(await read('m1-model/shapes.v2.json')) as unknown;
     const v3 = JSON.parse(await read('m7-symbols/migrated/shapes.v3.json')) as unknown;

@@ -40,6 +40,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | V-28 | Hovering a selection handle shows a resize cursor along the handle's direction, and the rotate zone a rotate cursor curled around its corner, both turned with a rotated box (Figma) | Full | Done | Done 2026-11-09 (#541), headed M2-A13 Chrome+Edge 10/10 at ad4ff05 ([M2 section 4.1 amendment](mvp-m2-interaction-contract.md#41-rotation)) |
 | V-29 | A press anywhere along a selection box edge (on it or just outside) resizes that edge, and the hover shows the resize cursor there (Figma) | Full | Done | Done 2026-11-09 (#543), headed m2/m1/p5 next-host 10/10, 2/2, 4/4 at d07d2e4 ([M2 section 4.1 amendment](mvp-m2-interaction-contract.md#41-rotation)) |
 | V-30 | Export the page, the selection or an artboard as PNG (0.5x to 4x) or SVG from an Export section (Figma) | Full | Done | Done 2026-11-09 (#550), headed v30-export and m8 ([contract](viz-v30-export-contract.md#8-record)) |
+| V-31..V-40 shared | Document schema v8, one unreleased version for the ten gap-list items | Full | Active | Scaffold in review ([rule](viz-schema-v8.md)) |
 
 ## V-1: path appearance editing
 

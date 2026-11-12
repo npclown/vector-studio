@@ -114,8 +114,8 @@ function effect(value: Effect): Ordered {
   };
 }
 
-/** A v7 node: the v6 fields, then `effects` (E41-S1). */
-function nodeV7(value: NodeV8): Ordered {
+/** A v8 node (v7's shape so far): the v6 fields, then `effects` (E41-S1). */
+function nodeV8(value: NodeV8): Ordered {
   return { ...nodeV6(value), effects: value.effects.map(effect) };
 }
 
@@ -209,7 +209,7 @@ export function orderedDocument(document: DocumentV8): Ordered {
     nodes: Object.fromEntries(
       Object.keys(document.nodes)
         .sort(compareCodeUnits)
-        .map((key) => [key, nodeV7(document.nodes[key]!)]),
+        .map((key) => [key, nodeV8(document.nodes[key]!)]),
     ),
   };
 }
