@@ -586,8 +586,8 @@ const ADD_TEST_IDS: Readonly<Record<Kind, string>> = {
 /**
  * E41-U7 (E41 contract, section 6) and V-36 (section 6): add each kind the host projects to each
  * selected node, and per effect index a visible toggle, a kind select within the row's family,
- * colour, X, Y, blur and remove, "mixed" where the selected nodes differ. A mask source's effects do not render (section 3): the section shows them
- * disabled with a note.
+ * colour, X, Y, blur and remove, "mixed" where the selected nodes differ. A mask source's
+ * effects do not render (section 3): the section shows them disabled with a note.
  */
 function EffectsSection({
   document,

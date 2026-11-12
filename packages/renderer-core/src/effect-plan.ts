@@ -443,8 +443,9 @@ export type EffectReach = Readonly<{ margin: number; clip: ClipChain | null }>;
 
 /**
  * E41-K1 in world units, without K4's clamp (which only shrinks the reach): `3 σ_blur` plus the
- * largest `3 σᵢ + |offsetᵢ|` over drop and (V36-K1) inner shadows, σ through `world`'s largest singular value, offsets through its
- * linear part. Device rounding is within the cull's 2 px guard.
+ * largest `3 σᵢ + |offsetᵢ|` over drop and (V36-K1) inner shadows, σ through `world`'s largest
+ * singular value, offsets through its linear part. Device rounding is within the cull's 2 px
+ * guard.
  */
 export function worldEffectMargin(effects: readonly SceneEffect[], world: SceneAffine): number {
   const scale = largestSingularValue(world);

@@ -9,6 +9,9 @@ import {
   type DocumentV8,
   type Effect,
 } from '@vector-studio/model';
+import { EditorProvider, PropertySections } from '@vector-studio/ui';
+import { createElement } from 'react';
+import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
   createCounterIdSource,
@@ -381,5 +384,49 @@ describe('V-36 panel model (section 6)', () => {
       'layerBlur',
       'backgroundBlur',
     ]);
+  });
+});
+
+const panel = (target: Editor) =>
+  renderToString(
+    createElement(EditorProvider, { editor: target }, createElement(PropertySections)),
+  );
+
+describe('V-36 the panel section (section 6)', () => {
+  it("offers inner shadow under 'v1' only, and background blur not before U3", () => {
+    for (const projection of [true, 'v1'] as const) {
+      const target = editor(projection);
+      const id = rectangle(target);
+      run(target, { type: 'setSelection', ids: [id] });
+      const html = panel(target);
+      expect(html).toContain('data-testid="effects-add-shadow"');
+      expect(html).toContain('data-testid="effects-add-blur"');
+      expect(html.includes('data-testid="effects-add-inner-shadow"')).toBe(projection === 'v1');
+      expect(html).not.toContain('effects-add-background-blur');
+    }
+  });
+
+  it('a row has a kind select over its family; Mixed and disabled across families', () => {
+    const target = editor('v1');
+    const a = rectangle(target);
+    const b = rectangle(target, 40);
+    run(target, { type: 'addEffect', ids: [a], kind: 'innerShadow' });
+    run(target, { type: 'addEffect', ids: [b], kind: 'layerBlur' });
+    run(target, { type: 'setSelection', ids: [a] });
+    let html = panel(target);
+    const select = /<select[^>]*data-testid="effect-0-kind"[^>]*>(.*?)<\/select>/u;
+    let match = select.exec(html)!;
+    expect(match[0]).not.toContain('disabled');
+    expect(match[1]).toContain('value="dropShadow"');
+    expect(match[1]).toMatch(/value="innerShadow"[^>]*selected/u);
+    expect(match[1]).not.toContain('value="layerBlur"');
+    expect(html).toContain('data-kind="innerShadow"');
+    expect(html).toContain('aria-label="Effect 1 colour"');
+
+    run(target, { type: 'setSelection', ids: [a, b] });
+    html = panel(target);
+    match = select.exec(html)!;
+    expect(match[0]).toMatch(/disabled=""/u);
+    expect(match[1]).toBe('<option value="mixed" selected="">Mixed</option>');
   });
 });

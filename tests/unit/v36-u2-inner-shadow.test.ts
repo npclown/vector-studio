@@ -271,6 +271,33 @@ describe('V36-K1b cut sides in the packet', () => {
     expect(layer.effect!.innerClamp).toBe(3);
   });
 
+  it('marks a leaf root cut at the target on a backend without off-target layers', () => {
+    // The test target has no `offTargetEffectLayers`, so every bound is clamped to it.
+    const packet = prepare([box('a', null, -30, { y: 300, size: 80, effects: [inner(0, 4, 2)] })]);
+    const layer = packet.layers!.layers.find((entry) => entry.nodeId === 'a')!;
+    expect([layer.bound.x, layer.bound.y + layer.bound.height]).toEqual([0, 360]);
+    // Left and bottom are cut (1 | 8).
+    expect(layer.effect!.innerClamp).toBe(9);
+  });
+
+  it('marks a nested root cut by its parent root’s bound', () => {
+    const parent: RenderNodeSnapshot = {
+      ...group('p', null, ['a'], { effects: [drop(0, 0, 0)] }),
+      clip: { kind: 'rect', x: 100, y: 100, width: 60, height: 60 },
+    };
+    const packet = prepare([
+      parent,
+      box('a', 'p', 130, { y: 130, size: 80, effects: [inner(0, 4, 2)] }),
+    ]);
+    const outer = packet.layers!.layers.find((entry) => entry.nodeId === 'p')!;
+    const layer = packet.layers!.layers.find((entry) => entry.nodeId === 'a')!;
+    expect(layer.bound.x + layer.bound.width).toBeLessThanOrEqual(
+      outer.bound.x + outer.bound.width,
+    );
+    // Right and bottom are cut by the parent (4 | 8); left and top are the content's own edges.
+    expect(layer.effect!.innerClamp).toBe(12);
+  });
+
   it('leaves the mask out for an uncut root and for roots without inner shadows', () => {
     const packet = prepare([
       box('a', null, 100, { effects: [inner(0, 4, 2)] }),

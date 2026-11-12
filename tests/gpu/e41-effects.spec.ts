@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
@@ -759,25 +760,61 @@ for (const samples of [1, 4] as const) {
   });
 }
 
-test('E41-A06 scenes without effects draw identically under effects v0', async ({ browser }) => {
-  test.setTimeout(120_000);
+// V-36 (V36-A05) adds the 'v1' page: scenes without effects draw as on 'none' there too.
+test('E41-A06 scenes without effects draw identically under effects v0 and v1', async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
   const rows: unknown[] = [];
   for (const samples of [1, 4] as const) {
-    const withOption = await browser.newPage();
     const without = await browser.newPage();
-    await open(withOption, { samples, effects: true });
     await open(without, { samples, effects: false });
+    const levels = [true, 'v1'] as const;
+    const pages = [];
+    for (const effects of levels) {
+      const page = await browser.newPage();
+      await open(page, { samples, effects });
+      pages.push(page);
+    }
     for (const fixture of FIXTURES) {
       const plain = fixture.nodes.map(withoutEffects);
-      const a = await render(withOption, plain, fixture.camera);
       const b = await render(without, plain, fixture.camera);
-      const identical = Buffer.compare(Buffer.from(a.rgba), Buffer.from(b.rgba)) === 0;
-      rows.push({ samples, fixture: fixture.name, identical });
-      expect(identical, `${fixture.name} at ${samples}x`).toBe(true);
-      expect(a.result.counters.effectPasses).toBe(0);
+      for (const [i, page] of pages.entries()) {
+        const a = await render(page, plain, fixture.camera);
+        const identical = Buffer.compare(Buffer.from(a.rgba), Buffer.from(b.rgba)) === 0;
+        const level = levels[i] === true ? 'v0' : 'v1';
+        rows.push({ samples, fixture: fixture.name, level, identical });
+        expect(identical, `${fixture.name} at ${samples}x on ${level}`).toBe(true);
+        expect(a.result.counters.effectPasses).toBe(0);
+      }
     }
   }
   writeReport('a06', { rows });
+});
+
+// V-36 contract, V36-A05, the module re-pin half: the SHA-256 of every E41 fixture capture with
+// its effects ('v0' page) and without them ('none' page). The same test, run on a build from
+// before the re-pin, must write the same digests (docs/evidence/v36/u2-swiftshader.md).
+test('V36-A05 capture digests of the E41 fixtures', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const digests: Record<string, string> = {};
+  for (const samples of [1, 4] as const) {
+    const withEffects = await browser.newPage();
+    const without = await browser.newPage();
+    await open(withEffects, { samples, effects: true });
+    await open(without, { samples, effects: false });
+    for (const fixture of FIXTURES) {
+      const a = await render(withEffects, fixture.nodes, fixture.camera);
+      const b = await render(without, fixture.nodes.map(withoutEffects), fixture.camera);
+      const sha = (rgba: ArrayLike<number>) =>
+        createHash('sha256')
+          .update(Buffer.from(rgba as Uint8Array))
+          .digest('hex');
+      digests[`${fixture.name}@${samples}x effects`] = sha(a.rgba);
+      digests[`${fixture.name}@${samples}x plain`] = sha(b.rgba);
+    }
+  }
+  writeReport('v36-a05-digests', { digests });
 });
 
 // V-36 contract, V36-A05: E41's fixtures, with their effects, draw byte-identically under 'v0'
@@ -858,12 +895,14 @@ function countersScene(effects = true, p = 'a07'): RenderNodeSnapshot[] {
   return effects ? nodes : nodes.map(withoutEffects);
 }
 
-test('E41-A07 effect edits, pan and zoom cost no geometry; effectPasses per frame', async ({
+test('E41-A07 and V36-A07 effect edits, pan and zoom cost no geometry; effectPasses per frame', async ({
   browser,
 }) => {
   test.setTimeout(120_000);
   const page = await browser.newPage();
-  const { pageErrors } = await open(page, { samples: 4, effects: true });
+  // On 'v1' (V-36), which draws E41's kinds as 'v0' does (V36-A05), so the inner-shadow edits
+  // (V36-A07) run on the same page.
+  const { pageErrors } = await open(page, { samples: 4, effects: 'v1' });
   const failures: string[] = [];
   const rows: Record<string, unknown> = {};
   const scene = countersScene();
@@ -877,6 +916,11 @@ test('E41-A07 effect edits, pan and zoom cost no geometry; effectPasses per fram
     secondShadow: [dropShadow(4, 12, 6), dropShadow(-3, -3, 1, BLUE)],
     withBlur: [dropShadow(4, 12, 6), layerBlur(2)],
     removed: [],
+    // V36-A07: an inner shadow added, its offset and σ edited, a second one, removed.
+    innerAdded: [innerShadow(0, 4, 2)],
+    innerOffsetAndSigma: [innerShadow(-5, 9, 7)],
+    innerSecond: [innerShadow(-5, 9, 7), innerShadow(3, 3, 1, BLUE)],
+    innerRemoved: [],
   };
   for (const [name, effects] of Object.entries(edits)) {
     const before = await counters(page);
