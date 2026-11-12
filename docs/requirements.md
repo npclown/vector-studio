@@ -98,7 +98,6 @@ A mask group uses its first path as the mask for its remaining children.
 
 - Drop shadows and layer blur ([E41](plans/d9-e41-boolean-effects-contract.md))
 - Inner shadows and background blur ([V-36](plans/viz-v36-inner-shadow-background-blur-contract.md)); background blur shows only on layers outside groups with opacity or effects
-
 - Multiple fills per node, each with its own opacity, visibility and blend mode, and the 16 W3C blend modes on nodes ([V-35](plans/viz-v35-fills-blend-contract.md), requested by the user 2026-11-12)
 
 ## Editing behavior
