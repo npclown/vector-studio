@@ -281,10 +281,10 @@ describe('V36-K1b cut sides in the packet', () => {
   });
 
   it('marks a nested root cut by its parent root’s bound', () => {
-    const parent: RenderNodeSnapshot = {
+    const parent = {
       ...group('p', null, ['a'], { effects: [drop(0, 0, 0)] }),
       clip: { kind: 'rect', x: 100, y: 100, width: 60, height: 60 },
-    };
+    } as RenderNodeSnapshot;
     const packet = prepare([
       parent,
       box('a', 'p', 130, { y: 130, size: 80, effects: [inner(0, 4, 2)] }),
