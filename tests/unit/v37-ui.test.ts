@@ -26,11 +26,16 @@ import {
   type Command,
   type Editor,
 } from '../../packages/editor-core/src/index.js';
+import { expandInstance } from '../../packages/editor-core/src/expansion.js';
 import { contextMenuItems } from '../../packages/ui/src/context-menu-model.js';
 import { effectRows, addEffectCommand } from '../../packages/ui/src/effects-model.js';
 import {
+  focusInstanceAt as focusAt,
+  focusKeyListener,
+  getInstanceFocus,
   layerInSource,
   resolveFocus,
+  setInstanceFocus as setFocus,
   targetInstance,
 } from '../../packages/ui/src/instance-focus.js';
 import { layerRows } from '../../packages/ui/src/layer-model.js';
@@ -760,5 +765,124 @@ describe('V37-U4 panel markup', () => {
     expect(html).toContain('data-icon="symbol-set"');
     // A plain symbol row has none.
     expect(html).not.toContain('data-testid="layer-icon-sP"');
+  });
+});
+
+describe('V37-U4 focus store (read directly)', () => {
+  const inBox = { x: 50, y: 120 };
+  const keyEvent = (key: string, tagName = 'CANVAS') => {
+    const calls: string[] = [];
+    const event = {
+      key,
+      target: { tagName },
+      preventDefault: () => calls.push('prevent'),
+      stopPropagation: () => calls.push('stop'),
+    } as unknown as KeyboardEvent;
+    return { event, calls };
+  };
+
+  it('clears on a selection change', () => {
+    const target = loose();
+    ok(target, { type: 'setSelection', ids: ['inst'] });
+    expect(focusAt(target, inBox)).toBe(true);
+    expect(getInstanceFocus(target)).toMatchObject({ instance: 'inst', layer: 'rA' });
+    ok(target, { type: 'setSelection', ids: ['sA'] });
+    expect(getInstanceFocus(target)).toBeNull();
+    // Selecting the instance again does not bring it back.
+    ok(target, { type: 'setSelection', ids: ['inst'] });
+    expect(getInstanceFocus(target)).toBeNull();
+  });
+
+  it('clears when the layer leaves the source, and an undo does not restore it', () => {
+    const target = loose();
+    ok(target, { type: 'setSelection', ids: ['inst'] });
+    setFocus(target, 'inst', 'rA');
+    expect(getInstanceFocus(target)).not.toBeNull();
+    ok(target, { type: 'deleteNodes', ids: ['rA'] });
+    expect(getInstanceFocus(target)).toBeNull();
+    ok(target, { type: 'undo' });
+    expect(docOf(target).nodes.rA).toBeDefined();
+    expect(getInstanceFocus(target)).toBeNull();
+  });
+
+  it('a DOM Escape clears only the focus and is consumed; a field keeps its own', () => {
+    const target = loose();
+    ok(target, { type: 'setSelection', ids: ['inst'] });
+    const listener = focusKeyListener(target);
+    setFocus(target, 'inst', 'rA');
+    const other = keyEvent('a');
+    listener(other.event);
+    expect(other.calls).toEqual([]);
+    expect(getInstanceFocus(target)).not.toBeNull();
+    const field = keyEvent('Escape', 'INPUT');
+    listener(field.event);
+    expect(field.calls).toEqual([]);
+    expect(getInstanceFocus(target)).not.toBeNull();
+    const escape = keyEvent('Escape');
+    listener(escape.event);
+    expect(escape.calls).toEqual(['prevent', 'stop']);
+    expect(getInstanceFocus(target)).toBeNull();
+    expect(target.getSnapshot().selection).toEqual(['inst']);
+  });
+});
+
+describe('V37-U4 instanceLayerCorners query', () => {
+  /** `sA` 100 x 100 holding `rA` 50 x 50 at (25, 25) rotated 45 degrees; `inst` 200 x 100. */
+  function scaled() {
+    const value = JSON.parse(read('next-host.v8.json')) as {
+      nodes: Record<string, { frame: unknown; rotation: number }>;
+    };
+    value.nodes.sA!.frame = { x: 0, y: 0, width: 100, height: 100 };
+    value.nodes.rA!.frame = { x: 25, y: 25, width: 50, height: 50 };
+    value.nodes.rA!.rotation = Math.PI / 4;
+    value.nodes.inst!.frame = { x: 0, y: 100, width: 200, height: 100 };
+    return editorOf(build(JSON.stringify(value)));
+  }
+  const corners = (target: Editor, node: string) =>
+    target.query({ type: 'instanceLayerCorners', id: 'inst', node });
+
+  it('gives the rotated frame as the expansion places it', () => {
+    const target = scaled();
+    const got = corners(target, 'rA')!;
+    expect(got).toHaveLength(4);
+    const expanded = expandInstance(docOf(target), 'inst');
+    if (expanded === null || !expanded.ok) throw new Error('no expansion');
+    const node = expanded.expansion.nodes.get('rA')!;
+    // The centre is the source centre scaled by the instance's size ratio (x2, x1).
+    const centre = {
+      x: (got[0]!.x + got[2]!.x) / 2,
+      y: (got[0]!.y + got[2]!.y) / 2,
+    };
+    expect(centre.x).toBeCloseTo(100, 6);
+    expect(centre.y).toBeCloseTo(150, 6);
+    // The sides are the expanded node's own size, turned by its own rotation.
+    expect(Math.hypot(got[1]!.x - got[0]!.x, got[1]!.y - got[0]!.y)).toBeCloseTo(
+      node.frame.width,
+      6,
+    );
+    expect(Math.hypot(got[3]!.x - got[0]!.x, got[3]!.y - got[0]!.y)).toBeCloseTo(
+      node.frame.height,
+      6,
+    );
+    expect(Math.atan2(got[1]!.y - got[0]!.y, got[1]!.x - got[0]!.x)).toBeCloseTo(node.rotation, 6);
+    // The expansion never shears: adjacent sides stay perpendicular.
+    const dot =
+      (got[1]!.x - got[0]!.x) * (got[3]!.x - got[0]!.x) +
+      (got[1]!.y - got[0]!.y) * (got[3]!.y - got[0]!.y);
+    expect(dot).toBeCloseTo(0, 6);
+  });
+
+  it('gives the instance box for the source, and null otherwise', () => {
+    const target = scaled();
+    expect(corners(target, 'sA')).toEqual([
+      { x: 0, y: 100 },
+      { x: 200, y: 100 },
+      { x: 200, y: 200 },
+      { x: 0, y: 200 },
+    ]);
+    expect(corners(target, 'rB')).toBeNull();
+    expect(corners(target, 'missing')).toBeNull();
+    expect(target.query({ type: 'instanceLayerCorners', id: 'sA', node: 'rA' })).toBeNull();
+    expect(target.query({ type: 'instanceLayerCorners', id: 3 as never, node: 'rA' })).toBeNull();
   });
 });

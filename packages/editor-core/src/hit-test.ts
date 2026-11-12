@@ -5,6 +5,7 @@ import {
   boundsOfPoints,
   invertRigid,
   localTransform,
+  multiply,
   rotate,
   rotatedBounds,
 } from './geometry.js';
@@ -804,4 +805,57 @@ export function instanceLayerAt(
     expansions,
   );
   return found;
+}
+
+/**
+ * V-37 section 6.3: the page-space corners of the rotated frame of source node `node` as the
+ * expansion of instance `id` places it (top-left, top-right, bottom-right, bottom-left in the
+ * node's own axes), so the scale map and any approximated size are respected. The source's own
+ * ID gives the instance's box. Null for an unknown instance, an invalid expansion or a node that
+ * is not in the source's subtree.
+ */
+export function instanceLayerCorners(
+  document: DocumentV8,
+  id: string,
+  node: string,
+  expansions: ExpansionCache = new ExpansionCache(),
+): readonly PagePoint[] | null {
+  const instance = Object.hasOwn(document.nodes, id) ? document.nodes[id] : undefined;
+  if (instance?.type !== 'instance') return null;
+  const tree = documentTree(document);
+  const base = multiply(
+    spaceOf(tree, instance.parent).matrix,
+    localTransform(instance.frame, instance.rotation),
+  );
+  const result = expansions.expand(document, id);
+  if (result === null || !result.ok) return null;
+  const { nodes } = result.expansion;
+  if (node === instance.symbol) {
+    const { width, height } = instance.frame;
+    return [
+      apply(base, 0, 0),
+      apply(base, width, 0),
+      apply(base, width, height),
+      apply(base, 0, height),
+    ];
+  }
+  let at = nodes.get(node);
+  if (at === undefined) return null;
+  let matrix = localTransform(at.frame, at.rotation);
+  // The chain inside the expansion ends at a direct child of the source, whose parent is not in
+  // the map; its depth is bounded by the tree depth.
+  for (let steps = 0; steps < 1024; steps += 1) {
+    const owner = nodes.get(at.parent);
+    if (owner === undefined) break;
+    matrix = multiply(localTransform(owner.frame, owner.rotation), matrix);
+    at = owner;
+  }
+  const whole = multiply(base, matrix);
+  const { width, height } = nodes.get(node)!.frame;
+  return [
+    apply(whole, 0, 0),
+    apply(whole, width, 0),
+    apply(whole, width, height),
+    apply(whole, 0, height),
+  ];
 }

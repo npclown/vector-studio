@@ -47,6 +47,7 @@ const OWN_VALUES = [
   // V-37 (variants and overrides): the focused layer of an instance.
   'clearInstanceFocus',
   'focusInstanceAt',
+  'getInstanceFocus',
   'resolvePanels',
   'selectForContextMenu',
   'setInstanceFocus',

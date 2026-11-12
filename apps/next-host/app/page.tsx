@@ -25,7 +25,7 @@ import {
   usePanelErrors,
 } from '@vector-studio/ui';
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
-import { focusedLayerCorners, handleCursorAt, type HandleCursor } from '../src/m2-geometry';
+import { handleCursorAt, type HandleCursor } from '../src/m2-geometry';
 import { handleCursorCss } from '../src/v28-handle-cursor';
 import { useStudioContextMenu } from '../src/v25-context-menu';
 import {
@@ -631,7 +631,13 @@ function Surface({
   // V-37 section 6.3: the focused layer of an instance, outlined in the overlay.
   const instanceFocus = useInstanceFocus();
   const focusBox =
-    instanceFocus === null ? null : focusedLayerCorners(snapshot.document, instanceFocus);
+    instanceFocus === null
+      ? null
+      : editor.query({
+          type: 'instanceLayerCorners',
+          id: instanceFocus.instance,
+          node: instanceFocus.layer,
+        });
   // V-28: the resize cursor over a handle and the rotate cursor over a rotate zone, both turned to
   // the box, while no button is held; during the drag a press there starts it stays at its
   // press-time angle (the hover does not run while a button is held).

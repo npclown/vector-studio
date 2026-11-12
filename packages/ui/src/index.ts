@@ -287,6 +287,7 @@ export { importMessages } from './import-model.js';
 export {
   clearInstanceFocus,
   focusInstanceAt,
+  getInstanceFocus,
   setInstanceFocus,
   useInstanceFocus,
   type InstanceFocus,

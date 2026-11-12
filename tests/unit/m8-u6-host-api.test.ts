@@ -194,6 +194,7 @@ const ADDED: Readonly<Record<keyof typeof AT_17A2B0A, readonly string[]>> = {
     'importMessages',
     'clearInstanceFocus',
     'focusInstanceAt',
+    'getInstanceFocus',
     'resolvePanels',
     'selectForContextMenu',
     'setInstanceFocus',

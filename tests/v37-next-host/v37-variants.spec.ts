@@ -111,6 +111,14 @@ test('V37-A13 combine, switch a variant, focus a layer, override its fill, reset
   await page.mouse.dblclick(at.x, at.y);
   await expect(page.getByTestId('instance-focus')).toHaveCount(1);
   await expect(page.getByTestId('instance-layer-rB')).toHaveAttribute('aria-pressed', 'true');
+  // The first Escape, with the canvas focused, clears only the focus: the selection stays and
+  // the scope is not left. A second double-click focuses the layer again.
+  await page.locator('[data-testid="studio-canvas"] canvas').focus();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('instance-focus')).toHaveCount(0);
+  expect((await state(page)).selection).toEqual(['inst']);
+  await page.mouse.dblclick(at.x, at.y);
+  await expect(page.getByTestId('instance-focus')).toHaveCount(1);
   const steps = (await state(page)).undoDepth;
   expect((await state(page)).selection).toEqual(['inst']);
 

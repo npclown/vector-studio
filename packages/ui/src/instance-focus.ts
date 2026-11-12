@@ -169,6 +169,11 @@ export function setInstanceFocus(editor: Editor, instance: string, layer: string
   storeOf(editor).set({ instance, layer, selection: editor.getSnapshot().selection });
 }
 
+/** The current focus of `editor`, or null (for hosts and tests that read it without a hook). */
+export function getInstanceFocus(editor: Editor): InstanceFocus | null {
+  return storeOf(editor).get();
+}
+
 /** Clears the focus. */
 export function clearInstanceFocus(editor: Editor): void {
   storeOf(editor).set(null);
@@ -182,11 +187,30 @@ export function useInstanceFocus(): InstanceFocus | null {
   const active = focus !== null;
   useEffect(() => {
     if (!active) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') store.set(null);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [active, store]);
+    const onKey = focusKeyListener(editor);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [active, editor]);
   return focus;
+}
+
+/** Whether a key event's target is a text field, select or textarea. */
+function isField(target: EventTarget | null): boolean {
+  const tag = (target as { tagName?: unknown } | null)?.tagName;
+  return tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
+}
+
+/**
+ * The window `keydown` listener of a standing focus: the first Escape clears only the focus. It
+ * is consumed in the capture phase, before the canvas's keymap (exit scope, clear selection)
+ * sees it; a text field, select or textarea keeps its own Escape.
+ */
+export function focusKeyListener(editor: Editor): (event: KeyboardEvent) => void {
+  const store = storeOf(editor);
+  return (event) => {
+    if (event.key !== 'Escape' || isField(event.target)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    store.set(null);
+  };
 }

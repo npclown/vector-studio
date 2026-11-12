@@ -40,7 +40,7 @@ import {
   toolOverlay,
   type RegisteredTool,
 } from './extensions.js';
-import { boundsOf, instanceLayerAt, isLocked } from './hit-test.js';
+import { boundsOf, instanceLayerAt, instanceLayerCorners, isLocked } from './hit-test.js';
 import { createEyedropperTool, sampleColor } from './eyedropper.js';
 import { createCounterIdSource } from './ids.js';
 import {
@@ -1836,6 +1836,12 @@ class EditorCore implements Editor {
             (node) => this.extensions.geometry(node),
             this.expansions,
           );
+        }
+        case 'instanceLayerCorners': {
+          const id: unknown = query.id;
+          const node: unknown = query.node;
+          if (typeof id !== 'string' || typeof node !== 'string') return null;
+          return instanceLayerCorners(this.document, id, node, this.expansions);
         }
         case 'exportScene':
         case 'exportSvg': {
