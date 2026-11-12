@@ -51,6 +51,9 @@ export const BUILTIN_ACTIONS: ReadonlySet<string> = new Set([
   'togglePathClosed',
   // E41 contract, section 6: `boolean { op }`.
   'boolean',
+  // V-31 contract, V31-E5.
+  'toggleLocked',
+  'toggleVisible',
 ]);
 
 /**
@@ -81,6 +84,8 @@ export const DEFAULT_KEYMAP: readonly KeyBinding[] = deepFreeze([
   { chord: 'Mod+Alt+I', action: 'boolean', args: { op: 'intersect' } },
   { chord: 'Mod+Alt+X', action: 'boolean', args: { op: 'exclude' } },
   { chord: 'Mod+D', action: 'duplicate' },
+  { chord: 'Mod+Shift+L', action: 'toggleLocked' },
+  { chord: 'Mod+Shift+H', action: 'toggleVisible' },
   { chord: 'ArrowLeft', action: 'nudge', args: { dx: -1, dy: 0 } },
   { chord: 'ArrowRight', action: 'nudge', args: { dx: 1, dy: 0 } },
   { chord: 'ArrowUp', action: 'nudge', args: { dx: 0, dy: -1 } },

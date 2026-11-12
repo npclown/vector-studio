@@ -239,6 +239,8 @@ export type NodeProps = Readonly<{
   stroke?: Stroke | null;
   opacity?: number;
   visible?: boolean;
+  /** V31-E4: `false` removes the key (V31-S1). */
+  locked?: boolean;
   /** Custom nodes only. */
   data?: JsonValue;
   /** Rectangles only. */
@@ -346,6 +348,11 @@ export type DocumentCommand =
       frames: readonly Readonly<{ id: string; frame: Frame; rotation?: number }>[];
     }>
   | Readonly<{ type: 'setNodeProps'; id: string; props: NodeProps }>
+  /**
+   * V-31 contract, V31-E4: sets `locked` and/or `visible` on nodes of the active page in one
+   * transaction (one undo step); `locked: false` removes the key; returns empty `ids`.
+   */
+  | Readonly<{ type: 'setLayerState'; ids: readonly string[]; locked?: boolean; visible?: boolean }>
   /**
    * Sets appearance on nodes of the active page at any depth in one transaction (MVP M4
    * contract, section 4.2); returns empty `ids`, and a change of no value records no step.
