@@ -35,7 +35,7 @@ The MVP requirements below describe the intended editor, not a claim that the gr
 - Rectangle and rounded rectangle
 - Ellipse
 - Line and arrow
-- Open and closed cubic Bezier path
+- Open and closed cubic Bezier path, drawn with the pen, the freehand pencil or the polygon tool (V-40)
 - Rich text
 - Group
 - Frame

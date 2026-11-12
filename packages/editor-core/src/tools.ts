@@ -8,7 +8,7 @@ import {
 } from '@vector-studio/model';
 import type { Tool, ToolContext } from './editor.js';
 import { ExpansionCache } from './expansion.js';
-import { DEFAULT_PATH_STROKE } from './edits.js';
+import { DEFAULT_PATH_STROKE, DEFAULT_RECTANGLE_FILL } from './edits.js';
 import { deepFreeze } from './freeze.js';
 import { adoptionOwner, dropAdoption } from './adopt.js';
 import {
@@ -63,8 +63,10 @@ import {
   type ValueIndex,
 } from './snap.js';
 import { contentBox, hasInnerContentBox } from './content-box.js';
+import { freehandPath, freehandPreview, polygonPath, type PathData } from './freehand.js';
 import { childrenOf, documentTree, isAncestor, isContainer, spaceOf } from './tree.js';
 import type {
+  DocumentCommand,
   InputEvent,
   Modifiers,
   PagePoint,
@@ -704,6 +706,204 @@ export function createPathTool(options: DrawOptions = {}): Tool {
       const copy = (anchor: Anchor): PathAnchor => ({ ...anchor });
       return deepFreeze({ kind: 'path', anchors: anchors.map(copy) });
     },
+  };
+}
+
+/**
+ * V-40 (contract section 3): the pencil tool. A drag records the pointer samples and shows them,
+ * smoothed, as a live polyline path through the gesture; the release replaces it with the fitted
+ * cubic path (`freehandPath`), open, or closed when the stroke ends near its start. The stroke is
+ * one gesture, so one undo step. A click makes nothing; Escape cancels the stroke.
+ */
+export function createPencilTool(options: DrawOptions = {}): Tool {
+  let drag: {
+    samples: PagePoint[];
+    parent: string | null;
+    style: ReturnType<typeof drawStroke>;
+    zoom: number;
+    id: string | null;
+  } | null = null;
+
+  function show(context: ToolContext, data: PathData | null): void {
+    if (drag === null) return;
+    if (data === null) {
+      if (drag.id !== null) {
+        context.gesture.replace([]);
+        drag.id = null;
+      }
+      return;
+    }
+    const command = (parent: string | null): DocumentCommand => ({
+      type: 'createPath',
+      name: 'Pencil',
+      verbs: data.verbs,
+      points: data.points,
+      ...drag!.style,
+      ...(parent === null ? {} : { parent }),
+    });
+    let result = context.gesture.replace([command(drag.parent)]);
+    if (!result.ok && drag.parent !== null) {
+      // The owner refused it (clip or tree depth): the page holds it.
+      drag.parent = null;
+      result = context.gesture.replace([command(null)]);
+    }
+    // Refused on the page too: no stale preview stays in the document.
+    if (!result.ok) context.gesture.replace([]);
+    drag.id = result.ok ? (result.ids[0] ?? null) : null;
+  }
+
+  return {
+    input(event, context) {
+      if (event.kind === 'keydown') {
+        if (event.key === 'Escape' && drag !== null) {
+          context.gesture.cancel();
+          drag = null;
+          return true;
+        }
+        return false;
+      }
+      if (event.kind === 'pointerdown') {
+        if (drag !== null || !context.gesture.begin()) return false;
+        drag = {
+          samples: [event.point],
+          parent: drawTarget(context, event.point, options)?.parent ?? null,
+          style: drawStroke(context, event.point, options),
+          zoom: zoomOf(context),
+          id: null,
+        };
+        return true;
+      }
+      if (!isMoveOrUp(event) || drag === null) return false;
+      drag.samples.push(event.point);
+      if (event.kind === 'pointermove') {
+        show(context, freehandPreview(drag.samples, drag.zoom));
+        return true;
+      }
+      show(context, freehandPath(drag.samples, drag.zoom));
+      const id = drag.id;
+      drag = null;
+      // A click made no path, so the commit creates nothing.
+      context.gesture.commit();
+      if (id !== null) selectCreated(context, [id], options);
+      return true;
+    },
+    reset() {
+      drag = null;
+    },
+    overlay: () => null,
+  };
+}
+
+/** The polygon tool's side count, read and set by the editor's session (V-40). */
+export type PolygonSides = Readonly<{ get(): number; set(sides: number): void }>;
+
+/**
+ * V-40 (contract section 4): the polygon tool. A drag from a to b creates a closed regular
+ * polygon path that fills the box between them (`polygonPath`), first vertex at the top; Shift
+ * makes the box square. ArrowUp and ArrowDown during the drag add or remove a side, and the count
+ * stays for the next polygon (the session's `polygonSides`). Escape cancels the drag.
+ */
+export function createPolygonTool(sides: PolygonSides, options: DrawOptions = {}): Tool {
+  let drag: {
+    start: PagePoint;
+    end: PagePoint;
+    shift: boolean;
+    candidates: () => SnapSet;
+    parent: string | null;
+    id: string | null;
+  } | null = null;
+
+  function show(context: ToolContext): void {
+    if (drag === null) return;
+    let { end } = drag;
+    if (drag.shift) {
+      const dx = end.x - drag.start.x;
+      const dy = end.y - drag.start.y;
+      const side = Math.max(Math.abs(dx), Math.abs(dy));
+      end = {
+        x: drag.start.x + (dx < 0 ? -side : side),
+        y: drag.start.y + (dy < 0 ? -side : side),
+      };
+    }
+    const data = polygonPath(boxOf(drag.start, end), sides.get());
+    if (data === null) {
+      if (drag.id !== null) {
+        context.gesture.replace([]);
+        drag.id = null;
+      }
+      return;
+    }
+    const command = (parent: string | null): DocumentCommand => ({
+      type: 'createPath',
+      name: 'Polygon',
+      verbs: data.verbs,
+      points: data.points,
+      // A shape like the rectangle and ellipse: their default fill and no stroke.
+      fill: DEFAULT_RECTANGLE_FILL,
+      stroke: null,
+      ...(parent === null ? {} : { parent }),
+    });
+    let result = context.gesture.replace([command(drag.parent)]);
+    if (!result.ok && drag.parent !== null) {
+      drag.parent = null;
+      result = context.gesture.replace([command(null)]);
+    }
+    if (!result.ok) context.gesture.replace([]);
+    drag.id = result.ok ? (result.ids[0] ?? null) : null;
+  }
+
+  return {
+    input(event, context) {
+      if (event.kind === 'keydown') {
+        if (drag === null) return false;
+        if (event.key === 'Escape') {
+          context.gesture.cancel();
+          drag = null;
+          return true;
+        }
+        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+          sides.set(sides.get() + (event.key === 'ArrowUp' ? 1 : -1));
+          show(context);
+          return true;
+        }
+        return false;
+      }
+      if (event.kind === 'pointerdown') {
+        if (drag !== null || !context.gesture.begin()) return false;
+        drag = {
+          start: event.point,
+          end: event.point,
+          shift: false,
+          candidates: lazySnapSet(context, []),
+          parent: drawTarget(context, event.point, options)?.parent ?? null,
+          id: null,
+        };
+        return true;
+      }
+      if (!isMoveOrUp(event) || drag === null) return false;
+      // The dragged corner snaps (M2 section 4.2), as the box tools' does; Shift squares the box
+      // instead, without snapping (as the line tool's Shift), so no guide marks a point the
+      // square's corner is not on.
+      const end = event.modifiers.shift
+        ? { point: event.point, overlay: null }
+        : snappedPoint(context, event.point, event.modifiers, drag.candidates);
+      drag.end = end.point;
+      drag.shift = event.modifiers.shift;
+      show(context);
+      context.snap(end.overlay);
+      if (event.kind === 'pointerup') {
+        const id = drag.id;
+        drag = null;
+        // A click without movement made no polygon, so the commit creates nothing.
+        context.gesture.commit();
+        if (id !== null) selectCreated(context, [id], options);
+      }
+      return true;
+    },
+    reset() {
+      drag = null;
+    },
+    overlay: () => null,
   };
 }
 
