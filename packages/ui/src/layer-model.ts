@@ -112,6 +112,10 @@ export type LayerRow = Readonly<{
   expanded: boolean;
   selected: boolean;
   visible: boolean;
+  /** V31-U1: the node's own lock. */
+  locked: boolean;
+  /** V31-U1: the row is inside a locked (first) or hidden ancestor, else null. */
+  inherited: 'locked' | 'hidden' | null;
 }>;
 
 const childrenOf = (node: NodeV8): readonly string[] | null =>
@@ -134,7 +138,7 @@ export function layerRows(
   const selected = new Set(selection);
   const rows: LayerRow[] = [];
   const next: LayerRowCache['entries'] = new Map();
-  const visit = (ids: readonly string[], depth: number) => {
+  const visit = (ids: readonly string[], depth: number, inherited: 'locked' | 'hidden' | null) => {
     for (let index = ids.length - 1; index >= 0; index -= 1) {
       const node = document.nodes[ids[index]!];
       if (node === undefined) continue;
@@ -147,7 +151,8 @@ export function layerRows(
         previous.node === node &&
         previous.row.depth === depth &&
         previous.row.expanded === open &&
-        previous.row.selected === isSelected
+        previous.row.selected === isSelected &&
+        previous.row.inherited === inherited
           ? previous.row
           : {
               id: node.id,
@@ -159,20 +164,28 @@ export function layerRows(
               expanded: open,
               selected: isSelected,
               visible: node.visible,
+              locked: node.locked === true,
+              inherited,
             };
       if (cache !== null) next.set(node.id, { node, row });
       rows.push(row);
-      if (open) visit(children, depth + 1);
+      if (open) {
+        const below =
+          inherited === 'locked' || node.locked === true
+            ? 'locked'
+            : (inherited ?? (node.visible ? null : 'hidden'));
+        visit(children, depth + 1, below);
+      }
     }
   };
-  visit(page.children, 0);
+  visit(page.children, 0, null);
   if (cache !== null) cache.entries = next;
   return rows;
 }
 
 /**
  * V-20 contract, lever L2: the rows of the last `layerRows` call that used this cache. A row whose
- * node object, depth, expanded and selected state are unchanged is returned as the same object,
+ * node object, depth, expanded, selected and inherited state are unchanged is returned as the same object,
  * so a memoized row component skips its render. The walk itself runs on every call.
  */
 export type LayerRowCache = { entries: Map<string, Readonly<{ node: NodeV8; row: LayerRow }>> };
@@ -243,6 +256,11 @@ export function rowClickCommand(
 /** The row's visibility toggle (M8-L4): `setNodeProps visible` with the opposite value. */
 export function visibilityCommand(row: LayerRow): Command {
   return { type: 'setNodeProps', id: row.id, props: { visible: !row.visible } };
+}
+
+/** V31-U1: the row's lock toggle, `setNodeProps locked` with the opposite value. */
+export function lockCommand(row: LayerRow): Command {
+  return { type: 'setNodeProps', id: row.id, props: { locked: !row.locked } };
 }
 
 /** The rename of a row's node (`setNodeProps name`): blank is invalid, the same name sends nothing. */

@@ -113,6 +113,8 @@ export function handleCursorAt(
   point: PagePoint,
   zoom: number,
 ): HandleCursor | null {
+  // V31-E2: a selection with a locked node has no handles, so no resize or rotate cursor.
+  if (handles.handles.length === 0) return null;
   const [origin, right, , bottom] = handles.corners;
   const width = Math.hypot(right.x - origin.x, right.y - origin.y);
   const height = Math.hypot(bottom.x - origin.x, bottom.y - origin.y);
