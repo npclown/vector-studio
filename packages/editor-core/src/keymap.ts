@@ -14,6 +14,8 @@ export const TOOL_NAMES: readonly ToolName[] = [
   'frame',
   'path',
   'text',
+  'pencil',
+  'polygon',
 ];
 
 /**
@@ -49,6 +51,9 @@ export const BUILTIN_ACTIONS: ReadonlySet<string> = new Set([
   'togglePathClosed',
   // E41 contract, section 6: `boolean { op }`.
   'boolean',
+  // V-31 contract, V31-E5.
+  'toggleLocked',
+  'toggleVisible',
 ]);
 
 /**
@@ -62,6 +67,8 @@ export const DEFAULT_KEYMAP: readonly KeyBinding[] = deepFreeze([
   { chord: 'L', action: 'setTool', args: { tool: 'line' } },
   { chord: 'F', action: 'setTool', args: { tool: 'frame' } },
   { chord: 'P', action: 'setTool', args: { tool: 'path' } },
+  // V-40: the pencil on Shift+P (Figma); the polygon tool has no default chord.
+  { chord: 'Shift+P', action: 'setTool', args: { tool: 'pencil' } },
   { chord: 'T', action: 'setTool', args: { tool: 'text' } },
   { chord: 'Delete', action: 'delete' },
   { chord: 'Backspace', action: 'delete' },
@@ -77,6 +84,8 @@ export const DEFAULT_KEYMAP: readonly KeyBinding[] = deepFreeze([
   { chord: 'Mod+Alt+I', action: 'boolean', args: { op: 'intersect' } },
   { chord: 'Mod+Alt+X', action: 'boolean', args: { op: 'exclude' } },
   { chord: 'Mod+D', action: 'duplicate' },
+  { chord: 'Mod+Shift+L', action: 'toggleLocked' },
+  { chord: 'Mod+Shift+H', action: 'toggleVisible' },
   { chord: 'ArrowLeft', action: 'nudge', args: { dx: -1, dy: 0 } },
   { chord: 'ArrowRight', action: 'nudge', args: { dx: 1, dy: 0 } },
   { chord: 'ArrowUp', action: 'nudge', args: { dx: 0, dy: -1 } },

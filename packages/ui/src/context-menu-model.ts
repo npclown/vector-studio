@@ -133,9 +133,10 @@ function pasteItem(keymap: readonly KeyBinding[], point: PagePoint): ContextMenu
  * (copy, cut, paste here, duplicate, delete), arrange (bring to front, forward, send backward,
  * to back), grouping (group, ungroup for one selected group or mask group, mask for two or
  * more), booleans (union, subtract, intersect, exclude, only when the selection qualifies,
- * E41), show or hide (hide when any selected node is visible), symbols (the toolbar's symbol,
+ * E41), show or hide (hide when any selected node is visible) and lock or unlock (lock when any
+ * selected node is unlocked, V31-U2), symbols (the toolbar's symbol,
  * instance and detach rules) and zoom to selection. Without one (empty canvas): paste here,
- * select all (the scope's children, else the page's), zoom to fit and zoom to 100%.
+ * select all (the scope's visible unlocked children, else the page's), zoom to fit and zoom to 100%.
  */
 export function contextMenuItems({ snapshot, point }: ContextMenuInput): ContextMenuModel {
   const { selection, keymap, document } = snapshot;
@@ -146,7 +147,11 @@ export function contextMenuItems({ snapshot, point }: ContextMenuInput): Context
         ? document.pages.find((page) => page.id === snapshot.activePage)?.children
         : (document.nodes[snapshot.scope] as { children?: readonly string[] } | undefined)
             ?.children;
-    const all = parent ?? [];
+    // V31-E3: as the `selectAll` action, hidden and locked nodes are left out.
+    const all = (parent ?? []).filter((id) => {
+      const node = document.nodes[id];
+      return node !== undefined && node.visible && node.locked !== true;
+    });
     return [
       [pasteItem(keymap, point)],
       [
@@ -181,6 +186,7 @@ export function contextMenuItems({ snapshot, point }: ContextMenuInput): Context
     item(id, label, shortcut('reorder', { op }), single({ type: 'reorderNodes', ids, op }));
   const group = first !== undefined && (first.type === 'group' || first.type === 'maskGroup');
   const anyVisible = nodes.some((node) => node?.visible !== false);
+  const anyUnlocked = nodes.some((node) => node?.locked !== true);
   const symbols = new Map(symbolActions(ids, types).map((button) => [button.testId, button]));
   const booleans = booleanActions(document, ids, keymap);
   const symbolItem = (id: string, label: string) =>
@@ -246,16 +252,19 @@ export function contextMenuItems({ snapshot, point }: ContextMenuInput): Context
           ),
         ]),
     [
-      item('visibility', anyVisible ? 'Hide' : 'Show', null, (execute) => {
-        // One `setNodeProps` per node (each its own undo step), as the layer tree's toggle.
-        let last: CommandResult | null = null;
-        for (const id of ids) {
-          const result = execute({ type: 'setNodeProps', id, props: { visible: !anyVisible } });
-          if (!result.ok) return result;
-          last = result;
-        }
-        return last;
-      }),
+      // V31-U2: the `toggleVisible` and `toggleLocked` rules, one `setLayerState` (one step).
+      item(
+        'visibility',
+        anyVisible ? 'Hide' : 'Show',
+        shortcut('toggleVisible'),
+        single({ type: 'setLayerState', ids, visible: !anyVisible }),
+      ),
+      item(
+        'lock',
+        anyUnlocked ? 'Lock' : 'Unlock',
+        shortcut('toggleLocked'),
+        single({ type: 'setLayerState', ids, locked: anyUnlocked }),
+      ),
     ],
     [
       symbolItem('create-symbol', 'Create symbol'),

@@ -617,7 +617,8 @@ function subtreeOf(nodes: Readonly<Record<string, NodeV8>>, root: string): NodeV
 /**
  * The content of a source for the content match of section 6, rule (2), as canonical text: its
  * size, `fill`, `stroke`, `opacity` (M4-Q18 (a): it reaches every instance under M4-Q15 (a)),
- * children and every descendant; its placement, name, constraints and visibility do not count.
+ * children and every descendant; its placement, name, constraints and visibility do not count,
+ * nor the lock of any node (V31-S2).
  */
 function contentText(nodes: readonly NodeV8[]): string {
   const [root, ...rest] = nodes as [SymbolNodeV8, ...NodeV8[]];
@@ -630,7 +631,14 @@ function contentText(nodes: readonly NodeV8[]): string {
     constraints: START,
     visible: true,
   };
-  return JSON.stringify(canonicalNodes(new Map([normalized, ...rest].map((n) => [n.id, n]))));
+  // V31-S2: no node's lock counts in the match.
+  const unlocked = [normalized, ...rest].map((n) => {
+    if (n.locked === undefined) return n;
+    const copy: Record<string, unknown> = { ...n };
+    delete copy.locked;
+    return copy as NodeV8;
+  });
+  return JSON.stringify(canonicalNodes(new Map(unlocked.map((n) => [n.id, n]))));
 }
 
 /** How a pasted instance names its source (M7 contract, section 6, M7-Q9 (a)). */

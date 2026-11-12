@@ -768,14 +768,20 @@ type Schema = Readonly<{
    * v8's legacy `fill`).
    */
   fills: 'none' | 'added' | 'read';
+  /**
+   * The node's optional `locked` (V-31 contract, V31-S1): `read` at v8 only. Its default is no
+   * key (unlocked), so `added` (an older input read into v8) and `none` both add nothing and a
+   * `locked` key in an older input fails as unknown.
+   */
+  locked: 'none' | 'added' | 'read';
 }>;
 
 const V4_TYPES = Object.keys(NODE_KEYS_V2) as NodeTypeKey[];
 const V3_TYPES = V4_TYPES.filter((type) => type !== 'text');
 const V2_TYPES = V3_TYPES.filter((type) => type !== 'symbol' && type !== 'instance');
 const OLDER = { containerOpacity: 'one' } as const;
-const NO_EFFECTS = { effects: 'none', fills: 'none' } as const;
-const ADD_EFFECTS = { effects: 'added', fills: 'added' } as const;
+const NO_EFFECTS = { effects: 'none', fills: 'none', locked: 'none' } as const;
+const ADD_EFFECTS = { effects: 'added', fills: 'added', locked: 'added' } as const;
 const V2: Schema = {
   types: V2_TYPES,
   overrides: 'none',
@@ -811,9 +817,13 @@ const V6_TO_V7: Schema = {
 };
 /** `migrateV6toV7` only: a v7 result keeps v6's `fill`. */
 const V6_TO_V7_ONLY: Schema = { ...V6_TO_V7, fills: 'none' };
-/** A v7 input read into v8 (V35-S1). */
-const V7_TO_V8: Schema = { ...V6_TO_V7, effects: 'read', fills: 'added' };
-const V8: Schema = { ...V7_TO_V8, fills: 'read' };
+/**
+ * A v7 input read into v8 (V35-S1, V31-S1). Each item adding a v8 field adds its dimension to
+ * every schema that reads into v8 (`V2_TO_V7` to `V6_TO_V7` too, which `validateAnyDocument` uses
+ * for older inputs); see docs/plans/viz-schema-v8.md, Where a field addition goes.
+ */
+const V7_TO_V8: Schema = { ...V6_TO_V7, effects: 'read', fills: 'added', locked: 'added' };
+const V8: Schema = { ...V7_TO_V8, fills: 'read', locked: 'read' };
 /** v8 nodes of an input below v6, already migrated: v8 fields, the older opacity rule. */
 const V8_OLDER_OPACITY: Schema = { ...V8, ...OLDER };
 
@@ -1079,8 +1089,8 @@ function readNode(key: string, value: unknown, path: Path, schema: Schema): Node
     schema.effects === 'read'
       ? readEffects((value as Record<string, unknown>).effects, [...path, 'effects'])
       : [];
-  if (schema.fills === 'none') return { ...node, effects } as unknown as NodeV8;
   const record = value as Record<string, unknown>;
+  if (schema.fills === 'none') return { ...node, effects } as unknown as NodeV8;
   // `fills` takes `fill`'s place, so the value's key order is the written one (V35-S2).
   const withFills: Record<string, unknown> = {};
   for (const [key, field] of Object.entries(node)) {
@@ -1100,6 +1110,12 @@ function readNode(key: string, value: unknown, path: Path, schema: Schema): Node
     legacy !== null && legacy.blend
       ? readBlendMode(record.blendMode, node.type, [...path, 'blendMode'])
       : defaultBlendMode(node.type);
+  // V31-S1: absent or `false` is unlocked and normalizes to no key.
+  if (schema.locked === 'read' && Object.hasOwn(record, 'locked')) {
+    if (readBoolean(record.locked, [...path, 'locked'])) {
+      return { ...withFills, blendMode, effects, locked: true } as unknown as NodeV8;
+    }
+  }
   return { ...withFills, blendMode, effects } as unknown as NodeV8;
 }
 
@@ -1251,7 +1267,14 @@ function readNodeFields(key: string, value: unknown, path: Path, schema: Schema)
   const type = readEnum(value.type, schema.types, [...path, 'type']);
   const typeKeys =
     type === 'instance' && schema.overrides === 'read' ? INSTANCE_KEYS_V5 : NODE_KEYS_V2[type];
-  const keys = schema.effects === 'read' ? [...typeKeys, 'effects'] : typeKeys;
+  // V31-S1: the optional `locked` key at v8, after every other field.
+  const lockKey = schema.locked === 'read' && Object.hasOwn(value, 'locked');
+  const keys =
+    schema.effects === 'read'
+      ? lockKey
+        ? [...typeKeys, 'effects', 'locked']
+        : [...typeKeys, 'effects']
+      : typeKeys;
   const record = readRecord(value, keys, path);
   if (!isValidId(key) || record.id !== key) invalid([...path, 'id']);
   const base = {

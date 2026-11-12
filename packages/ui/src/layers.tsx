@@ -21,6 +21,7 @@ import {
 import {
   createLayerRowCache,
   layerRows,
+  lockCommand,
   mountedIndexes,
   windowRange,
   type LayerRow,
@@ -35,6 +36,7 @@ import {
   visibilityCommand,
   type FieldEdit,
 } from './layer-model.js';
+import { Icon } from './icons.js';
 import { countRender } from './render-probe.js';
 import { runAction, type ActionButton } from './toolbar-model.js';
 
@@ -227,6 +229,7 @@ type RowActions = Readonly<{
   click: (id: string, event: MouseEvent) => void;
   startRename: (id: string, name: string) => void;
   toggleVisible: (row: LayerRow) => void;
+  toggleLocked: (row: LayerRow) => void;
   renameChange: (value: string) => void;
   renameCommit: () => void;
   renameCancel: () => void;
@@ -267,6 +270,9 @@ const LayerRowItem = memo(function LayerRowItem({
       data-testid={row.testId}
       data-depth={row.depth}
       data-selected={row.selected}
+      data-hidden={!row.visible}
+      data-locked={row.locked}
+      data-inherited={row.inherited ?? undefined}
       data-index={index}
       aria-setsize={count}
       aria-posinset={index + 1}
@@ -276,7 +282,7 @@ const LayerRowItem = memo(function LayerRowItem({
         boxSizing: 'border-box',
         listStyle: 'none',
         paddingLeft: row.depth * INDENT,
-        opacity: row.visible ? 1 : 0.5,
+        opacity: row.visible && row.inherited === null ? 1 : 0.5,
       }}
     >
       {row.expandable ? (
@@ -312,10 +318,26 @@ const LayerRowItem = memo(function LayerRowItem({
       <span>{row.type}</span>
       <button
         type="button"
+        data-testid={`layer-lock-${row.id}`}
+        data-layer-flag=""
+        data-active={row.locked}
+        aria-pressed={row.locked}
+        aria-label={row.locked ? 'unlock' : 'lock'}
+        title={row.locked ? 'Unlock' : 'Lock'}
+        onClick={() => actions.toggleLocked(row)}
+      >
+        <Icon name={row.locked ? 'lock' : 'unlock'} />
+      </button>
+      <button
+        type="button"
         data-testid={`layer-visible-${row.id}`}
+        data-layer-flag=""
+        data-active={!row.visible}
+        title={row.visible ? 'Hide' : 'Show'}
         onClick={() => actions.toggleVisible(row)}
       >
-        {row.visible ? 'hide' : 'show'}
+        <Icon name={row.visible ? 'eye' : 'eye-off'} />
+        <span data-layer-flag-text="">{row.visible ? 'hide' : 'show'}</span>
       </button>
     </li>
   );
@@ -337,7 +359,9 @@ function rowIndexOf(target: EventTarget | null): number | null {
  * expansion is not listed. Clicking a name selects the node (`setSelection [id]`), with Shift or
  * Mod it toggles it; selected rows are marked (`data-selected`, a pressed name). A double-click
  * renames (`setNodeProps name` on Enter or blur), `layer-visible-<id>` hides or shows the node
- * (`setNodeProps visible`), and the forward, backward, front and back buttons reorder the
+ * (`setNodeProps visible`), `layer-lock-<id>` locks or unlocks it (`setNodeProps locked`, V31-U1;
+ * both buttons carry `data-layer-flag`, and `data-active` when the row is hidden or locked, so a
+ * host stylesheet can reveal the inactive ones on hover by opacity), and the forward, backward, front and back buttons reorder the
  * selection (`reorderNodes`). A refused command shows its code (`layers-refusal`).
  *
  * V-20 contract (levers L2 and L3, section 4): the list is windowed. Every row has one height,
@@ -389,6 +413,10 @@ export function LayerTree({ height = TREE_HEIGHT }: LayerTreeProps = {}) {
     toggleVisible: (row) => {
       const { execute: run, show: report } = latest.current;
       report(run(visibilityCommand(row)));
+    },
+    toggleLocked: (row) => {
+      const { execute: run, show: report } = latest.current;
+      report(run(lockCommand(row)));
     },
     renameChange: (value) => latest.current.rename.change(value),
     renameCommit: () => latest.current.rename.commit(),

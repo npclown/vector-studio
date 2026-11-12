@@ -102,6 +102,7 @@ export type {
   ContainerBlendMode,
   Fill,
   LeafBlend,
+  NodeLock,
   NodeProps,
   NodeV8,
   PagePoint,
