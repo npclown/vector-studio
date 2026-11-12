@@ -94,6 +94,8 @@ import {
   type TransformTarget,
 } from './property-model.js';
 import { countRender } from './render-probe.js';
+import { RowBinding, type BindRun } from './style-controls.js';
+import { bindingState, tablesOfDocument } from './styles-model.js';
 
 // MVP M8 contract, section 7.3 (M8-R1 to M8-R5, M8-U5): the property panel. Under the moved M4
 // appearance panel come the transform, layer (name and visibility), line, constraint, text and
@@ -281,7 +283,12 @@ function TextSection({
   textEdit,
   run,
   exitTextEdit,
+  document,
+  bindRun,
 }: {
+  /** The document whose tables the text colour's Style menu lists (V-39 U2). */
+  document: DocumentV8;
+  bindRun: BindRun;
   texts: readonly TextNodeV8[];
   /** One node is selected, and it is this text node. */
   editable: boolean;
@@ -304,6 +311,10 @@ function TextSection({
   // V-25 slice 5: the hex field, the colour picker and the swatches write the run colour with
   // the shown colour's alpha (opaque when mixed), one `setTextStyle` each.
   const colorValue = color.state === 'one' ? colorHex(color.value) : null;
+  // V-39 U2: the text colour row's binding; bound to one style or variable, the chip replaces
+  // the hex field.
+  const tables = tablesOfDocument(document);
+  const colorBound = bindingState(tables, texts, 'text').state === 'one';
   const setColor = (hex: string) => {
     const value = runColor(hex, color);
     return value !== null && setStyle({ color: value });
@@ -389,14 +400,16 @@ function TextSection({
             return value !== null && setStyle({ size: value });
           }}
         />
-        <TextField
-          identity={runIdentity}
-          label="Text colour"
-          value={colorValue}
-          disabled={runsDisabled}
-          onLeaveTextEdit={exitTextEdit}
-          commit={setColor}
-        />
+        {!colorBound && (
+          <TextField
+            identity={runIdentity}
+            label="Text colour"
+            value={colorValue}
+            disabled={runsDisabled}
+            onLeaveTextEdit={exitTextEdit}
+            commit={setColor}
+          />
+        )}
         <ColorWell
           label="Text colour picker"
           testId="text-colour-picker"
@@ -405,6 +418,14 @@ function TextSection({
           textEdit={{ onLeave: exitTextEdit }}
           onOpen={openPicker}
           commit={pickColor}
+        />
+        <RowBinding
+          binder={{ tables, run: bindRun }}
+          nodes={texts}
+          bindingKey="text"
+          label="Text colour style"
+          testId="text-colour"
+          paint={color.state === 'one' ? color.value : null}
         />
       </Row>
       <Swatches
@@ -823,6 +844,11 @@ export function PropertySections() {
     setStatus(refusalText(result));
     return result.ok;
   };
+  const bindRun: BindRun = (command) => {
+    const result = execute(command);
+    setStatus(refusalText(result));
+    return result.ok ? { ok: true, ids: result.ids } : { ok: false, ids: [] };
+  };
   // M8-R4: a run field keeps the text edit selection while focused; leaving it for anything but
   // the canvas, another run field or the window (Alt+Tab keeps edit mode, as M6b-H2) exits.
   const exitTextEdit = () => {
@@ -848,6 +874,8 @@ export function PropertySections() {
           textEdit={textEdit}
           run={run}
           exitTextEdit={exitTextEdit}
+          document={document}
+          bindRun={bindRun}
         />
       )}
       <EffectsSection document={document} nodes={nodes} run={run} />

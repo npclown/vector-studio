@@ -281,3 +281,6 @@ export { ExportPanel } from './export-panel.js';
 // V-33 (SVG import): the Import section, SVG files as editable nodes.
 export { ImportPanel } from './import-panel.js';
 export { importMessages } from './import-model.js';
+
+// V-39 (styles and variables): the Local styles panel.
+export { StylesPanel } from './styles-panel.js';
