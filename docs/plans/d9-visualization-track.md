@@ -41,6 +41,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | V-29 | A press anywhere along a selection box edge (on it or just outside) resizes that edge, and the hover shows the resize cursor there (Figma) | Full | Done | Done 2026-11-09 (#543), headed m2/m1/p5 next-host 10/10, 2/2, 4/4 at d07d2e4 ([M2 section 4.1 amendment](mvp-m2-interaction-contract.md#41-rotation)) |
 | V-30 | Export the page, the selection or an artboard as PNG (0.5x to 4x) or SVG from an Export section (Figma) | Full | Done | Done 2026-11-09 (#550), headed v30-export and m8 ([contract](viz-v30-export-contract.md#8-record)) |
 | V-36 | Inner shadow and background blur effects, on E41's effect roots and V-35's backdrop snapshot (Figma) | Full | Active | Contract adopted 2026-11-12 ([contract](viz-v36-inner-shadow-background-blur-contract.md)); V36-Q1 to Q5 (a) adopted as recommended |
+| V-37 | Component variants (component sets, variant switching) and property overrides of instance layers (Figma) | Full | Active | Contract APPROVED 2026-11-12 (r3 READY WITH FOLLOW-UPS applied) ([contract](viz-v37-variants-overrides-contract.md)) |
 
 ## V-1: path appearance editing
 
