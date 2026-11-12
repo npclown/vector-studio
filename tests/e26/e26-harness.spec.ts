@@ -25,6 +25,7 @@ import {
   E26_ISOLATION,
   E26_SCENARIOS,
   E41_SCENARIOS,
+  V35_SCENARIOS,
   e41CardsMoveSelection,
   E26_TYPICAL_VISIBLE,
   e26Configuration,
@@ -256,6 +257,7 @@ const runs: { scenario: E26Scenario; variant: Variant }[] = [
   ...M9_SCENARIOS,
   ...V20_UI0_SCENARIOS,
   ...E41_SCENARIOS,
+  ...V35_SCENARIOS,
 ]
   .filter(
     (scenario) => filter.length === 0 || filter.some((entry) => scenario.id.startsWith(entry)),
@@ -329,6 +331,9 @@ type PageHook = {
     /** E41-U7c: effect roots drawn with their effects, one per root and frame. */
     getEffectPassesForTesting(): number;
     readonly effectPipelineAvailable: boolean;
+    /** V35-U5: backdrop splits (V35-K8) and whether the blend pipeline exists (V35-K7). */
+    getBlendSplitsForTesting(): number;
+    readonly blendPipelineAvailable: boolean;
   } | null;
   setDriver(driver: unknown): void;
   driverSteps(): number;
@@ -940,6 +945,7 @@ for (const { scenario, variant } of runs) {
             const revisions = hook.latencies.length;
             const submitted = backend.getStatistics().framesSubmitted;
             const effectPassesBefore = backend.getEffectPassesForTesting();
+            const blendSplitsBefore = backend.getBlendSplitsForTesting();
             for (const name of Object.values(splitNames)) performance.clearMeasures(name);
             backend.startFrameMeasurements(8192);
             await until(t0 + windowEndMs);
@@ -967,6 +973,9 @@ for (const { scenario, variant } of runs) {
               // E41-U7c: effect roots drawn with effects over the window (0 without effects).
               effectPasses: backend.getEffectPassesForTesting() - effectPassesBefore,
               effectPipelineAvailable: backend.effectPipelineAvailable,
+              // V35-U5: backdrop splits over the window (0 without blend roots).
+              blendSplits: backend.getBlendSplitsForTesting() - blendSplitsBefore,
+              blendPipelineAvailable: backend.blendPipelineAvailable,
               lifecycle: backend.getStatistics().lifecycle,
               recoveryAttempts: backend.getStatistics().recoveryAttempts,
               measurements,
@@ -1070,6 +1079,16 @@ for (const { scenario, variant } of runs) {
         if (!smoke) {
           expect(intervals.length).toBeGreaterThan(0);
           if (scenario.interaction === 'edit-drag') expect(run.revisedMoves).toBeGreaterThan(0);
+        }
+        // V35-U5 (V35-A10): the blend pipeline exists, and every frame split the backdrop at least
+        // once per blend root drawn (the splits are recorded; the GPU time is the frame's `vs-gpu`).
+        if (scenario.document === 'v35-cards') {
+          expect(run.blendPipelineAvailable, 'the blend pipeline').toBe(true);
+          expect(run.blendSplits, 'backdrop splits over the window').toBeGreaterThanOrEqual(
+            run.framesSubmitted,
+          );
+          if (scenario.interaction === 'edit-drag')
+            expect(draggedFrameAfter, 'the dragged card moved').not.toEqual(draggedFrameBefore);
         }
         // E41-U7c: every card's effects drew in every frame of the window, exactly one pass per
         // root and frame (the backend counts the passes and the submission in one callback).

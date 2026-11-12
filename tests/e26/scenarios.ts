@@ -89,10 +89,14 @@ export type E26ScenarioId =
   | 'e26-pointer-busy-10k/v1'
   | M9ScenarioId
   | V20Ui0ScenarioId
-  | E41ScenarioId;
+  | E41ScenarioId
+  | V35ScenarioId;
 
 /** E41-U7c (E41 contract, section 5.6, E41-A10): the `e41-cards` scenarios. */
 export type E41ScenarioId = 'e41-cards-view/v1' | 'e41-cards-drag/v1';
+
+/** V35-U5 (V-35 contract, V35-A10): the `v35-cards` scenarios. */
+export type V35ScenarioId = 'v35-cards-view/v1' | 'v35-cards-drag/v1';
 
 /** The M9 scenarios (M9 contract, section 3.2). */
 export type M9ScenarioId =
@@ -118,7 +122,7 @@ export type V20Ui0ScenarioId =
 
 export type E26Scenario = Readonly<{
   id: E26ScenarioId;
-  document: 'm1-a13' | 'stress' | 'm9-v2' | 'e41-cards';
+  document: 'm1-a13' | 'stress' | 'm9-v2' | 'e41-cards' | 'v35-cards';
   seed: number;
   camera: 'typical' | 'fitted';
   interaction: 'edit-drag' | 'pan-zoom' | 'latency-drag' | 'typing';
@@ -158,7 +162,9 @@ const seedOf = (document: E26Scenario['document']) =>
       ? M9_V2_SEED
       : document === 'e41-cards'
         ? E41_CARDS.seed
-        : E26_STRESS.seed;
+        : document === 'v35-cards'
+          ? E41_CARDS.seed
+          : E26_STRESS.seed;
 
 const frame = (
   id: E26ScenarioId,
@@ -399,6 +405,60 @@ export function e41CardsMoveSelection(): { group: string; ids: [string]; pressed
 export const E41_SCENARIOS: readonly E26Scenario[] = Object.freeze([
   frame('e41-cards-view/v1', 'e41-cards', 'fitted', 'pan-zoom', 16.7),
   frame('e41-cards-drag/v1', 'e41-cards', 'fitted', 'edit-drag', 16.7),
+]);
+
+// ---------------------------------------------------------------------------------------------
+// V35-U5 (V-35 contract, section 8, V35-A10): the `v35-cards` scene and its two scenarios.
+
+/**
+ * The `v35-cards` scene: `e41-cards`' 50 cards (same grid, geometry and header colours, so the
+ * fitted camera and the dragged card are the same) without effects, each background carrying
+ * three fills, bottom first: the white base, a translucent tint and a top fill. Every fifth card
+ * (index 0, 5, ...; 10 cards) has `multiply` on its top fill, and every tenth card (index 0, 10,
+ * ...; 5 cards) is `screen` as a node, so a card at both has two nested blend roots. That is 15
+ * blend roots (V35-A10's "20" does not follow from its own counts; the record states 15).
+ */
+export const V35_CARDS = Object.freeze({
+  multiplyEvery: 5,
+  screenEvery: 10,
+  /** Blend roots: one per multiply card's top fill, one per screen card. */
+  blendRoots: 15,
+  base: Object.freeze({ r: 1, g: 1, b: 1, a: 1 }),
+  tint: Object.freeze({ r: 0.9, g: 0.95, b: 1, a: 0.6 }),
+  top: Object.freeze({ r: 0.9, g: 0.7, b: 0.5, a: 1 }),
+});
+
+/** The `v35-cards` document at the current schema (v8): the e41 cards with fills and modes. */
+export function generateV35CardsDocument() {
+  const document = generateE41CardsDocument() as unknown as {
+    schemaVersion: number;
+    id: string;
+    nodes: Record<string, Record<string, unknown>>;
+  };
+  document.id = 'v35-cards';
+  const fill = (paint: unknown, blendMode = 'normal') => ({
+    paint,
+    visible: true,
+    opacity: 1,
+    blendMode,
+  });
+  for (let i = 0; i < E41_CARDS.count; i += 1) {
+    const id = e41CardId(i);
+    document.nodes[id]!.effects = [];
+    document.nodes[id]!.blendMode = i % V35_CARDS.screenEvery === 0 ? 'screen' : 'passThrough';
+    document.nodes[`${id}-bg`]!.fills = [
+      fill(V35_CARDS.base),
+      fill(V35_CARDS.tint),
+      fill(V35_CARDS.top, i % V35_CARDS.multiplyEvery === 0 ? 'multiply' : 'normal'),
+    ];
+  }
+  return document;
+}
+
+/** The two `v35-cards` scenarios, as `e41-cards`' (fitted camera, 16.7 ms ceiling). */
+export const V35_SCENARIOS: readonly E26Scenario[] = Object.freeze([
+  frame('v35-cards-view/v1', 'v35-cards', 'fitted', 'pan-zoom', 16.7),
+  frame('v35-cards-drag/v1', 'v35-cards', 'fitted', 'edit-drag', 16.7),
 ]);
 
 // ---------------------------------------------------------------------------------------------
@@ -743,7 +803,9 @@ export function loadScenarioDocument(
         ? generateM9V2Document()
         : document === 'e41-cards'
           ? generateE41CardsDocument()
-          : generateStressDocument();
+          : document === 'v35-cards'
+            ? generateV35CardsDocument()
+            : generateStressDocument();
   const parsed = parseDocument(JSON.stringify(generated));
   if (!parsed.ok) throw new Error(`parse: ${parsed.code} ${parsed.path}`);
   const pageId =
@@ -751,7 +813,7 @@ export function loadScenarioDocument(
       ? 'page-1'
       : document === 'm9-v2'
         ? M9_V2_PAGE
-        : document === 'e41-cards'
+        : document === 'e41-cards' || document === 'v35-cards'
           ? 'cards-page'
           : 'stress-page';
   // M9-U1: the v2 page's text projects through the committed font's recorded layouts.
