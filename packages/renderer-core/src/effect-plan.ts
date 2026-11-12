@@ -29,6 +29,12 @@ export const E41_LAYER_REACH_MAX = 1 << 17;
 export const E41_BLUR_TAPS_MAX = 32;
 /** E41-K4: downsample levels at most, so `σ_px ≤ 341` before the clamp. */
 export const E41_BLUR_LEVELS_MAX = 5;
+/**
+ * σ below this many device pixels blurs nothing measurable and is treated as 0 (the effect
+ * passes' `EFFECT_SIGMA_EPSILON_PX`, of the same value). V-36 section 5.1: a background blur
+ * below it needs no snapshot, split or pass.
+ */
+export const E41_SIGMA_EPSILON_PX = 1e-3;
 
 /** One drop shadow in device pixels. */
 export type DeviceShadow = Readonly<{
@@ -133,6 +139,21 @@ export function blurLevels(sigmaPx: number): number {
   while (levels < E41_BLUR_LEVELS_MAX && Math.ceil((3 * sigmaPx) / 2 ** levels) > E41_BLUR_TAPS_MAX)
     levels += 1;
   return levels;
+}
+
+/**
+ * V-36 section 5.2: `backdropMargin(σ_px)`, a bound in whole device pixels on how far E41-K4's
+ * read chain for a blur of σ reaches past the output rectangle at level 0, on every side, for
+ * any integer rectangle: with L levels (`blurLevels`), s = 2^L and r = min(⌈3 σ / s⌉, 32) taps,
+ * the bilinear samples of the last level start at most 1.5 texels outside the rectangle and the
+ * taps add r, so the level-0 reach is under s (r + 1.5) ≤ s (r + 2). 0 below
+ * E41_SIGMA_EPSILON_PX (no blur).
+ */
+export function backdropMargin(sigmaPx: number): number {
+  if (!(sigmaPx >= E41_SIGMA_EPSILON_PX)) return 0;
+  const scale = 2 ** blurLevels(sigmaPx);
+  const radius = Math.min(Math.ceil((3 * sigmaPx) / scale), E41_BLUR_TAPS_MAX);
+  return scale * (radius + 2);
 }
 
 /** E41-K1: the margin `m = ⌈3 σ_blur⌉ + maxᵢ(⌈3 σᵢ⌉ + |offsetᵢ|)` in device pixels. */
@@ -280,6 +301,11 @@ export type BudgetLayer =
       /** V-36 section 5.5: the largest inner-shadow harden region, in pixels. */
       innerScratch?: number;
       snapshot?: number;
+      /**
+       * V-36 section 5.5: a background-blur root's blurred backdrop `B`, in pixels (its output
+       * bound); its snapshot `D` is `snapshot`, which then also bounds the blur's scratch.
+       */
+      blurred?: number;
     }>;
 
 /** A layer tree for the effect budget, in paint order. */
@@ -317,6 +343,8 @@ export type TreeNotice = Readonly<{ nodeId: string; bytes: number; limit: number
  * - shared scratch `4 × (2 + 2/3) × max O` over the admitted effect roots (V-36 section 5.5:
  *   or the largest inner-shadow harden region `H`, when larger);
  * - V35-K6: a blend root's backdrop snapshot, 4 bytes per pixel of its `snapshot` area;
+ * - V-36 section 5.5: a background-blur root's `B` at 4 bytes per pixel of `blurred`, and its
+ *   snapshot `D` in the scratch maximum;
  * - E25's tile set over the widest admitted layer or source bound.
  *
  * A tree with effects that does not fit, or holds a bound over `maxTextureDimension`, drops its
@@ -368,9 +396,11 @@ export function planEffectBudget(
         oversize = true;
       }
       bytes += 4 * (source.width * source.height + out.width * out.height);
+      bytes += 4 * (layer.blurred ?? 0);
       width = Math.max(width, source.width);
       height = Math.max(height, source.height);
       output = Math.max(output, out.width * out.height, layer.innerScratch ?? 0);
+      if (layer.blurred !== undefined) output = Math.max(output, layer.snapshot ?? 0);
     }
     const total = resident + bytes + scratch(output) + layerTileBytes(width, height, sampleCount);
     if (!oversize && total <= limit) {

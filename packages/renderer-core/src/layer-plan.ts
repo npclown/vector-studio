@@ -86,6 +86,11 @@ export type LayerTarget = Readonly<{
   height: number;
   devicePixelRatio: number;
   sampleCount: 1 | 4;
+  /**
+   * V-36 section 5.2: whether the backend takes main-pass backdrop snapshots for background
+   * blur (`PrimitiveTarget.backdropSnapshots`); absent or false, no root asks for one.
+   */
+  backdropSnapshots?: boolean;
 }>;
 
 /**

@@ -53,7 +53,7 @@ All names end in `ForTesting`, as `destroyDeviceForTesting()` and `getOverlayBui
 | `WebGpuBackendOptions.countPassForTesting?: boolean` | `true` (only with frame capture) creates the count pipelines next to the mesh pipelines, at initialization and recovery, never on the frame path (section 5) |
 | `WebGpuBackend.captureFrameForTesting(options?: { counts?: boolean; timeoutMs?: number }): Promise<WebGpuFrameCaptureForTesting>` | Arms one capture and invalidates. The next primitive submission encodes the copy (and, if requested, the count pass) into its own command encoder after the main pass, and resolves after `mapAsync` (section 4) |
 
-Amended 2026-11-12 by [V-35](viz-v35-fills-blend-contract.md) K4: under the renderer option `blend: 'v0'` a primitive-mode canvas is also configured with `TEXTURE_BINDING`, for the backdrop snapshot, so `frameCaptureForTesting` is no longer the only configuration change in that mode. Under `blend: 'none'`, the default, the configuration is unchanged.
+Amended 2026-11-12 by [V-35](viz-v35-fills-blend-contract.md) K4: under the renderer option `blend: 'v0'` a primitive-mode canvas is also configured with `TEXTURE_BINDING`, for the backdrop snapshot, so `frameCaptureForTesting` is no longer the only configuration change in that mode. Under `blend: 'none'`, the default, the configuration is unchanged, except under `effects: 'v1'`, which adds `TEXTURE_BINDING` the same way for V-36's background blur (amended 2026-11-12 by [V-36](viz-v36-inner-shadow-background-blur-contract.md) U3).
 
 **Platform port members.** `webgpu-platform.ts` is a root export, so its interfaces are shared surface too. E10 changes them as follows, each member marked `@internal Tests only`:
 

@@ -36,6 +36,13 @@ export type PrimitiveTarget = Readonly<{
    * `normal` and isolating containers as `passThrough`.
    */
   blendLayers?: boolean;
+  /**
+   * V-36 contract, section 5.2: whether the backend takes backdrop snapshots of the main target
+   * for background blur (the snapshot pipeline exists and the main attachment can be read).
+   * Absent or false, no effect root asks for a backdrop for its background blur, and the
+   * backend draws each such root without it (counted in `backgroundBlurSkipped`).
+   */
+  backdropSnapshots?: boolean;
 }>;
 export type PrimitiveRecordVersion = Readonly<{ index: number; version: symbol }>;
 export type PrimitiveResource = Readonly<{
@@ -244,7 +251,11 @@ export type LayerPacketPart = Readonly<{
      * snapshot; absent for source-over (E25 layers and isolating containers).
      */
     blend?: BlendRootMode;
-    /** V35-K4: the backdrop snapshot of a blend root, present exactly with `blend`. */
+    /**
+     * V35-K4: the backdrop snapshot of a blend root (present with `blend`) or, V-36 section 5.2,
+     * of an effect root composited in the main pass with a background blur of σ at least
+     * E41_SIGMA_EPSILON_PX (`margin = backdropMargin(σ)`; the larger margin when it is both).
+     */
     backdrop?: Readonly<{ margin: number }>;
   }>[];
   /** One per layer, each in its target's paint order. */
@@ -445,6 +456,12 @@ export interface PrimitiveFrameSource {
    * (V35-K4). Optional; absent means false.
    */
   readonly requiresBlendPipeline?: boolean;
+  /**
+   * V-36 contract, section 5.2: true when the backend must create the backdrop snapshot
+   * pipeline and the main attachment's `TEXTURE_BINDING` usage for background blur (as under
+   * `requiresBlendPipeline`), at initialization and recovery. Optional; absent means false.
+   */
+  readonly requiresBackdropSnapshot?: boolean;
   /**
    * V-32 contract (V32-P1): the image source port the backend's texture store requests drawn
    * image keys from. Optional; absent means image paints bind the transparent texture.

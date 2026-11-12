@@ -983,7 +983,11 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
                   draws: Object.freeze(layered?.layers[index] ?? []),
                   meshDraws: Object.freeze(meshByLayer.get(index) ?? []),
                   ...effectRecordOf(layerPlan!.effects.get(layer), layerPlan!.bounds.get(layer)!),
-                  ...blendRecordOf(layerPlan!.blends.get(layer), layer),
+                  ...blendRecordOf(
+                    layerPlan!.blends.get(layer),
+                    layer,
+                    layerPlan!.effects.get(layer),
+                  ),
                 }),
               ),
             ),
@@ -3277,13 +3281,23 @@ function compositeClipStates(
   });
 }
 
-/** V35-K3, K4: a drawn blend root's mode and backdrop request, for its packet layer. */
+/**
+ * V35-K3, K4: a drawn blend root's mode and backdrop request, for its packet layer. V-36 section
+ * 5.2: a background-blur root composited in the main pass asks for a backdrop too, without a
+ * mode; a root that is both takes the larger margin.
+ */
 function blendRecordOf(
   blend: BlendRootMode | undefined,
   scope: LayerScope,
+  effect: EffectLayer | undefined,
 ): { blend?: BlendRootMode; backdrop?: Readonly<{ margin: number }> } {
-  if (blend === undefined) return {};
-  return { blend, backdrop: scope.backdrop ?? Object.freeze({ margin: 0 }) };
+  const background = effect?.backdrop;
+  if (blend === undefined) return background === undefined ? {} : { backdrop: background };
+  const own = scope.backdrop ?? Object.freeze({ margin: 0 });
+  return {
+    blend,
+    backdrop: background === undefined || background.margin <= own.margin ? own : background,
+  };
 }
 
 /** E41: the packet record of a drawn effect root, spread into its layer entry. */

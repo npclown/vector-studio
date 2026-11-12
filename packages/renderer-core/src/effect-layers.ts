@@ -1,6 +1,8 @@
 import { rebaseClipChain } from './clip-resolution.js';
 import type { SceneBounds } from './scene-numeric.js';
 import {
+  E41_SIGMA_EPSILON_PX,
+  backdropMargin,
   deviceEffects,
   effectBounds,
   effectMargin,
@@ -39,6 +41,13 @@ export type EffectLayer = Readonly<{
   uncut?: DeviceRect;
   /** A leaf root's opacity, which its draws in `L` keep (U5 builds `R` with it); else 1. */
   contentOpacity: number;
+  /**
+   * V-36 section 5.2: the backdrop snapshot of a root composited in the main pass with a
+   * background blur of σ at least E41_SIGMA_EPSILON_PX, on a target that takes backdrop
+   * snapshots; `margin = backdropMargin(σ)`. Absent otherwise (a nested root draws without its
+   * background blur, section 5.3).
+   */
+  backdrop?: Readonly<{ margin: number }>;
 }>;
 
 export type LayerState = 'drawn' | 'dissolved' | 'dropped';
@@ -346,6 +355,27 @@ export function planEffectLayers(
   // effect root, else its layer bound.
   const snapshot = (scope: LayerScope, area: number) =>
     scope.backdrop === undefined ? {} : { snapshot: area };
+  // V-36 section 5.2: a background-blur root composited in the main pass (no layer around it)
+  // snapshots its output bound grown by `backdropMargin(σ)` inside the target.
+  const backgroundOf = (
+    scope: LayerScope,
+    output: DeviceRect,
+  ): Readonly<{ margin: number; area: number }> | null => {
+    if (target.backdropSnapshots !== true || scope.parent !== null) return null;
+    const sigma = device.get(scope)?.backgroundBlur?.sigmaPx;
+    if (sigma === undefined || !(sigma >= E41_SIGMA_EPSILON_PX)) return null;
+    const margin = backdropMargin(sigma);
+    const grown = intersectRects(
+      {
+        x: output.x - margin,
+        y: output.y - margin,
+        width: output.width + 2 * margin,
+        height: output.height + 2 * margin,
+      },
+      targetRect,
+    );
+    return { margin, area: grown === null ? 0 : grown.width * grown.height };
+  };
   const plainRootOf = (scope: LayerScope): LayerScope => {
     let root = scope;
     for (let parent = scope.parent; parent !== null; parent = parent.parent) {
@@ -380,12 +410,20 @@ export function planEffectLayers(
     if (scope.effects !== undefined) tree.effectRoots.push(scope.nodeId);
     const effect = effectBoundsOf.get(scope);
     if (effect !== undefined) {
+      const area = effect.output.width * effect.output.height;
+      // V-36 section 5.5: `D` (one snapshot with a blend root's, at the larger margin) and `B`.
+      const background = backgroundOf(scope, effect.output);
       tree.layers.push({
         kind: 'effect',
         source: effect.source,
         output: effect.output,
         ...(effect.innerScratch === undefined ? {} : { innerScratch: effect.innerScratch }),
-        ...snapshot(scope, effect.output.width * effect.output.height),
+        ...(background === null
+          ? snapshot(scope, area)
+          : {
+              snapshot: Math.max(background.area, scope.backdrop === undefined ? 0 : area),
+              blurred: area,
+            }),
       });
     } else if (bound !== undefined) {
       tree.layers.push({
@@ -439,6 +477,7 @@ export function planEffectLayers(
       if (effect !== undefined) {
         const deviceEffect = device.get(scope)!;
         clampedSigmas += deviceEffect.clamped;
+        const background = backgroundOf(scope, effect.output);
         effects.set(
           scope,
           Object.freeze({
@@ -447,6 +486,9 @@ export function planEffectLayers(
             output: effect.output,
             ...(effect.uncut === undefined ? {} : { uncut: effect.uncut }),
             contentOpacity: scope.contentOpacity ?? 1,
+            ...(background === null
+              ? {}
+              : { backdrop: Object.freeze({ margin: background.margin }) }),
           }),
         );
       }

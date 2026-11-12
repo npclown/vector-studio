@@ -195,6 +195,8 @@ export type E23Counters = Readonly<{
   effectPipelineAvailable: boolean;
   /** V35-K8: backdrop splits of the current generation so far. */
   blendSplits: number;
+  /** V-36 section 5.4: background blurs not drawn so far, one per root and frame. */
+  backgroundBlurSkipped: number;
   /** V35-A05: blend composite draws so far, per variant. */
   blendCompositeDraws: Readonly<Record<'plain' | 'clip' | 'shifted' | 'clip-shifted', number>>;
   /** V35-K7: whether this generation draws blend roots with their mode. */
@@ -361,6 +363,7 @@ async function start() {
     requiresTextPipeline: product.requiresTextPipeline,
     requiresEffectPipeline: product.requiresEffectPipeline,
     requiresBlendPipeline: product.requiresBlendPipeline,
+    requiresBackdropSnapshot: product.requiresBackdropSnapshot,
     ...(product.imageSource === undefined ? {} : { imageSource: product.imageSource }),
     prepare(target) {
       const packet = product.prepare(target);
@@ -472,6 +475,7 @@ function counters(): E23Counters {
     effectPasses: backend.getEffectPassesForTesting(),
     effectPipelineAvailable: backend.effectPipelineAvailable,
     blendSplits: backend.getBlendSplitsForTesting(),
+    backgroundBlurSkipped: backend.getBackgroundBlurSkippedForTesting(),
     blendCompositeDraws: backend.getBlendCompositeDrawsForTesting(),
     blendPipelineAvailable: backend.blendPipelineAvailable,
     glyphRasterCalls: service!.getGlyphRasterCallsForTesting(),

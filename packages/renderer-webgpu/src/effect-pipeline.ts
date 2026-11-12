@@ -271,8 +271,12 @@ export function createEffectPipelineDescriptor(
   };
 }
 
-/** The textures a pass reads or writes: `L`, `R` and the two shared scratch textures. */
-export type EffectSurface = 'content' | 'result' | 'scratch0' | 'scratch1';
+/**
+ * The textures a pass reads or writes: `L`, `R` and the two shared scratch textures; V-36
+ * section 5.2 adds a background-blur root's snapshot `D` (`backdrop`, whose texel 0 is the
+ * snapshot's device origin) and its blurred backdrop `B` (`blurred`, at the result bound).
+ */
+export type EffectSurface = 'content' | 'result' | 'scratch0' | 'scratch1' | 'backdrop' | 'blurred';
 
 type Point = readonly [number, number];
 
@@ -298,6 +302,12 @@ export type EffectPass = Readonly<{
   edge: number;
   /** Premultiplied. */
   color: readonly [number, number, number, number];
+  /**
+   * V-36 section 5.2: the attachment texel the pass's region starts at, when it is not (0, 0)
+   * (a merge into `backdrop` over the result bound); `dstOrigin` is then the absolute
+   * coordinate of the attachment's texel 0. Absent on every other pass.
+   */
+  at?: Point;
 }>;
 
 export type EffectPassPlan = Readonly<{
@@ -485,6 +495,107 @@ export function planEffectPasses(
         levelScale: blurred.scale,
       });
     }
+  }
+  return Object.freeze({
+    passes: Object.freeze(passes),
+    scratch: Object.freeze({ width: scratchWidth, height: scratchHeight }),
+  });
+}
+
+/**
+ * V-36 section 5.2, steps 2 to 4: a background-blur root's passes, run after its snapshot `D`
+ * (`snapshot`, absolute target pixels, grown by `backdropMargin(σ)` and clamped to the target)
+ * is taken. E41-K4's chain blurs `D` (its first reader clamps on every side, Q3) into `B` at
+ * `result` (the upsample from the last level, or the vertical blur without levels); `coverage`
+ * multiplies `B` by `h`, read from `L` at `content` with the 127 / c gain; and for a root that is
+ * also a blend root (`blend`), `merge` draws `B` at `opacity` (the composite's `o`) over `D`
+ * inside `result`, so the blend composite reads the backdrop as the background blur left it.
+ * Empty below EFFECT_SIGMA_EPSILON_PX or without a background blur.
+ */
+export function planBackgroundBlurPasses(
+  snapshot: DeviceRect,
+  content: DeviceRect,
+  result: DeviceRect,
+  effect: LayerEffectRecord,
+  blend: boolean,
+  opacity = 1,
+): EffectPassPlan {
+  const sigmaPx = effect.backgroundBlur?.sigmaPx;
+  if (sigmaPx === undefined || !(sigmaPx >= EFFECT_SIGMA_EPSILON_PX)) {
+    return Object.freeze({
+      passes: Object.freeze([]),
+      scratch: Object.freeze({ width: 0, height: 0 }),
+    });
+  }
+  const passes: EffectPass[] = [];
+  let scratchWidth = 0;
+  let scratchHeight = 0;
+  let blurredWritten = false;
+  const push = (pass: Omit<EffectPass, 'clear'>) => {
+    let clear = false;
+    if (pass.target === 'blurred') {
+      clear = !blurredWritten;
+      blurredWritten = true;
+    } else if (pass.target === 'scratch0' || pass.target === 'scratch1') {
+      scratchWidth = Math.max(scratchWidth, pass.width);
+      scratchHeight = Math.max(scratchHeight, pass.height);
+    }
+    passes.push(Object.freeze({ ...pass, clear }));
+  };
+  const backdrop = surfaceOf('backdrop', snapshot);
+  const output = surfaceOf('blurred', result).region;
+  const { levels, scale, sigma, radius, sampled, chain } = blurChain(result, sigmaPx, NO_POINT);
+  // The first reader of `D` clamps on every side: only the target's edge is ever reached.
+  let edge = EFFECT_EDGE_CLAMP_ALL;
+  let current: Readonly<{ surface: EffectSurface; region: Region }> = backdrop;
+  for (let level = 1; level <= levels; level += 1) {
+    const region = chain[level - 1]!;
+    const surface: EffectSurface = level % 2 === 1 ? 'scratch0' : 'scratch1';
+    push({ ...passOf('downsample', current, surface, region), edge });
+    edge = 0;
+    current = { surface, region };
+  }
+  // Without levels the blur's output is `B` itself, so the horizontal pass covers its columns.
+  const columns = levels === 0 ? output : sampled;
+  const horizontal: Region = {
+    x0: columns.x0,
+    y0: columns.y0 - radius,
+    x1: columns.x1,
+    y1: columns.y1 + radius,
+  };
+  const across: EffectSurface = current.surface === 'scratch0' ? 'scratch1' : 'scratch0';
+  push({ ...passOf('blur', current, across, horizontal), dir: [1, 0], radius, sigma, edge });
+  if (levels === 0) {
+    push({
+      ...passOf('blur', { surface: across, region: horizontal }, 'blurred', output),
+      dir: [0, 1],
+      radius,
+      sigma,
+    });
+  } else {
+    const down: EffectSurface = across === 'scratch0' ? 'scratch1' : 'scratch0';
+    push({
+      ...passOf('blur', { surface: across, region: horizontal }, down, sampled),
+      dir: [0, 1],
+      radius,
+      sigma,
+    });
+    push({
+      ...passOf('upsample', { surface: down, region: sampled }, 'blurred', output),
+      levelScale: scale,
+    });
+  }
+  push({
+    ...passOf('coverage', surfaceOf('content', content), 'blurred', output),
+    contentScale: EFFECT_HARD_ALPHA_GAIN / effect.contentOpacity,
+  });
+  if (blend) {
+    push({
+      ...passOf('merge', { surface: 'blurred', region: output }, 'backdrop', output),
+      dstOrigin: [snapshot.x, snapshot.y],
+      at: [result.x - snapshot.x, result.y - snapshot.y],
+      contentScale: opacity,
+    });
   }
   return Object.freeze({
     passes: Object.freeze(passes),
