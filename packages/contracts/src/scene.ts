@@ -130,8 +130,27 @@ export type SceneEffect =
       /** Finite, >= 0. */
       sigma: number;
     }>
-  | Readonly<{ kind: 'layerBlur'; /** Finite, >= 0. */ sigma: number }>;
-/** E41-S3 and S5: more effects than this, or more than one layer blur, is `invalid-value`. */
+  | Readonly<{ kind: 'layerBlur'; /** Finite, >= 0. */ sigma: number }>
+  /**
+   * V-36 contract (docs/plans/viz-v36-inner-shadow-background-blur-contract.md), V36-S3: an
+   * inner shadow, fields as a drop shadow's; needs the renderer's `effects: 'v1'`.
+   */
+  | Readonly<{
+      kind: 'innerShadow';
+      color: SceneColor;
+      /** Finite. */
+      offsetX: number;
+      /** Finite. */
+      offsetY: number;
+      /** Finite, >= 0. */
+      sigma: number;
+    }>
+  /** V36-S3: a background blur. Needs the renderer's `effects: 'v1'`. */
+  | Readonly<{ kind: 'backgroundBlur'; /** Finite, >= 0. */ sigma: number }>;
+/**
+ * E41-S3 and S5: more effects than this, or more than one layer blur (V36-S3: or more than one
+ * background blur), is `invalid-value`.
+ */
 export const SCENE_MAX_EFFECTS = 8;
 export type SceneNodeBase = Readonly<{
   id: string;
@@ -141,7 +160,8 @@ export type SceneNodeBase = Readonly<{
   opacity: number;
   /**
    * E41-S5: the node's visible effects, in list order. Absent and `[]` both mean none; a non-empty
-   * list needs the renderer's `effects: 'v0'` (E41-S6), else it is `unsupported-feature`. A frame
+   * list needs the renderer's `effects: 'v0'` (E41-S6), or `'v1'` when it holds an inner shadow
+   * or a background blur (V36-S4), else it is `unsupported-feature`. A frame
    * unit carries its effects on its outer container.
    */
   effects?: readonly SceneEffect[];

@@ -154,8 +154,11 @@ describe('E41-U7 the commands of the controls', () => {
     ok(target, { type: 'addEffect', ids: [a], kind: 'layerBlur' });
     const result = target.execute(addEffectCommand(nodesOf(target, [a]), 'layerBlur'));
     expect(result.ok).toBe(false);
-    expect(effectNotice(result)).toBe('A layer takes at most 8 effects and one layer blur');
-    expect(refusalText(result)).toBe('A layer takes at most 8 effects and one layer blur');
+    // V-36 (section 6) names the background blur limit too.
+    const notice =
+      'A layer takes at most 8 effects, at most one layer blur and one background blur';
+    expect(effectNotice(result)).toBe(notice);
+    expect(refusalText(result)).toBe(notice);
     expect(effectNotice(target.execute({ type: 'undo' }))).toBeNull();
   });
 });
@@ -206,16 +209,17 @@ describe('E41-U7 the panel section', () => {
 });
 
 describe('E41-U7 host wiring (E41-S6)', () => {
-  it('next-host projects effects; the editor renderer runs on effects v0', () => {
+  // V-36 (V36-S5) moved both to the next level: 'v1' projection on a 'v1' renderer.
+  it('next-host projects effects; the editor renderer runs on effects v1', () => {
     const host = readFileSync(
       new URL('../../apps/next-host/src/m6a-text-host.ts', import.meta.url),
       'utf8',
     );
-    expect(host).toMatch(/projectEffects: true,/u);
+    expect(host).toMatch(/projectEffects: 'v1',/u);
     const webgpu = readFileSync(
       new URL('../../packages/webgpu-host/src/index.ts', import.meta.url),
       'utf8',
     );
-    expect(webgpu).toMatch(/effects: 'v0',/u);
+    expect(webgpu).toMatch(/effects: 'v1',/u);
   });
 });

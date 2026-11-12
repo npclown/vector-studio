@@ -571,7 +571,7 @@ describe('E41-S6 service option', () => {
       "effects: 'v0' needs groups: 'isolated'.",
     );
     expect(() => new PrimitiveRendererService(invalidate, { effects: 'blur' } as never)).toThrow(
-      "effects must be 'none' or 'v0'.",
+      "effects must be 'none', 'v0' or 'v1'.",
     );
     expect(
       () =>

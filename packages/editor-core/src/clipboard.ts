@@ -332,6 +332,15 @@ function readFields(
     // As an older document reads it, `effects` is an unknown key there.
     if (effectsWritten) return fail('document.invalid-field', mapPath(name, key, '/effects'));
     if (gridsWritten) return fail('document.invalid-field', mapPath(name, key, '/layoutGrids'));
+    // Below schema v8 an effect kind V-36 adds is unknown, as a v7 document reads it (V36-S2).
+    if (schemaVersion < 8) {
+      const index = result.node.effects.findIndex(
+        (effect) => effect.kind === 'innerShadow' || effect.kind === 'backgroundBlur',
+      );
+      if (index >= 0) {
+        return fail('document.invalid-field', mapPath(name, key, `/effects/${index}/kind`));
+      }
+    }
     if (result.node.id !== key) return fail('document.invalid-field', mapPath(name, key, '/id'));
     read.push([key, result.node]);
   }

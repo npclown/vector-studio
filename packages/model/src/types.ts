@@ -394,19 +394,46 @@ export type DropShadowEffect = Readonly<{
 /** A blur of the node's whole rendered layer (E41-S2), `σ = radius / 2`. */
 export type LayerBlurEffect = Readonly<{ kind: 'layerBlur'; visible: boolean; radius: number }>;
 
-export type Effect = DropShadowEffect | LayerBlurEffect;
+/** The effect kinds of v7 (E41-S2). */
+export type EffectV7 = DropShadowEffect | LayerBlurEffect;
+
+/**
+ * An inner shadow (V-36 contract, V36-S1): a drop shadow's fields and ranges, drawn inside the
+ * node's hardened coverage.
+ */
+export type InnerShadowEffect = Readonly<{
+  kind: 'innerShadow';
+  visible: boolean;
+  color: Color;
+  offsetX: number;
+  offsetY: number;
+  radius: number;
+}>;
+
+/** A blur of what lies behind the node, inside its coverage (V36-S1), `σ = radius / 2`. */
+export type BackgroundBlurEffect = Readonly<{
+  kind: 'backgroundBlur';
+  visible: boolean;
+  radius: number;
+}>;
+
+/** The effect kinds of v8 (V36-S1): v7's and the two V-36 adds. */
+export type Effect = DropShadowEffect | LayerBlurEffect | InnerShadowEffect | BackgroundBlurEffect;
 
 /** The field v7 adds to every node (E41-S1): at most 8 effects, at most one layer blur (E41-S3). */
+export type NodeEffectsV7 = Readonly<{ effects: readonly EffectV7[] }>;
+
+/** v8's `effects` (V36-S2): E41-S3's limits, plus at most one background blur. */
 export type NodeEffects = Readonly<{ effects: readonly Effect[] }>;
 
-export type RectangleNodeV7 = RectangleNodeV6 & NodeEffects;
-export type EllipseNodeV7 = EllipseNodeV6 & NodeEffects;
-export type LineNodeV7 = LineNodeV6 & NodeEffects;
-export type PathNodeV7 = PathNodeV6 & NodeEffects;
-export type CustomNodeV7 = CustomNodeV6 & NodeEffects;
-export type TextNodeV7 = TextNode & NodeEffects;
-export type InstanceNodeV7 = InstanceNodeV5 & NodeEffects;
-export type GroupNodeV7 = GroupNode & NodeEffects;
+export type RectangleNodeV7 = RectangleNodeV6 & NodeEffectsV7;
+export type EllipseNodeV7 = EllipseNodeV6 & NodeEffectsV7;
+export type LineNodeV7 = LineNodeV6 & NodeEffectsV7;
+export type PathNodeV7 = PathNodeV6 & NodeEffectsV7;
+export type CustomNodeV7 = CustomNodeV6 & NodeEffectsV7;
+export type TextNodeV7 = TextNode & NodeEffectsV7;
+export type InstanceNodeV7 = InstanceNodeV5 & NodeEffectsV7;
+export type GroupNodeV7 = GroupNode & NodeEffectsV7;
 /**
  * A page guide (V-38 contract, V38-S1): `axis: 'x'` is a vertical line at page x = `value`,
  * `'y'` a horizontal line at page y = `value`.
@@ -442,8 +469,8 @@ export type LayoutGrid = UniformLayoutGrid | BandLayoutGrid;
 /** The optional field V-38 adds to a frame or symbol (V38-S2); absent means none. */
 export type NodeLayoutGrids = Readonly<{ layoutGrids?: readonly LayoutGrid[] }>;
 
-export type FrameNodeV7 = FrameNodeV6 & NodeEffects;
-export type SymbolNodeV7 = SymbolNodeV6 & NodeEffects;
+export type FrameNodeV7 = FrameNodeV6 & NodeEffectsV7;
+export type SymbolNodeV7 = SymbolNodeV6 & NodeEffectsV7;
 
 export type LeafNodeV7 =
   | RectangleNodeV7
