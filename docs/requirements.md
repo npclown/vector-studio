@@ -42,7 +42,7 @@ The MVP requirements below describe the intended editor, not a claim that the gr
 - Mask group
 - Simplified symbol and symbol instance
 
-Images are deferred.
+Images are supported as an image fill paint since 2026-11-12 (requested by the user; [V-32 contract](plans/viz-v32-image-contract.md)): pasting, dropping or placing a PNG, JPEG, WebP or GIF image creates a rectangle filled with it, and any fillable shape can take an image fill (fill, fit, stretch or tile). Image strokes, crop mode, image adjustments and animated images are deferred.
 
 ## Path editing
 
@@ -150,8 +150,8 @@ Untrusted plugins, sandbox execution, a marketplace, import, raster editing, ani
 
 Future considerations (recorded 2026-11-04 at the user's request; no work is scheduled). Today's extension surface ([host API guide](host-api.md#extensions)) covers path-shaped custom node types that use the node's own fill and stroke, commands, tools, key bindings and UI panels; import or export (deferred above) could later be built as extension commands on the public commands and queries. These need engine or core changes first, because the scene contract or the extension boundary has no place for them:
 
-- New paint types beyond solid, linear and radial (for example patterns, image fills, conic or mesh gradients).
+- New paint types beyond solid, linear, radial and image (for example patterns, conic or mesh gradients).
 - Effects and filters beyond E41's drop shadow and layer blur (for example blend modes).
-- Non-path content such as raster image nodes, and any renderer-side extension (custom shaders, direct renderer access).
+- Non-path content other than image fills, and any renderer-side extension (custom shaders, direct renderer access).
 
 A plugin contract is planned when the first concrete need for one of these appears. It would cover a renderer-side extension port for registering paints and effects, extension versioning and compatibility rules, and, only if untrusted plugins are wanted, runtime installation and a sandbox, which stay deferred until then.
