@@ -375,7 +375,7 @@ export function generateE41CardsDocument() {
     schemaVersion: number;
     nodes: Record<string, { effects: unknown[] }>;
   };
-  if (document.schemaVersion !== 7) throw new Error('e41-cards: not schema version 7');
+  if (document.schemaVersion !== 8) throw new Error('e41-cards: not schema version 8');
   for (let i = 0; i < count; i += 1) {
     const effects: unknown[] = [{ kind: 'dropShadow', visible: true, ...E41_CARDS.shadow }];
     if (i % E41_CARDS.blurEvery === 0)

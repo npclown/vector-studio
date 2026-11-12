@@ -1,4 +1,4 @@
-import type { DocumentV7, NodeV7, Paint, PathNodeV7, PathVerb } from '@vector-studio/model';
+import type { DocumentV8, NodeV8, Paint, PathNodeV8, PathVerb } from '@vector-studio/model';
 import {
   booleanOp,
   type BooleanOp,
@@ -29,7 +29,7 @@ import type { DocumentCommand } from './types.js';
 
 export const BOOLEAN_OPS: readonly BooleanOp[] = ['union', 'subtract', 'intersect', 'exclude'];
 
-type Finish = (draft: Draft) => DocumentV7 | Failure;
+type Finish = (draft: Draft) => DocumentV8 | Failure;
 type Outline = Readonly<{ verbs: readonly string[]; points: readonly number[] }>;
 
 /**
@@ -38,7 +38,7 @@ type Outline = Readonly<{ verbs: readonly string[]; points: readonly number[] }>
  * with a path projection. The fill rule is the node's own.
  */
 function inputOutline(
-  node: NodeV7,
+  node: NodeV8,
   custom: CustomRules,
 ): (Outline & { fillRule: 'nonzero' | 'evenodd' }) | null {
   const { width, height } = node.frame;
@@ -144,7 +144,7 @@ export function contoursPath(contours: readonly (readonly BSegment[])[]): {
 }
 
 /** A node's unit box to its parent's space: the frame transform after a scale by the size. */
-function unitBox(node: Readonly<{ frame: NodeV7['frame']; rotation: number }>): Matrix {
+function unitBox(node: Readonly<{ frame: NodeV8['frame']; rotation: number }>): Matrix {
   const { width, height } = node.frame;
   return multiply(localTransform(node.frame, node.rotation), [width, 0, 0, height, 0, 0]);
 }
@@ -180,7 +180,7 @@ export function remapPaint(paint: Paint, from: Matrix, to: Matrix): Paint {
 
 /** `booleanNodes` (E41 contract, sections 2.1 to 2.3). */
 export function booleanNodes(
-  document: DocumentV7,
+  document: DocumentV8,
   command: Extract<DocumentCommand, { type: 'booleanNodes' }>,
   context: EditContext,
   custom: CustomRules,
@@ -232,7 +232,7 @@ export function booleanNodes(
       ? { ...base.stroke, color: remapPaint(base.stroke.color, from, to) }
       : null;
   const build = (id: string): EditResult => {
-    const node: PathNodeV7 = {
+    const node: PathNodeV8 = {
       id,
       parent: owner,
       name: base.name,

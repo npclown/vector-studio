@@ -6,7 +6,7 @@ import type {
   SceneApplyResult,
   ScenePathGeometry,
 } from '@vector-studio/contracts';
-import type { DocumentV7, NodeV7 } from '@vector-studio/model';
+import type { DocumentV8, NodeV8 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   createCounterIdSource,
@@ -54,7 +54,7 @@ function ok(target: Editor, command: Command): readonly string[] {
   return result.ids;
 }
 
-function documentOf(target: Editor): DocumentV7 {
+function documentOf(target: Editor): DocumentV8 {
   return target.query({ type: 'document' });
 }
 
@@ -65,7 +65,7 @@ async function fixture(name: string): Promise<unknown> {
 type Fields = Record<string, unknown>;
 
 /** A v2 node with defaults; `extra` holds the type's fields. */
-function node(id: string, parent: string, type: NodeV7['type'], extra: Fields = {}): Fields {
+function node(id: string, parent: string, type: NodeV8['type'], extra: Fields = {}): Fields {
   return {
     id,
     name: id,
@@ -208,7 +208,7 @@ function line(
   endArrow: string,
   cap: 'butt' | 'round' | 'square' = 'butt',
   overrides: Fields = {},
-): NodeV7 {
+): NodeV8 {
   return node('l', 'p', 'line', {
     frame: { x: 0, y: 0, width: 100, height: 0 },
     points: [0, 0, 1, 0],
@@ -216,7 +216,7 @@ function line(
     startArrow,
     endArrow,
     ...overrides,
-  }) as unknown as NodeV7;
+  }) as unknown as NodeV8;
 }
 
 /** `lineContent` of a test line, its stroke at v6 (M4-M1 adds `dash: null`). */

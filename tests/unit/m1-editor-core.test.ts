@@ -3,9 +3,9 @@ import path from 'node:path';
 import {
   parseDocument,
   serializeDocument,
-  type DocumentV7,
+  type DocumentV8,
   type Frame,
-  type NodeV7,
+  type NodeV8,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
@@ -57,11 +57,11 @@ function text(target: Editor): string {
   return serializeDocument(target.query({ type: 'document' }));
 }
 
-function documentOf(target: Editor): DocumentV7 {
+function documentOf(target: Editor): DocumentV8 {
   return target.query({ type: 'document' });
 }
 
-function nodeOf(target: Editor, id: string): NodeV7 {
+function nodeOf(target: Editor, id: string): NodeV8 {
   const node = target.query({ type: 'node', id });
   if (node === null) throw new Error(`no node ${id}`);
   return node;
@@ -168,7 +168,7 @@ const f = (x: number, y: number, width: number, height: number): Frame => ({ x, 
 
 type M = [number, number, number, number, number, number];
 
-function local(node: NodeV7): M {
+function local(node: NodeV8): M {
   const { x, y, width: w, height: h } = node.frame;
   const t = node.rotation;
   if (t === 0) return [1, 0, 0, 1, x, y];
@@ -195,8 +195,8 @@ function mul(m: M, n: M): M {
   ];
 }
 
-function pageMatrix(document: DocumentV7, id: string): { m: M; rotation: number } {
-  const chain: NodeV7[] = [];
+function pageMatrix(document: DocumentV8, id: string): { m: M; rotation: number } {
+  const chain: NodeV8[] = [];
   for (let node = document.nodes[id]; node !== undefined; node = document.nodes[node.parent]) {
     chain.unshift(node);
   }
@@ -214,7 +214,7 @@ function at(m: M, x: number, y: number) {
 }
 
 /** Page centre, page rotation (normalized), size and page points of a path or line. */
-function placement(document: DocumentV7, id: string) {
+function placement(document: DocumentV8, id: string) {
   const node = document.nodes[id]!;
   const { m, rotation } = pageMatrix(document, id);
   const unit =
@@ -245,7 +245,7 @@ function angleNear(actual: number, expected: number) {
 }
 
 /** M1-A05: every listed node keeps its page placement within the contract's tolerance. */
-function expectSamePlacement(before: DocumentV7, after: DocumentV7, ids: readonly string[]) {
+function expectSamePlacement(before: DocumentV8, after: DocumentV8, ids: readonly string[]) {
   for (const id of ids) {
     const a = placement(before, id);
     const b = placement(after, id);
@@ -277,7 +277,7 @@ describe('M1-A01 editor half: a migrated ext.star node nested in a group and a f
     ) as unknown;
     const target = editor(v1);
     // Migrated through v2 to v6 to the latest schema, v7 since E41-U4.
-    expect(documentOf(target).schemaVersion).toBe(7);
+    expect(documentOf(target).schemaVersion).toBe(8);
     const [group] = ok(target, { type: 'groupNodes', ids: ['n2'], kind: 'group' });
     const [frame] = ok(target, {
       type: 'createFrame',
@@ -649,7 +649,7 @@ describe('M1-A04 creation commands', () => {
           endArrow: 'triangle',
         },
       },
-    }) as unknown as DocumentV7;
+    }) as unknown as DocumentV8;
     expect(documentOf(target)).toEqual(expected);
     expect(DEFAULT_FRAME_FILL).toEqual({ r: 1, g: 1, b: 1, a: 1 });
   });
@@ -1336,7 +1336,7 @@ describe('M1-A08 resize rules', () => {
     const target = editor(doc([['p', ['a']]], [rect('a', 'p', frame, Math.PI / 2)]));
     const before = documentOf(target);
     ok(target, { type: 'setFrames', frames: [{ id: 'a', frame: turned }] });
-    const anchor = (document: DocumentV7) => at(pageMatrix(document, 'a').m, 0, 0);
+    const anchor = (document: DocumentV8) => at(pageMatrix(document, 'a').m, 0, 0);
     near(anchor(documentOf(target)).x, anchor(before).x);
     near(anchor(documentOf(target)).y, anchor(before).y);
     expect(nodeOf(target, 'a').rotation).toBe(Math.PI / 2);

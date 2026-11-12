@@ -4,9 +4,9 @@ import type { RenderNodeSnapshot } from '@vector-studio/contracts';
 import {
   serializeDocument,
   validateDocument,
-  type DocumentV7,
+  type DocumentV8,
   type Gradient,
-  type NodeV7,
+  type NodeV8,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
@@ -43,7 +43,7 @@ const HOST_TEXT = v7Text(read('m4-appearance/host.v6.json'));
 
 const panel = (await import(path.join(root, 'packages/ui/src/appearance-model.ts'))) as {
   RADIAL_TRANSFORM: Gradient['transform'];
-  styleKeys: (type: NodeV7['type']) => readonly (keyof StyleProps)[];
+  styleKeys: (type: NodeV8['type']) => readonly (keyof StyleProps)[];
   linearTransform: (theta: number) => Gradient['transform'];
   linearAngle: (transform: Gradient['transform']) => number;
   paintForKind: (kind: 'none' | 'solid' | 'linear' | 'radial', current: unknown) => unknown;
@@ -56,9 +56,9 @@ const panel = (await import(path.join(root, 'packages/ui/src/appearance-model.ts
   parseNumber: (text: string, min?: number, max?: number) => number | null;
   radiiFor: (lead: readonly number[], index: number, value: number, linked: boolean) => unknown;
   common: (
-    nodes: readonly NodeV7[],
+    nodes: readonly NodeV8[],
     key: keyof StyleProps,
-    read: (node: NodeV7) => unknown,
+    read: (node: NodeV8) => unknown,
   ) => unknown;
   styleCommand: (ids: readonly string[], style: StyleProps) => Command;
 };
@@ -67,7 +67,7 @@ const RED = { r: 1, g: 0, b: 0, a: 1 };
 const BLUE = { r: 0, g: 0, b: 1, a: 1 };
 
 /** A v6 or v7 document text read at v7: v6 nodes gain `effects: []` (E41-S1). */
-function parsed(text: string): DocumentV7 {
+function parsed(text: string): DocumentV8 {
   const result = validateDocument(v7Value(JSON.parse(text)));
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -88,7 +88,7 @@ function editorWith(document: unknown): { target: Editor; events: EditorEvent[] 
 const text = (target: Editor) => serializeDocument(target.query({ type: 'document' }));
 
 /** Applies a projection to a mirror with next-host's feature set since M4-U4 (M4-P7). */
-function nextHostMirror(document: DocumentV7, page: string) {
+function nextHostMirror(document: DocumentV8, page: string) {
   const projection = projectPage(document, page, () => null);
   const mirror = new RetainedSceneMirror(undefined, {
     pathNodes: 'supported',
@@ -176,7 +176,7 @@ describe('M4-Q17 (a): ungroup of a translucent group', () => {
     const { target } = editorWith(before);
     target.execute({ type: 'ungroupNodes', id: 'g' });
     const after = target.query({ type: 'document' });
-    const tree = (document: DocumentV7) => {
+    const tree = (document: DocumentV8) => {
       const projection = projectPage(document, 'p', () => null);
       return sceneLayerTree(projection);
     };
@@ -318,7 +318,7 @@ describe('M4 section 8: the panel helpers', () => {
 
   it("styleKeys mirrors the editor's PROPS: setStyle takes exactly those keys per type", () => {
     const document = parsed(read('m4-appearance/appearance.v6.json'));
-    const byType = new Map<NodeV7['type'], NodeV7>();
+    const byType = new Map<NodeV8['type'], NodeV8>();
     for (const value of Object.values(document.nodes)) {
       if (!byType.has(value.type)) byType.set(value.type, value);
     }

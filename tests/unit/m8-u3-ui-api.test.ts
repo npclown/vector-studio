@@ -120,7 +120,7 @@ describe('M8-A02 ui re-exports react and adds sections 6 and 7 (M8-T2, T3)', () 
   it('lets a consumer of ui alone name every reached type', () => {
     const names = reachedTypes.map((name) => name.name);
     expect(new Set(names).size).toBe(names.length);
-    for (const name of [...OWN_TYPES, 'ExtensionSummary', 'NodeV7', 'RenderCamera', 'Paint']) {
+    for (const name of [...OWN_TYPES, 'ExtensionSummary', 'NodeV8', 'RenderCamera', 'Paint']) {
       expect(names, name).toContain(name);
     }
     for (const name of names) expect(exported.get(name), name).toBeDefined();

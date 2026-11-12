@@ -14,7 +14,7 @@ import {
   validateFragmentTree,
   validateNode,
   type DocumentV3,
-  type DocumentV7,
+  type DocumentV8,
   type EnvelopeResult,
   type FragmentTreeResult,
   type NodeResult,
@@ -44,7 +44,7 @@ function read(file: string): Promise<string> {
   return readFile(path.join(fixtures, file), 'utf8');
 }
 
-function parsed(text: string): DocumentV7 {
+function parsed(text: string): DocumentV8 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -261,9 +261,9 @@ describe('M6a-A02 migration v3 to v4 (section 2.1)', () => {
     'm1-model/malformed/unsupported-version.json',
     'm7-symbols/malformed/unsupported-version.json',
     'm6-text/malformed/unsupported-version.json',
-  ])('fails %s at schemaVersion 8', async (file) => {
+  ])('fails %s at schemaVersion 9', async (file) => {
     const text = await read(file);
-    expect((JSON.parse(text) as { schemaVersion: number }).schemaVersion).toBe(8);
+    expect((JSON.parse(text) as { schemaVersion: number }).schemaVersion).toBe(9);
     expect(failure(parseDocument(text))).toEqual({
       code: 'document.unsupported-version',
       path: '/schemaVersion',
@@ -272,12 +272,12 @@ describe('M6a-A02 migration v3 to v4 (section 2.1)', () => {
 
   // `order-5-6` holds an unknown key as well, so its step 5 failure is checked in M5's tests.
   it.each(['document-unsupported-version', 'order-5-6'])(
-    'holds document schemaVersion 8 in the M5 envelope %s',
+    'holds document schemaVersion 9 in the M5 envelope %s',
     async (name) => {
       const text = await read(`m5-persistence/malformed/${name}.json`);
       expect(
         (JSON.parse(text) as { document: { schemaVersion: number } }).document.schemaVersion,
-      ).toBe(8);
+      ).toBe(9);
     },
   );
 
@@ -289,13 +289,13 @@ describe('M6a-A02 migration v3 to v4 (section 2.1)', () => {
     });
   });
 
-  it('accepts versions 1 to 7, validateDocument only 7', () => {
+  it('accepts versions 1 to 8, validateDocument only 8', () => {
     const value = single();
     expect(validateDocument(value).ok).toBe(true);
     expect(validateAnyDocument(value).ok).toBe(true);
     expect(validateAnyDocument({ ...v6Value(value), schemaVersion: 4 }).ok).toBe(true);
     expect(validateAnyDocument({ ...v6Value(value), schemaVersion: 5 }).ok).toBe(true);
-    for (const version of [1, 2, 3, 4, 5, 6, 8]) {
+    for (const version of [1, 2, 3, 4, 5, 6, 7, 9]) {
       expect(failure(validateDocument({ ...value, schemaVersion: version }))).toEqual({
         code: 'document.unsupported-version',
         path: '/schemaVersion',
@@ -379,7 +379,7 @@ describe('M6a-A02 round trip and serialize order (section 2)', () => {
     }
     // The order holds for an in-memory value built in another key order.
     const value = parsed(text);
-    const node = value.nodes.t2 as Extract<DocumentV7['nodes'][string], { type: 'text' }>;
+    const node = value.nodes.t2 as Extract<DocumentV8['nodes'][string], { type: 'text' }>;
     const { runs, lineHeight, ...rest } = node;
     const shuffled = {
       ...value,
@@ -396,7 +396,7 @@ describe('M6a-A02 round trip and serialize order (section 2)', () => {
           ...rest,
         },
       },
-    } as DocumentV7;
+    } as DocumentV8;
     expect(serializeDocument(shuffled)).toBe(await v6('text'));
   });
 });
