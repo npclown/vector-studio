@@ -127,9 +127,7 @@ export function resolvedValue(
 /** Deep equality of two paints (V39-S5): per channel, gradients by kind, transform, stops, spread. */
 export function samePaint(a: Paint, b: Paint): boolean {
   if (isColor(a) || isColor(b)) {
-    return (
-      isColor(a) && isColor(b) && a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a
-    );
+    return isColor(a) && isColor(b) && a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a;
   }
   return (
     a.kind === b.kind &&
@@ -237,7 +235,7 @@ export function withBoundValue(
       if (typeof value !== 'number' || stroke == null) return null;
       return { ...node, stroke: { ...stroke, width: value } } as NodeV8;
     case 'opacity':
-      return typeof value === 'number' ? ({ ...node, opacity: value } as NodeV8) : null;
+      return typeof value === 'number' ? ({ ...node, opacity: value }) : null;
     case 'cornerRadius':
       return typeof value === 'number'
         ? ({ ...node, cornerRadii: [value, value, value, value] } as NodeV8)

@@ -1598,9 +1598,7 @@ function readTables(
     taken.add(key);
   };
   colorStyles?.forEach((style, index) => claim(style.id, ['colorStyles', index, 'id']));
-  variables?.items.forEach((item, index) =>
-    claim(item.id, ['variables', 'items', index, 'id']),
-  );
+  variables?.items.forEach((item, index) => claim(item.id, ['variables', 'items', index, 'id']));
   variables?.modes.forEach((mode, index) => claim(mode.id, ['variables', 'modes', index, 'id']));
   if (variables !== undefined && !variables.modes.some((mode) => mode.id === variables.mode)) {
     throw new Failure('document.dangling-reference', ['variables', 'mode']);

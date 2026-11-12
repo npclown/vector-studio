@@ -128,12 +128,12 @@ describe('V39-A01 the model', () => {
 
   it('checks shapes and limits of the tables (S1, S2, S3)', () => {
     expect(failure(bound({ colorStyles: [] }))).toMatchObject({ path: '/colorStyles' });
-    expect(
-      failure(bound({ colorStyles: [{ id: 's1', name: '', paint: red }] })),
-    ).toMatchObject({ path: '/colorStyles/0/name' });
-    expect(
-      failure(bound({ variables: { ...variables, items: [] } })),
-    ).toMatchObject({ path: '/variables/items' });
+    expect(failure(bound({ colorStyles: [{ id: 's1', name: '', paint: red }] }))).toMatchObject({
+      path: '/colorStyles/0/name',
+    });
+    expect(failure(bound({ variables: { ...variables, items: [] } }))).toMatchObject({
+      path: '/variables/items',
+    });
     const missing = { ...variables.items[0]!, values: { m1: red } };
     expect(
       failure(bound({ variables: { ...variables, items: [missing, variables.items[1]] } })),
@@ -145,9 +145,10 @@ describe('V39-A01 the model', () => {
   });
 
   it('IDs are unique across the document, pages, nodes and tables; mode names a mode', () => {
-    expect(
-      failure(bound({ colorStyles: [{ id: 'n1', name: 'X', paint: red }] })),
-    ).toEqual({ code: 'document.duplicate-id', path: '/colorStyles/0/id' });
+    expect(failure(bound({ colorStyles: [{ id: 'n1', name: 'X', paint: red }] }))).toEqual({
+      code: 'document.duplicate-id',
+      path: '/colorStyles/0/id',
+    });
     expect(failure(bound({ variables: { ...variables, mode: 'm9' } }))).toEqual({
       code: 'document.dangling-reference',
       path: '/variables/mode',
@@ -185,9 +186,10 @@ describe('V39-A01 the model', () => {
       ...variables,
       items: [variables.items[0]!, { ...variables.items[1]!, values: { m1: 1, m2: 2 } }],
     };
-    expect(
-      failure({ ...with_('n1', { opacity: { variable: 'v2' } }), variables: wide }),
-    ).toEqual({ code: 'document.invalid-field', path: '/nodes/n1/bindings/opacity' });
+    expect(failure({ ...with_('n1', { opacity: { variable: 'v2' } }), variables: wide })).toEqual({
+      code: 'document.invalid-field',
+      path: '/nodes/n1/bindings/opacity',
+    });
     // The node rule: a key the type has no field for, an empty object, a bad reference shape.
     expect(failure(with_('n1', { text: { variable: 'v1' } }))).toEqual({
       code: 'document.invalid-field',

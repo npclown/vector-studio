@@ -489,7 +489,12 @@ export type VariableMode = Readonly<{ id: string; name: string }>;
 /** A colour or number variable with exactly one value per mode (V39-S2). */
 export type Variable =
   | Readonly<{ id: string; name: string; type: 'color'; values: Readonly<Record<string, Color>> }>
-  | Readonly<{ id: string; name: string; type: 'number'; values: Readonly<Record<string, number>> }>;
+  | Readonly<{
+      id: string;
+      name: string;
+      type: 'number';
+      values: Readonly<Record<string, number>>;
+    }>;
 
 /** The variables, their 1 to 16 modes and the active `mode` (V39-S2). */
 export type VariableSet = Readonly<{

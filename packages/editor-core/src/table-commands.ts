@@ -114,7 +114,7 @@ function withBinding(
 function setBindings(node: NodeV8, bindings: Bindings | undefined): NodeV8 {
   const { bindings: _old, ...rest } = node;
   void _old;
-  return (bindings === undefined ? rest : { ...rest, bindings }) as NodeV8;
+  return (bindings === undefined ? rest : { ...rest, bindings });
 }
 
 /**
@@ -138,9 +138,7 @@ function resync(draft: Draft, defaultStroke: DefaultStroke): void {
       const rewritten =
         value === undefined ? null : withBoundValue(next, key, value, defaultStroke);
       next =
-        rewritten === null
-          ? setBindings(next, withBinding(next.bindings, key, null))
-          : rewritten;
+        rewritten === null ? setBindings(next, withBinding(next.bindings, key, null)) : rewritten;
     }
     if (next !== node) draft.set(next);
   }
@@ -186,7 +184,8 @@ export function tableCommand(
   const tables = draft.tables;
   const styles = tables.colorStyles ?? [];
   const set = tables.variables;
-  const fresh = (): string | Failure => freshId(document, context.ids) ?? fail('editor.duplicate-id');
+  const fresh = (): string | Failure =>
+    freshId(document, context.ids) ?? fail('editor.duplicate-id');
   switch (command.type) {
     case 'createColorStyle': {
       if (!validName(command.name)) return fail('editor.invalid-command', '/name');
@@ -313,7 +312,8 @@ export function tableCommand(
       const id = fresh();
       if (typeof id !== 'string') return id;
       const items = set.items.map(
-        (item) => ({ ...item, values: { ...item.values, [id]: item.values[set.mode]! } }) as Variable,
+        (item) =>
+          ({ ...item, values: { ...item.values, [id]: item.values[set.mode]! } }) as Variable,
       );
       draft.setTables({
         ...tables,
