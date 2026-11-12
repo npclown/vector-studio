@@ -304,6 +304,12 @@ function readFields(
     // Below LAYOUT_GRIDS_SINCE a frame or symbol has no `layoutGrids` key (V38-S2).
     const gridsWritten =
       schemaVersion < LAYOUT_GRIDS_SINCE && isRecord(raw) && Object.hasOwn(raw, 'layoutGrids');
+    // Below schema v8 a node has no `autoLayout` or `layoutSizing` (V-34 contract, section 2):
+    // both are unknown keys there, and absent means no auto layout and fixed sizing.
+    const layoutWritten =
+      schemaVersion < 8 && isRecord(raw)
+        ? (['autoLayout', 'layoutSizing'] as const).find((field) => Object.hasOwn(raw, field))
+        : undefined;
     if (older) {
       const rest = { ...(candidate as Record<string, unknown>) };
       delete rest.textOverrides;
@@ -341,6 +347,9 @@ function readFields(
       if (index >= 0) {
         return fail('document.invalid-field', mapPath(name, key, `/effects/${index}/kind`));
       }
+    }
+    if (layoutWritten !== undefined) {
+      return fail('document.invalid-field', mapPath(name, key, `/${layoutWritten}`));
     }
     if (result.node.id !== key) return fail('document.invalid-field', mapPath(name, key, '/id'));
     read.push([key, result.node]);

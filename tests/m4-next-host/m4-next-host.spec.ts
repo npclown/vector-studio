@@ -722,16 +722,26 @@ test('M4-A12: every panel control once, one undo step each', async ({ page }) =>
   );
   await step('stroke off', () => checkbox.click(), stroke, null);
 
-  // A mixed selection (V35-C2): h1 (fill none) and h2 (radial) show "Mixed"; `+` replaces both
-  // nodes' fills by one default fill in one step.
+  // A mixed selection: h1 (no fill) and h2 (radial) each hold at most one fill, so the panel keeps
+  // M4's one Fill row (V35-C2) and shows the fill type as mixed; the edited value replaces both in
+  // one step.
   await run(page, { type: 'setSelection', ids: ['h1', 'h2'] });
-  await expect(panel.getByTestId('fill-mixed')).toBeVisible();
-  await step('mixed fill replace', () => button('Add fill').click(), fill, {
-    r: 0.8,
-    g: 0.8,
-    b: 0.8,
-    a: 1,
-  });
+  await expect(select('Fill type')).toHaveAttribute('data-mixed', 'true');
+  const h2Stops = (fill(FIXTURE.nodes.h2 as unknown as Loose) as Gradient).stops;
+  await step(
+    'mixed fill type',
+    () =>
+      select('Fill type')
+        .selectOption('linear')
+        .then(() => {}),
+    fill,
+    {
+      kind: 'linear',
+      transform: linear(0),
+      stops: h2Stops,
+      spread: 'pad',
+    },
+  );
   expect(fill(await node('h2'))).toEqual(fill(await node('h1')));
 
   // Every step undoes back to the fixture, byte for byte.

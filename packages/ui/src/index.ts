@@ -38,6 +38,8 @@ export type {
   BindingKey,
   BindingRef,
   Bindings,
+  AutoLayout,
+  AxisSizing,
   CameraApplyResult,
   CanvasSize,
   Color,
@@ -90,6 +92,7 @@ export type {
   FillRule,
   Frame,
   FrameNodeV6,
+  FrameLayout,
   FrameNodeV8,
   Gradient,
   GradientKind,
@@ -106,6 +109,7 @@ export type {
   JsonValue,
   KeyBinding,
   LayerBlurEffect,
+  LayoutSizing,
   LeafNodeV8,
   LineNodeV6,
   LineNodeV8,
@@ -122,6 +126,7 @@ export type {
   LeafBlend,
   NodeLock,
   NodeLayoutGrids,
+  NodeSizing,
   NodeProps,
   NodeV8,
   PagePoint,
@@ -175,6 +180,8 @@ export type {
   SceneGradientSpread,
   SceneGradientStop,
   SceneIdentity,
+  SceneImagePaint,
+  SceneImageWrap,
   SceneNodeBase,
   ScenePaint,
   ScenePathGeometry,
@@ -281,3 +288,6 @@ export { ExportPanel } from './export-panel.js';
 // V-33 (SVG import): the Import section, SVG files as editable nodes.
 export { ImportPanel } from './import-panel.js';
 export { importMessages } from './import-model.js';
+
+// V-39 (styles and variables): the Local styles panel.
+export { StylesPanel } from './styles-panel.js';

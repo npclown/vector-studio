@@ -1,5 +1,6 @@
 import type {
   Disposable,
+  ImageSourcePort,
   PixelSize,
   RendererAdapterInfo,
   ResourceDescriptor,
@@ -91,6 +92,12 @@ export interface WebGpuPrimitiveScenePort extends PrimitivePacketConsumer {
   readonly textPipelineAvailable?: boolean;
   /** E28-D1: true once an atlas page or the text buffer could not be created; text stays undrawn. */
   readonly textPageAllocationFailed?: boolean;
+  /** V-32 (V32-K3, K5): image notices since the last call; absent on scenes without paints. */
+  takeImageNotices?(limit?: number): readonly Readonly<{
+    key: string;
+    kind: 'unavailable' | 'resource-limit';
+    reason?: string;
+  }>[];
   /**
    * E41 contract, U5: true when this generation created the effect pipelines. Absent or false:
    * effect roots draw their content without effects (section 5.3).
@@ -178,6 +185,11 @@ export interface WebGpuPrimitiveSceneOptions {
    * them a draw with a gradient paint is not drawn (fail closed).
    */
   readonly paintPipeline?: boolean;
+  /**
+   * V-32 contract (V32-P1): the image source port the paint variants' texture store requests
+   * drawn image keys from. Without it every image paint binds the transparent texture.
+   */
+  readonly imageSource?: ImageSourcePort;
   /**
    * E25 contract, U3: creates the layer pipeline variants of every variant the generation has
    * (section 4, Layer pipeline variants) and the composite pipeline. It needs the adapter's

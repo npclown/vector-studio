@@ -203,7 +203,7 @@ describe('V-25 colour picking', () => {
     expect(gradient).not.toContain('Fill colour picker');
   });
 
-  it('shows Mixed, with no swatches, when the selected fills differ and one is a gradient', () => {
+  it('hides the swatches when a mixed selection includes a gradient', () => {
     const target = editor();
     const frame = { x: 0, y: 0, width: 10, height: 10 };
     const [a] = ok(target, { type: 'createRectangle', frame });
@@ -227,8 +227,7 @@ describe('V-25 colour picking', () => {
     const html = renderToString(
       createElement(EditorProvider, { editor: target }, createElement(PropertyPanel)),
     );
-    // V35-C2: fills that differ show "Mixed" (with `+` to replace them), not a paint editor.
-    expect(html).toContain('data-testid="fill-mixed"');
+    expect(html).toContain('Fill type');
     expect(html).not.toContain('Fill swatches');
   });
 });

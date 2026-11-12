@@ -7,7 +7,11 @@ import type {
   SceneGradient,
 } from '@vector-studio/contracts';
 import { DIAGNOSTIC_CODES } from '@vector-studio/contracts';
-import { PrimitiveRendererService, type GradientPaintRecord } from '@vector-studio/renderer-core';
+import {
+  PrimitiveRendererService,
+  type GradientPaintRecord,
+  type GradientRecord,
+} from '@vector-studio/renderer-core';
 import {
   WebGpuBackend,
   type WebGpuAdapterPort,
@@ -48,7 +52,7 @@ import {
 } from '../support/st-u6-stroke-harness.js';
 import { createCountingPort } from '../support/v3a-path-harness.js';
 
-// E23 contract (docs/plans/d9-e23-gradient-paint-contract.md), unit U3: the `+paint-v0`
+// E23 contract (docs/plans/d9-e23-gradient-paint-contract.md), unit U3: the `+paint-v1`
 // pipeline variants (section 4), their modules and keys beside the unchanged base and clip
 // modules (E23-A08 hash part), the paint bind group and change-only record writes (E23-A05),
 // draw encoding and batching (E23-A06), fail-closed gradient draws and `render.paint-unavailable`
@@ -132,16 +136,16 @@ describe('E23 U3 paint shader variants (section 4, Pipelines; E23-A08 hash part)
     const analytic = primitivePipelineKey('bgra8unorm', 4, true);
     expect(paintVariantKey(analytic)).toEqual({
       ...analytic,
-      shaderKey: 'p1-analytic-v1+paint-v0',
-      layoutKey: 'p1-packet-v1+e23-paint-v0',
+      shaderKey: 'p1-analytic-v1+paint-v1',
+      layoutKey: 'p1-packet-v1+e23-paint-v1',
     });
     expect(paintClipVariantKey(analytic)).toEqual({
       ...analytic,
-      shaderKey: 'p1-analytic-v1+paint-v0+clip-v0',
-      layoutKey: 'p1-packet-v1+e23-paint-v0+p4-clip-v0',
+      shaderKey: 'p1-analytic-v1+paint-v1+clip-v0',
+      layoutKey: 'p1-packet-v1+e23-paint-v1+p4-clip-v0',
     });
     expect(paintVariantKey(meshPipelineKey('bgra8unorm', 1, 'joint')).shaderKey).toBe(
-      'p3-mesh-joint-v0+paint-v0',
+      'p3-mesh-joint-v0+paint-v1',
     );
   });
 
@@ -206,7 +210,7 @@ describe('E23 U3 paint shader variants (section 4, Pipelines; E23-A08 hash part)
 });
 
 describe('E23 U3 record and index packing', () => {
-  const record: GradientPaintRecord = {
+  const record: GradientRecord = {
     kind: 'radial',
     spread: 'reflect',
     map: [0.5, 0, 0, 0.25, -1, 2],
@@ -231,7 +235,7 @@ describe('E23 U3 record and index packing', () => {
   });
 
   it('refuses malformed records', () => {
-    const bad: readonly Partial<Record<keyof GradientPaintRecord, unknown>>[] = [
+    const bad: readonly Partial<Record<keyof GradientRecord, unknown>>[] = [
       { kind: 'conic' },
       { spread: 'clamp' },
       { map: [1, 0, 0, 1, 0] },
@@ -281,26 +285,26 @@ describe('E23 U3 pipeline creation', () => {
     });
     // E39-U2: each mesh paint variant also has its two cover pipelines.
     expect(fixture.pipelineLabels.slice(30)).toEqual([
-      'vector-studio/p1-analytic-primitive-stencil-4x+paint-v0',
-      'vector-studio/p1-analytic-primitive-stencil-4x+paint-v0+clip-v0',
-      'vector-studio/p3-mesh-fill-4x+paint-v0',
-      'vector-studio/p3-mesh-joint-4x+paint-v0',
-      'vector-studio/p3-mesh-cover-nonzero-4x+paint-v0',
-      'vector-studio/p3-mesh-cover-evenodd-4x+paint-v0',
-      'vector-studio/p3-mesh-cover-joint-both-nonzero-4x+paint-v0',
-      'vector-studio/p3-mesh-cover-joint-both-evenodd-4x+paint-v0',
-      'vector-studio/p3-mesh-cover-joint-fill-nonzero-4x+paint-v0',
-      'vector-studio/p3-mesh-cover-joint-fill-evenodd-4x+paint-v0',
-      'vector-studio/p3-mesh-cover-joint-stroke-4x+paint-v0',
-      'vector-studio/p3-mesh-fill-4x+paint-v0+clip-v0',
-      'vector-studio/p3-mesh-joint-4x+paint-v0+clip-v0',
-      'vector-studio/p3-mesh-cover-nonzero-4x+paint-v0+clip-v0',
-      'vector-studio/p3-mesh-cover-evenodd-4x+paint-v0+clip-v0',
-      'vector-studio/p3-mesh-cover-joint-both-nonzero-4x+paint-v0+clip-v0',
-      'vector-studio/p3-mesh-cover-joint-both-evenodd-4x+paint-v0+clip-v0',
-      'vector-studio/p3-mesh-cover-joint-fill-nonzero-4x+paint-v0+clip-v0',
-      'vector-studio/p3-mesh-cover-joint-fill-evenodd-4x+paint-v0+clip-v0',
-      'vector-studio/p3-mesh-cover-joint-stroke-4x+paint-v0+clip-v0',
+      'vector-studio/p1-analytic-primitive-stencil-4x+paint-v1',
+      'vector-studio/p1-analytic-primitive-stencil-4x+paint-v1+clip-v0',
+      'vector-studio/p3-mesh-fill-4x+paint-v1',
+      'vector-studio/p3-mesh-joint-4x+paint-v1',
+      'vector-studio/p3-mesh-cover-nonzero-4x+paint-v1',
+      'vector-studio/p3-mesh-cover-evenodd-4x+paint-v1',
+      'vector-studio/p3-mesh-cover-joint-both-nonzero-4x+paint-v1',
+      'vector-studio/p3-mesh-cover-joint-both-evenodd-4x+paint-v1',
+      'vector-studio/p3-mesh-cover-joint-fill-nonzero-4x+paint-v1',
+      'vector-studio/p3-mesh-cover-joint-fill-evenodd-4x+paint-v1',
+      'vector-studio/p3-mesh-cover-joint-stroke-4x+paint-v1',
+      'vector-studio/p3-mesh-fill-4x+paint-v1+clip-v0',
+      'vector-studio/p3-mesh-joint-4x+paint-v1+clip-v0',
+      'vector-studio/p3-mesh-cover-nonzero-4x+paint-v1+clip-v0',
+      'vector-studio/p3-mesh-cover-evenodd-4x+paint-v1+clip-v0',
+      'vector-studio/p3-mesh-cover-joint-both-nonzero-4x+paint-v1+clip-v0',
+      'vector-studio/p3-mesh-cover-joint-both-evenodd-4x+paint-v1+clip-v0',
+      'vector-studio/p3-mesh-cover-joint-fill-nonzero-4x+paint-v1+clip-v0',
+      'vector-studio/p3-mesh-cover-joint-fill-evenodd-4x+paint-v1+clip-v0',
+      'vector-studio/p3-mesh-cover-joint-stroke-4x+paint-v1+clip-v0',
     ]);
     const groups = (label: string) =>
       (
@@ -308,12 +312,12 @@ describe('E23 U3 pipeline creation', () => {
           groups: { label: string }[];
         }
       ).groups.map((layout) => layout.label);
-    expect(groups('vector-studio/p1-analytic-primitive-stencil-4x+paint-v0')).toEqual([
+    expect(groups('vector-studio/p1-analytic-primitive-stencil-4x+paint-v1')).toEqual([
       'vector-studio/p1-primitive-packet-layout',
       'primitive/1/paint-empty-bind-group-layout',
       'vector-studio/e23-paint-layout',
     ]);
-    expect(groups('vector-studio/p3-mesh-joint-4x+paint-v0+clip-v0')).toEqual([
+    expect(groups('vector-studio/p3-mesh-joint-4x+paint-v1+clip-v0')).toEqual([
       'vector-studio/p3-mesh-packet-layout',
       'vector-studio/p4-clip-layout',
       'vector-studio/e23-paint-layout',
@@ -344,18 +348,18 @@ describe('E23 U3 pipeline creation', () => {
     });
     expect(analyticOnly.pipelineLabels).toEqual([
       'vector-studio/p1-analytic-primitive-4x',
-      'vector-studio/p1-analytic-primitive-4x+paint-v0',
+      'vector-studio/p1-analytic-primitive-4x+paint-v1',
     ]);
     only.creation.dispose();
   });
 
   const steps = [
-    ['analytic', 'primitive-stencil-4x+paint-v0'],
-    ['analytic clip', 'primitive-stencil-4x+paint-v0+clip'],
-    ['mesh', 'p3-mesh-fill-4x+paint-v0'],
-    ['mesh joint', 'p3-mesh-joint-4x+paint-v0'],
-    ['mesh clip', 'p3-mesh-fill-4x+paint-v0+clip'],
-    ['mesh joint clip', 'p3-mesh-joint-4x+paint-v0+clip'],
+    ['analytic', 'primitive-stencil-4x+paint-v1'],
+    ['analytic clip', 'primitive-stencil-4x+paint-v1+clip'],
+    ['mesh', 'p3-mesh-fill-4x+paint-v1'],
+    ['mesh joint', 'p3-mesh-joint-4x+paint-v1'],
+    ['mesh clip', 'p3-mesh-fill-4x+paint-v1+clip'],
+    ['mesh joint clip', 'p3-mesh-joint-4x+paint-v1+clip'],
   ] as const;
 
   it.each(steps)(
@@ -413,7 +417,7 @@ describe('E23 U3 draw encoding (E23-A06)', () => {
       ['setPipeline', p1],
       ['setBindGroup', 0],
       ['drawIndexed', 6, 1, 0, 0, 0],
-      ['setPipeline', `${p1}+paint-v0`],
+      ['setPipeline', `${p1}+paint-v1`],
       ['setBindGroup', 1, empty],
       ['setBindGroup', 2, primitiveGroup],
       ['drawIndexed', 6, 2, 0, 0, 1],
@@ -458,7 +462,7 @@ describe('E23 U3 draw encoding (E23-A06)', () => {
     submitted(scene.submitPrimitivePacket(packet));
     const calls = encoded(fixture.calls);
     const joint = calls.findIndex(
-      (call) => call[0] === 'setPipeline' && call[1] === 'vector-studio/p3-mesh-joint-4x+paint-v0',
+      (call) => call[0] === 'setPipeline' && call[1] === 'vector-studio/p3-mesh-joint-4x+paint-v1',
     );
     expect(joint).toBeGreaterThan(0);
     expect(calls.slice(joint + 1, joint + 4)).toEqual([
@@ -494,7 +498,7 @@ describe('E23 U3 draw encoding (E23-A06)', () => {
     expect(encoded(fixture.calls)).toEqual([
       ['setPipeline', p1],
       ['setBindGroup', 0],
-      ['setPipeline', `${p1}+paint-v0+clip-v0`],
+      ['setPipeline', `${p1}+paint-v1+clip-v0`],
       ['setBindGroup', 2, primitiveGroup],
       ['setBindGroup', 1, 'primitive/1/clip-states-1/bind-group', 1280],
       ['drawIndexed', 6, 1, 0, 0, 0],
@@ -503,7 +507,7 @@ describe('E23 U3 draw encoding (E23-A06)', () => {
   });
 
   it('E23-A07: without the paint variants gradient draws are not drawn and solid ones are', async () => {
-    const fixture = nativeFixture({ failPipeline: 'primitive-stencil-4x+paint-v0' });
+    const fixture = nativeFixture({ failPipeline: 'primitive-stencil-4x+paint-v1' });
     const { scene, creation, target } = await nativeScene(fixture, allOptions);
     const h = harness([
       box('u0', 0),
@@ -667,8 +671,8 @@ describe('E23 U3 index tables', () => {
       .map((call) => call[1]);
     expect(pipelines).toEqual([
       'vector-studio/p1-analytic-primitive-stencil-4x',
-      'vector-studio/p3-mesh-joint-4x+paint-v0',
-      'vector-studio/p3-mesh-fill-4x+paint-v0',
+      'vector-studio/p3-mesh-joint-4x+paint-v1',
+      'vector-studio/p3-mesh-fill-4x+paint-v1',
     ]);
     creation.dispose();
   });
@@ -804,7 +808,7 @@ describe('E23 U3 render.paint-unavailable and the service option (E23-A07)', () 
     ).toBe(true);
     expect(new PrimitiveRendererService(invalidate).requiresPaintPipeline).toBe(false);
     expect(() => new PrimitiveRendererService(invalidate, { paints: 'ramp' as 'solid' })).toThrow(
-      "paints must be 'solid' or 'gradient'.",
+      "paints must be 'solid', 'gradient' or 'image'.",
     );
   });
 

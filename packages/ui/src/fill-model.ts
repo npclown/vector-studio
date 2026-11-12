@@ -23,7 +23,9 @@ export const PANEL_DEFAULT_FILL: Paint = Object.freeze({ r: 0.8, g: 0.8, b: 0.8,
 
 /** The fills the selected nodes share, or that they differ. */
 export type FillView =
-  Readonly<{ state: 'list'; fills: readonly Fill[] }> | Readonly<{ state: 'mixed' }>;
+  | Readonly<{ state: 'list'; fills: readonly Fill[] }>
+  | Readonly<{ state: 'single' }>
+  | Readonly<{ state: 'mixed' }>;
 
 /** The selected nodes that take fills (shapes, paths, custom nodes, frames and symbols). */
 export const fillHolders = (
@@ -32,8 +34,10 @@ export const fillHolders = (
   nodes.filter((node): node is Extract<NodeV8, { fills: unknown }> => 'fills' in node);
 
 /**
- * The shared list when every holder has the same fills (compared as JSON), else mixed (C2: a
- * mixed selection shows "Mixed"; the index-based commands would otherwise edit different rows).
+ * The shared list when every holder has the same fills (compared as JSON); `single` when they
+ * differ but each holder has at most one fill, which edits as M4's one Fill row with mixed values
+ * (and V-39's `fill` binding); else mixed (C2: "Mixed", since the index-based commands would
+ * otherwise edit different rows).
  */
 export function fillView(
   holders: readonly Pick<NodeV8 & { fills: readonly Fill[] }, 'fills'>[],
@@ -42,7 +46,11 @@ export function fillView(
   if (first === undefined) return { state: 'list', fills: [] };
   const text = JSON.stringify(first.fills);
   for (const holder of holders) {
-    if (JSON.stringify(holder.fills) !== text) return { state: 'mixed' };
+    if (JSON.stringify(holder.fills) !== text) {
+      return holders.every((entry) => entry.fills.length <= 1)
+        ? { state: 'single' }
+        : { state: 'mixed' };
+    }
   }
   return { state: 'list', fills: first.fills };
 }

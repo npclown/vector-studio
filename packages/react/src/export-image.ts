@@ -244,6 +244,7 @@ class Painter {
       context.restore();
       return;
     }
+    if (paint.kind === 'image') return;
     const { surface, context: layer } = this.layer();
     setMatrix(layer, m);
     layer.fillStyle = '#000';

@@ -7,11 +7,21 @@ import {
   type BindingTables,
   type Bindings,
   type DocumentV8,
+  type Frame,
+  type LayoutFields,
   type NodeV8,
   type PageV8,
   type TextNodeV8,
 } from '@vector-studio/model';
+import {
+  autoLayoutOf,
+  layoutFrame,
+  layoutSizingOf,
+  NoTextLayoutError,
+  participantsOf,
+} from './auto-layout.js';
 import type { ExpansionCache } from './expansion.js';
+import { rotatedBounds } from './geometry.js';
 import { deepFreeze } from './freeze.js';
 import { refitGroup, type WritableTree } from './resize.js';
 import { refitFrame, type TextLayouter } from './text.js';
@@ -44,8 +54,25 @@ export function samePlacement(a: NodeV8, b: NodeV8): boolean {
   );
 }
 
+/** Whether two optional V-34 values are equal (JSON of plain records, keys in fixed order). */
+function sameValue(a: unknown, b: unknown): boolean {
+  return a === b || JSON.stringify(a) === JSON.stringify(b);
+}
+
+function sameChildren(a: NodeV8, b: NodeV8): boolean {
+  const x = (a as { children?: readonly string[] }).children ?? [];
+  const y = (b as { children?: readonly string[] }).children ?? [];
+  return x.length === y.length && x.every((id, i) => id === y[i]);
+}
+
 export class Draft implements WritableTree {
   readonly base: DocumentV8;
+  /** The draft resizes auto-layout frames without their constraints (V-34 section 4.3). */
+  readonly layoutAware = true;
+  /** Nodes a command targeted for placement (V-34 section 4.1): drop-order candidates. */
+  readonly placed = new Set<string>();
+  /** Nodes a command resized, with their frame before (V-34 section 4.2). */
+  readonly resized = new Map<string, Frame>();
   private readonly nodes: Map<string, NodeV8>;
   private pages: PageV8[];
   /** Nodes created, changed or removed. */
@@ -131,6 +158,16 @@ export class Draft implements WritableTree {
     }
   }
 
+  /** Records a command's placement target (V-34 section 4.1). */
+  markPlaced(id: string): void {
+    this.placed.add(id);
+  }
+
+  /** Records a node the command resized from `before` (V-34 section 4.2); the first wins. */
+  markResized(id: string, before: Frame): void {
+    if (!this.resized.has(id)) this.resized.set(id, before);
+  }
+
   /** Marks a text node for the refit step of `finish` (M6a contract, section 6.3). */
   markTextRefit(id: string): void {
     this.textRefits.add(id);
@@ -179,13 +216,23 @@ export class Draft implements WritableTree {
       placementBase?: DocumentV8;
       expansions?: ExpansionCache;
       layout?: TextLayouter | undefined;
+      /** A gesture's accumulated placement targets and resizes (V-34 section 4.1). */
+      placed?: Iterable<string> | undefined;
+      resized?: ReadonlyMap<string, Frame> | undefined;
     }> = { refit: true },
   ): DocumentV8 | Failure {
     this.expansions = options.expansions;
+    for (const id of options.placed ?? []) this.placed.add(id);
+    for (const [id, frame] of options.resized ?? []) this.markResized(id, frame);
     this.deleteEmptyGroups();
     const text = this.refitText(options.layout);
     if (text !== null) return text;
-    if (options.refit) this.refit(options.placementBase ?? this.base);
+    try {
+      this.refit(options.placementBase ?? this.base, options.refit, options.layout);
+    } catch (error) {
+      if (error instanceof NoTextLayoutError) return fail('editor.no-text-layout');
+      throw error;
+    }
     this.pruneOverrides();
     this.detachBindings();
     for (const id of this.unchecked) {
@@ -322,20 +369,87 @@ export class Draft implements WritableTree {
     }
   }
 
-  private refit(placementBase: DocumentV8): void {
+  /**
+   * The group refit (M1 contract, section 4.2) and the V-34 layout pass (section 4.3) over one
+   * pending set, deepest node first. Groups refit only when `groups` holds (not on gesture
+   * updates); auto-layout frames lay out either way, with section 4.1's drop order, or with its
+   * float rule on gesture updates.
+   */
+  private refit(
+    placementBase: DocumentV8,
+    groups: boolean,
+    measure: TextLayouter | undefined,
+  ): void {
+    const before = (id: string) =>
+      Object.hasOwn(placementBase.nodes, id) ? placementBase.nodes[id] : undefined;
+    this.applySizingRules();
     const pending = new Set<string>();
+    const done = new Set<string>();
     const consider = (owner: string | undefined) => {
-      if (owner !== undefined && isGroup(this.nodes.get(owner))) pending.add(owner);
+      if (owner === undefined || done.has(owner)) return;
+      const node = this.nodes.get(owner);
+      if ((groups && isGroup(node)) || autoLayoutOf(node) !== null) pending.add(owner);
     };
+    const seed = (owner: string | undefined) => {
+      if (owner !== undefined && autoLayoutOf(this.nodes.get(owner)) !== null) pending.add(owner);
+    };
+    // Drop-order candidates per auto-layout frame (section 4.1), and the floating ones.
+    const candidates = new Map<string, string[]>();
+    const floating = new Set<string>();
     for (const id of this.touched) {
-      const before = Object.hasOwn(placementBase.nodes, id) ? placementBase.nodes[id] : undefined;
-      const after = this.nodes.get(id);
-      if (before !== undefined && after !== undefined && samePlacement(before, after)) continue;
-      consider(before?.parent);
-      consider(after?.parent);
+      const old = before(id);
+      const now = this.nodes.get(id);
+      if (now !== undefined && autoLayoutOf(now) !== null) {
+        if (
+          old === undefined ||
+          autoLayoutOf(old) === null ||
+          !sameValue((old as LayoutFields).autoLayout, (now as LayoutFields).autoLayout) ||
+          !sameValue(layoutSizingOf(old), layoutSizingOf(now)) ||
+          old.frame.width !== now.frame.width ||
+          old.frame.height !== now.frame.height ||
+          !sameChildren(old, now)
+        ) {
+          seed(id);
+        }
+      }
+      if (groups && (old === undefined || now === undefined || !samePlacement(old, now))) {
+        consider(old?.parent);
+        consider(now?.parent);
+      }
+      if (now !== undefined && autoLayoutOf(this.nodes.get(now.parent)) !== null) {
+        const owner = now.parent;
+        const entered = old === undefined || old.parent !== owner;
+        const translated =
+          !entered &&
+          this.placed.has(id) &&
+          old.rotation === now.rotation &&
+          old.frame.width === now.frame.width &&
+          old.frame.height === now.frame.height &&
+          (old.frame.x !== now.frame.x || old.frame.y !== now.frame.y);
+        if (translated && !groups) {
+          floating.add(id);
+        } else {
+          if (entered || translated) {
+            const list = candidates.get(owner) ?? [];
+            list.push(id);
+            candidates.set(owner, list);
+          }
+          if (
+            entered ||
+            !samePlacement(old, now) ||
+            old.visible !== now.visible ||
+            !sameValue(layoutSizingOf(old), layoutSizingOf(now))
+          ) {
+            seed(owner);
+          }
+        }
+      }
+      if (old !== undefined && old.parent !== now?.parent) seed(old.parent);
     }
+    for (const [owner, ids] of candidates) this.dropOrder(owner, ids);
+    const env = { tree: this, measure, floating };
     while (pending.size > 0) {
-      // Innermost first: the deepest pending group refits before any of its ancestors.
+      // Innermost first: the deepest pending node before any of its ancestors.
       let deepest = '';
       let depth = -1;
       for (const id of pending) {
@@ -346,7 +460,76 @@ export class Draft implements WritableTree {
         }
       }
       pending.delete(deepest);
-      if (refitGroup(this, deepest)) consider(this.nodes.get(deepest)?.parent);
+      done.add(deepest);
+      const node = this.nodes.get(deepest);
+      const changed =
+        autoLayoutOf(node) !== null
+          ? layoutFrame(env, deepest)
+          : groups && refitGroup(this, deepest);
+      if (changed) consider(this.nodes.get(deepest)?.parent);
     }
   }
+
+  /**
+   * Section 4.2: a hug axis of a resized auto-layout frame, and a fill axis of a resized child
+   * of one, whose size changed become fixed.
+   */
+  private applySizingRules(): void {
+    for (const [id, before] of this.resized) {
+      const node = this.nodes.get(id);
+      if (node === undefined) continue;
+      const sizing = layoutSizingOf(node);
+      const own = autoLayoutOf(node) !== null;
+      const inLayout = autoLayoutOf(this.nodes.get(node.parent)) !== null;
+      const next = { ...sizing };
+      for (const axis of ['horizontal', 'vertical'] as const) {
+        const size = axis === 'horizontal' ? node.frame.width : node.frame.height;
+        const old = axis === 'horizontal' ? before.width : before.height;
+        if (size === old) continue;
+        if ((own && sizing[axis] === 'hug') || (inLayout && sizing[axis] === 'fill')) {
+          next[axis] = 'fixed';
+        }
+      }
+      if (next.horizontal === sizing.horizontal && next.vertical === sizing.vertical) continue;
+      this.set(withSizing(node, next));
+    }
+  }
+
+  /** Section 4.1: each candidate moves before the first participant whose centre is past its own. */
+  private dropOrder(owner: string, ids: readonly string[]): void {
+    const frame = this.nodes.get(owner)!;
+    const layout = autoLayoutOf(frame)!;
+    const centre = (id: string) => {
+      const box = rotatedBounds(this.nodes.get(id)!);
+      return layout.direction === 'horizontal' ? box.x + box.width / 2 : box.y + box.height / 2;
+    };
+    const visible = new Set(
+      participantsOf({ tree: this, measure: undefined }, frame).map((n) => n.id),
+    );
+    const moving = (frame as { children: readonly string[] }).children.filter(
+      (id) => ids.includes(id) && visible.has(id),
+    );
+    if (moving.length === 0) return;
+    const list = childrenOf(this, owner).filter((id) => !moving.includes(id));
+    for (const id of moving) {
+      const own = centre(id);
+      const index = list.findIndex(
+        (other) => visible.has(other) && !moving.includes(other) && centre(other) > own,
+      );
+      if (index < 0) list.push(id);
+      else list.splice(index, 0, id);
+    }
+    this.setChildren(owner, list);
+  }
+}
+
+/** `node` with `sizing`, the field left out when fixed on both axes (V34-S2). */
+export function withSizing(node: NodeV8, sizing: LayoutFields['layoutSizing']): NodeV8 {
+  const copy = { ...node } as NodeV8 & LayoutFields & { layoutSizing?: unknown };
+  if (sizing === undefined || (sizing.horizontal === 'fixed' && sizing.vertical === 'fixed')) {
+    delete copy.layoutSizing;
+  } else {
+    copy.layoutSizing = sizing;
+  }
+  return copy;
 }

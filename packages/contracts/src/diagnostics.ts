@@ -77,6 +77,17 @@ export const DIAGNOSTIC_CODES = Object.freeze({
    * by unit U1, reported from unit U2.
    */
   GLYPH_RASTER_FAILURE: 'render.glyph-raster-failure',
+  /**
+   * An image paint's image could not be obtained from the image source port (failed or threw),
+   * so it contributes nothing; once per key per renderer generation (V-32 contract, V32-K3,
+   * docs/plans/viz-v32-image-contract.md).
+   */
+  IMAGE_UNAVAILABLE: 'render.image-unavailable',
+  /**
+   * An image's texture does not fit the image texture budget, so its paint contributes nothing
+   * while it stays refused; once per key (V32-K5).
+   */
+  IMAGE_RESOURCE_LIMIT: 'render.image-resource-limit',
   DISPOSAL_COMPLETED: 'disposal.completed',
   DISPOSAL_FAILED: 'disposal.failed',
 } as const);

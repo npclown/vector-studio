@@ -184,6 +184,7 @@ const ADDED: Readonly<Record<keyof typeof AT_17A2B0A, readonly string[]>> = {
     'PropertyPanel',
     'PropertySections',
     'ResolvedPanel',
+    'StylesPanel',
     'ToolbarPrimaryRow',
     'ToolbarRowProps',
     'ToolbarSecondaryRow',
