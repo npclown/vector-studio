@@ -17,9 +17,11 @@ export const BUILT_IN_TOOLS: readonly ToolName[] = Object.freeze([
   'select',
   'rectangle',
   'ellipse',
+  'polygon',
   'line',
   'frame',
   'path',
+  'pencil',
   'text',
   'eyedropper',
 ]);

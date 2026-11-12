@@ -107,6 +107,9 @@ describe('V39-A04 sampleColor (E6)', () => {
     // Opacity is not applied (V39-Q5).
     ok(target, { type: 'setStyle', ids: [top], style: { opacity: 0.5 } });
     expect(sample(target, { x: 75, y: 75 })).toEqual(green);
+    // Locked nodes are sampled too (V39-E6), though the canvas cannot pick them (V31-E1).
+    ok(target, { type: 'setLayerState', ids: [top], locked: true });
+    expect(sample(target, { x: 75, y: 75 })).toEqual(green);
   });
 
   it('evaluates linear gradients with each spread, interpolating premultiplied', () => {

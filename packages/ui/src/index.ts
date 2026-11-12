@@ -15,6 +15,9 @@ export {
   EditorProvider,
   exportPng,
   extensionCommand,
+  importSvgFiles,
+  isSvgFile,
+  SVG_FILE_OFFSET,
   useActivePage,
   useEditor,
   useEditorCommands,
@@ -47,6 +50,13 @@ export type {
   Dash,
   DropShadowEffect,
   Effect,
+  BandLayoutGrid,
+  Guide,
+  LayoutGrid,
+  LayoutGridBand,
+  LayoutGridGeometry,
+  LayoutGridLine,
+  UniformLayoutGrid,
   DiagnosticEvent,
   DistributeAxis,
   DocumentChangeCause,
@@ -83,6 +93,7 @@ export type {
   GroupNodeV8,
   HistoryState,
   IdSource,
+  ImportSvgFilesOptions,
   InputEvent,
   InstanceNodeV5,
   InstanceNodeV8,
@@ -96,6 +107,8 @@ export type {
   Modifiers,
   NodeBaseV2,
   NodeEffects,
+  NodeLock,
+  NodeLayoutGrids,
   NodeProps,
   NodeV8,
   PagePoint,
@@ -171,6 +184,12 @@ export type {
   StrokeJoin,
   StrokePatch,
   StyleProps,
+  SvgFileImport,
+  SvgFileLike,
+  SvgImport,
+  SvgImportOptions,
+  SvgTextMeasure,
+  SvgTextRun,
   SymbolNodeV6,
   SymbolNodeV8,
   TextAffinity,
@@ -241,3 +260,7 @@ export {
 
 // V-30 (export): the Export section, PNG at a scale or SVG, of the selection or the page.
 export { ExportPanel } from './export-panel.js';
+
+// V-33 (SVG import): the Import section, SVG files as editable nodes.
+export { ImportPanel } from './import-panel.js';
+export { importMessages } from './import-model.js';

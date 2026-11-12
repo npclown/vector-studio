@@ -407,6 +407,41 @@ export type CustomNodeV7 = CustomNodeV6 & NodeEffects;
 export type TextNodeV7 = TextNode & NodeEffects;
 export type InstanceNodeV7 = InstanceNodeV5 & NodeEffects;
 export type GroupNodeV7 = GroupNode & NodeEffects;
+/**
+ * A page guide (V-38 contract, V38-S1): `axis: 'x'` is a vertical line at page x = `value`,
+ * `'y'` a horizontal line at page y = `value`.
+ */
+export type Guide = Readonly<{ axis: 'x' | 'y'; value: number }>;
+
+/** A uniform layout grid (V38-S2): lines every `size` page units from the frame's top-left. */
+export type UniformLayoutGrid = Readonly<{
+  type: 'grid';
+  size: number;
+  color: Color;
+  visible: boolean;
+}>;
+
+/**
+ * Columns or rows (V38-S2): `count` bands of `size` (ignored by `stretch`) with `gutter` between
+ * them, `offset` from the aligned side (the margin for `stretch`, ignored by `center`).
+ */
+export type BandLayoutGrid = Readonly<{
+  type: 'columns' | 'rows';
+  count: number;
+  align: 'stretch' | 'start' | 'center' | 'end';
+  size: number;
+  gutter: number;
+  offset: number;
+  color: Color;
+  visible: boolean;
+}>;
+
+/** A frame's or symbol's layout grid (V38-S2). */
+export type LayoutGrid = UniformLayoutGrid | BandLayoutGrid;
+
+/** The optional field V-38 adds to a frame or symbol (V38-S2); absent means none. */
+export type NodeLayoutGrids = Readonly<{ layoutGrids?: readonly LayoutGrid[] }>;
+
 export type FrameNodeV7 = FrameNodeV6 & NodeEffects;
 export type SymbolNodeV7 = SymbolNodeV6 & NodeEffects;
 
@@ -436,16 +471,22 @@ export type DocumentV7 = Readonly<{
 // so the ten items can each add their fields to one unreleased version instead of bumping it in
 // turn. The v7 to v8 migration changes only `schemaVersion` until an item adds a field.
 
-export type RectangleNodeV8 = RectangleNodeV6 & NodeEffects;
-export type EllipseNodeV8 = EllipseNodeV6 & NodeEffects;
-export type LineNodeV8 = LineNodeV6 & NodeEffects;
-export type PathNodeV8 = PathNodeV6 & NodeEffects;
-export type CustomNodeV8 = CustomNodeV6 & NodeEffects;
-export type TextNodeV8 = TextNode & NodeEffects;
-export type InstanceNodeV8 = InstanceNodeV5 & NodeEffects;
-export type GroupNodeV8 = GroupNode & NodeEffects;
-export type FrameNodeV8 = FrameNodeV6 & NodeEffects;
-export type SymbolNodeV8 = SymbolNodeV6 & NodeEffects;
+/**
+ * V-31 contract, V31-S1: the optional lock. Absent or `false` is unlocked, and a validated node
+ * has the key only when locked; locked nodes cannot be picked or transformed on the canvas.
+ */
+export type NodeLock = Readonly<{ locked?: boolean }>;
+
+export type RectangleNodeV8 = RectangleNodeV6 & NodeEffects & NodeLock;
+export type EllipseNodeV8 = EllipseNodeV6 & NodeEffects & NodeLock;
+export type LineNodeV8 = LineNodeV6 & NodeEffects & NodeLock;
+export type PathNodeV8 = PathNodeV6 & NodeEffects & NodeLock;
+export type CustomNodeV8 = CustomNodeV6 & NodeEffects & NodeLock;
+export type TextNodeV8 = TextNode & NodeEffects & NodeLock;
+export type InstanceNodeV8 = InstanceNodeV5 & NodeEffects & NodeLock;
+export type GroupNodeV8 = GroupNode & NodeEffects & NodeLock;
+export type FrameNodeV8 = FrameNodeV6 & NodeEffects & NodeLock & NodeLayoutGrids;
+export type SymbolNodeV8 = SymbolNodeV6 & NodeEffects & NodeLock & NodeLayoutGrids;
 
 export type LeafNodeV8 =
   | RectangleNodeV8
@@ -459,7 +500,8 @@ export type ContainerNodeV8 = GroupNodeV8 | FrameNodeV8 | SymbolNodeV8;
 export type NodeV8 = LeafNodeV8 | ContainerNodeV8;
 export type NodeTypeV8 = NodeV8['type'];
 
-export type PageV8 = PageV6;
+/** A page with its optional guides (V38-S1); absent means none. */
+export type PageV8 = PageV6 & Readonly<{ guides?: readonly Guide[] }>;
 
 export type DocumentV8 = Readonly<{
   schemaVersion: 8;

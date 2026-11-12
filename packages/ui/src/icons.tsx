@@ -17,6 +17,14 @@ const PATHS: Readonly<Record<string, ReactNode>> = {
     </>
   ),
   text: <path d="M3 3.5 H13 M8 3.5 V13.5 M6 13.5 H10" />,
+  // V-40: a freehand squiggle with a pencil tip, and a pentagon.
+  pencil: (
+    <>
+      <path d="M1.5 12.5 C3 9.5 5 14 7 11 S9.5 8 10.5 9" />
+      <path d="M9.5 6.5 L13 3 L14.5 4.5 L11 8 L9 8.5 Z" />
+    </>
+  ),
+  polygon: <path d="M8 2 L14 6.5 L11.7 13.5 H4.3 L2 6.5 Z" />,
   // V-39: a pipette, tip at the lower left.
   eyedropper: (
     <path d="M2.5 13.5 L3.5 12.5 L9 7 M7 5 L11 9 M9 3 L13 7 M10.2 1.8 A2 2 0 0 1 14.2 5.8 L12.5 7.5 L8.5 3.5 Z M9 7 L3.5 12.5" />
@@ -78,6 +86,28 @@ const PATHS: Readonly<Record<string, ReactNode>> = {
       fillOpacity={0.35}
       fillRule="evenodd"
     />
+  ),
+  // V-31: the layer row's visibility and lock buttons.
+  eye: (
+    <>
+      <path d="M1.5 8 C3.5 4.5 5.5 3.5 8 3.5 C10.5 3.5 12.5 4.5 14.5 8 C12.5 11.5 10.5 12.5 8 12.5 C5.5 12.5 3.5 11.5 1.5 8 Z" />
+      <circle cx="8" cy="8" r="2" />
+    </>
+  ),
+  'eye-off': (
+    <path d="M2 10 C4 11.7 6 12.5 8 12.5 C10 12.5 12 11.7 14 10 M4 11.5 L3 13 M8 12.5 V14.5 M12 11.5 L13 13" />
+  ),
+  lock: (
+    <>
+      <rect x="3.5" y="7" width="9" height="7" rx="1" />
+      <path d="M5.5 7 V5 A2.5 2.5 0 0 1 10.5 5 V7" />
+    </>
+  ),
+  unlock: (
+    <>
+      <rect x="3.5" y="7" width="9" height="7" rx="1" />
+      <path d="M5.5 7 V5 A2.5 2.5 0 0 1 10.5 4" />
+    </>
   ),
 };
 
