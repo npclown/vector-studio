@@ -163,6 +163,7 @@ function jpeg(bytes: Uint8Array): ImageHeader | null {
   if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) return null;
   let at = 2;
   let orientation = 1;
+  let exifSeen = false;
   let size: { width: number; height: number } | null = null;
   while (at + 4 <= bytes.length) {
     if (bytes[at] !== 0xff) {
@@ -189,7 +190,9 @@ function jpeg(bytes: Uint8Array): ImageHeader | null {
     if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
       if (body + 5 > bytes.length) return null;
       size = { height: u16be(bytes, body + 1), width: u16be(bytes, body + 3) };
-    } else if (marker === 0xe1) {
+    } else if (marker === 0xe1 && !exifSeen && ascii(bytes, body, 'Exif\0\0')) {
+      // Only the first Exif APP1 counts, as in Chromium; an XMP APP1 after it does not reset it.
+      exifSeen = true;
       orientation = exifOrientation(bytes, body, Math.min(end, bytes.length));
     }
     at = end;

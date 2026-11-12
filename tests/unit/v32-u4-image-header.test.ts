@@ -115,7 +115,14 @@ function exif(orientation: number, little: boolean): number[] {
 function jpegBytes(
   width: number,
   height: number,
-  options: { orientation?: number; little?: boolean; marker?: number; exifAfterSof?: boolean } = {},
+  options: {
+    orientation?: number;
+    little?: boolean;
+    marker?: number;
+    exifAfterSof?: boolean;
+    /** Segments written right after the Exif APP1. */
+    after?: readonly number[];
+  } = {},
 ): Uint8Array {
   const sof = [
     0xff,
@@ -145,6 +152,7 @@ function jpegBytes(
     0xd8,
     ...app0,
     ...(options.exifAfterSof ? [] : orientation),
+    ...(options.after ?? []),
     ...dht,
     ...sof,
     ...(options.exifAfterSof ? orientation : []),
@@ -273,6 +281,23 @@ describe('V32-E1 header parser', () => {
       width: 300,
       height: 200,
     });
+  });
+
+  it('takes the orientation of the first Exif APP1 only, as Chromium does', () => {
+    const xmpBody = [...text('http://ns.adobe.com/xap/1.0/'), 0, ...text('<x:xmpmeta/>')];
+    const xmp = [0xff, 0xe1, ...be16(xmpBody.length + 2), ...xmpBody];
+    // Exif then XMP (Adobe-processed files, Ultra HDR photos): the XMP does not reset it.
+    expect(readImageHeader(jpegBytes(300, 200, { orientation: 6, after: xmp }))).toMatchObject({
+      width: 200,
+      height: 300,
+    });
+    // Two Exif blocks: the first wins.
+    expect(
+      readImageHeader(jpegBytes(300, 200, { orientation: 6, after: exif(1, false) })),
+    ).toMatchObject({ width: 200, height: 300 });
+    expect(
+      readImageHeader(jpegBytes(300, 200, { orientation: 1, after: exif(6, false) })),
+    ).toMatchObject({ width: 300, height: 200 });
   });
 
   it('rejects a JPEG without a frame header', () => {
