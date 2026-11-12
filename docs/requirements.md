@@ -82,7 +82,9 @@ A mask group uses its first path as the mask for its remaining children.
 - Instances have independent placement and size.
 - Instance text content may differ from the source.
 - Instances can be detached.
-- Nested instances, variants, and general property overrides are deferred.
+- Symbols can be combined into a component set of variants named by property values; an instance can switch its variant (V-37, 2026-11-12).
+- Instances can override the fill, stroke, opacity, visibility and effects of any layer of their content (V-37, 2026-11-12).
+- Nested instances, component properties, and overrides of layer geometry or text style are deferred.
 
 ## Initial appearance model
 
@@ -95,8 +97,9 @@ A mask group uses its first path as the mask for its remaining children.
 - Independent rectangle corner radii
 
 - Drop shadows and layer blur ([E41](plans/d9-e41-boolean-effects-contract.md))
+- Inner shadows and background blur ([V-36](plans/viz-v36-inner-shadow-background-blur-contract.md)); background blur shows only on layers outside groups with opacity or effects
 
-Multiple fills, inner shadows, background blur, and blend modes are deferred.
+Multiple fills and blend modes are deferred.
 
 ## Editing behavior
 

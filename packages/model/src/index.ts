@@ -16,6 +16,7 @@ export {
   migrateV4toV5,
   migrateV5toV6,
   migrateV6toV7,
+  migrateV7toV8,
   normalizeRotation,
   parseDocument,
   validateAnyDocument,
@@ -33,6 +34,7 @@ export {
   type ParseResultV4,
   type ParseResultV5,
   type ParseResultV6,
+  type ParseResultV7,
   type ValidateNodeOptions,
 } from './parse.js';
 export {

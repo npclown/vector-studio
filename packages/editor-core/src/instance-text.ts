@@ -1,7 +1,7 @@
 import {
   validateNode,
-  type DocumentV7,
-  type InstanceNodeV7,
+  type DocumentV8,
+  type InstanceNodeV8,
   type TextOverride,
 } from '@vector-studio/model';
 import { Draft, fail, type Failure } from './draft.js';
@@ -16,7 +16,7 @@ import type { DocumentCommand } from './types.js';
 // An override holds runs only, in the source's space; the expansion applies it (`expansion.ts`)
 // and `Draft.finish` drops keys left without their text node. No port is needed.
 
-type Finish = (draft: Draft) => DocumentV7 | Failure;
+type Finish = (draft: Draft) => DocumentV8 | Failure;
 type InstanceTextCommand<T extends 'setInstanceText' | 'clearInstanceText'> = Extract<
   DocumentCommand,
   { type: T }
@@ -27,7 +27,7 @@ type InstanceTextCommand<T extends 'setInstanceText' | 'clearInstanceText'> = Ex
  * its text node; a key without a copy is dropped (none in a valid document).
  */
 export function remappedOverrides(
-  overrides: InstanceNodeV7['textOverrides'],
+  overrides: InstanceNodeV8['textOverrides'],
   copyOf: ReadonlyMap<string, string>,
 ): Record<string, TextOverride> {
   const entries: [string, TextOverride][] = [];
@@ -42,7 +42,7 @@ export function remappedOverrides(
 
 /** The overrides with `key` set to `value` (or removed when null), keys in code unit order. */
 function withKey(
-  overrides: InstanceNodeV7['textOverrides'],
+  overrides: InstanceNodeV8['textOverrides'],
   key: string,
   value: TextOverride | null,
 ): Record<string, TextOverride> {
@@ -55,7 +55,7 @@ function withKey(
 }
 
 /** `id` names an instance: `editor.unknown-node`, then `editor.not-an-instance` (no path). */
-function instanceOf(document: DocumentV7, id: string): InstanceNodeV7 | Failure {
+function instanceOf(document: DocumentV8, id: string): InstanceNodeV8 | Failure {
   const node = nodeOf(document, id);
   if (node === undefined) return fail('editor.unknown-node');
   if (node.type !== 'instance') return fail('editor.not-an-instance');
@@ -63,7 +63,7 @@ function instanceOf(document: DocumentV7, id: string): InstanceNodeV7 | Failure 
 }
 
 /** Whether `id` is a text node of the subtree of the instance's source. */
-function isSourceText(document: DocumentV7, instance: InstanceNodeV7, id: string): boolean {
+function isSourceText(document: DocumentV8, instance: InstanceNodeV8, id: string): boolean {
   const node = nodeOf(document, id);
   if (node?.type !== 'text') return false;
   return ancestors(documentTree(document), id).some((up) => up.id === instance.symbol);
@@ -75,8 +75,8 @@ function isFailure(value: object): value is Failure {
 
 /** The command's document with `instance` replaced, as one step; unchanged gives no step. */
 function written(
-  document: DocumentV7,
-  instance: InstanceNodeV7,
+  document: DocumentV8,
+  instance: InstanceNodeV8,
   textOverrides: Record<string, TextOverride>,
   finish: Finish,
 ): EditResult {
@@ -102,7 +102,7 @@ function written(
  * a command that changes nothing records no step.
  */
 export function setInstanceText(
-  document: DocumentV7,
+  document: DocumentV8,
   command: InstanceTextCommand<'setInstanceText'>,
   _context: EditContext,
   finish: Finish,
@@ -120,7 +120,7 @@ export function setInstanceText(
     const path = checked.path.startsWith(prefix) ? checked.path.slice(prefix.length) : '/runs';
     return fail(checked.code, path);
   }
-  const valid = (checked.node as InstanceNodeV7).textOverrides[node]!;
+  const valid = (checked.node as InstanceNodeV8).textOverrides[node]!;
   const small = valid.runs.findIndex((run) => run.size < MIN_AUTHORED_TEXT_SIZE);
   if (small >= 0) return fail('editor.invalid-command', `/runs/${small}/size`);
   const source = document.nodes[node]!;
@@ -146,7 +146,7 @@ export function setInstanceText(
  * subtree (`editor.not-a-text-node` at `/node`). A command that changes nothing records no step.
  */
 export function clearInstanceText(
-  document: DocumentV7,
+  document: DocumentV8,
   command: InstanceTextCommand<'clearInstanceText'>,
   _context: EditContext,
   finish: Finish,

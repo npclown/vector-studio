@@ -12,7 +12,7 @@ import {
   scanJson,
   serializeDocument,
   serializeEnvelope,
-  type DocumentV7,
+  type DocumentV8,
   type EnvelopeResult,
   type PersistenceEnvelope,
 } from '@vector-studio/model';
@@ -55,7 +55,7 @@ async function readV7(name: string): Promise<string> {
   return v7Text(await read(m4, name));
 }
 
-function parsedDocument(text: string): DocumentV7 {
+function parsedDocument(text: string): DocumentV8 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -136,7 +136,7 @@ describe('M5-A01 envelope text and round trip', () => {
     });
     expect(
       text.startsWith(
-        '{\n  "envelopeVersion": 1,\n  "lastOpenPageId": "page-1",\n  "document": {\n    "schemaVersion": 7,\n',
+        '{\n  "envelopeVersion": 1,\n  "lastOpenPageId": "page-1",\n  "document": {\n    "schemaVersion": 8,\n',
       ),
     ).toBe(true);
     expect(Object.keys(JSON.parse(text) as object)).toEqual([
@@ -175,7 +175,7 @@ describe('M5-A01 envelope text and round trip', () => {
         (JSON.parse(v1) as { document: { schemaVersion: number } }).document.schemaVersion,
       ).toBe(1);
       const envelope = parsed(v1);
-      expect(envelope.document.schemaVersion).toBe(7);
+      expect(envelope.document.schemaVersion).toBe(8);
       expect(serializeEnvelope(envelope)).toBe(await readV7(`${name}.envelope.v6`));
       expect(serializeDocument(envelope.document)).toBe(await readV7(`${name}.v6`));
     },
@@ -448,8 +448,8 @@ describe('M5-A03 model stays unchanged and import-free', () => {
     'm1-model/malformed/unsupported-version.json':
       // Moved from schemaVersion 3 to 4 by M7-U1 (M7 contract, section 2.1), to 5 by M6a-U1 (M6a
       // contract, section 2.1), to 6 by M7-U7 (M6a contract, section 9), to 7 by M4-U1 (M4
-      // contract, section 2.1), to 8 by E41-U4 (E41 contract, section 3).
-      '862dcf69350a07f8c841f6940d60aff45081270f36876ceb79db37bb9602b36b',
+      // contract, section 2.1), to 8 by E41-U4 (E41 contract, section 3), to 9 by the v8 scaffold.
+      '397677ce985305094f03dc74249cfa3def99ee7613fc2d18097cc2ebbcf673de',
     'm1-model/shapes.v2.json': '7d03fa27cb8ce892150eea79aba402a596a9dfd0f26a8115efc9c5fd90226948',
     'p5-model/empty.json': '5935aafb5604fd7847dfe5c1a6e843f021aaa523bfb26ff50fdf3c4d13b5dc7f',
     'p5-model/ext-star.json': '942ad8c439902aaf1c30bce6b0e8cf0690eeff2613c899372ab250a9f43b9246',
@@ -468,8 +468,8 @@ describe('M5-A03 model stays unchanged and import-free', () => {
     'p5-model/malformed/unsupported-version.json':
       // Moved from schemaVersion 3 to 4 by M7-U1 (M7 contract, section 2.1), to 5 by M6a-U1 (M6a
       // contract, section 2.1), to 6 by M7-U7 (M6a contract, section 9), to 7 by M4-U1 (M4
-      // contract, section 2.1), to 8 by E41-U4 (E41 contract, section 3).
-      'b3be0411d6b83c74558e080ff628ae326680091f288b0584163da39075bf9b08',
+      // contract, section 2.1), to 8 by E41-U4 (E41 contract, section 3), to 9 by the v8 scaffold.
+      '87770ce1e0aba65fca662843ab616c53e95e9d952eed9de164892884ebcc5b61',
     'p5-model/shapes.json': '82f2172b30188618e5e925cba612bc72ac439eeed189bdd0eae2eba63a9f0474',
   };
 

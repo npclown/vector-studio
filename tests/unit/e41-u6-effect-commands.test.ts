@@ -1,4 +1,4 @@
-import { serializeDocument, type NodeV7 } from '@vector-studio/model';
+import { serializeDocument, type NodeV8 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   createCounterIdSource,
@@ -29,7 +29,7 @@ function rect(target: Editor, x = 0, y = 0): string {
   return ok(target, { type: 'createRectangle', frame: { x, y, width: 100, height: 50 } })[0]!;
 }
 
-function node(target: Editor, id: string): NodeV7 {
+function node(target: Editor, id: string): NodeV8 {
   return target.query({ type: 'node', id })!;
 }
 

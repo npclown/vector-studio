@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { RenderChangeSet } from '@vector-studio/contracts';
-import { validateDocument, type DocumentV7 } from '@vector-studio/model';
+import { validateDocument, type DocumentV8 } from '@vector-studio/model';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createEditor,
@@ -75,7 +75,7 @@ type Json = {
 };
 
 /** The symbols fixture after `edit`, read by the model; nodes the edit adds gain `effects: []`. */
-function symbols(edit: (value: Json) => void = () => {}): DocumentV7 {
+function symbols(edit: (value: Json) => void = () => {}): DocumentV8 {
   const value = JSON.parse(SYMBOLS) as Json;
   edit(value);
   const result = validateDocument(v7Value(value));
@@ -108,7 +108,7 @@ const rect = (id: string, parent: string, frame: JsonNode['frame'], fill = red) 
  * rectangle `a` at (80, 40, 40, 20), which sticks out of the source's clip, and instance `I` of
  * it at (200, 0) with size `size`.
  */
-function clipped(size = 100, sourceStroke: unknown = null, rotation = 0): DocumentV7 {
+function clipped(size = 100, sourceStroke: unknown = null, rotation = 0): DocumentV8 {
   const result = validateDocument(
     v7Value({
       schemaVersion: 6,
@@ -146,7 +146,7 @@ const starGeometry = (node: { type: string; customType?: string; data?: unknown;
  * triangle `mp` masking a red square `mr`, both 50 × 50) and a star `c` at (60, 60, 40, 40);
  * instance `I` of it at (200, 0), 200 × 200 (scale 2).
  */
-function masked(): DocumentV7 {
+function masked(): DocumentV8 {
   const square = { x: 0, y: 0, width: 50, height: 50 };
   const result = validateDocument(
     v7Value({

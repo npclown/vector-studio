@@ -3,7 +3,7 @@ import type { TextLayoutPort } from '@vector-studio/contracts';
 import {
   MAX_TEXT_LENGTH,
   type Color,
-  type DocumentV7,
+  type DocumentV8,
   type Frame,
   type PersistenceEnvelope,
 } from '@vector-studio/model';
@@ -93,7 +93,7 @@ function rect(id: string, parent: string, frame: Frame): Loose {
  * rectangle at (100, 100); group `g` holding `tg` at (0, 80); frame `fr` at (200, 0), empty.
  * Page `p2`: rectangle `r2`.
  */
-function fixture(): DocumentV7 {
+function fixture(): DocumentV8 {
   const nodes: Loose[] = [
     text('t', 'p1', f(10, 20, 22.5, 12)),
     rect('r', 'p1', f(100, 100, 10, 10)),
@@ -116,7 +116,7 @@ function fixture(): DocumentV7 {
       { id: 'p2', name: 'Page 2', children: ['r2'] },
     ],
     nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
-  } as unknown as DocumentV7;
+  } as unknown as DocumentV8;
 }
 
 function editor(port: TextLayoutPort | null = createFakeTextLayout()): Editor {
@@ -637,7 +637,7 @@ describe('M6b-A04 an abandoned pending node leaves nothing (section 3.3, M6-Q19 
   });
 
   it('writes nothing to autosave; the creating text writes once', async () => {
-    const writes: DocumentV7[] = [];
+    const writes: DocumentV8[] = [];
     const store: DocumentStore = {
       read: () => Promise.resolve({ ok: true, envelope: null }),
       write: (envelope) => {
