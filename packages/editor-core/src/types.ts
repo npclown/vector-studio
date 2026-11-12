@@ -698,7 +698,10 @@ export type EditorErrorCode =
   | 'editor.boolean-too-large'
   | 'editor.boolean-failed'
   // E41 contract, section 6.
-  | 'editor.effect-limit';
+  | 'editor.effect-limit'
+  // V-33 SVG import contract, section 2.
+  | 'editor.invalid-svg'
+  | 'editor.empty-svg';
 
 /**
  * `consumed` is present on `input` results only (M2-I3): whether navigation, the tool or a key

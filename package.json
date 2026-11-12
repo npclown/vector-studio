@@ -52,6 +52,7 @@
     "test:m7-next-host": "playwright test --config playwright.m7-next-host.config.ts",
     "test:m8-next-host": "playwright test --config playwright.m8-next-host.config.ts",
     "test:v30-export": "playwright test --config playwright.v30-export.config.ts",
+    "test:v33-svg-import": "playwright test --config playwright.v33-svg-import.config.ts",
     "test:v38-rulers": "playwright test --config playwright.v38-rulers.config.ts",
     "test:e26": "playwright test --config playwright.e26.config.ts",
     "test:e41-next-host": "playwright test --config playwright.e41-studio.config.ts",
