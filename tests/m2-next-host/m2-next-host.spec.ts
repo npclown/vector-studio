@@ -297,12 +297,14 @@ test('M2-A13 section 7: every default chord reaches the editor', async ({ page }
 
   // Tools. `T` (the text tool) joined the default keymap in M6b-U3; the expected chords below
   // come from the live keymap, so it is pressed here too, before `V` returns to the select tool.
+  // V-40 added the pencil on `Shift+P`.
   for (const [chord, tool] of [
     ['R', 'rectangle'],
     ['O', 'ellipse'],
     ['L', 'line'],
     ['F', 'frame'],
     ['P', 'path'],
+    ['Shift+P', 'pencil'],
     ['T', 'text'],
     ['V', 'select'],
   ] as const) {
