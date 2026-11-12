@@ -396,6 +396,7 @@ function buildDuplicate(
       copy.symbol = copyOf.get(node.symbol);
       // Its overrides then name the copies of the source's text nodes (M6a section 9, M7-T3).
       copy.textOverrides = remappedOverrides(node.textOverrides, copyOf);
+      if (node.overrides !== undefined) copy.overrides = remappedOverrides(node.overrides, copyOf);
     }
     if (rootSet.has(id)) copy.frame = translated(tree, node, offset.x, offset.y);
     draft.set(copy as NodeV8);

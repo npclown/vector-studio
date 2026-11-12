@@ -42,6 +42,8 @@ type Props = Readonly<{
   caretColour?: string;
   /** V-25 slice 8: the pointer's page point over the canvas, for the pen's next segment. */
   penCursor?: PagePoint | null;
+  /** V-37 section 6.3: the focused layer of an instance, its rotated box in page space. */
+  instanceFocus?: readonly PagePoint[] | null;
 }>;
 
 type ToScreen = (x: number, y: number) => [number, number];
@@ -152,6 +154,8 @@ function ToolShape({
 
 const SNAP_COLOUR = '#e0218a';
 const TEXT_COLOUR = '#1e78ff';
+/** V-37: the focused instance layer's thin outline. */
+const FOCUS_COLOUR = '#e07a00';
 
 function TextEditShapes({
   markers,
@@ -319,6 +323,7 @@ export function SelectionOverlay({
   textBox = null,
   caretColour = '#000',
   penCursor = null,
+  instanceFocus = null,
 }: Props) {
   const { position, zoom } = snapshot.viewport;
   const toScreen = (x: number, y: number): [number, number] => [
@@ -356,6 +361,18 @@ export function SelectionOverlay({
           points={corners.map(([x, y]) => `${x},${y}`).join(' ')}
           fill="none"
           stroke="#1e78ff"
+        />
+      )}
+      {instanceFocus === null ? null : (
+        <polygon
+          data-testid="instance-focus"
+          points={instanceFocus
+            .map((p) => toScreen(p.x, p.y))
+            .map(([x, y]) => `${x},${y}`)
+            .join(' ')}
+          fill="none"
+          stroke={FOCUS_COLOUR}
+          strokeWidth={1}
         />
       )}
       {points.map(([x, y], index) => (

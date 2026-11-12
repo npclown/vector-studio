@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 8,
+  "id": "doc-v37",
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Page 1",
+      "children": [
+        "set1",
+        "inst1",
+        "sP"
+      ]
+    }
+  ],
+  "nodes": {
+    "inst1": {
+      "id": "inst1",
+      "name": "Button",
+      "parent": "page-1",
+      "frame": {
+        "x": 0,
+        "y": 200,
+        "width": 100,
+        "height": 40
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "instance",
+      "symbol": "sP",
+      "textOverrides": {},
+      "blendMode": "passThrough",
+      "effects": []
+    },
+    "sP": {
+      "id": "sP",
+      "name": "Plain",
+      "parent": "page-1",
+      "frame": {
+        "x": 400,
+        "y": 0,
+        "width": 60,
+        "height": 30
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "symbol",
+      "children": [],
+      "fills": [],
+      "stroke": null,
+      "blendMode": "passThrough",
+      "effects": []
+    },
+    "set1": {
+      "id": "set1",
+      "name": "Component set",
+      "parent": "page-1",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 300,
+        "height": 120
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "symbolSet",
+      "children": [],
+      "fills": [],
+      "stroke": {
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 1,
+          "a": 1
+        },
+        "width": 2,
+        "cap": "butt",
+        "join": "round",
+        "miterLimit": 4,
+        "dash": null
+      },
+      "blendMode": "passThrough",
+      "effects": []
+    }
+  }
+}

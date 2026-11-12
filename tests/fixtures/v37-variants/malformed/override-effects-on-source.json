@@ -1,0 +1,360 @@
+{
+  "schemaVersion": 8,
+  "id": "doc-v37",
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Page 1",
+      "children": [
+        "set1",
+        "inst1",
+        "sP"
+      ]
+    }
+  ],
+  "nodes": {
+    "inst1": {
+      "id": "inst1",
+      "name": "Button",
+      "parent": "page-1",
+      "frame": {
+        "x": 0,
+        "y": 200,
+        "width": 100,
+        "height": 40
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "instance",
+      "symbol": "sA",
+      "textOverrides": {
+        "t1": {
+          "runs": [
+            {
+              "text": "Go",
+              "family": "Inter",
+              "size": 14,
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 1
+              }
+            }
+          ]
+        }
+      },
+      "blendMode": "passThrough",
+      "effects": [],
+      "overrides": {
+        "r1": {
+          "fills": [
+            {
+              "paint": {
+                "r": 0,
+                "g": 1,
+                "b": 0,
+                "a": 1
+              },
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "normal"
+            }
+          ],
+          "stroke": {
+            "color": {
+              "r": 0,
+              "g": 0,
+              "b": 1,
+              "a": 1
+            },
+            "width": 2,
+            "cap": "butt",
+            "join": "round",
+            "miterLimit": 4,
+            "dash": null
+          },
+          "opacity": 0.5,
+          "visible": false,
+          "effects": [
+            {
+              "kind": "dropShadow",
+              "visible": true,
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0.5
+              },
+              "offsetX": 1,
+              "offsetY": 2,
+              "radius": 3
+            }
+          ]
+        },
+        "sA": {
+          "effects": []
+        },
+        "t1": {
+          "opacity": 0.25,
+          "effects": [
+            {
+              "kind": "layerBlur",
+              "visible": true,
+              "radius": 2
+            }
+          ]
+        }
+      }
+    },
+    "r1": {
+      "id": "r1",
+      "name": "Box",
+      "parent": "sA",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 50,
+        "height": 40
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "rectangle",
+      "cornerRadii": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "fills": [
+        {
+          "paint": {
+            "r": 1,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          },
+          "visible": true,
+          "opacity": 1,
+          "blendMode": "normal"
+        }
+      ],
+      "stroke": null,
+      "blendMode": "normal",
+      "effects": []
+    },
+    "r2": {
+      "id": "r2",
+      "name": "Box",
+      "parent": "sB",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 50,
+        "height": 40
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "rectangle",
+      "cornerRadii": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "fills": [],
+      "stroke": null,
+      "blendMode": "normal",
+      "effects": []
+    },
+    "sA": {
+      "id": "sA",
+      "name": "Default",
+      "parent": "set1",
+      "frame": {
+        "x": 20,
+        "y": 20,
+        "width": 100,
+        "height": 40
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "symbol",
+      "children": [
+        "r1",
+        "t1"
+      ],
+      "fills": [
+        {
+          "paint": {
+            "r": 1,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          },
+          "visible": true,
+          "opacity": 1,
+          "blendMode": "normal"
+        }
+      ],
+      "stroke": null,
+      "blendMode": "passThrough",
+      "effects": [],
+      "variant": {
+        "Size": "Large",
+        "State": "Default"
+      }
+    },
+    "sB": {
+      "id": "sB",
+      "name": "Hover",
+      "parent": "set1",
+      "frame": {
+        "x": 140,
+        "y": 20,
+        "width": 100,
+        "height": 40
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "symbol",
+      "children": [
+        "r2"
+      ],
+      "fills": [],
+      "stroke": null,
+      "blendMode": "passThrough",
+      "effects": [],
+      "variant": {
+        "Size": "Large",
+        "State": "Hover"
+      }
+    },
+    "sP": {
+      "id": "sP",
+      "name": "Plain",
+      "parent": "page-1",
+      "frame": {
+        "x": 400,
+        "y": 0,
+        "width": 60,
+        "height": 30
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "symbol",
+      "children": [],
+      "fills": [],
+      "stroke": null,
+      "blendMode": "passThrough",
+      "effects": []
+    },
+    "set1": {
+      "id": "set1",
+      "name": "Component set",
+      "parent": "page-1",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 300,
+        "height": 120
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "symbolSet",
+      "children": [
+        "sA",
+        "sB"
+      ],
+      "fills": [],
+      "stroke": {
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 1,
+          "a": 1
+        },
+        "width": 2,
+        "cap": "butt",
+        "join": "round",
+        "miterLimit": 4,
+        "dash": null
+      },
+      "blendMode": "passThrough",
+      "effects": []
+    },
+    "t1": {
+      "id": "t1",
+      "name": "Label",
+      "parent": "sA",
+      "frame": {
+        "x": 55,
+        "y": 10,
+        "width": 40,
+        "height": 20
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "text",
+      "runs": [
+        {
+          "text": "Hi",
+          "family": "Inter",
+          "size": 14,
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          }
+        }
+      ],
+      "sizing": "fixed",
+      "align": "left",
+      "letterSpacing": 0,
+      "lineHeight": 1.2,
+      "blendMode": "normal",
+      "effects": []
+    }
+  }
+}

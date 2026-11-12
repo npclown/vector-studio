@@ -19,7 +19,7 @@ import {
   type EditContext,
   type EditResult,
 } from './edit-support.js';
-import type { Expansion, ExpansionCache } from './expansion.js';
+import { sourceAppearance, type Expansion, type ExpansionCache } from './expansion.js';
 import { documentTree, isContainer, nodePath, pageInstances, pageOf } from './tree.js';
 import type { DocumentCommand, IdSource } from './types.js';
 
@@ -99,9 +99,9 @@ function detach(draft: Draft, document: DocumentV8, planned: Plan, ids: readonly
       visible: instance.visible,
       type: 'frame',
       children: children.map((child) => copyOf.get(child)!),
-      // V35-S4: the source's fills, and the instance's own mode.
-      fills: source.fills,
-      stroke: source.stroke,
+      // The source's fills and border, or the instance's override of them (V37-X1), and the
+      // instance's own mode (V35-S4).
+      ...sourceAppearance(instance, source),
       // The effects the instance draws with (E41-S10): its own, or else its source's.
       effects: instance.effects.length > 0 ? instance.effects : source.effects,
       blendMode: instance.blendMode,

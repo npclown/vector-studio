@@ -26,7 +26,9 @@ import {
   ExpansionCache,
   MAX_EXPANDED_NODES,
   MAX_EXPANDED_NODES_TOTAL,
+  overrideExtra,
   sceneCount,
+  sourceAppearance,
   type Expansion,
 } from './expansion.js';
 import { deepFreeze } from './freeze.js';
@@ -95,6 +97,14 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const isSymbolType = (type: unknown): boolean => type === 'symbol' || type === 'instance';
 
+/** A symbol without its `variant`: a copied root or carried source lands outside any set. */
+function withoutVariant(node: NodeV8): NodeV8 {
+  if (node.type !== 'symbol' || node.variant === undefined) return node;
+  const copy: Record<string, unknown> = { ...node };
+  delete copy.variant;
+  return copy as NodeV8;
+}
+
 /** A JSON Pointer (RFC 6901) to a path inside the fragment. */
 function pointer(path: readonly (string | number)[]): string {
   return path
@@ -159,14 +169,14 @@ export function copyFragment(
       const space = spaceOf(tree, node.parent);
       placement = relocate(node.frame, node.rotation, space.matrix, space.rotation, IDENTITY, 0);
     }
-    nodes.set(root, { ...node, ...placement, parent: '' });
+    nodes.set(root, { ...withoutVariant(node), ...placement, parent: '' });
   }
   for (const id of nodes.keys()) symbols.delete(id);
   const sources = inPageOrder(document, tree, symbols);
   const carried = new Map<string, NodeV8>();
   for (const source of sources) {
     for (const id of subtree(tree, source)) carried.set(id, document.nodes[id]!);
-    carried.set(source, { ...document.nodes[source]!, parent: '' });
+    carried.set(source, { ...withoutVariant(document.nodes[source]!), parent: '' });
   }
   const body = JSON.stringify({
     fragmentVersion: FRAGMENT_VERSION,
@@ -202,6 +212,11 @@ const OLDER_STROKES: Readonly<Record<string, 'shape' | 'path'>> = {
   line: 'path',
   path: 'path',
   custom: 'path',
+};
+/** The optional v8 key of the types that have one (V-37 contract, section 2). */
+const OPTIONAL_KEYS: Readonly<Record<string, string>> = {
+  symbol: 'variant',
+  instance: 'overrides',
 };
 const COLOR_KEYS = ['r', 'g', 'b', 'a'];
 const SHAPE_STROKE_KEYS = ['color', 'width'];
@@ -292,6 +307,10 @@ function readFields(
     if (schemaVersion < 4 && isRecord(raw) && raw.type === 'text') {
       return fail('document.invalid-field', mapPath(name, key, '/type'));
     }
+    // A `symbolSet` is a v8 type: below schema v8 it fails the same way (V-37 contract, section 2).
+    if (schemaVersion < 8 && isRecord(raw) && raw.type === 'symbolSet') {
+      return fail('document.invalid-field', mapPath(name, key, '/type'));
+    }
     // Below schema v5 an instance has no `textOverrides`, which the v4 to v5 migration adds empty
     // (M6a contract, section 9, M7-T3); a key written there is unknown at that version.
     const older = schemaVersion < 5 && isRecord(raw) && raw.type === 'instance';
@@ -304,6 +323,17 @@ function readFields(
     // Below LAYOUT_GRIDS_SINCE a frame or symbol has no `layoutGrids` key (V38-S2).
     const gridsWritten =
       schemaVersion < LAYOUT_GRIDS_SINCE && isRecord(raw) && Object.hasOwn(raw, 'layoutGrids');
+    // Below schema v8 a symbol has no `variant` and an instance no `overrides`: absent there,
+    // and an unknown key if written (V-37 contract, section 2).
+    const optionalKey =
+      raw && isRecord(raw) && schemaVersion < 8 ? OPTIONAL_KEYS[raw.type as string] : undefined;
+    const optionalWritten =
+      optionalKey !== undefined && isRecord(raw) && Object.hasOwn(raw, optionalKey);
+    if (optionalWritten && isRecord(candidate)) {
+      const rest = { ...candidate };
+      delete rest[optionalKey];
+      candidate = rest;
+    }
     // Below schema v8 a node has no `autoLayout` or `layoutSizing` (V-34 contract, section 2):
     // both are unknown keys there, and absent means no auto layout and fixed sizing.
     const layoutWritten =
@@ -348,6 +378,9 @@ function readFields(
         return fail('document.invalid-field', mapPath(name, key, `/effects/${index}/kind`));
       }
     }
+    if (optionalWritten) {
+      return fail('document.invalid-field', mapPath(name, key, `/${optionalKey}`));
+    }
     if (layoutWritten !== undefined) {
       return fail('document.invalid-field', mapPath(name, key, `/${layoutWritten}`));
     }
@@ -383,6 +416,10 @@ function checkReferences(
   for (const [key, node] of read) {
     if (symbolRoots && roots.has(key) && node.type !== 'symbol') {
       return fail('editor.invalid-clipboard', mapPath(name, key, '/type'));
+    }
+    // V-37: a root or carried root lands outside any set, so it has no `variant`.
+    if (roots.has(key) && node.type === 'symbol' && node.variant !== undefined) {
+      return fail('editor.invalid-clipboard', mapPath(name, key, '/variant'));
     }
     const consistent = roots.has(key)
       ? unparented.has(key)
@@ -434,6 +471,34 @@ function inSource(map: ReadonlyMap<string, NodeV8>, id: string, symbol: string):
     if (up.id === symbol) return up.type === 'symbol';
   }
   return false;
+}
+
+/**
+ * V37-S3 against the source `symbol` in `map`: the path, relative to the instance, of the first
+ * override key naming no node of the source's subtree, or else of its first field that does not
+ * apply to the node (`fill` and `stroke` need that field, the rest a node below the source).
+ */
+function overrideFailure(
+  map: ReadonlyMap<string, NodeV8>,
+  symbol: string,
+  overrides: NonNullable<InstanceNodeV8['overrides']>,
+): string | null {
+  const below = (id: string): boolean => {
+    for (let up = map.get(map.get(id)?.parent ?? ''); up !== undefined; up = map.get(up.parent)) {
+      if (up.id === symbol) return up.type === 'symbol';
+    }
+    return false;
+  };
+  for (const name of Object.keys(overrides)) {
+    const at = `/overrides/${pointer([name]).slice(1)}`;
+    const target = map.get(name);
+    if (target === undefined || (name !== symbol && !below(name))) return at;
+    for (const field of Object.keys(overrides[name]!)) {
+      const own = field === 'fills' || field === 'stroke';
+      if (own ? !(field in target) : name === symbol) return `${at}/${field}`;
+    }
+  }
+  return null;
 }
 
 /** The model's tree rules on one map, on a holder page holding `roots` (paths into `name`). */
@@ -587,6 +652,14 @@ export function parseFragment(text: string, custom: CustomRules): Fragment | Fai
       }
     }
   }
+  // V37-S3: every key of `overrides` names a node of the copied or carried source's subtree
+  // (the source itself included) and every field applies to it.
+  for (const [key, node] of main.read) {
+    if (node.type !== 'instance' || node.overrides === undefined) continue;
+    const map = byId.get(node.symbol)?.type === 'symbol' ? byId : sideById;
+    const failed = overrideFailure(map, node.symbol, node.overrides);
+    if (failed !== null) return fail('editor.invalid-clipboard', mapPath('nodes', key, failed));
+  }
 
   // The model's tree rules, each map on its own holder page, never one merged node map.
   const validated = treeRules('nodes', main, [...rootSet]);
@@ -617,13 +690,23 @@ export function parseFragment(text: string, custom: CustomRules): Fragment | Fai
  * The paste target (section 6): the scope, else a single selected frame or symbol (frame-like,
  * M7 contract, section 1.2), else the page.
  */
-function pasteTarget(tree: TreeView, context: EditContext): string {
+function pasteTarget(tree: TreeView, context: EditContext, symbolsOnly = false): string {
   const { scope, selection = [], activePage } = context;
-  if (typeof scope === 'string' && isContainer(tree.node(scope))) {
-    if (pageOf(tree, scope) === activePage) return scope;
+  const scoped = typeof scope === 'string' ? tree.node(scope) : undefined;
+  if (isContainer(scoped) && pageOf(tree, scoped.id) === activePage) {
+    // A set holds symbols only and never takes a paste from its scope: its parent does (V-37
+    // contract, section 2.1).
+    return scoped.type === 'symbolSet' ? scoped.parent : scoped.id;
   }
   const only = selection.length === 1 ? tree.node(selection[0]!) : undefined;
-  if (isFrameLike(only) && pageOf(tree, only.id) === activePage) return only.id;
+  if (only?.type === 'symbol' && symbolsOnly && tree.node(only.parent)?.type === 'symbolSet') {
+    // A variant is no target (a symbol does not nest): symbols paste beside it, into its set.
+    return only.parent;
+  }
+  if (isFrameLike(only) && pageOf(tree, only.id) === activePage) {
+    // A selected set is the target only for a fragment of symbols alone.
+    return only.type === 'symbolSet' && !symbolsOnly ? only.parent : only.id;
+  }
   return activePage;
 }
 
@@ -648,7 +731,8 @@ function subtreeOf(nodes: Readonly<Record<string, NodeV8>>, root: string): NodeV
  */
 function contentText(nodes: readonly NodeV8[]): string {
   const [root, ...rest] = nodes as [SymbolNodeV8, ...NodeV8[]];
-  const normalized: SymbolNodeV8 = {
+  // A carried subtree never has a `variant` (V-37 contract, section 5), so the local one is left out.
+  const normalized = withoutVariant({
     ...root,
     name: '',
     parent: '',
@@ -656,7 +740,7 @@ function contentText(nodes: readonly NodeV8[]): string {
     rotation: 0,
     constraints: START,
     visible: true,
-  };
+  });
   // V31-S2: no node's lock counts in the match.
   const unlocked = [normalized, ...rest].map((n) => {
     if (n.locked === undefined) return n;
@@ -683,7 +767,8 @@ function expandedCounts(
   let total = 0;
   pageInstances(document).forEach((ids, index) => {
     for (const id of ids) {
-      const count = cache.count(document, (document.nodes[id] as InstanceNodeV8).symbol);
+      const instance = document.nodes[id] as InstanceNodeV8;
+      const count = cache.count(document, instance.symbol, instance);
       total += count;
       if (document.pages[index]!.id === page) onPage += count;
     }
@@ -751,8 +836,10 @@ function resolveInstances(
       context.activePage,
       context.expansions ?? new ExpansionCache(check),
     );
-    counts.page += carried.count;
-    counts.total += carried.count;
+    const carriedById = new Map(carried.nodes.map((n) => [n.id, n]));
+    const added = carried.count + overrideExtra(node, (id) => carriedById.get(id));
+    counts.page += added;
+    counts.total += added;
     if (counts.page > MAX_EXPANDED_NODES || counts.total > MAX_EXPANDED_NODES_TOTAL) {
       return fail('editor.expansion-limit', mapPath('nodes', key));
     }
@@ -879,7 +966,8 @@ export function paste(
   if ('ok' in resolved) return resolved;
 
   const tree = documentTree(document);
-  const target = pasteTarget(tree, context);
+  const symbolsOnly = fragment.roots.every((root) => fragment.nodes[root]!.type === 'symbol');
+  const target = pasteTarget(tree, context, symbolsOnly);
   const onPage = tree.page(target) !== undefined;
   const space = spaceOf(tree, target);
   let dx = 0;
@@ -943,6 +1031,9 @@ export function paste(
         const instance = node as InstanceNodeV8;
         copy.symbol = copyOf.get(instance.symbol)!;
         copy.textOverrides = remappedOverrides(instance.textOverrides, copyOf);
+        if (instance.overrides !== undefined) {
+          copy.overrides = remappedOverrides(instance.overrides, copyOf);
+        }
       }
       if (how?.kind === 'detached') {
         // A frame as `detachInstances` makes one (section 5.2), from the carried subtree; with
@@ -962,14 +1053,15 @@ export function paste(
         }
         delete copy.symbol;
         delete copy.textOverrides;
+        delete copy.overrides;
         Object.assign(copy, {
           type: 'frame',
           // The effective opacity, as `detachInstances` writes it (MVP M4 contract, section 5).
           opacity: node.opacity * how.source.opacity,
           children: (how.expansion?.children ?? []).map((child) => map.get(child)!),
-          // V35-S4: the source's fills; the instance keeps its own mode.
-          fills: how.source.fills,
-          stroke: how.source.stroke,
+          // V35-S4: the instance keeps its own mode; the source's fills and border, or the
+          // instance's override of them (V37-X1).
+          ...sourceAppearance(node as InstanceNodeV8, how.source),
           // E41-S10: the effects the instance drew with, its own or else its source's.
           effects: node.effects.length > 0 ? node.effects : how.source.effects,
           // V-38 contract, V38-S2: the source's layout grids.

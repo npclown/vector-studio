@@ -97,6 +97,7 @@ describe('V-25 slice 10: the context menu items', () => {
       'context-create-symbol',
       'context-create-instance',
       'context-detach',
+      'context-combine-variants',
       'context-zoom-selection',
     ]);
     const disabled = [...one.values()].filter((entry) => entry.disabled).map((e) => e.testId);
@@ -106,6 +107,7 @@ describe('V-25 slice 10: the context menu items', () => {
       'context-mask',
       'context-create-instance',
       'context-detach',
+      'context-combine-variants',
     ]);
     const b = rect(target, 40, 0);
     ok(target, { type: 'setSelection', ids: [a, b] });

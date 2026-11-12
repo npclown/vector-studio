@@ -45,9 +45,15 @@ const OWN_VALUES = [
   'ToolbarPrimaryRow',
   'ToolbarSecondaryRow',
   'ZoomMenu',
+  // V-37 (variants and overrides): the focused layer of an instance.
+  'clearInstanceFocus',
+  'focusInstanceAt',
+  'getInstanceFocus',
   'importMessages',
   'resolvePanels',
   'selectForContextMenu',
+  'setInstanceFocus',
+  'useInstanceFocus',
   'usePanelErrors',
 ];
 /** The type exports of `ui` beyond `react`'s. */
@@ -56,6 +62,7 @@ const OWN_TYPES = [
   'CanvasContextMenuAt',
   'CanvasContextMenuProps',
   'EditorToolbarProps',
+  'InstanceFocus',
   'LayerTreeProps',
   'PanelBoundaryProps',
   'PanelBoundaryState',

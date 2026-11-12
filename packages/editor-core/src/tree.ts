@@ -7,6 +7,7 @@ import {
   type NodeV8,
   type PageV2,
   type SymbolNodeV8,
+  type SymbolSetNode,
 } from '@vector-studio/model';
 import { fillDraws, leafSceneCount } from './fills.js';
 import { IDENTITY, localTransform, multiply, type Matrix } from './geometry.js';
@@ -28,8 +29,8 @@ export function documentTree(document: DocumentV8): TreeView {
 }
 
 /**
- * A node with children: a group, mask group, frame or symbol. A symbol is a container as a frame
- * is (M7 contract, section 1.2).
+ * A node with children: a group, mask group, frame, symbol or symbol set. A symbol is a container
+ * as a frame is (M7 contract, section 1.2), and so is a set (V-37 contract, section 2.1).
  */
 export function isContainer(node: NodeV8 | undefined): node is ContainerNodeV8 {
   return (
@@ -37,16 +38,20 @@ export function isContainer(node: NodeV8 | undefined): node is ContainerNodeV8 {
     (node.type === 'group' ||
       node.type === 'maskGroup' ||
       node.type === 'frame' ||
-      node.type === 'symbol')
+      node.type === 'symbol' ||
+      node.type === 'symbolSet')
   );
 }
 
 /**
- * A `frame` or a `symbol`: the containers the frame rules apply to (M7 contract, section 1.2):
- * constraints when resized, the mapping inside a resized group, the top-level artboard target.
+ * A `frame`, a `symbol` or a `symbolSet`: the containers the frame rules apply to (M7 contract,
+ * section 1.2; V-37 contract, section 2.1): constraints when resized, the mapping inside a
+ * resized group, the top-level artboard target.
  */
-export function isFrameLike(node: NodeV8 | undefined): node is FrameNodeV8 | SymbolNodeV8 {
-  return node?.type === 'frame' || node?.type === 'symbol';
+export function isFrameLike(
+  node: NodeV8 | undefined,
+): node is FrameNodeV8 | SymbolNodeV8 | SymbolSetNode {
+  return node?.type === 'frame' || node?.type === 'symbol' || node?.type === 'symbolSet';
 }
 
 /** A `group` or `maskGroup`: the containers that refit to their children. */
@@ -124,11 +129,11 @@ export function treeDepth(tree: TreeView, id: string): number {
 }
 
 /**
- * Whether a container adds a clip level: a `frame`, a `maskGroup` (section 4.3) or a `symbol`,
- * which clips as a frame (M7 contract, section 1.2).
+ * Whether a container adds a clip level: a `frame`, a `maskGroup` (section 4.3), or a `symbol` or
+ * `symbolSet`, which clip as a frame (M7 contract, section 1.2; V-37 contract, section 2.1).
  */
 export function clipsChildren(node: NodeV8 | undefined): boolean {
-  return node?.type === 'frame' || node?.type === 'maskGroup' || node?.type === 'symbol';
+  return isFrameLike(node) || node?.type === 'maskGroup';
 }
 
 /** Clip levels above a node: one per `frame`, `maskGroup` or `symbol` ancestor (section 4.3). */
@@ -600,7 +605,15 @@ export function symbolChange(
     if (!Object.hasOwn(document.nodes, id)) continue;
     const node = document.nodes[id]!;
     const before = Object.hasOwn(base.nodes, id) ? base.nodes[id] : undefined;
-    if (before !== undefined && before.parent === node.parent && before.type === node.type) {
+    // An instance whose source changes counts as reparented (V-37 contract, section 1.2).
+    const resourced =
+      before?.type === 'instance' && node.type === 'instance' && before.symbol !== node.symbol;
+    if (
+      before !== undefined &&
+      before.parent === node.parent &&
+      before.type === node.type &&
+      !resourced
+    ) {
       continue;
     }
     moved.push(id);

@@ -3,6 +3,7 @@ import {
   validateNode,
   type DocumentV8,
   type InstanceNodeV8,
+  type NodeOverride,
   type NodeV8,
   type SymbolNodeV8,
   type TextOverride,
@@ -60,14 +61,17 @@ type ChildState = Readonly<{ id: string; objects: readonly NodeV8[]; count: numb
 type SourceState = Readonly<{
   node: SymbolNodeV8;
   children: readonly ChildState[];
-  /** The direct child whose subtree holds each text node of the source (M7-T3). */
-  textChild: ReadonlyMap<string, ChildState>;
+  /** The direct child whose subtree holds each node of the source (M7-T3, V37-S3). */
+  nodeChild: ReadonlyMap<string, ChildState>;
   /** Scene nodes one instance of the source adds (section 4.1). */
   count: number;
 }>;
 
-/** The text overrides of an instance that apply inside one source child, in key order. */
-type Overrides = readonly (readonly [string, TextOverride])[];
+/** What an instance overrides on one node: its runs (M7-T3) and its properties (V37-S3). */
+type ChildOverride = Readonly<{ text?: TextOverride; props?: NodeOverride }>;
+
+/** The overrides of an instance that apply inside one source child, in key order. */
+type Overrides = readonly (readonly [string, ChildOverride])[];
 const NO_OVERRIDES: Overrides = [];
 
 /** An expanded subtree, or the source node whose copy failed. */
@@ -127,6 +131,48 @@ export function sameRuns(a: readonly TextRun[], b: readonly TextRun[]): boolean 
   );
 }
 
+/** Whether two overrides of one node are equal by value (V37-X2), as `sameOverrides` compares. */
+function sameChildOverride(a: ChildOverride, b: ChildOverride): boolean {
+  const text =
+    a.text === b.text ||
+    (a.text !== undefined && b.text !== undefined && sameRuns(a.text.runs, b.text.runs));
+  return text && (a.props === b.props || JSON.stringify(a.props) === JSON.stringify(b.props));
+}
+
+/**
+ * The fills and stroke an instance takes from its source: the source's own, unless the instance
+ * overrides them under the source's key (V37-X1, M7 section 4.1).
+ */
+export function sourceAppearance(
+  instance: InstanceNodeV8,
+  source: SymbolNodeV8,
+): Readonly<Pick<SymbolNodeV8, 'fills' | 'stroke'>> {
+  const overrides = instance.overrides;
+  const own =
+    overrides !== undefined && Object.hasOwn(overrides, source.id)
+      ? overrides[source.id]
+      : undefined;
+  return {
+    fills: own?.fills !== undefined ? own.fills : source.fills,
+    stroke: own?.stroke !== undefined ? own.stroke : source.stroke,
+  };
+}
+
+/** `node` with `override` applied: the runs of a text node, then each property that fits it. */
+function applyOverride(node: NodeV8, override: ChildOverride): NodeV8 {
+  const next: Record<string, unknown> = { ...node };
+  if (override.text !== undefined && node.type === 'text') next.runs = override.text.runs;
+  const props = override.props;
+  if (props !== undefined) {
+    if (props.fills !== undefined && 'fills' in node) next.fills = props.fills;
+    if (props.stroke !== undefined && 'stroke' in node) next.stroke = props.stroke;
+    if (props.opacity !== undefined) next.opacity = props.opacity;
+    if (props.visible !== undefined) next.visible = props.visible;
+    if (props.effects !== undefined) next.effects = props.effects;
+  }
+  return next as NodeV8;
+}
+
 /**
  * Whether two override lists of one source child are the same keys with equal runs. By value, not
  * object identity: every edit of the instance reads its overrides into new objects.
@@ -136,7 +182,7 @@ function sameOverrides(a: Overrides, b: Overrides): boolean {
     a.length === b.length &&
     a.every(
       ([key, value], i) =>
-        key === b[i]![0] && (value === b[i]![1] || sameRuns(value.runs, b[i]![1].runs)),
+        key === b[i]![0] && (value === b[i]![1] || sameChildOverride(value, b[i]![1])),
     )
   );
 }
@@ -153,6 +199,34 @@ export function sceneCount(objects: readonly NodeV8[]): number {
       node.type === 'frame' ? frameSceneCount(node.fills, node.stroke) : leafSceneCount(node);
   }
   return count;
+}
+
+/**
+ * The scene nodes an instance's overrides add to the count of its source (V37-X1): the nodes a
+ * node projects as, with its overridden `fills` and `stroke` applied, beyond those it projects as
+ * without (V35-P2, P3: a background per drawing fill, a border). An override that hides or
+ * clears is not subtracted (conservative). `nodeAt` finds a node of the source subtree by ID.
+ */
+export function overrideExtra(
+  instance: InstanceNodeV8,
+  nodeAt: (id: string) => NodeV8 | undefined,
+): number {
+  const overrides = instance.overrides;
+  if (overrides === undefined) return 0;
+  const count = (node: NodeV8) =>
+    node.type === 'frame' || node.type === 'symbol'
+      ? frameSceneCount(node.fills, node.stroke)
+      : leafSceneCount(node);
+  let extra = 0;
+  for (const key of Object.keys(overrides)) {
+    const node = nodeAt(key);
+    if (node === undefined) continue;
+    const { fills, stroke } = overrides[key]!;
+    if (fills === undefined && stroke === undefined) continue;
+    const applied = applyOverride(node, { props: { fills, stroke } } as ChildOverride);
+    extra += Math.max(0, count(applied) - count(node));
+  }
+  return extra;
 }
 
 /** The instance's scale per axis: an axis whose source size is 0 is not scaled (M7-X1). */
@@ -187,9 +261,9 @@ function refitChanged(
 
 /**
  * The expanded copies of one source child's subtree at scale `(sx, sy)` (M7-X1), each checked
- * with the model's field rules and, for a custom node, `check` (M7-X3). An overridden text node
- * takes the override's runs, in the source's space, before the map (M7-T3). At `(1, 1)` the
- * source's own objects are the copies, an overridden text node excepted.
+ * with the model's field rules and, for a custom node, `check` (M7-X3). An overridden node takes
+ * the override's fields, in the source's space, before the map (M7-T3, V37-X1). At `(1, 1)` the
+ * source's own objects are the copies, an overridden node excepted.
  */
 function expandSubtree(
   child: ChildState,
@@ -200,13 +274,23 @@ function expandSubtree(
 ): Subtree['nodes'] {
   let objects = child.objects;
   if (overrides.length > 0) {
-    const runsOf = new Map(overrides);
-    objects = child.objects.map((node) => {
-      const override = runsOf.get(node.id);
-      return override === undefined || node.type !== 'text'
-        ? node
-        : deepFreeze({ ...node, runs: override.runs });
-    });
+    // V37-X1: the override step, before the scale map; each overridden node is checked as a
+    // mapped one is (V37-X3).
+    const byId = new Map(overrides);
+    const applied: NodeV8[] = [];
+    for (const node of child.objects) {
+      const override = byId.get(node.id);
+      if (override === undefined) {
+        applied.push(node);
+        continue;
+      }
+      const result = validateNode(applyOverride(node, override));
+      if (!result.ok) return { failed: node.id };
+      const copy = deepFreeze(result.node);
+      if (check(copy) !== null) return { failed: node.id };
+      applied.push(copy);
+    }
+    objects = applied;
   }
   if (sx === 1 && sy === 1) return objects;
   const original = new Map(objects.map((node) => [node.id, node]));
@@ -318,9 +402,16 @@ export class ExpansionCache {
   }
 
   /** Scene nodes one instance of `symbol` adds in `document` (section 4.1), or 0. */
-  count(document: DocumentV8, symbol: string): number {
+  count(document: DocumentV8, symbol: string, instance?: InstanceNodeV8): number {
     this.use(document);
-    return this.source(document, symbol)?.count ?? 0;
+    const base = this.source(document, symbol)?.count ?? 0;
+    if (instance === undefined) return base;
+    return (
+      base +
+      overrideExtra(instance, (id) =>
+        Object.hasOwn(document.nodes, id) ? document.nodes[id] : undefined,
+      )
+    );
   }
 
   /** Starts a new document: drops the entries of nodes it no longer holds. */
@@ -352,12 +443,10 @@ export class ExpansionCache {
       previous !== undefined &&
       previous.node === node &&
       children.every((child, i) => child === previous.children[i]);
-    const textChild = new Map<string, ChildState>();
+    const nodeChild = new Map<string, ChildState>();
     if (!unchanged) {
       for (const child of children) {
-        for (const object of child.objects) {
-          if (object.type === 'text') textChild.set(object.id, child);
-        }
+        for (const object of child.objects) nodeChild.set(object.id, child);
       }
     }
     const state: SourceState = unchanged
@@ -365,7 +454,7 @@ export class ExpansionCache {
       : {
           node,
           children,
-          textChild,
+          nodeChild,
           // The instance's outer and content nodes, and its background and border when present.
           count:
             frameSceneCount(node.fills, node.stroke) +
@@ -381,15 +470,27 @@ export class ExpansionCache {
 function overridesByChild(
   instance: InstanceNodeV8,
   source: SourceState,
-): Map<ChildState, [string, TextOverride][]> {
-  const out = new Map<ChildState, [string, TextOverride][]>();
+): Map<ChildState, [string, ChildOverride][]> {
+  const merged = new Map<string, { text?: TextOverride; props?: NodeOverride }>();
+  const entry = (key: string) => {
+    let value = merged.get(key);
+    if (value === undefined) merged.set(key, (value = {}));
+    return value;
+  };
   for (const key of Object.keys(instance.textOverrides)) {
-    // A valid document has no key outside its source (M7-T3); any other key is ignored.
-    const child = source.textChild.get(key);
+    entry(key).text = instance.textOverrides[key]!;
+  }
+  const props = instance.overrides ?? {};
+  for (const key of Object.keys(props)) entry(key).props = props[key]!;
+  const out = new Map<ChildState, [string, ChildOverride][]>();
+  for (const key of [...merged.keys()].sort()) {
+    // A valid document has no key outside its source (M7-T3); any other key is ignored, and the
+    // source's own key is read by `sourceAppearance`.
+    const child = source.nodeChild.get(key);
     if (child === undefined) continue;
     let list = out.get(child);
     if (list === undefined) out.set(child, (list = []));
-    list.push([key, instance.textOverrides[key]!]);
+    list.push([key, merged.get(key)!]);
   }
   return out;
 }
@@ -437,7 +538,7 @@ export function expansionFailure(document: DocumentV8, cache: ExpansionCache): F
     let onPage = 0;
     for (const id of page) {
       const node = document.nodes[id]!;
-      const count = node.type === 'instance' ? cache.count(document, node.symbol) : 0;
+      const count = node.type === 'instance' ? cache.count(document, node.symbol, node) : 0;
       onPage += count;
       total += count;
       if (onPage > MAX_EXPANDED_NODES || total > MAX_EXPANDED_NODES_TOTAL) {

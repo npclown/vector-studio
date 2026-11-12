@@ -465,8 +465,9 @@ describe('M6a-A01 malformed text documents (M6a-S1 to M6a-S4)', () => {
       );
     }
     expect(MAX_TEXT_LENGTH).toBe(16_384);
-    expect(DOCUMENT_ERROR_CODES.at(-1)).toBe('document.invalid-symbol');
-    expect(DOCUMENT_ERROR_CODES).toHaveLength(10);
+    // V-37 adds `document.invalid-variant` after the M7 code.
+    expect(DOCUMENT_ERROR_CODES.at(-2)).toBe('document.invalid-symbol');
+    expect(DOCUMENT_ERROR_CODES).toHaveLength(11);
   });
 });
 

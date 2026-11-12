@@ -197,6 +197,8 @@ export function booleanNodes(
     return fail('editor.boolean-unsupported');
   }
   const parent = nodeOf(document, owner);
+  // A path never sits directly in a set (V-37 contract, section 2.1).
+  if (parent?.type === 'symbolSet') return fail('editor.invalid-parent', '/parent');
   const siblings = childrenOf(documentTree(document), owner);
   if (parent?.type === 'maskGroup' && ids.includes(siblings[0]!)) {
     return fail('editor.boolean-unsupported');

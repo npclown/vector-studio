@@ -33,8 +33,25 @@ export const MAX_VARIABLE_MODES = 16;
 /** The longest style, variable or mode name in UTF-16 units (V39-S3). */
 export const MAX_TABLE_NAME_LENGTH = 200;
 
-const FILL_TYPES = new Set(['rectangle', 'ellipse', 'path', 'custom', 'frame', 'symbol']);
-const STROKE_TYPES = new Set(['rectangle', 'ellipse', 'line', 'path', 'custom', 'frame', 'symbol']);
+const FILL_TYPES = new Set([
+  'rectangle',
+  'ellipse',
+  'path',
+  'custom',
+  'frame',
+  'symbol',
+  'symbolSet',
+]);
+const STROKE_TYPES = new Set([
+  'rectangle',
+  'ellipse',
+  'line',
+  'path',
+  'custom',
+  'frame',
+  'symbol',
+  'symbolSet',
+]);
 
 /**
  * Whether nodes of `type` have the field `key` binds (V39-S4 read by type, V39-S6's node rule):
