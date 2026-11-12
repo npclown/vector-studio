@@ -108,6 +108,7 @@ Multiple fills and blend modes are deferred.
 - Grouping and layer reordering
 - Align and distribute
 - Snapping to object/frame edges and centers, equal spacing, and rotation angles
+- Rulers, page guides and frame layout grids (grid, columns, rows), with snapping to guides and grid lines (since 2026-11-12, requested by the user; [V-38 contract](plans/viz-v38-rulers-guides-grids-contract.md))
 - Zoom and pan
 - Copy and paste
 - Undo and redo

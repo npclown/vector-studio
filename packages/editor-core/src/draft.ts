@@ -3,7 +3,7 @@ import {
   validateNode,
   type DocumentV8,
   type NodeV8,
-  type PageV2,
+  type PageV8,
   type TextNodeV8,
 } from '@vector-studio/model';
 import type { ExpansionCache } from './expansion.js';
@@ -42,7 +42,7 @@ export function samePlacement(a: NodeV8, b: NodeV8): boolean {
 export class Draft implements WritableTree {
   readonly base: DocumentV8;
   private readonly nodes: Map<string, NodeV8>;
-  private pages: PageV2[];
+  private pages: PageV8[];
   /** Nodes created, changed or removed. */
   readonly touched = new Set<string>();
   /** Nodes set from derived values, validated by `finish`. */
@@ -68,11 +68,11 @@ export class Draft implements WritableTree {
     return this.nodes.get(id);
   }
 
-  page(id: string): PageV2 | undefined {
+  page(id: string): PageV8 | undefined {
     return this.pages.find((page) => page.id === id);
   }
 
-  get pageList(): readonly PageV2[] {
+  get pageList(): readonly PageV8[] {
     return this.pages;
   }
 
@@ -115,7 +115,7 @@ export class Draft implements WritableTree {
     this.unchecked.delete(id);
   }
 
-  setPages(pages: readonly PageV2[]): void {
+  setPages(pages: readonly PageV8[]): void {
     this.pages = [...pages];
   }
 

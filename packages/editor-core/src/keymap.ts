@@ -54,6 +54,9 @@ export const BUILTIN_ACTIONS: ReadonlySet<string> = new Set([
   // V-31 contract, V31-E5.
   'toggleLocked',
   'toggleVisible',
+  // V-38 contract, V38-C4.
+  'toggleRulers',
+  'toggleLayoutGrids',
 ]);
 
 /**
@@ -105,6 +108,9 @@ export const DEFAULT_KEYMAP: readonly KeyBinding[] = deepFreeze([
   { chord: 'Shift+)', action: 'zoomTo100' },
   { chord: 'Enter', action: 'enterScope' },
   { chord: 'Escape', action: 'exitScope' },
+  // V-38 contract, V38-C4 (US-layout key tokens; Ctrl on every platform, as Figma).
+  { chord: 'Shift+R', action: 'toggleRulers' },
+  { chord: 'Ctrl+Shift+$', action: 'toggleLayoutGrids' },
 ]);
 
 const MODIFIER_ORDER = ['Ctrl', 'Meta', 'Alt', 'Shift'] as const;

@@ -114,12 +114,14 @@ describe('M8-A01 editor-core re-exports its model and contracts reach', () => {
       'DEFAULT_PATH_STROKE',
       'DEFAULT_RECTANGLE_FILL',
       'DEFAULT_SHAPE_STROKE',
+      'MAX_GRID_LINES',
       'ZOOM_MAX',
       'ZOOM_MIN',
       'createCounterIdSource',
       'createEditor',
       'eventChord',
       'extensionCommand',
+      'layoutGridLines',
       'starExtension',
     ]);
     const others = new Set([...(await runtimeKeys(MODEL)), ...(await runtimeKeys(CONTRACTS))]);

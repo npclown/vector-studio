@@ -371,6 +371,7 @@ const DOCUMENT_COMMANDS = new Set([
   'removePage',
   'renamePage',
   'movePage',
+  'setGuides',
   'rotateNodes',
   'alignNodes',
   'distributeNodes',
@@ -757,6 +758,9 @@ class EditorCore implements Editor {
   private snap: SnapOverlay | null = null;
   private snapKey = 'null';
   private snapping = true;
+  /** V-38 contract, V38-C3: the host's rulers and guides, and layout grids. */
+  private rulersVisible = false;
+  private layoutGridsVisible = true;
   /** The entered container of the active page (M2 contract, section 5), or null. */
   private scope: string | null = null;
   /**
@@ -1472,6 +1476,18 @@ class EditorCore implements Editor {
         if (this.updateKeymap()) this.refresh({ type: 'session', field: 'keymap' });
         return { ok: true, ids: [] };
       }
+      case 'setRulersVisible':
+      case 'setLayoutGridsVisible': {
+        if (typeof command.visible !== 'boolean') {
+          return failure('editor.invalid-command', '/visible');
+        }
+        const field = command.type === 'setRulersVisible' ? 'rulersVisible' : 'layoutGridsVisible';
+        if (command.visible !== this[field]) {
+          this[field] = command.visible;
+          this.refresh({ type: 'session', field });
+        }
+        return { ok: true, ids: [] };
+      }
       case 'setSnapping': {
         if (typeof command.enabled !== 'boolean') {
           return failure('editor.invalid-command', '/enabled');
@@ -1695,6 +1711,10 @@ class EditorCore implements Editor {
           return this.snap;
         case 'snapping':
           return this.snapping;
+        case 'rulersVisible':
+          return this.rulersVisible;
+        case 'layoutGridsVisible':
+          return this.layoutGridsVisible;
         case 'scope':
           return this.scope;
         case 'clipboard':
@@ -2049,6 +2069,11 @@ class EditorCore implements Editor {
         return this.run({ type: 'zoomTo', target: 'selection' });
       case 'zoomTo100':
         return this.run({ type: 'zoomTo', target: 'actual' });
+      // V-38 contract, V38-C4.
+      case 'toggleRulers':
+        return this.run({ type: 'setRulersVisible', visible: !this.rulersVisible });
+      case 'toggleLayoutGrids':
+        return this.run({ type: 'setLayoutGridsVisible', visible: !this.layoutGridsVisible });
       // The in-memory clipboard (section 6); the dispatch leaves an empty-selection copy or
       // cut unconsumed before it gets here.
       case 'copy':
@@ -3589,6 +3614,8 @@ class EditorCore implements Editor {
       keymap: this.keymap,
       snap: this.snap,
       snapping: this.snapping,
+      rulersVisible: this.rulersVisible,
+      layoutGridsVisible: this.layoutGridsVisible,
       scope: this.scope,
       pathEdit: this.pathEdit,
       textEdit: this.textEdit,

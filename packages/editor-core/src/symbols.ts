@@ -84,6 +84,8 @@ function detach(draft: Draft, document: DocumentV8, planned: Plan, ids: readonly
       effects: instance.effects.length > 0 ? instance.effects : source.effects,
       // V31-S3: detach keeps the instance's lock, as it keeps `visible`.
       ...(instance.locked === true ? { locked: true } : {}),
+      // V-38 contract, V38-S2: the source's layout grids.
+      ...(source.layoutGrids === undefined ? {} : { layoutGrids: source.layoutGrids }),
     });
   });
 }
