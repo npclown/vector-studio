@@ -100,6 +100,13 @@ export interface WebGpuPrimitiveScenePort extends PrimitivePacketConsumer {
   readonly effectPasses?: number;
   /** E41 section 5.4: the device's `maxTextureDimension2D`, which effect bounds respect. */
   readonly maxTextureDimension2D?: number;
+  /**
+   * V35-K7: true when this generation created the backdrop snapshot and blend composite
+   * pipelines. Absent or false: blend roots draw as `normal`.
+   */
+  readonly blendPipelineAvailable?: boolean;
+  /** V35-K8: backdrop splits this generation has made, one per end-and-resume of a pass. */
+  readonly blendSplits?: number;
   setTarget(target: PrimitiveTarget): void;
   submitPrimitivePacket: PrimitivePacketConsumer['submitPrimitivePacket'];
   /**
@@ -183,6 +190,13 @@ export interface WebGpuPrimitiveSceneOptions {
   readonly effectPipeline?: boolean;
   /** @internal Tests only (E41-A05): effect roots composite their content `L` only. */
   readonly effectContentForTesting?: boolean;
+  /**
+   * V-35 contract, V35-K4 and K5: creates the backdrop snapshot pipeline and the blend
+   * composite variants (with the layer pipeline only), and gives the multisample attachment and
+   * the layer tile colour textures `TEXTURE_BINDING`. Without them blend roots draw as `normal`
+   * and isolating containers as `passThrough` (V35-K7).
+   */
+  readonly blendPipeline?: boolean;
   /**
    * @internal Tests only (E25 contract, section 4): the layer tile edge instead of 1024; a
    * positive even integer.

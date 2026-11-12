@@ -206,6 +206,8 @@ export async function nativeScene(
     layerPipeline?: boolean;
     textPipeline?: boolean;
     effectPipeline?: boolean;
+    /** V-35 U4: the blend pipelines (K5) and the snapshot (K4). */
+    blendPipeline?: boolean;
     effectContentForTesting?: boolean;
     layerTileSizeForTesting?: number;
     sampleCount?: 1 | 4;
