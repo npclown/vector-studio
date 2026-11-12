@@ -19,10 +19,10 @@ import type { RenderNodeSnapshot, SceneBlendMode, SceneColor } from '@vector-stu
 // 230 on SwiftShader and, inferred from the composite drawn over it, 229 on the reference PC's
 // NVIDIA GPU. The reference PC also stored a normal composite of 175.75 as 175 (inferred the
 // same way), a value that is not a tie; the cause is unverified, blend precision suspected.
-// A mode composited over such a backdrop moves by the backdrop step times the mode's slope: at
-// most 1 for multiply, screen, darken, lighten, difference and exclusion; about 1.3 to 2.3 for
-// overlay, softLight and the non-separable modes over these fixtures; about 3 to 5 for
-// colorBurn and colorDodge. So each blend composite records `slack`, the largest change of its
+// A mode composited over such a backdrop moves by the backdrop step times the mode's slope.
+// Over these fixtures the result moves at most one step for multiply, screen, darken, lighten,
+// hardLight, difference, exclusion, saturation and luminosity; about 1.3 to 2.3 steps for
+// softLight, color, overlay and hue; about 2.8 for colorBurn and 5 for colorDodge. So each blend composite records `slack`, the largest change of its
 // result when the stored backdrop moves one step (the source `R` is modelled exactly and not
 // perturbed), carried through later composites by their (1 − αs). The tolerance already holds
 // one step, so a pixel passes within `tolerance + max(0, slack − 1)` in 1/255: a mode of slope
