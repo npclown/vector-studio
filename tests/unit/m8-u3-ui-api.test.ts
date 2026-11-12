@@ -38,6 +38,8 @@ const OWN_VALUES = [
   'PanelProvider',
   'PropertyPanel',
   'PropertySections',
+  // V-39 (styles and variables).
+  'StylesPanel',
   'ToolbarPrimaryRow',
   'ToolbarSecondaryRow',
   'ZoomMenu',

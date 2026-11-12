@@ -43,6 +43,8 @@ import {
 import { ColorWell, Swatches } from './color-controls.js';
 import { Choice, Row, TextField } from './fields.js';
 import { countRender } from './render-probe.js';
+import { RowBinding, type Binder, type BindRun } from './style-controls.js';
+import { bindingState, tablesOfDocument } from './styles-model.js';
 
 // MVP M8 contract, M8-R1 (M8-U5): the M4 appearance panel, moved from next-host's
 // `src/m4-appearance-panel.tsx` with its behavior, roles, names and test IDs unchanged (M8-Q11
@@ -70,12 +72,17 @@ function PaintControls({
   paints,
   kinds,
   write,
+  binder,
+  nodes,
 }: {
   prefix: 'Fill' | 'Stroke';
   /** The paints of the nodes the controls write. */
   paints: readonly (Paint | null)[];
   kinds: readonly PaintKind[];
   write: (paint: Paint | null) => boolean;
+  binder: Binder;
+  /** The nodes the controls write, in `paints` order (V-39 U2). */
+  nodes: readonly NodeV8[];
 }) {
   const kindValue = useMemo(() => {
     const values = new Set(paints.map(paintKind));
@@ -91,6 +98,9 @@ function PaintControls({
   const hexValue = sameText((paint) =>
     paint === null || isGradient(paint) ? null : colorHex(paint),
   );
+  const bindingKey = prefix === 'Fill' ? 'fill' : 'stroke';
+  // U2: a row bound to one style or variable shows it in place of the hex and alpha fields.
+  const bound = bindingState(binder.tables, nodes, bindingKey).state === 'one';
   return (
     <>
       <Row>
@@ -102,6 +112,14 @@ function PaintControls({
             const first = paints.find((paint) => paint !== null) ?? null;
             void write(paintForKind(next, first));
           }}
+        />
+        <RowBinding
+          binder={binder}
+          nodes={nodes}
+          bindingKey={bindingKey}
+          label={`${prefix} style`}
+          testId={lower}
+          paint={paints.find((paint) => paint !== null) ?? null}
         />
       </Row>
       {kind === 'solid' && (
@@ -115,31 +133,35 @@ function PaintControls({
               return color !== null && write(color);
             }}
           />
-          <TextField
-            label={`${prefix} colour`}
-            value={hexValue}
-            commit={(text) => {
-              const first = paints.find((paint) => paint !== null && !isGradient(paint));
-              const alpha =
-                first !== undefined && first !== null && !isGradient(first) ? first.a : 1;
-              const color = parseHex(text, alpha);
-              if (color === null) return false;
-              return write(color);
-            }}
-          />
-          <TextField
-            label={`${prefix} alpha`}
-            value={sameText((paint) =>
-              paint === null || isGradient(paint) ? null : numberText(paint.a),
-            )}
-            commit={(text) => {
-              const a = parseNumber(text, 0, 1);
-              const first = paints.find((paint) => paint !== null && !isGradient(paint));
-              if (a === null || first === undefined || first === null || isGradient(first))
-                return false;
-              return write({ ...first, a });
-            }}
-          />
+          {!bound && (
+            <>
+              <TextField
+                label={`${prefix} colour`}
+                value={hexValue}
+                commit={(text) => {
+                  const first = paints.find((paint) => paint !== null && !isGradient(paint));
+                  const alpha =
+                    first !== undefined && first !== null && !isGradient(first) ? first.a : 1;
+                  const color = parseHex(text, alpha);
+                  if (color === null) return false;
+                  return write(color);
+                }}
+              />
+              <TextField
+                label={`${prefix} alpha`}
+                value={sameText((paint) =>
+                  paint === null || isGradient(paint) ? null : numberText(paint.a),
+                )}
+                commit={(text) => {
+                  const a = parseNumber(text, 0, 1);
+                  const first = paints.find((paint) => paint !== null && !isGradient(paint));
+                  if (a === null || first === undefined || first === null || isGradient(first))
+                    return false;
+                  return write({ ...first, a });
+                }}
+              />
+            </>
+          )}
         </Row>
       )}
       {!paints.some(isGradient) && (
@@ -261,7 +283,15 @@ function GradientControls({
 }
 
 /** The stroke controls (section 8): on and off, paint, width, cap, join, miter limit and dash. */
-function StrokeControls({ nodes, commit }: { nodes: readonly NodeV8[]; commit: Commit }) {
+function StrokeControls({
+  nodes,
+  commit,
+  binder,
+}: {
+  nodes: readonly NodeV8[];
+  commit: Commit;
+  binder: Binder;
+}) {
   const takers = nodes.filter((node) => idsTaking([node], 'stroke').length > 0);
   const stroked = takers.filter((node) => strokeOf(node) !== null);
   const strokes = stroked.map((node) => strokeOf(node)!);
@@ -299,6 +329,8 @@ function StrokeControls({ nodes, commit }: { nodes: readonly NodeV8[]; commit: C
             paints={strokes.map((stroke) => stroke.color)}
             kinds={['solid', 'linear', 'radial']}
             write={(paint) => paint !== null && patch({ color: paint })}
+            binder={binder}
+            nodes={stroked}
           />
           <Row>
             <TextField
@@ -309,6 +341,13 @@ function StrokeControls({ nodes, commit }: { nodes: readonly NodeV8[]; commit: C
                 if (width === null) return false;
                 return patch({ width });
               }}
+            />
+            <RowBinding
+              binder={binder}
+              nodes={stroked}
+              bindingKey="strokeWidth"
+              label="Stroke width variable"
+              testId="stroke-width"
             />
             <Choice
               label="Stroke cap"
@@ -360,7 +399,17 @@ function StrokeControls({ nodes, commit }: { nodes: readonly NodeV8[]; commit: C
 }
 
 /** Opacity as a slider that commits on its `change` event only (no live preview, M4-Q13 (a)). */
-function OpacitySlider({ value, commit }: { value: Common<number>; commit: Commit }) {
+function OpacitySlider({
+  value,
+  commit,
+  binder,
+  nodes,
+}: {
+  value: Common<number>;
+  commit: Commit;
+  binder: Binder;
+  nodes: readonly NodeV8[];
+}) {
   const slider = useRef<HTMLInputElement>(null);
   const shown = value.state === 'one' ? value.value : 1;
   const latest = useRef(commit);
@@ -395,13 +444,28 @@ function OpacitySlider({ value, commit }: { value: Common<number>; commit: Commi
       <output aria-label="Opacity value">
         {value.state === 'mixed' ? 'mixed' : numberText(shown)}
       </output>
+      <RowBinding
+        binder={binder}
+        nodes={nodes}
+        bindingKey="opacity"
+        label="Opacity variable"
+        testId="opacity"
+      />
     </Row>
   );
 }
 
 const CORNERS = ['top left', 'top right', 'bottom right', 'bottom left'] as const;
 
-function RadiiControls({ nodes, commit }: { nodes: readonly NodeV8[]; commit: Commit }) {
+function RadiiControls({
+  nodes,
+  commit,
+  binder,
+}: {
+  nodes: readonly NodeV8[];
+  commit: Commit;
+  binder: Binder;
+}) {
   const [linked, setLinked] = useState(true);
   const rectangles = nodes.filter((node) => node.type === 'rectangle');
   const lead = rectangles[0]!.cornerRadii;
@@ -432,6 +496,13 @@ function RadiiControls({ nodes, commit }: { nodes: readonly NodeV8[]; commit: Co
             />
           );
         })}
+        <RowBinding
+          binder={binder}
+          nodes={rectangles}
+          bindingKey="cornerRadius"
+          label="Corner radius variable"
+          testId="corner-radius"
+        />
       </Row>
     </fieldset>
   );
@@ -479,6 +550,13 @@ export function AppearancePanel({ layout = 'aside' }: AppearancePanelProps) {
     setStatus(result.ok ? '' : `${result.code} ${result.path ?? ''}`.trimEnd());
     return result.ok;
   };
+  const tables = useMemo(() => tablesOfDocument(content), [content]);
+  const run: BindRun = (command) => {
+    const result = execute(command);
+    setStatus(result.ok ? '' : `${result.code} ${result.path ?? ''}`.trimEnd());
+    return result.ok ? { ok: true, ids: result.ids } : { ok: false, ids: [] };
+  };
+  const binder: Binder = { tables, run };
   const fillTakers = nodes.filter((node) => idsTaking([node], 'fill').length > 0);
   const opacity = common(nodes, 'opacity', (node) => node.opacity);
   return (
@@ -499,18 +577,20 @@ export function AppearancePanel({ layout = 'aside' }: AppearancePanelProps) {
                 paints={fillTakers.map(fillOf)}
                 kinds={['none', 'solid', 'linear', 'radial']}
                 write={(fill) => commit({ fill })}
+                binder={binder}
+                nodes={fillTakers}
               />
             </fieldset>
           )}
           {nodes.some((node) => idsTaking([node], 'stroke').length > 0) && (
-            <StrokeControls nodes={nodes} commit={commit} />
+            <StrokeControls nodes={nodes} commit={commit} binder={binder} />
           )}
           <fieldset>
             <legend>Layer</legend>
-            <OpacitySlider value={opacity} commit={commit} />
+            <OpacitySlider value={opacity} commit={commit} binder={binder} nodes={nodes} />
           </fieldset>
           {nodes.some((node) => node.type === 'rectangle') && (
-            <RadiiControls nodes={nodes} commit={commit} />
+            <RadiiControls nodes={nodes} commit={commit} binder={binder} />
           )}
         </>
       )}

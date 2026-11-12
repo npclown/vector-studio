@@ -5,6 +5,7 @@ import {
   LayerTree,
   PageList,
   PropertyPanel,
+  StylesPanel,
   ZoomMenu,
   useEditorSelector,
   usePanelErrors,
@@ -131,6 +132,8 @@ export type StudioShellProps = StudioStatusProps &
 /** The studio layout (V-25); see the module comment. */
 export function StudioShell({ canvas, fileControls, ...status }: StudioShellProps) {
   const [cell, size] = useSettledSize();
+  // V-39 U4: the Local styles panel takes the right column when nothing is selected.
+  const nothingSelected = useEditorSelector((snapshot) => snapshot.selection.length === 0);
   return (
     <div className="vs-studio" data-testid="studio">
       <style>{STUDIO_CSS}</style>
@@ -165,6 +168,7 @@ export function StudioShell({ canvas, fileControls, ...status }: StudioShellProp
       <aside className="vs-right" aria-label="design">
         <ArtboardPresets />
         <PropertyPanel />
+        {nothingSelected && <StylesPanel />}
         <PathDebugPanel />
         <EditorPanels />
         <ExportPanel />
@@ -328,6 +332,7 @@ const STUDIO_CSS = `
 
 .vs-right [data-testid='appearance-panel'] > p { padding: 12px; color: var(--vs-muted); margin: 0; }
 .vs-right section[data-panel] button { text-align: left; }
+[data-testid='styles-panel'] { padding: 4px 12px 8px; }
 .vs-right section[data-panel] { border-top: 1px solid var(--vs-border); padding: 4px 12px 8px; }
 .vs-right section[data-panel] > h2 button { padding: 6px 0; font-weight: 600; }
 

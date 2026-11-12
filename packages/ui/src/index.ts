@@ -249,3 +249,6 @@ export {
 
 // V-30 (export): the Export section, PNG at a scale or SVG, of the selection or the page.
 export { ExportPanel } from './export-panel.js';
+
+// V-39 (styles and variables): the Local styles panel.
+export { StylesPanel } from './styles-panel.js';
