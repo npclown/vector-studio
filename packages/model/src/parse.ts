@@ -752,14 +752,20 @@ type Schema = Readonly<{
    * `read` at v7 (E41-S2, S3).
    */
   effects: 'none' | 'added' | 'read';
+  /**
+   * The node's optional `locked` (V-31 contract, V31-S1): `read` at v8 only. Its default is no
+   * key (unlocked), so `added` (an older input read into v8) and `none` both add nothing and a
+   * `locked` key in an older input fails as unknown.
+   */
+  locked: 'none' | 'added' | 'read';
 }>;
 
 const V4_TYPES = Object.keys(NODE_KEYS_V2) as NodeTypeKey[];
 const V3_TYPES = V4_TYPES.filter((type) => type !== 'text');
 const V2_TYPES = V3_TYPES.filter((type) => type !== 'symbol' && type !== 'instance');
 const OLDER = { containerOpacity: 'one' } as const;
-const NO_EFFECTS = { effects: 'none' } as const;
-const ADD_EFFECTS = { effects: 'added' } as const;
+const NO_EFFECTS = { effects: 'none', locked: 'none' } as const;
+const ADD_EFFECTS = { effects: 'added', locked: 'added' } as const;
 const V2: Schema = {
   types: V2_TYPES,
   overrides: 'none',
@@ -800,8 +806,8 @@ const V7: Schema = { ...V6_TO_V7, effects: 'read' };
  * (`V2_TO_V7` to `V6_TO_V7` too, which `validateAnyDocument` uses for older inputs); see
  * docs/plans/viz-schema-v8.md, Where a field addition goes.
  */
-const V7_TO_V8: Schema = V7;
-const V8: Schema = V7;
+const V7_TO_V8: Schema = { ...V7, locked: 'added' };
+const V8: Schema = { ...V7, locked: 'read' };
 /** v8 nodes of an input below v6, already migrated: v8 fields, the older opacity rule. */
 const V8_OLDER_OPACITY: Schema = { ...V8, ...OLDER };
 
@@ -1062,10 +1068,13 @@ function readOverrides(value: unknown, path: Path): Record<string, TextOverride>
 function readNode(key: string, value: unknown, path: Path, schema: Schema): NodeV8 {
   const node = readNodeFields(key, value, path, schema);
   if (schema.effects === 'none') return node as NodeV8;
+  const record = value as Record<string, unknown>;
   const effects =
-    schema.effects === 'read'
-      ? readEffects((value as Record<string, unknown>).effects, [...path, 'effects'])
-      : [];
+    schema.effects === 'read' ? readEffects(record.effects, [...path, 'effects']) : [];
+  // V31-S1: absent or `false` is unlocked and normalizes to no key.
+  if (schema.locked === 'read' && Object.hasOwn(record, 'locked')) {
+    if (readBoolean(record.locked, [...path, 'locked'])) return { ...node, effects, locked: true };
+  }
   return { ...node, effects };
 }
 
@@ -1124,7 +1133,14 @@ function readNodeFields(key: string, value: unknown, path: Path, schema: Schema)
   const type = readEnum(value.type, schema.types, [...path, 'type']);
   const typeKeys =
     type === 'instance' && schema.overrides === 'read' ? INSTANCE_KEYS_V5 : NODE_KEYS_V2[type];
-  const keys = schema.effects === 'read' ? [...typeKeys, 'effects'] : typeKeys;
+  // V31-S1: the optional `locked` key at v8, after every other field.
+  const lockKey = schema.locked === 'read' && Object.hasOwn(value, 'locked');
+  const keys =
+    schema.effects === 'read'
+      ? lockKey
+        ? [...typeKeys, 'effects', 'locked']
+        : [...typeKeys, 'effects']
+      : typeKeys;
   const record = readRecord(value, keys, path);
   if (!isValidId(key) || record.id !== key) invalid([...path, 'id']);
   const base = {

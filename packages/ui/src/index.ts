@@ -96,6 +96,7 @@ export type {
   Modifiers,
   NodeBaseV2,
   NodeEffects,
+  NodeLock,
   NodeProps,
   NodeV8,
   PagePoint,

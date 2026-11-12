@@ -91,6 +91,7 @@ describe('V-25 slice 10: the context menu items', () => {
       'context-ungroup',
       'context-mask',
       'context-visibility',
+      'context-lock',
       'context-create-symbol',
       'context-create-instance',
       'context-detach',
@@ -127,7 +128,9 @@ describe('V-25 slice 10: the context menu items', () => {
       expect(items.get('context-zoom-selection')!.shortcut).toBe('Shift+2');
       // Del off a Mac, ⌫ on one (the toolbar's tooltip shows the same).
       expect(items.get('context-delete')!.shortcut).toBe(platform === 'mac' ? '⌫' : 'Del');
-      expect(items.get('context-visibility')!.shortcut).toBeNull();
+      // V31-U2: show / hide and lock / unlock show their actions' chords.
+      expect(items.get('context-visibility')!.shortcut).toBe(`${mod}+Shift+H`);
+      expect(items.get('context-lock')!.shortcut).toBe(`${mod}+Shift+L`);
     }
   });
 

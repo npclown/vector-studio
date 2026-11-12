@@ -436,16 +436,22 @@ export type DocumentV7 = Readonly<{
 // so the ten items can each add their fields to one unreleased version instead of bumping it in
 // turn. The v7 to v8 migration changes only `schemaVersion` until an item adds a field.
 
-export type RectangleNodeV8 = RectangleNodeV6 & NodeEffects;
-export type EllipseNodeV8 = EllipseNodeV6 & NodeEffects;
-export type LineNodeV8 = LineNodeV6 & NodeEffects;
-export type PathNodeV8 = PathNodeV6 & NodeEffects;
-export type CustomNodeV8 = CustomNodeV6 & NodeEffects;
-export type TextNodeV8 = TextNode & NodeEffects;
-export type InstanceNodeV8 = InstanceNodeV5 & NodeEffects;
-export type GroupNodeV8 = GroupNode & NodeEffects;
-export type FrameNodeV8 = FrameNodeV6 & NodeEffects;
-export type SymbolNodeV8 = SymbolNodeV6 & NodeEffects;
+/**
+ * V-31 contract, V31-S1: the optional lock. Absent or `false` is unlocked, and a validated node
+ * has the key only when locked; locked nodes cannot be picked or transformed on the canvas.
+ */
+export type NodeLock = Readonly<{ locked?: boolean }>;
+
+export type RectangleNodeV8 = RectangleNodeV6 & NodeEffects & NodeLock;
+export type EllipseNodeV8 = EllipseNodeV6 & NodeEffects & NodeLock;
+export type LineNodeV8 = LineNodeV6 & NodeEffects & NodeLock;
+export type PathNodeV8 = PathNodeV6 & NodeEffects & NodeLock;
+export type CustomNodeV8 = CustomNodeV6 & NodeEffects & NodeLock;
+export type TextNodeV8 = TextNode & NodeEffects & NodeLock;
+export type InstanceNodeV8 = InstanceNodeV5 & NodeEffects & NodeLock;
+export type GroupNodeV8 = GroupNode & NodeEffects & NodeLock;
+export type FrameNodeV8 = FrameNodeV6 & NodeEffects & NodeLock;
+export type SymbolNodeV8 = SymbolNodeV6 & NodeEffects & NodeLock;
 
 export type LeafNodeV8 =
   | RectangleNodeV8

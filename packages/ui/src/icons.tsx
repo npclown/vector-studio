@@ -83,6 +83,28 @@ const PATHS: Readonly<Record<string, ReactNode>> = {
       fillRule="evenodd"
     />
   ),
+  // V-31: the layer row's visibility and lock buttons.
+  eye: (
+    <>
+      <path d="M1.5 8 C3.5 4.5 5.5 3.5 8 3.5 C10.5 3.5 12.5 4.5 14.5 8 C12.5 11.5 10.5 12.5 8 12.5 C5.5 12.5 3.5 11.5 1.5 8 Z" />
+      <circle cx="8" cy="8" r="2" />
+    </>
+  ),
+  'eye-off': (
+    <path d="M2 10 C4 11.7 6 12.5 8 12.5 C10 12.5 12 11.7 14 10 M4 11.5 L3 13 M8 12.5 V14.5 M12 11.5 L13 13" />
+  ),
+  lock: (
+    <>
+      <rect x="3.5" y="7" width="9" height="7" rx="1" />
+      <path d="M5.5 7 V5 A2.5 2.5 0 0 1 10.5 5 V7" />
+    </>
+  ),
+  unlock: (
+    <>
+      <rect x="3.5" y="7" width="9" height="7" rx="1" />
+      <path d="M5.5 7 V5 A2.5 2.5 0 0 1 10.5 4" />
+    </>
+  ),
 };
 
 /** Whether `name` has an icon. */

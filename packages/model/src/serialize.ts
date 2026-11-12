@@ -114,9 +114,10 @@ function effect(value: Effect): Ordered {
   };
 }
 
-/** A v8 node (v7's shape so far): the v6 fields, then `effects` (E41-S1). */
+/** A v8 node: the v6 fields, then `effects` (E41-S1), then `locked` only when true (V31-S1). */
 function nodeV8(value: NodeV8): Ordered {
-  return { ...nodeV6(value), effects: value.effects.map(effect) };
+  const ordered = { ...nodeV6(value), effects: value.effects.map(effect) };
+  return value.locked === true ? { ...ordered, locked: true } : ordered;
 }
 
 function nodeV6(value: NodeV6): Ordered {
