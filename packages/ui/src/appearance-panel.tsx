@@ -457,7 +457,7 @@ function FillRow({
   const prefix = rowPrefix(position);
   const lower = prefix.toLowerCase();
   return (
-    <div role="group" aria-label={prefix} data-testid={`fill-row-${position}`}>
+    <div role="group" aria-label={`Fill ${position + 1}`} data-testid={`fill-row-${position}`}>
       <Row>
         <label>
           <input
@@ -556,6 +556,9 @@ function FillSection({
           type="button"
           aria-label="Add fill"
           title={view.state === 'mixed' ? 'Replace the fills by one fill' : 'Add a fill'}
+          aria-description={
+            view.state === 'mixed' ? "Replaces every selected node's fills by one fill" : undefined
+          }
           data-testid="fill-add"
           disabled={full}
           onClick={() =>
@@ -569,7 +572,7 @@ function FillSection({
       </Row>
       {view.state === 'mixed' ? (
         <p data-testid="fill-mixed" style={{ margin: '4px 0' }}>
-          Mixed
+          Mixed <small>(+ replaces the fills by one fill)</small>
         </p>
       ) : view.fills.length === 0 ? (
         <PaintControls

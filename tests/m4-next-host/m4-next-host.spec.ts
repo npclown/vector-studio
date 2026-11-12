@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { RenderNodeSnapshot } from '@vector-studio/contracts';
 import type { Command, Editor, EditorEvent } from '@vector-studio/editor-core';
 import {
+  parseDocument,
   parseEnvelope,
   serializeDocument,
   type DocumentV8,
@@ -62,11 +63,14 @@ type Loose = Readonly<Record<string, unknown>>;
 type Box = readonly [number, number, number, number];
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const FIXTURE_TEXT = readFileSync(
-  path.join(root, 'tests/fixtures/m4-appearance/host.v6.json'),
-  'utf8',
+// The page loads the v6 file, which the editor migrates to v8 (V-35): the spec compares with the
+// migrated document and its canonical text, not with the v6 text.
+const parsedFixture = parseDocument(
+  readFileSync(path.join(root, 'tests/fixtures/m4-appearance/host.v6.json'), 'utf8'),
 );
-const FIXTURE = JSON.parse(FIXTURE_TEXT) as DocumentV8;
+if (!parsedFixture.ok) throw new Error(`host.v6.json: ${parsedFixture.code}`);
+const FIXTURE: DocumentV8 = parsedFixture.document;
+const FIXTURE_TEXT = serializeDocument(FIXTURE);
 
 const INTERIOR_TOLERANCE = 2;
 const EDGE_TOLERANCE = 4;

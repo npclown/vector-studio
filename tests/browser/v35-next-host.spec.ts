@@ -334,3 +334,40 @@ test('V35-A09: a multiply fill over a backdrop exports as PNG and SVG like the c
   expect(svg).toContain('mix-blend-mode: multiply');
   expect(errors).toEqual([]);
 });
+
+test('V35-C2: the controls of a lower row write that row, not the top one', async ({ page }) => {
+  const errors = await open(page);
+  const [a] = await ok(page, {
+    type: 'createRectangle',
+    frame: { x: 0, y: 0, width: 100, height: 100 },
+    fill: RED,
+    stroke: null,
+  });
+  const green = { r: 0, g: 1, b: 0, a: 1 };
+  // Bottom first: red (index 0), green (1), blue (2); the panel lists blue, green, red.
+  await ok(page, { type: 'addFill', ids: [a!] });
+  await ok(page, { type: 'setFill', ids: [a!], index: 1, patch: { paint: green } });
+  await ok(page, { type: 'addFill', ids: [a!] });
+  await ok(page, { type: 'setFill', ids: [a!], index: 2, patch: { paint: BLUE } });
+  await ok(page, { type: 'setSelection', ids: [a!] });
+  const fills = async () =>
+    (
+      (await node(page, a!)) as unknown as {
+        fills: { paint: unknown; opacity: number; blendMode: string }[];
+      }
+    ).fills;
+
+  // Fill 2 is index 1.
+  await commitField(page, 'Fill 2 opacity', '40');
+  expect((await fills()).map((fill) => fill.opacity)).toEqual([1, 0.4, 1]);
+  // Fill 3 is index 0.
+  await page.getByLabel('Fill 3 blend mode', { exact: true }).selectOption('screen');
+  expect((await fills()).map((fill) => fill.blendMode)).toEqual(['screen', 'normal', 'normal']);
+  // Fill 2 type none removes index 1 (green).
+  await page.getByLabel('Fill 2 type', { exact: true }).selectOption('none');
+  expect((await fills()).map((fill) => fill.paint)).toEqual([RED, BLUE]);
+  // Remove on the lower row (Fill 2 is now index 0, red).
+  await page.getByTestId('fill-1-remove').click();
+  expect((await fills()).map((fill) => fill.paint)).toEqual([BLUE]);
+  expect(errors).toEqual([]);
+});

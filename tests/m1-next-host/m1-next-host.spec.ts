@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Command, Editor, EditorEvent, SelectionHandles } from '@vector-studio/editor-core';
-import type { DocumentV8, NodeV8 } from '@vector-studio/model';
+import { parseDocument, type DocumentV8, type NodeV8 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
 import { expectLayoutBudget } from '../support/m8-n3-budget.js';
 
@@ -36,9 +36,12 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 // The page loads the v2 fixture `m1-model/containers.json`; since M4-U1 the editor holds its
 // committed v6 migration, which differs in the version and the M4-M1 stroke keys (M6a contract,
 // sections 2.1 and 9; M4 contract, section 2.1).
-const FIXTURE = JSON.parse(
+// V-35: the editor holds the v8 migration of that v6 file, so the spec compares with it.
+const parsedFixture = parseDocument(
   readFileSync(path.join(root, 'tests/fixtures/m4-appearance/migrated/containers.v6.json'), 'utf8'),
-) as DocumentV8;
+);
+if (!parsedFixture.ok) throw new Error(`containers.v6.json: ${parsedFixture.code}`);
+const FIXTURE: DocumentV8 = parsedFixture.document;
 const FIXTURE_LINE_STROKE = (FIXTURE.nodes.l1 as Extract<NodeV8, { type: 'line' }>).stroke!;
 /** The page's fixture camera (apps/next-host/app/page.tsx): css = (page - position) * zoom. */
 const CAMERA = { x: -20, y: -20, zoom: 2 };

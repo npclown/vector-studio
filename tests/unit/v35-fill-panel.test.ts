@@ -11,7 +11,9 @@ import {
 import { EditorProvider, PropertyPanel } from '@vector-studio/ui';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
+import { MAX_FILLS } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_RECTANGLE_FILL } from '../../packages/editor-core/src/edits.js';
 import {
   addFillCommand,
   BLEND_GROUPS,
@@ -24,6 +26,8 @@ import {
   modelIndex,
   moveFillCommand,
   offersPassThrough,
+  PANEL_DEFAULT_FILL,
+  PANEL_MAX_FILLS,
   parsePercent,
   percentText,
   removeFillCommand,
@@ -321,5 +325,12 @@ describe('V35-C2/C3 rendered panel', () => {
     ok(target, { type: 'setStyle', ids: [a], style: { blendMode: 'overlay' } });
     ok(target, { type: 'setSelection', ids: [a, b] });
     expect(panel(target)).toMatch(/aria-label="Blend mode"[^>]*data-mixed="true"/u);
+  });
+});
+
+describe('V35-C2 panel constants', () => {
+  it('equal the editor and model values they mirror', () => {
+    expect(PANEL_MAX_FILLS).toBe(MAX_FILLS);
+    expect(PANEL_DEFAULT_FILL).toEqual(DEFAULT_RECTANGLE_FILL);
   });
 });
