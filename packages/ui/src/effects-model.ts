@@ -194,6 +194,64 @@ export function effectOpacityCommand(
   };
 }
 
+/**
+ * The effects a node draws (E41-S10): an instance without effects of its own draws with its
+ * symbol's.
+ */
+function drawnEffects(document: DocumentV8, node: NodeV8): readonly Effect[] {
+  if (node.type !== 'instance' || node.effects.length > 0) return node.effects;
+  const source = Object.hasOwn(document.nodes, node.symbol)
+    ? document.nodes[node.symbol]
+    : undefined;
+  return source?.type === 'symbol' ? source.effects : node.effects;
+}
+
+/**
+ * V-36 section 5.3: whether a background blur at `row` shows only outside groups with opacity or
+ * effects, so the panel notes it does not show: true when any selected node whose effect at the
+ * row's index is a background blur is drawn inside a layer: an ancestor with opacity below 1 or
+ * with a visible effect it draws (E41-S10: an instance without effects of its own draws with its
+ * symbol's). Inside a symbol, each instance of it is such an ancestor too (the symbol's content
+ * draws inside each instance), with its own ancestors. The renderer draws a background blur only
+ * for a root composited in the main pass and counts the others in `backgroundBlurSkipped`.
+ */
+export function backgroundBlurNested(
+  document: DocumentV8,
+  nodes: readonly NodeV8[],
+  row: EffectRow,
+): boolean {
+  const seen = new Set<string>();
+  // V-35 (V35-K3): a container or instance with a blend mode other than pass-through is a layer.
+  const layered = (node: NodeV8) =>
+    node.opacity < 1 ||
+    drawnEffects(document, node).some((effect) => effect.visible) ||
+    (node.type !== 'symbol' && 'children' in node && node.blendMode !== 'passThrough') ||
+    (node.type === 'instance' && node.blendMode !== 'passThrough');
+  // Whether any ancestor of the node named `parent` (itself included) draws as a layer.
+  const nestedBelow = (parent: string): boolean => {
+    for (let id = parent; Object.hasOwn(document.nodes, id) && !seen.has(id);) {
+      seen.add(id);
+      const ancestor = document.nodes[id]!;
+      if (layered(ancestor)) return true;
+      if (ancestor.type === 'symbol') {
+        for (const node of Object.values(document.nodes)) {
+          if (node.type !== 'instance' || node.symbol !== id) continue;
+          if (layered(node) || nestedBelow(node.parent)) return true;
+        }
+      }
+      id = ancestor.parent;
+    }
+    return false;
+  };
+  return nodes.some(
+    (node) => node.effects[row.index]?.kind === 'backgroundBlur' && nestedBelow(node.parent),
+  );
+}
+
+/** The note shown under a background-blur row that `backgroundBlurNested` marks. */
+export const BACKGROUND_BLUR_NESTED_NOTE =
+  'Background blur shows only outside groups with opacity or effects';
+
 /** The notice for `editor.effect-limit`, or null for any other result. */
 export function effectNotice(result: CommandResult | null): string | null {
   return result !== null && !result.ok && result.code === 'editor.effect-limit'

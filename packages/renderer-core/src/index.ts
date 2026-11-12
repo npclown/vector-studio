@@ -48,7 +48,9 @@ export {
   E41_BLUR_LEVELS_MAX,
   E41_BLUR_TAPS_MAX,
   E41_LAYER_REACH_MAX,
+  E41_SIGMA_EPSILON_PX,
   E41_SIGMA_PX_MAX,
+  backdropMargin,
   blurLevels,
   effectResourceLimitDiagnostic,
 } from './effect-plan.js';

@@ -130,10 +130,12 @@ import {
   EFFECT_PASS_KINDS,
   EFFECT_PASS_RECORD_SIZE,
   EFFECT_SHADER,
+  EFFECT_SIGMA_EPSILON_PX,
   createEffectBindGroupLayoutDescriptor,
   createEffectPipelineDescriptor,
   effectPipelineKey,
   packEffectPassRecord,
+  planBackgroundBlurPasses,
   planEffectPasses,
   type EffectPassKind,
   type EffectPassPlan,
@@ -796,8 +798,17 @@ type ValidatedLayers = Readonly<{
   splits: ReadonlyMap<string, ReadonlyMap<number, BlendSplitFrame>>;
 }> | null;
 
-/** V35-K4: a blend root's snapshot in a frame, in device pixels. */
-type LayerBlendFrame = Readonly<{ snapshot: DeviceRect; margin: number }>;
+/**
+ * V35-K4: a blend root's snapshot in a frame, in device pixels. V-36 section 5.2: a
+ * background-blur root's too; `mode` is whether the root composites with its blend mode (else
+ * with source-over), `glass` whether the snapshot feeds its background blur.
+ */
+type LayerBlendFrame = Readonly<{
+  snapshot: DeviceRect;
+  margin: number;
+  mode: boolean;
+  glass: boolean;
+}>;
 
 /** V35-K4: one split: the composite's rectangle in its pass, and its snapshot record. */
 type BlendSplitFrame = Readonly<{ rect: DeviceRect; record: number }>;
@@ -823,10 +834,23 @@ type LayerEffectFrame = Readonly<{
    */
   scratchSlot: number;
   /**
-   * V-36 section 5.4: true when the root has a background blur that this frame does not draw
-   * (until U3 every background blur is skipped).
+   * V-36 section 5.4: true when the root has a background blur of σ at least
+   * EFFECT_SIGMA_EPSILON_PX that this frame does not plan to draw (nested, without the snapshot
+   * pipeline or a backdrop request, or with an empty snapshot).
    */
   backgroundBlurSkipped?: boolean;
+  /** V-36 section 5.2: the background-blur passes, run at the root's split in the main pass. */
+  background?: BackgroundBlurFrame;
+}>;
+
+/**
+ * V-36 section 5.2: a background-blur root's passes after its snapshot (records from
+ * `recordBase`), and the record of `B`'s composite at the root's opacity.
+ */
+type BackgroundBlurFrame = Readonly<{
+  plan: EffectPassPlan;
+  recordBase: number;
+  compositeRecord: number;
 }>;
 
 /** E25 U3: a frame's layer resources, released with the frame's transients. */
@@ -838,8 +862,20 @@ type LayerFrame = Readonly<{
   textures: readonly GPUTexture[];
   /** E41 U5: layers without a composite (an effect root whose `R` is empty). */
   skipped: ReadonlySet<number>;
-  /** V35-K4: per layer, its backdrop snapshot when it composites with its mode, else null. */
+  /**
+   * V35-K4: per layer, its backdrop snapshot when it composites with its mode (or, V-36, draws
+   * its background blur), else null.
+   */
   snapshots: readonly (BackdropSnapshot | null)[];
+  /** V35-K5: per layer, whether it composites with its mode over its snapshot. */
+  blended: readonly boolean[];
+  /** V-36 section 5.2: per layer, the composite bind group of its blurred backdrop `B`. */
+  glassGroups: readonly (GPUBindGroup | null)[];
+  /**
+   * V-36 section 5.2: encodes a background-blur root's passes after its snapshot (each its own
+   * render pass); false when the layer has none.
+   */
+  encodeBackgroundBlur(layer: number): boolean;
   /** V35-K4: the layer records buffer, which the snapshot records sit in. */
   records: GPUBuffer;
 }>;
@@ -1152,6 +1188,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     'clip-shifted': 0,
   };
   #backgroundBlurSkipped = 0;
+  /** V-36 section 5.2: background blurs drawn in the frame being built. */
+  #frameBackgroundBlurs = 0;
   readonly textPipelineAvailable: boolean;
   readonly #text: TextPipelineState | null;
   /** E28 section 4, Atlas pages: index i holds page i, as the packet's `pageCount` asks. */
@@ -1574,6 +1612,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         this.#encodeMaskPasses(encoder, clip, arena, meshArena, transients);
       }
       this.#frameSplits = 0;
+      this.#frameBackgroundBlurs = 0;
       for (const variant of BLEND_COMPOSITE_VARIANTS) this.#frameBlendCompositeDraws[variant] = 0;
       // E25 section 4, Pass order: the layers in post-order, after the mask passes.
       const layerFrame =
@@ -1734,7 +1773,13 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
             snapshot,
             planned.record * layers!.stride,
           );
+          // V-36 section 5.2: the background blur's passes between the snapshot and the resume.
+          const glass = layerFrame.encodeBackgroundBlur(slot.layer);
           pass = beginMain(true);
+          // Then `B` over the parent at the root's opacity, with the root's clip state.
+          if (glass && this.#encodeGlassComposite(pass, layerFrame, slot.layer, clip)) {
+            this.#frameBackgroundBlurs += 1;
+          }
         }
         const state = this.#encodeComposite(pass, layerFrame, slot.layer, 0, clip);
         bound = null;
@@ -1963,9 +2008,13 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         for (const variant of BLEND_COMPOSITE_VARIANTS) {
           this.#blendCompositeDraws[variant] += this.#frameBlendCompositeDraws[variant];
         }
-        this.#backgroundBlurSkipped += layers.effects.filter(
-          (effect) => effect?.result != null && effect.backgroundBlurSkipped === true,
-        ).length;
+        // V-36 section 5.4: roots with a background blur to draw, less those drawn.
+        this.#backgroundBlurSkipped +=
+          layers.effects.filter(
+            (effect) =>
+              effect?.result != null &&
+              (effect.backgroundBlurSkipped === true || effect.background !== undefined),
+          ).length - this.#frameBackgroundBlurs;
       }
       this.#observeCompletion();
       return Object.freeze({
@@ -3108,28 +3157,117 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         if (plan.scratch.width > maximum || plan.scratch.height > maximum) return null;
         const recordBase = effectRecords;
         effectRecords += plan.passes.length;
+        // V-36 section 5.4: a background blur counts as skipped until its passes are planned
+        // below; below EFFECT_SIGMA_EPSILON_PX it needs none and is not a skip.
+        const sigma = layer.effect.backgroundBlur?.sigmaPx;
         return {
           result,
           plan,
           recordBase,
           scratchSlot: -1,
-          ...(layer.effect.backgroundBlur === undefined ? {} : { backgroundBlurSkipped: true }),
+          ...(sigma !== undefined && sigma >= EFFECT_SIGMA_EPSILON_PX
+            ? { backgroundBlurSkipped: true }
+            : {}),
         };
       },
     );
+    // V35-K4, K5: a blend root composites with its mode over its backdrop snapshot when the
+    // blend pipeline has the variant its pass and clip state need; otherwise (K7) it composites
+    // with source-over, as the packet's plan does when the backend sets no `blendLayers`.
+    // V-36 section 5.2: a background-blur root with a backdrop request, composited in the main
+    // pass with its effect passes, snapshots its backdrop too (`glass`), composited with
+    // source-over unless it is also a blend root.
+    const targetRect: DeviceRect = { x: 0, y: 0, width: target.width, height: target.height };
+    const blends = layers.map((layer, index): LayerBlendFrame | null => {
+      if (layer.blend === undefined && layer.backdrop === undefined) return null;
+      const margin = layer.backdrop?.margin;
+      const background = layer.effect?.backgroundBlur !== undefined;
+      if (
+        (layer.blend === undefined
+          ? !background
+          : typeof layer.blend !== 'string' || !Object.hasOwn(BLEND_MODE_INDEX, layer.blend)) ||
+        typeof margin !== 'number' ||
+        !Number.isSafeInteger(margin) ||
+        margin < 0
+      ) {
+        throw new Error('Invalid blend.');
+      }
+      const blend = this.#blend;
+      if (blend === null) return null;
+      const effect = effects[index];
+      if (effect !== null && effect !== undefined && effect.result === null) return null;
+      const glass =
+        background &&
+        layer.parent === -1 &&
+        effect !== null &&
+        effect !== undefined &&
+        effect.backgroundBlurSkipped === true;
+      let mode = false;
+      if (layer.blend !== undefined) {
+        const parentShifted = layer.parent !== -1 && shifted[layer.parent]!;
+        const clipped = compositeStates[index] !== 0;
+        const pipeline = parentShifted
+          ? clipped
+            ? blend.clipShifted
+            : blend.shifted
+          : clipped
+            ? blend.clip
+            : blend.plain;
+        mode = pipeline !== null;
+      }
+      if (!mode && !glass) return null;
+      const composite = effect?.result ?? layer.bound;
+      const region = layer.parent === -1 ? targetRect : layers[layer.parent]!.bound;
+      // V35-K4: a margin is only offered over the main target; in a layer it is ignored.
+      const grown = layer.parent === -1 ? margin : 0;
+      const snapshot = backdropRect(composite, grown, region);
+      return snapshot === null ? null : Object.freeze({ snapshot, margin: grown, mode, glass });
+    });
+    // V-36 section 5.2: the background-blur passes after the snapshot, recorded after the
+    // effect passes, then `B`'s composite record.
+    blends.forEach((blend, index) => {
+      const effect = effects[index];
+      if (blend === null || !blend.glass || effect === null || effect === undefined) return;
+      const layer = layers[index]!;
+      const plan = planBackgroundBlurPasses(
+        blend.snapshot,
+        layer.bound,
+        effect.result!,
+        layer.effect!,
+        blend.mode,
+        layer.opacity * layer.effect!.contentOpacity,
+      );
+      if (
+        plan.passes.length === 0 ||
+        plan.scratch.width > maximum ||
+        plan.scratch.height > maximum
+      ) {
+        if (!blend.mode) blends[index] = null;
+        return;
+      }
+      const recordBase = effectRecords;
+      effectRecords += plan.passes.length;
+      effect.background = Object.freeze({ plan, recordBase, compositeRecord: effectRecords });
+      effectRecords += 1;
+      delete effect.backgroundBlurSkipped;
+    });
+    // A root's scratch need covers its effect passes and its background-blur passes.
+    const scratchOf = (effect: NonNullable<(typeof effects)[number]>) => ({
+      width: Math.max(effect.plan.scratch.width, effect.background?.plan.scratch.width ?? 0),
+      height: Math.max(effect.plan.scratch.height, effect.background?.plan.scratch.height ?? 0),
+    });
     // Scratch pairs: largest roots first, each root takes the first pair that fits it, or that
     // fits it when grown to both extents within twice the larger area; otherwise a new pair. So
     // similar roots share one pair, and a wide and a tall root never make one of both extents.
     const scratch: { width: number; height: number }[] = [];
     const byArea = effects
-      .filter((effect) => effect !== null && effect.plan.scratch.width > 0)
+      .filter((effect) => effect !== null && scratchOf(effect).width > 0)
       .sort(
         (a, b) =>
-          b!.plan.scratch.width * b!.plan.scratch.height -
-          a!.plan.scratch.width * a!.plan.scratch.height,
+          scratchOf(b!).width * scratchOf(b!).height - scratchOf(a!).width * scratchOf(a!).height,
       );
     for (const effect of byArea) {
-      const { width, height } = effect!.plan.scratch;
+      const { width, height } = scratchOf(effect!);
       let slot = scratch.findIndex((pair) => width <= pair.width && height <= pair.height);
       if (slot === -1) {
         slot = scratch.findIndex((pair) => {
@@ -3147,43 +3285,6 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       effect!.scratchSlot = slot;
     }
     for (const effect of effects) if (effect !== null) Object.freeze(effect);
-    // V35-K4, K5: a blend root composites with its mode over its backdrop snapshot when the
-    // blend pipeline has the variant its pass and clip state need; otherwise (K7) it composites
-    // with source-over, as the packet's plan does when the backend sets no `blendLayers`.
-    const targetRect: DeviceRect = { x: 0, y: 0, width: target.width, height: target.height };
-    const blends = layers.map((layer, index): LayerBlendFrame | null => {
-      if (layer.blend === undefined && layer.backdrop === undefined) return null;
-      const margin = layer.backdrop?.margin;
-      if (
-        typeof layer.blend !== 'string' ||
-        !Object.hasOwn(BLEND_MODE_INDEX, layer.blend) ||
-        typeof margin !== 'number' ||
-        !Number.isSafeInteger(margin) ||
-        margin < 0
-      ) {
-        throw new Error('Invalid blend.');
-      }
-      const blend = this.#blend;
-      if (blend === null) return null;
-      const parentShifted = layer.parent !== -1 && shifted[layer.parent]!;
-      const clipped = compositeStates[index] !== 0;
-      const pipeline = parentShifted
-        ? clipped
-          ? blend.clipShifted
-          : blend.shifted
-        : clipped
-          ? blend.clip
-          : blend.plain;
-      if (pipeline === null) return null;
-      const effect = effects[index];
-      if (effect !== null && effect !== undefined && effect.result === null) return null;
-      const composite = effect?.result ?? layer.bound;
-      const region = layer.parent === -1 ? targetRect : layers[layer.parent]!.bound;
-      // V35-K4: a margin is only offered over the main target; in a layer it is ignored.
-      const grown = layer.parent === -1 ? margin : 0;
-      const snapshot = backdropRect(composite, grown, region);
-      return snapshot === null ? null : Object.freeze({ snapshot, margin: grown });
-    });
     const splitPlan = planBackdropSplits(
       layers.map((layer, index) => ({
         parent: layer.parent,
@@ -3233,7 +3334,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           ? layer.opacity
           : layer.opacity * layer.effect!.contentOpacity;
       records.set(
-        blend === null || blend === undefined
+        blend === null || blend === undefined || !blend.mode
           ? packLayerCompositeRecord(bound, alpha)
           : packBlendCompositeRecord(bound, alpha, layer.blend!, blend.snapshot),
         (compositeRecordBase + index) * stride,
@@ -3241,6 +3342,14 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       effect?.plan.passes.forEach((pass, offset) => {
         records.set(packEffectPassRecord(pass), (effect.recordBase + offset) * stride);
       });
+      // V-36 section 5.2: the background-blur passes and `B`'s composite at the root's `o`.
+      const background = effect?.background;
+      if (background !== undefined) {
+        background.plan.passes.forEach((pass, offset) => {
+          records.set(packEffectPassRecord(pass), (background.recordBase + offset) * stride);
+        });
+        records.set(packLayerCompositeRecord(bound, alpha), background.compositeRecord * stride);
+      }
     });
     if (records.byteLength > safeLimit(this.#device.limits.maxBufferSize, 0)) {
       throw new AllocationError();
@@ -3416,6 +3525,42 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
             origin: Object.freeze({ x: blend.snapshot.x, y: blend.snapshot.y }),
           }),
     );
+    // V35-K5: the roots that composite with their mode (V-36: a background-blur root's snapshot
+    // alone composites with source-over).
+    const blended = layers.blends.map((blend) => blend !== null && blend.mode);
+    // V-36 section 5.2: each background-blur root's blurred backdrop `B`, at its result bound.
+    const blurred = layers.effects.map((effect, index) =>
+      effect?.background === undefined || effect.result === null
+        ? null
+        : texture(
+            `effect-blurred-${index}`,
+            effect.result.width,
+            effect.result.height,
+            this.#format,
+            1,
+            4,
+            TEXTURE_BINDING_USAGE,
+          ),
+    );
+    const glassGroups = blurred.map((glass, index) =>
+      glass === null
+        ? null
+        : this.#device.createBindGroup({
+            label: `${prefix}/background-blur-composite-${index}`,
+            layout: pipelines.compositeBindGroupLayout,
+            entries: [
+              { binding: LAYER_COMPOSITE_BINDINGS.layer, resource: glass.createView() },
+              {
+                binding: LAYER_COMPOSITE_BINDINGS.record,
+                resource: {
+                  buffer: records,
+                  offset: layers.effects[index]!.background!.compositeRecord * layers.stride,
+                  size: LAYER_COMPOSITE_RECORD_SIZE,
+                },
+              },
+            ],
+          }),
+    );
     const compositeGroups = textures.map((layerTexture, index) => {
       const snapshot = snapshots[index];
       const record = {
@@ -3424,7 +3569,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         size: LAYER_COMPOSITE_RECORD_SIZE,
       };
       const layerView = (results[index] ?? layerTexture).createView();
-      if (snapshot !== null && snapshot !== undefined) {
+      if (snapshot !== null && snapshot !== undefined && blended[index]) {
         // V35-K5: `R`, the blend record and the backdrop snapshot.
         return this.#device.createBindGroup({
           label: `${prefix}/blend-composite-${index}`,
@@ -3449,6 +3594,47 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     layers.effects.forEach((effect, index) => {
       if (effect !== null && effect.result === null) skipped.add(index);
     });
+    const effectGroups = new Map<GPUTexture, GPUBindGroup>();
+    /** E41 U5 and V-36 section 5.2: one root's planned passes, each its own render pass. */
+    const encodeEffectPasses = (
+      index: number,
+      plan: EffectPassPlan,
+      recordBase: number,
+      surfaces: Record<EffectSurface, GPUTexture | null>,
+    ) => {
+      plan.passes.forEach((planned, offset) => {
+        const pass = encoder.beginRenderPass({
+          label: `vector-studio/effect-pass/${index}/${planned.kind}`,
+          colorAttachments: [
+            {
+              view: surfaces[planned.target]!.createView(),
+              clearValue: { r: 0, g: 0, b: 0, a: 0 },
+              loadOp: planned.clear ? 'clear' : 'load',
+              storeOp: 'store',
+            },
+          ],
+        });
+        const [x, y] = planned.at ?? [0, 0];
+        pass.setViewport(x, y, planned.width, planned.height, 0, 1);
+        pass.setPipeline(this.#effect!.pipelines.get(planned.kind)!);
+        pass.setBindGroup(0, effectGroup(surfaces[planned.source]!), [
+          (recordBase + offset) * layers.stride,
+        ]);
+        pass.draw(3);
+        pass.end();
+      });
+    };
+    const surfacesOf = (index: number): Record<EffectSurface, GPUTexture | null> => {
+      const pair = scratch[layers.effects[index]?.scratchSlot ?? -1];
+      return {
+        content: textures[index]!,
+        result: results[index] ?? null,
+        scratch0: pair?.[0] ?? null,
+        scratch1: pair?.[1] ?? null,
+        backdrop: snapshots[index]?.texture ?? null,
+        blurred: blurred[index] ?? null,
+      };
+    };
     const frame: LayerFrame = Object.freeze({
       passGroup,
       compositeGroups,
@@ -3456,9 +3642,20 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       textures,
       skipped,
       snapshots: Object.freeze(snapshots),
+      blended: Object.freeze(blended),
+      glassGroups: Object.freeze(glassGroups),
+      // V-36 section 5.2: after the root's snapshot, its blur, coverage and (for a blend root)
+      // merge passes, each its own render pass on the frame's encoder.
+      encodeBackgroundBlur: (index: number) => {
+        const background = layers.effects[index]?.background;
+        if (background === undefined || blurred[index] === null || snapshots[index] == null) {
+          return false;
+        }
+        encodeEffectPasses(index, background.plan, background.recordBase, surfacesOf(index));
+        return true;
+      },
       records,
     });
-    const effectGroups = new Map<GPUTexture, GPUBindGroup>();
     const effectGroup = (source: GPUTexture) => {
       let group = effectGroups.get(source);
       if (group === undefined) {
@@ -3620,33 +3817,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       // E41 U5: `L` is complete; build `R` before any later pass composites it.
       const effect = layers.effects[index];
       if (effect == null || effect.result === null) return;
-      const pair = scratch[effect.scratchSlot];
-      const surfaces: Record<EffectSurface, GPUTexture | null> = {
-        content: textures[index]!,
-        result: results[index]!,
-        scratch0: pair?.[0] ?? null,
-        scratch1: pair?.[1] ?? null,
-      };
-      effect.plan.passes.forEach((planned, offset) => {
-        const pass = encoder.beginRenderPass({
-          label: `vector-studio/effect-pass/${index}/${planned.kind}`,
-          colorAttachments: [
-            {
-              view: surfaces[planned.target]!.createView(),
-              clearValue: { r: 0, g: 0, b: 0, a: 0 },
-              loadOp: planned.clear ? 'clear' : 'load',
-              storeOp: 'store',
-            },
-          ],
-        });
-        pass.setViewport(0, 0, planned.width, planned.height, 0, 1);
-        pass.setPipeline(this.#effect!.pipelines.get(planned.kind)!);
-        pass.setBindGroup(0, effectGroup(surfaces[planned.source]!), [
-          (effect.recordBase + offset) * layers.stride,
-        ]);
-        pass.draw(3);
-        pass.end();
-      });
+      encodeEffectPasses(index, effect.plan, effect.recordBase, surfacesOf(index));
     });
     return frame;
   }
@@ -3937,7 +4108,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     const state = frame.compositeStates[layer] ?? 0;
     // V35-K5: a blend root with its snapshot draws through the blend composite (preflight
     // checked that this pass and clip state have their variant).
-    const blended = frame.snapshots[layer] != null;
+    const blended = frame.blended[layer] === true;
     const plain = blended ? blendComposite : composite;
     const clipped = blended ? blendCompositeClip : compositeClip;
     if (plain === null || (state !== 0 && (clipped === null || clip === null))) return -1;
@@ -3969,6 +4140,37 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     pass.setBindGroup(LAYER_BIND_GROUP_INDEX, frame.passGroup, [passOffset]);
     pass.draw(6);
     return state;
+  }
+
+  /**
+   * V-36 section 5.2, step 5: a background-blur root's `B` in the main pass, drawn with the effect
+   * composite at the root's opacity (its record) and its composite's clip state, as `R` is.
+   * False when it is not drawn (no `B`, or a clipped composite without the clip variant).
+   */
+  #encodeGlassComposite(
+    pass: GPURenderPassEncoder,
+    frame: LayerFrame,
+    layer: number,
+    clip: ValidatedClip,
+  ): boolean {
+    const group = frame.glassGroups[layer];
+    if (group === null || group === undefined || frame.skipped.has(layer)) return false;
+    const state = frame.compositeStates[layer] ?? 0;
+    const pipelines = this.#layer!;
+    const clipped = this.#effect?.compositeClip ?? null;
+    if (state !== 0 && (clipped === null || clip === null)) return false;
+    pass.setPipeline(state === 0 ? pipelines.composite : clipped!);
+    pass.setBindGroup(0, group);
+    if (state === 0) pass.setBindGroup(CLIP_BIND_GROUP_INDEX, pipelines.emptyBindGroup);
+    else {
+      pass.setBindGroup(CLIP_BIND_GROUP_INDEX, this.#clipBindGroup(clip!, state), [
+        state * clip!.stride,
+      ]);
+    }
+    pass.setBindGroup(PAINT_BIND_GROUP_INDEX, pipelines.emptyBindGroup);
+    pass.setBindGroup(LAYER_BIND_GROUP_INDEX, frame.passGroup, [0]);
+    pass.draw(6);
+    return true;
   }
 
   /** Destroys the frame's transient attachments and releases their accounting entries. */

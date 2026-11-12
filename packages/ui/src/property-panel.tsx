@@ -16,7 +16,7 @@ import {
   type TextEditState,
   type TextNodeV8,
 } from '@vector-studio/react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { colorHex, fillOf, parseNumber, type Common } from './appearance-model.js';
 import { booleanActions } from './boolean-model.js';
 import {
@@ -25,6 +25,8 @@ import {
   effectColorCommand,
   effectLabel,
   effectNumberCommand,
+  BACKGROUND_BLUR_NESTED_NOTE,
+  backgroundBlurNested,
   effectRows,
   kindOptions,
   effectOpacityCommand,
@@ -701,11 +703,8 @@ function EffectsSection({
 }) {
   const masked = nodes.some((node) => isMaskSource(document, node));
   const rows = effectRows(nodes);
-  // The kinds the host projects (V-36 contract, section 6). Background blur joins the list when
-  // the renderer draws it (V-36 U3).
-  const offered = useEditorQuery({ type: 'effectKinds' }).filter(
-    (kind) => kind !== 'backgroundBlur',
-  );
+  // The kinds the host projects (V-36 contract, section 6).
+  const offered = useEditorQuery({ type: 'effectKinds' });
   return (
     <Section legend={legend}>
       <Row>
@@ -727,14 +726,18 @@ function EffectsSection({
         </p>
       )}
       {rows.map((row) => (
-        <EffectRowFields
-          key={row.index}
-          nodes={nodes}
-          row={row}
-          offered={offered}
-          disabled={masked}
-          run={run}
-        />
+        <Fragment key={row.index}>
+          <EffectRowFields nodes={nodes} row={row} offered={offered} disabled={masked} run={run} />
+          {/* V-36 section 5.3: a nested background blur does not show. */}
+          {backgroundBlurNested(document, nodes, row) && (
+            <p
+              data-testid={`effect-${row.index}-nested-note`}
+              style={{ margin: '0 0 4px', opacity: 0.7 }}
+            >
+              {BACKGROUND_BLUR_NESTED_NOTE}
+            </p>
+          )}
+        </Fragment>
       ))}
     </Section>
   );

@@ -105,7 +105,10 @@ export interface WebGpuPrimitiveScenePort extends PrimitivePacketConsumer {
   readonly effectPipelineAvailable?: boolean;
   /** E41 U5: effect roots this generation has drawn with their effects, one per root and frame. */
   readonly effectPasses?: number;
-  /** V-36 section 5.4: drawn effect roots whose background blur was not drawn. */
+  /**
+   * V-36 section 5.4: drawn effect roots whose background blur (σ at least the epsilon) was not
+   * drawn, one per root and frame: nested, without the snapshot pipeline or an empty snapshot.
+   */
   readonly backgroundBlurSkipped?: number;
   /** E41 section 5.4: the device's `maxTextureDimension2D`, which effect bounds respect. */
   readonly maxTextureDimension2D?: number;
@@ -212,7 +215,8 @@ export interface WebGpuPrimitiveSceneOptions {
    * V-35 contract, V35-K4 and K5: creates the backdrop snapshot pipeline and the blend
    * composite variants (with the layer pipeline only), and gives the multisample attachment and
    * the layer tile colour textures `TEXTURE_BINDING`. Without them blend roots draw as `normal`
-   * and isolating containers as `passThrough` (V35-K7).
+   * and isolating containers as `passThrough` (V35-K7). V-36 section 5.2: the backend also asks
+   * for them under `effects: 'v1'`, whose background blur takes main-pass snapshots.
    */
   readonly blendPipeline?: boolean;
   /**
