@@ -50,10 +50,19 @@ export class ImageTextureStore {
   readonly #port: ImageSourcePort | null;
   readonly #residency: ImageResidency;
   readonly #resident = new Map<string, Resident>();
-  /** Keys the port failed for, reported once each (V32-K3). */
-  readonly #failed = new Set<string>();
-  /** Keys refused by the budget while they stay refused, reported once each (V32-K5). */
-  readonly #refused = new Set<string>();
+  /**
+   * Keys the port answered pending or failed for: not requested again until the port notifies
+   * them (V32-A05: one request per state change).
+   */
+  readonly #waiting = new Set<string>();
+  /** Keys reported unavailable in this generation, so each is reported once (V32-K3). */
+  readonly #reported = new Set<string>();
+  /**
+   * Keys refused by the budget, with the bytes they need: requested again only once that many
+   * bytes would be admitted, and reported once while they stay refused (V32-K5).
+   */
+  readonly #refused = new Map<string, number>();
+  #unsubscribe: (() => void) | null = null;
   #notices: ImageNotice[] = [];
   #transparentTexture: GPUTexture | null = null;
   #frame = 0;
@@ -152,7 +161,12 @@ export class ImageTextureStore {
       this.#residency.use(key, this.#frame);
       return { key, view: resident.view, size: resident.size };
     }
-    if (this.#port === null || this.#failed.has(key)) return this.transparent;
+    if (this.#port === null || this.#waiting.has(key)) return this.transparent;
+    this.#subscribe();
+    const needed = this.#refused.get(key);
+    if (needed !== undefined && !this.#residency.fits(needed, this.#frame)) {
+      return this.transparent;
+    }
     let result: ImageSourceResult;
     try {
       result = this.#port.request(key);
@@ -162,31 +176,32 @@ export class ImageTextureStore {
     if (result === null || typeof result !== 'object') {
       result = { status: 'failed', reason: 'decode-failed' };
     }
-    if (result.status === 'pending') return this.transparent;
+    if (result.status === 'pending') {
+      this.#waiting.add(key);
+      return this.transparent;
+    }
     if (result.status !== 'ready') {
       this.#fail(key, result.status === 'failed' ? result.reason : 'decode-failed');
       return this.transparent;
     }
     const { width, height, pixels } = result;
-    const valid =
-      Number.isSafeInteger(width) &&
-      Number.isSafeInteger(height) &&
-      width >= 1 &&
-      height >= 1 &&
-      width <= this.#maxSide() &&
-      height <= this.#maxSide() &&
-      pixels instanceof Uint8Array &&
-      pixels.length === width * height * 4;
-    if (!valid) {
+    const sized =
+      Number.isSafeInteger(width) && Number.isSafeInteger(height) && width >= 1 && height >= 1;
+    if (!sized || !(pixels instanceof Uint8Array) || pixels.length !== width * height * 4) {
+      this.#fail(key, 'decode-failed');
+      return this.transparent;
+    }
+    if (width > this.#maxSide() || height > this.#maxSide()) {
       this.#fail(key, 'too-large');
       return this.transparent;
     }
-    const admission = this.#residency.admit(key, mipChainBytes(width, height), this.#frame);
+    const bytes = mipChainBytes(width, height);
+    const admission = this.#residency.admit(key, bytes, this.#frame);
     if (!admission.admitted) {
       if (!this.#refused.has(key)) {
-        this.#refused.add(key);
         this.#notices.push(Object.freeze({ key, kind: 'resource-limit' }));
       }
+      this.#refused.set(key, bytes);
       return this.transparent;
     }
     this.#refused.delete(key);
@@ -194,7 +209,7 @@ export class ImageTextureStore {
     const levels = buildImageMips(width, height, pixels);
     if (levels === null) {
       this.#residency.remove(key);
-      this.#fail(key, 'too-large');
+      this.#fail(key, 'decode-failed');
       return this.transparent;
     }
     const id = `${this.#prefix}/image-${this.#next++}`;
@@ -228,11 +243,25 @@ export class ImageTextureStore {
     return { key, view, size };
   }
 
-  /** The notices since the last call (V32-K3, K5). */
-  public takeNotices(): readonly ImageNotice[] {
-    const notices = this.#notices;
-    this.#notices = [];
+  /**
+   * The oldest `limit` notices not yet taken (V32-K3, K5); the rest wait for the next call, so a
+   * frame with many failed keys still reports each one.
+   */
+  public takeNotices(limit = Number.POSITIVE_INFINITY): readonly ImageNotice[] {
+    const notices = this.#notices.slice(0, limit);
+    this.#notices = this.#notices.slice(notices.length);
     return notices;
+  }
+
+  /**
+   * V32-K3: the port's notification makes its keys requestable again, so a pending key draws once
+   * ready and a failed one is retried (reported again only in a new generation).
+   */
+  #subscribe(): void {
+    if (this.#unsubscribe !== null || this.#port === null) return;
+    this.#unsubscribe = this.#port.subscribe((keys) => {
+      for (const key of keys) this.#waiting.delete(key);
+    });
   }
 
   public get residentBytes(): number {
@@ -240,6 +269,8 @@ export class ImageTextureStore {
   }
 
   public dispose(): void {
+    this.#unsubscribe?.();
+    this.#unsubscribe = null;
     for (const key of [...this.#resident.keys()]) this.#releaseTexture(key);
     this.#residency.clear();
     if (this.#base === null) return;
@@ -261,8 +292,9 @@ export class ImageTextureStore {
   }
 
   #fail(key: string, reason: Extract<ImageSourceResult, { status: 'failed' }>['reason']): void {
-    if (this.#failed.has(key)) return;
-    this.#failed.add(key);
+    this.#waiting.add(key);
+    if (this.#reported.has(key)) return;
+    this.#reported.add(key);
     this.#notices.push(Object.freeze({ key, kind: 'unavailable', reason }));
   }
 

@@ -140,6 +140,20 @@ export class ImageResidency {
     return { admitted: true, release };
   }
 
+  /**
+   * Whether `bytes` would be admitted in `frame` (after releasing what `admit` would release),
+   * without changing anything.
+   */
+  public fits(bytes: number, frame: number): boolean {
+    if (bytes > this.#budget) return false;
+    let freed = 0;
+    for (const entry of this.#entries.values()) {
+      if (this.#bytes - freed + bytes <= this.#budget) return true;
+      if (entry.frame !== frame) freed += entry.bytes;
+    }
+    return this.#bytes - freed + bytes <= this.#budget;
+  }
+
   public remove(key: string): void {
     const entry = this.#entries.get(key);
     if (entry === undefined) return;

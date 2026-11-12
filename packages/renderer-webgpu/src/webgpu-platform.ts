@@ -93,7 +93,7 @@ export interface WebGpuPrimitiveScenePort extends PrimitivePacketConsumer {
   /** E28-D1: true once an atlas page or the text buffer could not be created; text stays undrawn. */
   readonly textPageAllocationFailed?: boolean;
   /** V-32 (V32-K3, K5): image notices since the last call; absent on scenes without paints. */
-  takeImageNotices?(): readonly Readonly<{
+  takeImageNotices?(limit?: number): readonly Readonly<{
     key: string;
     kind: 'unavailable' | 'resource-limit';
     reason?: string;

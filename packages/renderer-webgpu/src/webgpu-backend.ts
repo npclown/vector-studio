@@ -1479,9 +1479,10 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
           }
         }
         // V-32 (V32-K3, K5): image notices of the frame's texture store.
-        const imageNotices = scene.takeImageNotices?.() ?? [];
+        // At most NOTICES_PER_PACKET per frame; the store keeps the rest for the next frame.
+        const imageNotices = scene.takeImageNotices?.(NOTICES_PER_PACKET) ?? [];
         if (this.#generation === generation) {
-          for (const notice of imageNotices.slice(0, NOTICES_PER_PACKET)) {
+          for (const notice of imageNotices) {
             this.#emit(
               notice.kind === 'unavailable'
                 ? DIAGNOSTIC_CODES.IMAGE_UNAVAILABLE

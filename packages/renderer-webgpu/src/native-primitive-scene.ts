@@ -3912,8 +3912,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   }
 
   /** V-32 (V32-K3, K5): image notices since the last call, for the backend's diagnostics. */
-  takeImageNotices(): readonly ImageNotice[] {
-    return this.#paint?.images.takeNotices() ?? [];
+  takeImageNotices(limit?: number): readonly ImageNotice[] {
+    return this.#paint?.images.takeNotices(limit) ?? [];
   }
 
   /** V-32: uploads and resident bytes of the image store, for tests and the A06 counters. */

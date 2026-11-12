@@ -166,6 +166,12 @@ type Fixture = Readonly<{
   name: string;
   nodes: readonly RenderNodeSnapshot[];
   regions: readonly Region[];
+  /** Pixels inside a shape but outside its clip, at least 2 px from both: must stay clear. */
+  outside?: Readonly<{
+    world: Affine;
+    inside: (x: number, y: number, margin: number) => boolean;
+    clip: (x: number, y: number, margin: number) => boolean;
+  }>;
   /** Edge bands: the same scene with a solid fill of the edge colour, and the band's pixels. */
   edges?: Readonly<{
     solid: readonly RenderNodeSnapshot[];
@@ -275,21 +281,34 @@ function fixtures(): Fixture[] {
       },
     });
   }
-  // Tile at scale 0.5: 32 × 16 tiles across a 200 × 100 frame-sized rectangle.
+  // Tile at scale 0.5: 32 × 16 tiles in a frame, as the projector draws one: a container clipped
+  // to the 200 × 100 frame box whose fill is an overflowing rectangle, so the clip cuts the tiles.
   {
     const world = translate(30, 30);
     const paint: Affine = [32, 0, 0, 16, 0, 0];
     list.push({
-      name: 'tile at 0.5',
+      name: 'tile at 0.5 in a frame',
       nodes: [
+        {
+          id: 'frame',
+          parentId: null,
+          transform: world,
+          visible: true,
+          opacity: 1,
+          kind: 'container',
+          clip: { kind: 'rect', x: 0, y: 0, width: 200, height: 100 },
+          children: ['tile'],
+        },
         primitive(
           'tile',
-          world,
-          { kind: 'rectangle', width: 200, height: 100 },
+          IDENTITY,
+          { kind: 'rectangle', width: 240, height: 140 },
           imagePaint('quadrants', paint, 'repeat'),
+          { parentId: 'frame' },
         ),
       ],
       regions: [{ world, paint, wrap: { x: 'repeat', y: 'repeat' }, inside: rectInside(200, 100) }],
+      outside: { world, inside: rectInside(240, 140), clip: rectInside(200, 100) },
     });
   }
   // Under a mask (an ellipse source), at opacity 0.5, and with a drop shadow.
@@ -501,6 +520,25 @@ for (const dpr of [1, 2]) {
       for (const fixture of fixtures()) {
         const rendered = await render(page, fixture.nodes);
         const interior = probeInterior(rendered, fixture, dpr);
+        if (fixture.outside !== undefined) {
+          // Clipped away: inside the shape, at least 2 px outside the clip, and still black.
+          const { world, inside, clip } = fixture.outside;
+          const inverse = invert(world);
+          const { width, height } = rendered.result.frame;
+          let clipped = 0;
+          for (let y = 1; y < height; y += 3) {
+            for (let x = 1; x < width; x += 3) {
+              const [lx, ly] = apply(inverse, (x + 0.5) / dpr, (y + 0.5) / dpr);
+              if (!inside(lx, ly, 2 / dpr) || clip(lx, ly, -2 / dpr)) continue;
+              clipped += 1;
+              const got = pixel(rendered, x, y);
+              if (got.some((value) => value > INTERIOR_TOLERANCE)) {
+                interior.failures.push(`${fixture.name} clipped (${x}, ${y}): ${got.join(',')}`);
+              }
+            }
+          }
+          expect(clipped, `${fixture.name} clipped probes`).toBeGreaterThan(50);
+        }
         let edge: { probes: number; worst: number; failures: string[] } | null = null;
         if (fixture.edges !== undefined) {
           const solid = await render(page, fixture.edges.solid);
@@ -609,8 +647,16 @@ for (const dpr of [1, 2]) {
       const pending = await render(page, nodes);
       expect(probe(pending, 40, 40)).toEqual([0, 0, 0]);
       expect(probe(pending, 220, 40)).toEqual([0, 0, 0]);
-      // Ready, then the port's notification alone submits a new frame.
+      // V32-A05: ready without a notification is not asked again, so it is not drawn.
       await setImage(page, 'late', IMAGE.width, quadrantImage());
+      const unnotified = await render(page, nodes);
+      expect(probe(unnotified, 40, 40)).toEqual([0, 0, 0]);
+      const lateRequests = () =>
+        page.evaluate(() =>
+          window.__vectorStudioE23.imageRequests().filter((key) => key === 'late'),
+        );
+      expect(await lateRequests()).toHaveLength(1);
+      // The port's notification alone submits a new frame, and the key is asked again.
       const before = await page.evaluate(
         () => window.__vectorStudioE23.counters().statistics.framesSubmitted,
       );
@@ -619,6 +665,7 @@ for (const dpr of [1, 2]) {
         (count) => window.__vectorStudioE23.counters().statistics.framesSubmitted > count,
         before,
       );
+      expect(await lateRequests()).toHaveLength(2);
       const drawn = await render(page, nodes);
       const red = probe(drawn, 40, 40);
       for (const [lane, value] of quadrantOverBlack(0).entries()) {

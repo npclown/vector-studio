@@ -101,8 +101,12 @@ describe('V32-S1 to S3 image paint validation', () => {
     );
   });
 
-  it('is invalid-value in a stroke slot', () => {
+  it('is invalid-value in a stroke slot, primitive or path', () => {
     expect(replace([box('a', 0, red, { color: image('k1'), width: 2 })])).toBe('invalid-value');
+    const stroked = strokedNode('p', 0, {
+      stroke: { color: image('k1') as never, width: 2, cap: 'butt', join: 'miter', miterLimit: 4 },
+    }) as RenderNodeSnapshot;
+    expect(replace([stroked])).toBe('invalid-value');
   });
 
   it('refuses each malformed field as invalid-value', () => {
@@ -273,6 +277,7 @@ type Script = Map<string, ImageSourceResult | 'throw'>;
 
 function scriptedPort(script: Script) {
   const requests: string[] = [];
+  const listeners = new Set<(keys: readonly string[]) => void>();
   const port: ImageSourcePort = {
     portVersion: 0,
     operationId: 'v32-u3/scripted',
@@ -282,18 +287,24 @@ function scriptedPort(script: Script) {
       if (result === 'throw') throw new Error('scripted throw');
       return result;
     },
-    subscribe: () => () => {},
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
   };
-  return { port, requests };
+  const notify = (keys: readonly string[]) => {
+    for (const listener of listeners) listener(keys);
+  };
+  return { port, requests, notify, listeners };
 }
 
 function ready(width: number, height: number): ImageSourceResult {
   return { status: 'ready', width, height, pixels: new Uint8Array(width * height * 4).fill(255) };
 }
 
-async function imageScene(script: Script) {
+async function imageScene(script: Script, clips: 'rect' | 'supported' = 'rect') {
   const fixture = nativeFixture();
-  const { port, requests } = scriptedPort(script);
+  const { port, requests, notify, listeners } = scriptedPort(script);
   const created = await nativeScene(fixture, {
     meshPipeline: true,
     clipPipeline: true,
@@ -304,13 +315,13 @@ async function imageScene(script: Script) {
   const scene = created.scene as typeof created.scene &
     Readonly<{
       imageTextureStatsForTesting: Readonly<{ uploads: number; residentBytes: number }>;
-      takeImageNotices(): readonly ImageNotice[];
+      takeImageNotices(limit?: number): readonly ImageNotice[];
     }>;
   const run = (nodes: readonly RenderNodeSnapshot[]) => {
     const h = createStrokeHarness({
       fillPort: createCountingPort(),
       strokePort: new ScriptedStrokeMeshPort(),
-      clips: 'rect',
+      clips,
       paints: 'image',
       nodes,
     });
@@ -320,7 +331,7 @@ async function imageScene(script: Script) {
       .filter((call) => call[0] === 'setBindGroup' && call[1] === 2)
       .map((call) => call[2]);
   };
-  return { fixture, scene, creation, run, requests };
+  return { fixture, scene, creation, run, requests, notify, listeners };
 }
 
 describe('V32-K7 per-draw image binding', () => {
@@ -380,41 +391,88 @@ describe('V32-K7 per-draw image binding', () => {
     creation.dispose();
   });
 
-  it('a pending image binds the transparent texture and is asked again next frame', async () => {
+  it('a pending image binds the transparent texture and is asked again only after a notification', async () => {
     const script: Script = new Map([['k1', { status: 'pending' }]]);
-    const { scene, creation, run, requests } = await imageScene(script);
+    const { scene, creation, run, requests, notify, listeners } = await imageScene(script);
     expect(run([box('a', 0, image('k1'))])).toEqual([primitiveGroup]);
     expect(scene.takeImageNotices()).toEqual([]);
+    // V32-A05: no further request while nothing changed, frame after frame.
+    run([box('a', 0, image('k1'))]);
+    run([box('a', 0, image('k1'))]);
+    expect(requests).toEqual(['k1']);
     script.set('k1', ready(2, 2));
+    notify(['k1']);
     expect(run([box('a', 0, image('k1'))])).toEqual([`${primitiveGroup}+image`]);
     expect(requests).toEqual(['k1', 'k1']);
     creation.dispose();
+    expect(listeners.size).toBe(0);
   });
 
-  it('a failed, throwing or malformed image is reported once and not asked again', async () => {
-    const { scene, creation, run, requests } = await imageScene(
-      new Map<string, ImageSourceResult | 'throw'>([
-        ['bad', { status: 'failed', reason: 'decode-failed' }],
-        ['boom', 'throw'],
-        ['short', { status: 'ready', width: 2, height: 2, pixels: new Uint8Array(15) }],
-      ]),
-    );
+  it('a failed, throwing or malformed image is reported once and asked again only after a notification', async () => {
+    const script = new Map<string, ImageSourceResult | 'throw'>([
+      ['bad', { status: 'failed', reason: 'decode-failed' }],
+      ['boom', 'throw'],
+      ['short', { status: 'ready', width: 2, height: 2, pixels: new Uint8Array(15) }],
+      ['huge', { status: 'ready', width: 4097, height: 1, pixels: new Uint8Array(4097 * 4) }],
+    ]);
+    const { scene, creation, run, requests, notify } = await imageScene(script);
     const nodes = [
       box('a', 0, image('bad')),
       box('b', 20, image('boom')),
       box('c', 40, image('short')),
       box('d', 60, image('gone')),
+      box('e', 80, image('huge')),
     ];
     expect(run(nodes)).toEqual([primitiveGroup]);
     expect(scene.takeImageNotices()).toEqual([
       { key: 'bad', kind: 'unavailable', reason: 'decode-failed' },
       { key: 'boom', kind: 'unavailable', reason: 'decode-failed' },
-      { key: 'short', kind: 'unavailable', reason: 'too-large' },
+      { key: 'short', kind: 'unavailable', reason: 'decode-failed' },
       { key: 'gone', kind: 'unavailable', reason: 'unknown-image' },
+      { key: 'huge', kind: 'unavailable', reason: 'too-large' },
     ]);
     run(nodes);
     expect(scene.takeImageNotices()).toEqual([]);
-    expect(requests).toEqual(['bad', 'boom', 'short', 'gone']);
+    expect(requests).toEqual(['bad', 'boom', 'short', 'gone', 'huge']);
+    // A notification retries the key; it is drawn once ready, and not reported again.
+    script.set('bad', ready(1, 1));
+    notify(['bad', 'gone']);
+    run(nodes);
+    expect(requests).toEqual(['bad', 'boom', 'short', 'gone', 'huge', 'bad', 'gone']);
+    expect(scene.takeImageNotices()).toEqual([]);
+    expect(scene.imageTextureStatsForTesting.uploads).toBe(1);
+    creation.dispose();
+  });
+
+  it('keeps notices past the per-frame limit for the next call', async () => {
+    const { scene, creation, run } = await imageScene(new Map());
+    run(Array.from({ length: 5 }, (_, index) => box(`n${index}`, index * 20, image(`k${index}`))));
+    expect(scene.takeImageNotices(3).map((notice) => notice.key)).toEqual(['k0', 'k1', 'k2']);
+    expect(scene.takeImageNotices(3).map((notice) => notice.key)).toEqual(['k3', 'k4']);
+    creation.dispose();
+  });
+
+  it('never requests the image of a mask source (V32-S2)', async () => {
+    const { creation, run, requests } = await imageScene(
+      new Map([['k1', ready(2, 2)]]),
+      'supported',
+    );
+    const mask = {
+      id: 'm',
+      parentId: null,
+      transform: [1, 0, 0, 1, 0, 0],
+      visible: true,
+      opacity: 1,
+      kind: 'container',
+      clip: { kind: 'mask' },
+      children: ['source', 'content'],
+    } as RenderNodeSnapshot;
+    run([
+      mask,
+      { ...box('source', 0, image('k1')), parentId: 'm' },
+      { ...box('content', 0, red), parentId: 'm' },
+    ]);
+    expect(requests).toEqual([]);
     creation.dispose();
   });
 
@@ -452,6 +510,8 @@ describe('V32-K9 image paint changes rebuild no geometry', () => {
     });
     h.prepare();
     const calls = fillPort.callCount;
+    const strokeCalls = strokePort.callCount;
+    const builds = h.statistics();
     expect(calls).toBeGreaterThan(0);
     for (const fill of [
       image('k2'),
@@ -462,6 +522,8 @@ describe('V32-K9 image paint changes rebuild no geometry', () => {
       h.prepare();
     }
     expect(fillPort.callCount).toBe(calls);
+    expect(strokePort.callCount).toBe(strokeCalls);
+    expect(h.statistics()).toEqual(builds);
   });
 });
 
@@ -473,7 +535,7 @@ describe('V32-K5 texture store under the budget', () => {
       track: (id: string) => void tracked.add(id),
       release: (id: string) => void tracked.delete(id),
     };
-    const { port } = scriptedPort(
+    const { port, requests } = scriptedPort(
       new Map([
         ['k1', ready(2, 2)],
         ['k2', ready(2, 2)],
@@ -489,10 +551,13 @@ describe('V32-K5 texture store under the budget', () => {
     store.beginFrame();
     expect(store.resolve('k1').key).toBe('k1');
     expect(store.resolve('k2').key).toBe('');
+    // Refused, and not requested again while it cannot fit (k1 is drawn in this frame).
     expect(store.resolve('k2').key).toBe('');
+    expect(requests).toEqual(['k1', 'k2']);
     expect(store.takeNotices()).toEqual([{ key: 'k2', kind: 'resource-limit' }]);
     store.beginFrame();
     expect(store.resolve('k2').key).toBe('k2');
+    expect(requests).toEqual(['k1', 'k2', 'k2']);
     expect(fixture.destroyed).toContain('v32/image-0');
     expect(tracked.has('v32/image-0')).toBe(false);
     expect(tracked.has('v32/image-1')).toBe(true);
