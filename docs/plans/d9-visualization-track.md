@@ -48,7 +48,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | V-33 | Import SVG: paste markup or files, drop files on the canvas, or choose them in an Import section, as editable nodes (Figma) | Full | Done | Done 2026-11-12 (#573 136fd1d), headed Chrome and Edge `test:v33-svg-import` 3/3 each and m8 36/36 on the main PC ([contract](viz-v33-svg-import-contract.md#8-record)) |
 | V-31 | Layer lock and hide: locked layers cannot be picked or transformed on the canvas, lock and eye buttons in the layer tree, `Mod+Shift+L` and `Mod+Shift+H` (Figma) | Full | Done | Done 2026-11-12 (#576) ([contract](viz-v31-lock-hide-contract.md)) |
 | V-40 | Pencil (freehand, smoothed and fitted with cubics) and polygon (3 to 60 sides) tools (Figma gap item 10) | Full | Done | Done 2026-11-12 (#570), headed m8 36/36 and manual drawing check at 8b0d021 ([contract](viz-v40-pencil-polygon-contract.md#9-record)) |
-| V-38 | Rulers, draggable page guides with snapping, and frame layout grids (grid, columns, rows) (Figma) | Full | Active | Contract APPROVED 2026-11-12 ([contract](viz-v38-rulers-guides-grids-contract.md)); implemented (#574), headed A07 owed |
+| V-38 | Rulers, draggable page guides with snapping, and frame layout grids (grid, columns, rows) (Figma) | Full | Done | Done 2026-11-12 (#574), headed Chrome/Edge 5/5 and M2-U8 10/10 ([contract](viz-v38-rulers-guides-grids-contract.md)) |
 
 ## V-1: path appearance editing
 
