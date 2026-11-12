@@ -1,3 +1,4 @@
+import { hasVisibleFill } from './fills.js';
 import type { DocumentV8, NodeV8, PathData, PathNodeV8 } from '@vector-studio/model';
 import { deepFreeze } from './freeze.js';
 import { apply, invertRigid, localTransform, multiply, type Matrix } from './geometry.js';
@@ -272,7 +273,7 @@ export function segmentParameter(
 /** Whether `point` is inside the edited path's fill region, through every ancestor. */
 function insidePathFill(geometry: PathGeometry, point: PagePoint, tolerance: number): boolean {
   const { node } = geometry;
-  if (node.fill === null) return false;
+  if (!hasVisibleFill(node.fills)) return false;
   // In node-local units, as `hitsNode` flattens a path in its own unrotated frame.
   const box = { x: 0, y: 0, width: node.frame.width, height: node.frame.height };
   const lines = flatten(node.path, box, true, tolerance);

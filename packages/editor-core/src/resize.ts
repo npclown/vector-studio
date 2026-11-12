@@ -194,8 +194,12 @@ export function mirrorContent(tree: WritableTree, id: string, mx: boolean, my: b
   // A custom node's geometry lives in its `data`, which is not mirrored, so its paints stay too.
   if (node.type === 'custom') return;
   let next: NodeV8 = node;
-  if ('fill' in next && next.fill !== null)
-    next = { ...next, fill: mirrorPaint(next.fill, mx, my) };
+  if ('fills' in next && next.fills.length > 0) {
+    next = {
+      ...next,
+      fills: next.fills.map((fill) => ({ ...fill, paint: mirrorPaint(fill.paint, mx, my) })),
+    };
+  }
   if ('stroke' in next && next.stroke !== null) {
     const stroke = next.stroke as { color: Paint };
     next = { ...next, stroke: { ...stroke, color: mirrorPaint(stroke.color, mx, my) } } as NodeV8;

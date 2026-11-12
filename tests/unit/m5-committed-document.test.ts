@@ -152,7 +152,7 @@ describe('M5-A07 committedDocument outside a gesture', () => {
     const after = target.query({ type: 'document' });
     expect(after).not.toBe(initial);
     expect(committed(target)).toBe(after);
-    expect(committed(target).nodes.b).toMatchObject({ fill: red });
+    expect(committed(target).nodes.b).toMatchObject({ fills: [{ paint: red }] });
 
     ok(target, { type: 'undo' });
     expect(committed(target)).toBe(target.query({ type: 'document' }));
@@ -242,7 +242,7 @@ describe('M5-A07 committedDocument during a gesture', () => {
     const recolored = target.query({ type: 'document' });
     expect(recolored).not.toBe(before);
     expect(committed(target)).toBe(recolored);
-    expect(recolored.nodes.b).toMatchObject({ fill: red });
+    expect(recolored.nodes.b).toMatchObject({ fills: [{ paint: red }] });
 
     pointer(target, 'pointerdown', at(0, 0));
     pointer(target, 'pointermove', at(4, 6));
@@ -250,7 +250,7 @@ describe('M5-A07 committedDocument during a gesture', () => {
     pointer(target, 'pointerup', at(4, 6));
     expect(committed(target)).toBe(target.query({ type: 'document' }));
     expect(frameOf(committed(target), 'a')).toEqual(f(4, 6, 100, 100));
-    expect(committed(target).nodes.b).toMatchObject({ fill: red });
+    expect(committed(target).nodes.b).toMatchObject({ fills: [{ paint: red }] });
   });
 
   it('a host command right after a replace back to the base ends the gesture: its result', () => {
@@ -267,7 +267,7 @@ describe('M5-A07 committedDocument during a gesture', () => {
     expect(after).not.toBe(before);
     expect(committed(target)).toBe(after);
     expect(frameOf(after, 'a')).toEqual(f(0, 0, 100, 100));
-    expect(after.nodes.b).toMatchObject({ fill: red });
+    expect(after.nodes.b).toMatchObject({ fills: [{ paint: red }] });
     // The gesture is over: a later move changes nothing.
     pointer(target, 'pointermove', at(20, 0));
     expect(target.query({ type: 'document' })).toBe(after);
@@ -286,7 +286,10 @@ describe('M5-A07 committedDocument during a gesture', () => {
     const after = target.query({ type: 'document' });
     expect(committed(target)).toBe(after);
     expect(frameOf(after, 'a')).toEqual(f(0, 0, 100, 100));
-    expect(after.nodes.b).toMatchObject({ fill: red, frame: f(300, 0, 50, 50) });
+    expect(after.nodes.b).toMatchObject({
+      fills: [{ paint: red }],
+      frame: f(300, 0, 50, 50),
+    });
     // The drag is over: a later move changes nothing.
     pointer(target, 'pointermove', at(120, 50));
     expect(target.query({ type: 'document' })).toBe(after);

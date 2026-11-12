@@ -66,9 +66,12 @@ function inside(document: DocumentV8, node: NodeV8, point: PagePoint): boolean {
 
 /** A node's fill colour when mostly opaque (its and its ancestors' opacity included), else null. */
 function opaqueFill(node: NodeV8, inherited: number): Color | null {
-  if (!('fill' in node) || node.fill === null) return null;
-  const color = paintColor(node.fill);
-  return color.a * node.opacity * inherited >= 0.5 ? color : null;
+  // The top drawing fill (V-35 fills are bottom first).
+  const fills = 'fills' in node ? node.fills : [];
+  const fill = [...fills].reverse().find((entry) => entry.visible && entry.opacity > 0);
+  if (fill === undefined) return null;
+  const color = paintColor(fill.paint);
+  return color.a * fill.opacity * node.opacity * inherited >= 0.5 ? color : null;
 }
 
 /** The frontmost backdrop fill under `point` among `ids` (back to front), or null. */

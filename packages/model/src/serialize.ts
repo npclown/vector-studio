@@ -2,6 +2,7 @@ import type {
   Dash,
   DocumentV8,
   Effect,
+  Fill,
   JsonValue,
   NodeV6,
   NodeV8,
@@ -114,9 +115,29 @@ function effect(value: Effect): Ordered {
   };
 }
 
-/** A v8 node (v7's shape so far): the v6 fields, then `effects` (E41-S1). */
+/** V35-S2 key order: `paint, visible, opacity, blendMode`. */
+function fill(value: Fill): Ordered {
+  return {
+    paint: paint(value.paint),
+    visible: value.visible,
+    opacity: value.opacity,
+    blendMode: value.blendMode,
+  };
+}
+
+/**
+ * A v8 node: the v6 fields with `fills` in `fill`'s place (V35-S2), then `blendMode` and
+ * `effects` (E41-S1).
+ */
 function nodeV8(value: NodeV8): Ordered {
-  return { ...nodeV6(value), effects: value.effects.map(effect) };
+  const fills = 'fills' in value ? value.fills : null;
+  const v6 = nodeV6({ ...value, fill: null } as unknown as NodeV6);
+  const ordered: Ordered = {};
+  for (const [key, field] of Object.entries(v6)) {
+    if (key === 'fill') ordered.fills = (fills ?? []).map(fill);
+    else ordered[key] = field;
+  }
+  return { ...ordered, blendMode: value.blendMode, effects: value.effects.map(effect) };
 }
 
 function nodeV6(value: NodeV6): Ordered {
@@ -224,7 +245,8 @@ export function orderedDocument(document: DocumentV8): Ordered {
  * `textOverrides` (its keys in code unit order, each value `{ runs }`), a text
  * node's in the base order followed by `runs` (each `text`, `family`, `size`, `color`),
  * `sizing`, `align`, `letterSpacing`, `lineHeight`. Every node ends with `effects`, each effect in
- * the E41-S2 key order.
+ * the E41-S2 key order. A v8 node holds `fills` (each `paint`, `visible`, `opacity`, `blendMode`)
+ * where v7 held `fill`, and `blendMode` before `effects` (V35-S2).
  */
 export function serializeDocument(document: DocumentV8): string {
   return `${JSON.stringify(orderedDocument(document), null, 2)}\n`;

@@ -177,10 +177,11 @@ describe('M7-T3 schema v5: the instance override field (M6a contract, section 9)
 
   it('writes textOverrides after symbol, keys in code unit order, each value exactly { runs }', () => {
     const raw = JSON.parse(TEXT_SYMBOLS) as Json;
-    expect(Object.keys(raw.nodes.i4!).slice(-4)).toEqual([
+    expect(Object.keys(raw.nodes.i4!).slice(-5)).toEqual([
       'type',
       'symbol',
       'textOverrides',
+      'blendMode',
       'effects',
     ]);
     expect(Object.keys(raw.nodes.i4!.textOverrides!)).toEqual(['t1', 't2']);

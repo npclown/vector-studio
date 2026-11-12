@@ -1,3 +1,4 @@
+import { hasVisibleFill } from './fills.js';
 import type { DocumentV8, Frame, NodeV8, PathData } from '@vector-studio/model';
 import {
   apply,
@@ -330,14 +331,14 @@ export function hitsNode(
   if (node.type === 'rectangle') {
     const radii = clampedRadii(node.cornerRadii, node.frame.width, node.frame.height);
     if (radii.every((r) => r === 0)) {
-      if (node.fill !== null && insideBox(point, node.frame)) return true;
+      if (hasVisibleFill(node.fills) && insideBox(point, node.frame)) return true;
       return nearOutline(point, [rectangleOutline(node.frame)], radius);
     }
-    if (node.fill !== null && insideRounded(point, node.frame, radii)) return true;
+    if (hasVisibleFill(node.fills) && insideRounded(point, node.frame, radii)) return true;
     return nearOutline(point, [roundedOutline(node.frame, radii, tolerance)], radius);
   }
   if (node.type === 'ellipse') {
-    if (node.fill !== null && insideEllipse(point, node.frame)) return true;
+    if (hasVisibleFill(node.fills) && insideEllipse(point, node.frame)) return true;
     return nearOutline(point, [ellipseOutline(node.frame, tolerance)], radius);
   }
   if (node.type === 'line') {
@@ -348,7 +349,8 @@ export function hitsNode(
   const geometry = node.type === 'path' ? node.path : custom(node);
   if (geometry === null) return false;
   const lines = flatten(geometry, node.frame, node.type === 'path', tolerance);
-  if (node.fill !== null && insideFill(point, lines, geometry.fillRule === 'evenodd')) return true;
+  if (hasVisibleFill(node.fills) && insideFill(point, lines, geometry.fillRule === 'evenodd'))
+    return true;
   return nearOutline(point, lines, radius);
 }
 
@@ -446,7 +448,7 @@ function visitHits(
     const inside = insideBox(local, box);
     if (node.type === 'instance') {
       const source = tree.node(node.symbol);
-      fill = source?.type === 'symbol' && source.fill !== null;
+      fill = source?.type === 'symbol' && hasVisibleFill(source.fills);
       stroke = source?.type === 'symbol' ? source.stroke : null;
       // An instance's content is always clipped to its box, so outside it nothing inside hits.
       const result = inside ? expansions.expand(document, node.id) : null;
@@ -456,7 +458,7 @@ function visitHits(
         as = owner ?? node.id;
       }
     } else {
-      fill = node.fill !== null;
+      fill = hasVisibleFill(node.fills);
       stroke = node.stroke;
       content = node.children;
     }

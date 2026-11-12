@@ -434,18 +434,56 @@ export type DocumentV7 = Readonly<{
 
 // Document schema v8 (docs/plans/viz-schema-v8.md, gap-list items V-31 to V-40): introduced as v7's shape
 // so the ten items can each add their fields to one unreleased version instead of bumping it in
-// turn. The v7 to v8 migration changes only `schemaVersion` until an item adds a field.
+// turn. V-35 replaces `fill` by `fills` and adds `blendMode` to every node (V35-S1, S2).
 
-export type RectangleNodeV8 = RectangleNodeV6 & NodeEffects;
-export type EllipseNodeV8 = EllipseNodeV6 & NodeEffects;
-export type LineNodeV8 = LineNodeV6 & NodeEffects;
-export type PathNodeV8 = PathNodeV6 & NodeEffects;
-export type CustomNodeV8 = CustomNodeV6 & NodeEffects;
-export type TextNodeV8 = TextNode & NodeEffects;
-export type InstanceNodeV8 = InstanceNodeV5 & NodeEffects;
-export type GroupNodeV8 = GroupNode & NodeEffects;
-export type FrameNodeV8 = FrameNodeV6 & NodeEffects;
-export type SymbolNodeV8 = SymbolNodeV6 & NodeEffects;
+/**
+ * V-35 contract (docs/plans/viz-v35-fills-blend-contract.md), V35-S2: the W3C Compositing Level 1
+ * blend modes, and `passThrough`, which only a container or instance takes.
+ */
+export type BlendMode =
+  | 'normal'
+  | 'multiply'
+  | 'screen'
+  | 'overlay'
+  | 'darken'
+  | 'lighten'
+  | 'colorDodge'
+  | 'colorBurn'
+  | 'hardLight'
+  | 'softLight'
+  | 'difference'
+  | 'exclusion'
+  | 'hue'
+  | 'saturation'
+  | 'color'
+  | 'luminosity';
+export type ContainerBlendMode = BlendMode | 'passThrough';
+
+/** V35-S2: one fill of a node, painted bottom first; `opacity` in `[0, 1]`. */
+export type Fill = Readonly<{
+  paint: Paint;
+  visible: boolean;
+  opacity: number;
+  blendMode: BlendMode;
+}>;
+
+/** V35-S2: the fills that replace v7's single `fill` (at most MAX_FILLS). */
+export type NodeFills = Readonly<{ fills: readonly Fill[] }>;
+/** V35-S2: a leaf's blend mode. */
+export type LeafBlend = Readonly<{ blendMode: BlendMode }>;
+/** V35-S2: a container's or instance's blend mode. */
+export type ContainerBlend = Readonly<{ blendMode: ContainerBlendMode }>;
+
+export type RectangleNodeV8 = Omit<RectangleNodeV6, 'fill'> & NodeFills & LeafBlend & NodeEffects;
+export type EllipseNodeV8 = Omit<EllipseNodeV6, 'fill'> & NodeFills & LeafBlend & NodeEffects;
+export type LineNodeV8 = LineNodeV6 & LeafBlend & NodeEffects;
+export type PathNodeV8 = Omit<PathNodeV6, 'fill'> & NodeFills & LeafBlend & NodeEffects;
+export type CustomNodeV8 = Omit<CustomNodeV6, 'fill'> & NodeFills & LeafBlend & NodeEffects;
+export type TextNodeV8 = TextNode & LeafBlend & NodeEffects;
+export type InstanceNodeV8 = InstanceNodeV5 & ContainerBlend & NodeEffects;
+export type GroupNodeV8 = GroupNode & ContainerBlend & NodeEffects;
+export type FrameNodeV8 = Omit<FrameNodeV6, 'fill'> & NodeFills & ContainerBlend & NodeEffects;
+export type SymbolNodeV8 = Omit<SymbolNodeV6, 'fill'> & NodeFills & ContainerBlend & NodeEffects;
 
 export type LeafNodeV8 =
   | RectangleNodeV8

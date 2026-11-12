@@ -75,9 +75,12 @@ export function common<T>(
   return found === null ? { state: 'none' } : { state: 'one', value: found.value };
 }
 
-/** A node's fill paint, or null (none, or a type without fill). */
+/**
+ * A node's fill paint: its top fill's (V-35 fills are bottom first), or null (none, or a type
+ * without fills).
+ */
 export const fillOf = (node: NodeV8): Paint | null =>
-  'fill' in node && FILL_TYPES.has(node.type) ? node.fill : null;
+  'fills' in node && FILL_TYPES.has(node.type) ? (node.fills.at(-1)?.paint ?? null) : null;
 
 /** A node's stroke, or null. */
 export const strokeOf = (node: NodeV8): Stroke | null =>

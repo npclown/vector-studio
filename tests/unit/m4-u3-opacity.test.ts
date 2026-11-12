@@ -23,7 +23,10 @@ import {
   type StyleProps,
 } from '../../packages/editor-core/src/index.js';
 import { deepestHit } from '../../packages/editor-core/src/hit-test.js';
-import { v7Value } from '../support/schema-v7.js';
+import { v6Node, v7Value } from '../support/schema-v7.js';
+
+/** V35-S1: the fills a `fill` paint stands for. */
+const fillsOf = (paint: unknown) => [{ paint, visible: true, opacity: 1, blendMode: 'normal' }];
 import { projectPage } from '../../packages/editor-core/src/projector.js';
 import {
   documentIsolationViolation,
@@ -223,8 +226,10 @@ describe('M4-A08 the opacity lift (M4-L1, M4-M2, M4-S5)', () => {
       for (const id of ['g', 'm', 'f', 'i', 's']) {
         const value = containers(1);
         value.schemaVersion = version;
+        for (const [key, node] of Object.entries(value.nodes)) {
+          value.nodes[key] = v6Node(node) as typeof node;
+        }
         for (const node of Object.values(value.nodes)) {
-          delete node.effects;
           if (version < 5) delete node.textOverrides;
           if (node.type === 'rectangle' || node.type === 'path') node.stroke = null;
         }
@@ -883,7 +888,7 @@ describe('M4-A09 setStyle (section 4.2)', () => {
     const after = setup.target.query({ type: 'document' });
     expect(after.nodes.r).toEqual({
       ...before.nodes.r,
-      fill: red,
+      fills: fillsOf(red),
       stroke: { ...dashed, width: 5 },
       opacity: 0.5,
       cornerRadii: [1, 2, 3, 4],
@@ -892,13 +897,13 @@ describe('M4-A09 setStyle (section 4.2)', () => {
     // line.
     expect(after.nodes.e).toEqual({
       ...before.nodes.e,
-      fill: red,
+      fills: fillsOf(red),
       stroke: { ...DEFAULT_SHAPE_STROKE, width: 5 },
       opacity: 0.5,
     });
     expect(after.nodes.f).toEqual({
       ...before.nodes.f,
-      fill: red,
+      fills: fillsOf(red),
       stroke: { ...DEFAULT_SHAPE_STROKE, width: 5 },
       opacity: 0.5,
     });
@@ -934,7 +939,7 @@ describe('M4-A09 setStyle (section 4.2)', () => {
       spread: 'reflect',
     } as const;
     ok(setup.target, { type: 'setStyle', ids: ['e'], style: { fill: gradient, stroke: dashed } });
-    expected.nodes.e!.fill = gradient;
+    expected.nodes.e!.fills = fillsOf(gradient);
     expected.nodes.e!.stroke = dashed;
     expect(text(setup.target)).toBe(serializeDocument(parsed(expected)));
   });
@@ -1002,7 +1007,7 @@ describe('M4-A09 setStyle (section 4.2)', () => {
     );
     ok(setup.target, { type: 'setStyle', ids: ['c'], style: { fill: red, stroke: {} } });
     expect(setup.target.query({ type: 'node', id: 'c' })).toMatchObject({
-      fill: red,
+      fills: fillsOf(red),
       stroke: DEFAULT_PATH_STROKE,
     });
   });

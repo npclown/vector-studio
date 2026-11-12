@@ -30,6 +30,7 @@ import {
   pathDataEquals,
   type ClipSupport,
   type DashSupport,
+  type BlendSupport,
   type EffectSupport,
   type GroupOpacitySupport,
   type PaintSupport,
@@ -91,6 +92,11 @@ export type RetainedSceneMirrorOptions = Readonly<{
    * `effects` option (U4b).
    */
   effects?: EffectSupport;
+  /**
+   * V35 contract, V35-K2: whether node blend modes are accepted; default 'none', under which a
+   * node with a non-default `blendMode` is `unsupported-feature`.
+   */
+  blend?: BlendSupport;
 }>;
 
 export type ScenePendingChangeState = Readonly<{
@@ -266,6 +272,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       options.groupOpacity === 'supported' ? 'supported' : 'unsupported';
     const textNodes: TextSupport = options.textNodes === 'supported' ? 'supported' : 'unsupported';
     const effects: EffectSupport = options.effects === 'v0' ? 'v0' : 'none';
+    const blend: BlendSupport = options.blend === 'v0' ? 'v0' : 'none';
     this.#pathNodes = Object.freeze({
       pathNodes,
       pathFills,
@@ -276,6 +283,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       groupOpacity,
       textNodes,
       effects,
+      blend,
     });
   }
 

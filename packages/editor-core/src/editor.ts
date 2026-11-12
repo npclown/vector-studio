@@ -176,6 +176,12 @@ export type EditorOptions = Readonly<{
    */
   projectEffects?: boolean;
   /**
+   * V-35 contract, V35-P4: when true, the scene the editor projects to an attached renderer
+   * carries blend modes, which needs a renderer on `blend: 'v0'`. Defaults to false: every node
+   * and fill draws as `normal`.
+   */
+  projectBlend?: boolean;
+  /**
    * V-25 slice 4: when true, the drawing tools create a node in the innermost frame under the
    * press point (inside the scope when it holds the point), and a select-tool move that ends with
    * the pointer over a frame moves the dragged nodes into it, or out of their frame onto the
@@ -833,6 +839,8 @@ class EditorCore implements Editor {
   private readonly layout: TextLayouter | undefined;
   /** E41-S6: whether the projector emits node effects (`EditorOptions.projectEffects`). */
   private readonly projectEffects: boolean;
+  /** V35-P4: whether the projector emits blend modes (`EditorOptions.projectBlend`). */
+  private readonly projectBlend: boolean;
 
   /**
    * The IDs of `returned` that a draw on `drawnOn` accepted: `drawIds` and `freshId` skip only
@@ -935,6 +943,7 @@ class EditorCore implements Editor {
     this.document = deepFreeze(result.document);
     this.activePage = this.document.pages[0]!.id;
     this.projectEffects = options.projectEffects === true;
+    this.projectBlend = options.projectBlend === true;
     this.snapshot = this.buildSnapshot();
     this.tools.set(
       'select',
@@ -1726,6 +1735,7 @@ class EditorCore implements Editor {
       // The editor's layout cache (M6c-Q2 (a)); without a port text projects nothing (M6c-P3).
       this.layout,
       this.projectEffects,
+      this.projectBlend,
     );
     this.projector = projector;
     this.renderer = renderer;

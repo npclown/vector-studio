@@ -9,6 +9,7 @@ import type {
   SceneClip,
   SceneColor,
   SceneDash,
+  SceneBlendMode,
   SceneEffect,
   SceneGradient,
   SceneGradientStop,
@@ -69,6 +70,11 @@ export type TextSupport = 'unsupported' | 'supported';
  * non-empty `effects` is reported as `unsupported-feature`.
  */
 export type EffectSupport = 'none' | 'v0';
+/**
+ * V-35 contract, V35-K2: whether the renderer draws blend modes. Unless 'v0', a node with a
+ * non-default `blendMode` is reported as `unsupported-feature`.
+ */
+export type BlendSupport = 'none' | 'v0';
 
 /**
  * The port-presence facts of a mirror (V3 section a; B2 stroke contract, section 5 and the
@@ -91,6 +97,8 @@ export type PathSupport = Readonly<{
   textNodes?: TextSupport;
   /** E41-S6; absent means 'none'. */
   effects?: EffectSupport;
+  /** V35-K2; absent means 'none'. */
+  blend?: BlendSupport;
 }>;
 
 const NO_PATH_SUPPORT: PathSupport = Object.freeze({
@@ -346,11 +354,28 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
               'runs',
             ]
           : null;
-  // E41-S5: `effects` is optional on every kind.
+  // E41-S5: `effects` is optional on every kind; V35-K1: so is `blendMode`.
   const withEffects = Object.hasOwn(value, 'effects');
-  if (fields === null || !hasExactFields(value, withEffects ? [...fields, 'effects'] : fields)) {
+  const withBlend = Object.hasOwn(value, 'blendMode');
+  if (
+    fields === null ||
+    !hasExactFields(value, [
+      ...fields,
+      ...(withEffects ? ['effects'] : []),
+      ...(withBlend ? ['blendMode'] : []),
+    ])
+  ) {
     return null;
   }
+  // V35-K1: a known mode, `passThrough` only on a container. The default is left out of the
+  // copy, so a scene without blending is held exactly as before (V35-A06).
+  const blendMode = withBlend ? copyBlendMode(value.blendMode, kind === 'container') : undefined;
+  if (blendMode === null) return null;
+  const blendFields =
+    blendMode === undefined || blendMode === (kind === 'container' ? 'passThrough' : 'normal')
+      ? {}
+      : { blendMode };
+  const blendUnsupported = 'blendMode' in blendFields && pathNodes.blend !== 'v0';
   const effects = withEffects ? copyEffects(value.effects) : EMPTY_EFFECTS;
   if (effects === null) return null;
   // Absent and [] both mean none, and the copy leaves the field out, so a scene without effects
@@ -386,6 +411,7 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
       visible,
       opacity,
       ...effectFields,
+      ...blendFields,
       kind: 'container' as const,
       children,
       clip,
@@ -395,7 +421,8 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
       unsupported:
         (opacity !== 1 && pathNodes.groupOpacity !== 'supported') ||
         !clipSupported(clip, pathNodes.clips) ||
-        effectsUnsupported,
+        effectsUnsupported ||
+        blendUnsupported,
     });
   }
 
@@ -417,6 +444,7 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
       visible,
       opacity,
       ...effectFields,
+      ...blendFields,
       kind: 'text' as const,
       generation,
       lang,
@@ -424,7 +452,7 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
     });
     return Object.freeze({
       node,
-      unsupported: pathNodes.textNodes !== 'supported' || effectsUnsupported,
+      unsupported: pathNodes.textNodes !== 'supported' || effectsUnsupported || blendUnsupported,
     });
   }
 
@@ -443,6 +471,7 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
       visible,
       opacity,
       ...effectFields,
+      ...blendFields,
       kind: 'path' as const,
       geometry,
       style,
@@ -456,7 +485,8 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
       pathNodes.pathNodes !== 'supported' ||
       (style.fill !== null && pathNodes.pathFills !== 'supported') ||
       (style.stroke !== null && style.stroke.width > 0 && pathNodes.pathStrokes !== 'supported') ||
-      effectsUnsupported;
+      effectsUnsupported ||
+      blendUnsupported;
     return Object.freeze({ node, unsupported });
   }
 
@@ -472,6 +502,7 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
     visible,
     opacity,
     ...effectFields,
+      ...blendFields,
     kind: 'primitive' as const,
     geometry,
     style,
@@ -481,7 +512,8 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
     unsupported:
       (geometry.kind === 'line' && style.fill !== null) ||
       !paintsSupported([style.fill, style.stroke?.color ?? null], pathNodes) ||
-      effectsUnsupported,
+      effectsUnsupported ||
+      blendUnsupported,
   });
 }
 
@@ -1039,7 +1071,8 @@ export function nodeEquals(
     left.opacity !== right.opacity ||
     left.kind !== right.kind ||
     !arraysEqual(left.transform, right.transform) ||
-    !effectsEqual(left.effects, right.effects)
+    !effectsEqual(left.effects, right.effects) ||
+    left.blendMode !== right.blendMode
   )
     return false;
   if (left.kind === 'container' && right.kind === 'container') {
@@ -1063,6 +1096,32 @@ export function nodeEquals(
   }
   if (left.kind !== 'primitive' || right.kind !== 'primitive') return false;
   return geometryEquals(left.geometry, right.geometry) && styleEquals(left.style, right.style);
+}
+
+const BLEND_MODES: ReadonlySet<string> = new Set([
+  'normal',
+  'multiply',
+  'screen',
+  'overlay',
+  'darken',
+  'lighten',
+  'colorDodge',
+  'colorBurn',
+  'hardLight',
+  'softLight',
+  'difference',
+  'exclusion',
+  'hue',
+  'saturation',
+  'color',
+  'luminosity',
+]);
+
+/** V35-K1: a mode of V35-S2, or `passThrough` on a container; null otherwise. */
+function copyBlendMode(value: unknown, container: boolean): SceneBlendMode | null {
+  if (typeof value !== 'string') return null;
+  if (BLEND_MODES.has(value)) return value as SceneBlendMode;
+  return container && value === 'passThrough' ? 'passThrough' : null;
 }
 
 /** E41-S5: absent and [] are equal; otherwise effect by effect, field by field (`===`). */

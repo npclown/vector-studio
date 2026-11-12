@@ -20,15 +20,23 @@ const root = path.resolve(import.meta.dirname, '../..');
 const read = (file: string) => readFileSync(path.join(root, 'tests/fixtures', file), 'utf8');
 
 type Json = Record<string, unknown>;
+const v6 = (): Json => JSON.parse(read('m4-appearance/appearance.v6.json')) as Json;
 /** The v6 appearance fixture as v7 wrote it: `effects: []` on every node, `schemaVersion: 7`. */
-const v7 = (): Json => ({
-  ...v7Value(JSON.parse(read('m4-appearance/appearance.v6.json')) as Json),
-  schemaVersion: 7,
-});
+const v7 = (): Json => {
+  const value = v6();
+  const nodes = value.nodes as Record<string, Json>;
+  return {
+    ...value,
+    schemaVersion: 7,
+    nodes: Object.fromEntries(
+      Object.entries(nodes).map(([key, node]) => [key, { ...node, effects: [] }]),
+    ),
+  };
+};
 const unsupported = { ok: false, code: 'document.unsupported-version', path: '/schemaVersion' };
 
 describe('schema v8 scaffold', () => {
-  it('reads a v7 document into v8 with only the version changed', () => {
+  it('reads a v7 document into v8: the version, `fills` for `fill` and `blendMode` (V35-S1)', () => {
     const input = v7();
     const any = validateAnyDocument(input);
     const parsed = parseDocument(JSON.stringify(input));
@@ -37,9 +45,7 @@ describe('schema v8 scaffold', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.document.schemaVersion).toBe(8);
-      expect({ ...JSON.parse(serializeDocument(result.document)), schemaVersion: 7 }).toEqual(
-        input,
-      );
+      expect(JSON.parse(serializeDocument(result.document))).toEqual(v7Value(v6()));
     }
   });
 
