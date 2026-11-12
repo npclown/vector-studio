@@ -1,0 +1,38 @@
+{
+  "rows": {
+    "leafMode": {
+      "portCalls": 0,
+      "geometryBuilds": 0
+    },
+    "leafNormal": {
+      "portCalls": 0,
+      "geometryBuilds": 0
+    },
+    "leafBack": {
+      "portCalls": 0,
+      "geometryBuilds": 0
+    },
+    "containerMode": {
+      "portCalls": 0,
+      "geometryBuilds": 0
+    },
+    "containerNormal": {
+      "portCalls": 0,
+      "geometryBuilds": 0
+    },
+    "fillMode": {
+      "portCalls": 0,
+      "geometryBuilds": 0
+    },
+    "fillOpacity": {
+      "portCalls": 0,
+      "geometryBuilds": 0
+    },
+    "fillPaint": {
+      "portCalls": 0,
+      "geometryBuilds": 0
+    }
+  },
+  "failures": [],
+  "pageErrors": []
+}

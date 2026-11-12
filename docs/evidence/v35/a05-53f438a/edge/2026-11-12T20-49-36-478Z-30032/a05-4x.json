@@ -1,0 +1,1506 @@
+{
+  "samples": 4,
+  "adapter": {
+    "architecture": "turing",
+    "description": "",
+    "vendor": "nvidia"
+  },
+  "cases": [
+    {
+      "fixture": "normal control",
+      "variant": "capture",
+      "comparison": {
+        "worst": 1,
+        "at": [
+          0,
+          0
+        ],
+        "over": 0,
+        "overAt": [],
+        "detail": {
+          "actual": [
+            229,
+            64,
+            38,
+            255
+          ],
+          "expected": [
+            230,
+            64,
+            38,
+            255
+          ]
+        },
+        "slackAtWorst": 0,
+        "maxSlack": 0
+      },
+      "cornerPixels": 1920,
+      "withCorners": {
+        "worst": 23,
+        "at": [
+          35,
+          302
+        ],
+        "over": 99,
+        "overAt": [
+          [
+            68,
+            15
+          ],
+          [
+            134,
+            15
+          ],
+          [
+            200,
+            15
+          ],
+          [
+            266,
+            15
+          ],
+          [
+            332,
+            15
+          ],
+          [
+            398,
+            15
+          ],
+          [
+            464,
+            15
+          ],
+          [
+            35,
+            150
+          ],
+          [
+            101,
+            150
+          ],
+          [
+            167,
+            150
+          ],
+          [
+            233,
+            150
+          ],
+          [
+            299,
+            150
+          ],
+          [
+            365,
+            150
+          ],
+          [
+            431,
+            150
+          ],
+          [
+            497,
+            150
+          ],
+          [
+            34,
+            151
+          ],
+          [
+            35,
+            151
+          ],
+          [
+            100,
+            151
+          ],
+          [
+            101,
+            151
+          ],
+          [
+            166,
+            151
+          ],
+          [
+            167,
+            151
+          ],
+          [
+            232,
+            151
+          ],
+          [
+            233,
+            151
+          ],
+          [
+            298,
+            151
+          ],
+          [
+            299,
+            151
+          ],
+          [
+            364,
+            151
+          ],
+          [
+            365,
+            151
+          ],
+          [
+            430,
+            151
+          ],
+          [
+            431,
+            151
+          ],
+          [
+            496,
+            151
+          ],
+          [
+            497,
+            151
+          ],
+          [
+            36,
+            152
+          ],
+          [
+            68,
+            152
+          ],
+          [
+            102,
+            152
+          ],
+          [
+            134,
+            152
+          ],
+          [
+            168,
+            152
+          ],
+          [
+            200,
+            152
+          ],
+          [
+            234,
+            152
+          ],
+          [
+            266,
+            152
+          ],
+          [
+            300,
+            152
+          ],
+          [
+            332,
+            152
+          ],
+          [
+            366,
+            152
+          ],
+          [
+            398,
+            152
+          ],
+          [
+            432,
+            152
+          ],
+          [
+            464,
+            152
+          ],
+          [
+            498,
+            152
+          ],
+          [
+            68,
+            167
+          ],
+          [
+            134,
+            167
+          ],
+          [
+            200,
+            167
+          ],
+          [
+            266,
+            167
+          ],
+          [
+            332,
+            167
+          ],
+          [
+            398,
+            167
+          ],
+          [
+            464,
+            167
+          ],
+          [
+            35,
+            302
+          ],
+          [
+            101,
+            302
+          ],
+          [
+            167,
+            302
+          ],
+          [
+            233,
+            302
+          ],
+          [
+            299,
+            302
+          ],
+          [
+            365,
+            302
+          ],
+          [
+            431,
+            302
+          ],
+          [
+            497,
+            302
+          ],
+          [
+            34,
+            303
+          ],
+          [
+            35,
+            303
+          ],
+          [
+            100,
+            303
+          ]
+        ],
+        "detail": {
+          "actual": [
+            158,
+            90,
+            136,
+            255
+          ],
+          "expected": [
+            181,
+            95,
+            148,
+            255
+          ]
+        },
+        "slackAtWorst": 0,
+        "maxSlack": 0
+      },
+      "splits": {
+        "frames": 2,
+        "splits": 0,
+        "perFrame": 0,
+        "draws": {
+          "plain": 0,
+          "clip": 0,
+          "shifted": 0,
+          "clip-shifted": 0
+        },
+        "fromPacket": 0,
+        "byHand": 0
+      }
+    },
+    {
+      "fixture": "normal control",
+      "variant": "tile 64",
+      "comparison": {
+        "worst": 1,
+        "at": [
+          0,
+          0
+        ],
+        "over": 0,
+        "overAt": [],
+        "detail": {
+          "actual": [
+            229,
+            64,
+            38,
+            255
+          ],
+          "expected": [
+            230,
+            64,
+            38,
+            255
+          ]
+        },
+        "slackAtWorst": 0,
+        "maxSlack": 0
+      },
+      "cornerPixels": 1920,
+      "withCorners": {
+        "worst": 23,
+        "at": [
+          35,
+          302
+        ],
+        "over": 99,
+        "overAt": [
+          [
+            68,
+            15
+          ],
+          [
+            134,
+            15
+          ],
+          [
+            200,
+            15
+          ],
+          [
+            266,
+            15
+          ],
+          [
+            332,
+            15
+          ],
+          [
+            398,
+            15
+          ],
+          [
+            464,
+            15
+          ],
+          [
+            35,
+            150
+          ],
+          [
+            101,
+            150
+          ],
+          [
+            167,
+            150
+          ],
+          [
+            233,
+            150
+          ],
+          [
+            299,
+            150
+          ],
+          [
+            365,
+            150
+          ],
+          [
+            431,
+            150
+          ],
+          [
+            497,
+            150
+          ],
+          [
+            34,
+            151
+          ],
+          [
+            35,
+            151
+          ],
+          [
+            100,
+            151
+          ],
+          [
+            101,
+            151
+          ],
+          [
+            166,
+            151
+          ],
+          [
+            167,
+            151
+          ],
+          [
+            232,
+            151
+          ],
+          [
+            233,
+            151
+          ],
+          [
+            298,
+            151
+          ],
+          [
+            299,
+            151
+          ],
+          [
+            364,
+            151
+          ],
+          [
+            365,
+            151
+          ],
+          [
+            430,
+            151
+          ],
+          [
+            431,
+            151
+          ],
+          [
+            496,
+            151
+          ],
+          [
+            497,
+            151
+          ],
+          [
+            36,
+            152
+          ],
+          [
+            68,
+            152
+          ],
+          [
+            102,
+            152
+          ],
+          [
+            134,
+            152
+          ],
+          [
+            168,
+            152
+          ],
+          [
+            200,
+            152
+          ],
+          [
+            234,
+            152
+          ],
+          [
+            266,
+            152
+          ],
+          [
+            300,
+            152
+          ],
+          [
+            332,
+            152
+          ],
+          [
+            366,
+            152
+          ],
+          [
+            398,
+            152
+          ],
+          [
+            432,
+            152
+          ],
+          [
+            464,
+            152
+          ],
+          [
+            498,
+            152
+          ],
+          [
+            68,
+            167
+          ],
+          [
+            134,
+            167
+          ],
+          [
+            200,
+            167
+          ],
+          [
+            266,
+            167
+          ],
+          [
+            332,
+            167
+          ],
+          [
+            398,
+            167
+          ],
+          [
+            464,
+            167
+          ],
+          [
+            35,
+            302
+          ],
+          [
+            101,
+            302
+          ],
+          [
+            167,
+            302
+          ],
+          [
+            233,
+            302
+          ],
+          [
+            299,
+            302
+          ],
+          [
+            365,
+            302
+          ],
+          [
+            431,
+            302
+          ],
+          [
+            497,
+            302
+          ],
+          [
+            34,
+            303
+          ],
+          [
+            35,
+            303
+          ],
+          [
+            100,
+            303
+          ]
+        ],
+        "detail": {
+          "actual": [
+            158,
+            90,
+            136,
+            255
+          ],
+          "expected": [
+            181,
+            95,
+            148,
+            255
+          ]
+        },
+        "slackAtWorst": 0,
+        "maxSlack": 0
+      },
+      "splits": {
+        "frames": 2,
+        "splits": 0,
+        "perFrame": 0,
+        "draws": {
+          "plain": 0,
+          "clip": 0,
+          "shifted": 0,
+          "clip-shifted": 0
+        },
+        "fromPacket": 0,
+        "byHand": 0
+      }
+    },
+    {
+      "fixture": "main target",
+      "variant": "capture",
+      "comparison": {
+        "worst": 3,
+        "at": [
+          208,
+          16
+        ],
+        "over": 0,
+        "overAt": [],
+        "detail": {
+          "actual": [
+            183,
+            16,
+            10,
+            255
+          ],
+          "expected": [
+            186,
+            16,
+            10,
+            255
+          ]
+        },
+        "slackAtWorst": 2.76,
+        "maxSlack": 5.02
+      },
+      "cornerPixels": 1920,
+      "packetBlends": 30,
+      "parentLayers": [],
+      "blendNotices": [],
+      "splits": {
+        "frames": 2,
+        "splits": 60,
+        "perFrame": 30,
+        "draws": {
+          "plain": 60,
+          "clip": 0,
+          "shifted": 0,
+          "clip-shifted": 0
+        },
+        "fromPacket": 30,
+        "byHand": 30
+      }
+    },
+    {
+      "fixture": "main target",
+      "variant": "tile 64",
+      "comparison": {
+        "worst": 3,
+        "at": [
+          208,
+          16
+        ],
+        "over": 0,
+        "overAt": [],
+        "detail": {
+          "actual": [
+            183,
+            16,
+            10,
+            255
+          ],
+          "expected": [
+            186,
+            16,
+            10,
+            255
+          ]
+        },
+        "slackAtWorst": 2.76,
+        "maxSlack": 5.02
+      },
+      "cornerPixels": 1920,
+      "packetBlends": 30,
+      "parentLayers": [],
+      "blendNotices": [],
+      "splits": {
+        "frames": 2,
+        "splits": 60,
+        "perFrame": 30,
+        "draws": {
+          "plain": 60,
+          "clip": 0,
+          "shifted": 0,
+          "clip-shifted": 0
+        },
+        "fromPacket": 30,
+        "byHand": 30
+      }
+    },
+    {
+      "fixture": "main target",
+      "variant": "production usage",
+      "comparison": {
+        "worst": 3,
+        "at": [
+          208,
+          16
+        ],
+        "over": 0,
+        "overAt": [],
+        "detail": {
+          "actual": [
+            183,
+            16,
+            10,
+            255
+          ],
+          "expected": [
+            186,
+            16,
+            10,
+            255
+          ]
+        },
+        "slackAtWorst": 2.76,
+        "maxSlack": 5.02
+      },
+      "cornerPixels": 1920,
+      "packetBlends": 30,
+      "parentLayers": [],
+      "blendNotices": []
+    },
+    {
+      "fixture": "E25 layer",
+      "variant": "capture",
+      "comparison": {
+        "worst": 2,
+        "at": [
+          41,
+          200
+        ],
+        "over": 0,
+        "overAt": [],
+        "detail": {
+          "actual": [
+            145,
+            168,
+            176,
+            255
+          ],
+          "expected": [
+            145,
+            168,
+            178,
+            255
+          ]
+        },
+        "slackAtWorst": 0.57,
+        "maxSlack": 1.86
+      },
+      "cornerPixels": 1984,
+      "packetBlends": 30,
+      "parentLayers": [
+        {
+          "nodeId": "l",
+          "bound": {
+            "x": 2,
+            "y": 2,
+            "width": 500,
+            "height": 316
+          }
+        }
+      ],
+      "blendNotices": [],
+      "splits": {
+        "frames": 2,
+        "splits": 60,
+        "perFrame": 30,
+        "draws": {
+          "plain": 60,
+          "clip": 0,
+          "shifted": 0,
+          "clip-shifted": 0
+        },
+        "fromPacket": 30,
+        "byHand": 30
+      }
+    },
+    {
+      "fixture": "E25 layer",
+      "variant": "tile 64",
+      "comparison": {
+        "worst": 2,
+        "at": [
+          41,
+          200
+        ],
+        "over": 0,
+        "overAt": [],
+        "detail": {
+          "actual": [
+            145,
+            168,
+            176,
+            255
+          ],
+          "expected": [
+            145,
+            168,
+            178,
+            255
+          ]
+        },
+        "slackAtWorst": 0.57,
+        "maxSlack": 1.86
+      },
+      "cornerPixels": 1984,
+      "packetBlends": 30,
+      "parentLayers": [
+        {
+          "nodeId": "l",
+          "bound": {
+            "x": 2,
+            "y": 2,
+            "width": 500,
+            "height": 316
+          }
+        }
+      ],
+      "blendNotices": [],
+      "splits": {
+        "frames": 2,
+        "splits": 264,
+        "perFrame": 132,
+        "draws": {
+          "plain": 2400,
+          "clip": 0,
+          "shifted": 0,
+          "clip-shifted": 0
+        },
+        "fromPacket": 132,
+        "byHand": 132
+      }
+    },
+    {
+      "fixture": "effect root",
+      "variant": "capture",
+      "comparison": {
+        "worst": 1,
+        "at": [
+          0,
+          0
+        ],
+        "over": 0,
+        "overAt": [],
+        "detail": {
+          "actual": [
+            229,
+            64,
+            38,
+            255
+          ],
+          "expected": [
+            230,
+            64,
+            38,
+            255
+          ]
+        },
+        "slackAtWorst": 0,
+        "maxSlack": 2.32
+      },
+      "cornerPixels": 3968,
+      "packetBlends": 30,
+      "parentLayers": [
+        {
+          "nodeId": "e",
+          "bound": {
+            "x": 2,
+            "y": 2,
+            "width": 500,
+            "height": 306
+          }
+        }
+      ],
+      "blendNotices": [],
+      "splits": {
+        "frames": 2,
+        "splits": 60,
+        "perFrame": 30,
+        "draws": {
+          "plain": 0,
+          "clip": 0,
+          "shifted": 60,
+          "clip-shifted": 0
+        },
+        "fromPacket": 30
+      }
+    },
+    {
+      "fixture": "effect root",
+      "variant": "tile 64",
+      "comparison": {
+        "worst": 1,
+        "at": [
+          0,
+          0
+        ],
+        "over": 0,
+        "overAt": [],
+        "detail": {
+          "actual": [
+            229,
+            64,
+            38,
+            255
+          ],
+          "expected": [
+            230,
+            64,
+            38,
+            255
+          ]
+        },
+        "slackAtWorst": 0,
+        "maxSlack": 2.32
+      },
+      "cornerPixels": 3968,
+      "packetBlends": 30,
+      "parentLayers": [
+        {
+          "nodeId": "e",
+          "bound": {
+            "x": 2,
+            "y": 2,
+            "width": 500,
+            "height": 306
+          }
+        }
+      ],
+      "blendNotices": [],
+      "splits": {
+        "frames": 2,
+        "splits": 264,
+        "perFrame": 132,
+        "draws": {
+          "plain": 0,
+          "clip": 0,
+          "shifted": 2400,
+          "clip-shifted": 0
+        },
+        "fromPacket": 132
+      }
+    },
+    {
+      "fixture": "effect root past the target",
+      "variant": "capture",
+      "comparison": {
+        "worst": 1,
+        "at": [
+          0,
+          0
+        ],
+        "over": 0,
+        "overAt": [],
+        "detail": {
+          "actual": [
+            229,
+            64,
+            38,
+            255
+          ],
+          "expected": [
+            230,
+            64,
+            38,
+            255
+          ]
+        },
+        "slackAtWorst": 0,
+        "maxSlack": 1
+      },
+      "cornerPixels": 480,
+      "packetBlends": 3,
+      "parentLayers": [
+        {
+          "nodeId": "s",
+          "bound": {
+            "x": -40,
+            "y": 38,
+            "width": 114,
+            "height": 274
+          }
+        }
+      ],
+      "blendNotices": [],
+      "splits": {
+        "frames": 2,
+        "splits": 6,
+        "perFrame": 3,
+        "draws": {
+          "plain": 0,
+          "clip": 0,
+          "shifted": 4,
+          "clip-shifted": 2
+        },
+        "fromPacket": 3
+      }
+    },
+    {
+      "fixture": "effect root past the target",
+      "variant": "tile 64",
+      "comparison": {
+        "worst": 1,
+        "at": [
+          0,
+          0
+        ],
+        "over": 0,
+        "overAt": [],
+        "detail": {
+          "actual": [
+            229,
+            64,
+            38,
+            255
+          ],
+          "expected": [
+            230,
+            64,
+            38,
+            255
+          ]
+        },
+        "slackAtWorst": 0,
+        "maxSlack": 1
+      },
+      "cornerPixels": 480,
+      "packetBlends": 3,
+      "parentLayers": [
+        {
+          "nodeId": "s",
+          "bound": {
+            "x": -40,
+            "y": 38,
+            "width": 114,
+            "height": 274
+          }
+        }
+      ],
+      "blendNotices": [],
+      "splits": {
+        "frames": 2,
+        "splits": 20,
+        "perFrame": 10,
+        "draws": {
+          "plain": 0,
+          "clip": 0,
+          "shifted": 40,
+          "clip-shifted": 20
+        },
+        "fromPacket": 10
+      }
+    },
+    {
+      "fixture": "clip",
+      "variant": "capture",
+      "comparison": {
+        "worst": 3,
+        "at": [
+          206,
+          30
+        ],
+        "over": 0,
+        "overAt": [],
+        "detail": {
+          "actual": [
+            183,
+            16,
+            10,
+            255
+          ],
+          "expected": [
+            186,
+            16,
+            10,
+            255
+          ]
+        },
+        "slackAtWorst": 2.76,
+        "maxSlack": 5.02
+      },
+      "cornerPixels": 2240,
+      "packetBlends": 29,
+      "parentLayers": [],
+      "blendNotices": [],
+      "splits": {
+        "frames": 2,
+        "splits": 58,
+        "perFrame": 29,
+        "draws": {
+          "plain": 56,
+          "clip": 2,
+          "shifted": 0,
+          "clip-shifted": 0
+        },
+        "fromPacket": 29
+      }
+    },
+    {
+      "fixture": "clip",
+      "variant": "tile 64",
+      "comparison": {
+        "worst": 3,
+        "at": [
+          206,
+          30
+        ],
+        "over": 0,
+        "overAt": [],
+        "detail": {
+          "actual": [
+            183,
+            16,
+            10,
+            255
+          ],
+          "expected": [
+            186,
+            16,
+            10,
+            255
+          ]
+        },
+        "slackAtWorst": 2.76,
+        "maxSlack": 5.02
+      },
+      "cornerPixels": 2240,
+      "packetBlends": 29,
+      "parentLayers": [],
+      "blendNotices": [],
+      "splits": {
+        "frames": 2,
+        "splits": 72,
+        "perFrame": 36,
+        "draws": {
+          "plain": 70,
+          "clip": 2,
+          "shifted": 0,
+          "clip-shifted": 0
+        },
+        "fromPacket": 36
+      }
+    },
+    {
+      "fixture": "mask",
+      "variant": "capture",
+      "comparison": {
+        "worst": 1,
+        "at": [
+          0,
+          0
+        ],
+        "over": 0,
+        "overAt": [],
+        "detail": {
+          "actual": [
+            229,
+            64,
+            38,
+            255
+          ],
+          "expected": [
+            230,
+            64,
+            38,
+            255
+          ]
+        },
+        "slackAtWorst": 0,
+        "maxSlack": 5.02
+      },
+      "cornerPixels": 2112,
+      "packetBlends": 25,
+      "parentLayers": [],
+      "blendNotices": [],
+      "splits": {
+        "frames": 2,
+        "splits": 50,
+        "perFrame": 25,
+        "draws": {
+          "plain": 48,
+          "clip": 2,
+          "shifted": 0,
+          "clip-shifted": 0
+        },
+        "fromPacket": 25
+      }
+    },
+    {
+      "fixture": "mask",
+      "variant": "tile 64",
+      "comparison": {
+        "worst": 1,
+        "at": [
+          0,
+          0
+        ],
+        "over": 0,
+        "overAt": [],
+        "detail": {
+          "actual": [
+            229,
+            64,
+            38,
+            255
+          ],
+          "expected": [
+            230,
+            64,
+            38,
+            255
+          ]
+        },
+        "slackAtWorst": 0,
+        "maxSlack": 5.02
+      },
+      "cornerPixels": 2112,
+      "packetBlends": 25,
+      "parentLayers": [],
+      "blendNotices": [],
+      "splits": {
+        "frames": 2,
+        "splits": 50,
+        "perFrame": 25,
+        "draws": {
+          "plain": 48,
+          "clip": 2,
+          "shifted": 0,
+          "clip-shifted": 0
+        },
+        "fromPacket": 25
+      }
+    },
+    {
+      "fixture": "R3 and R4",
+      "variant": "capture",
+      "comparison": {
+        "worst": 3,
+        "at": [
+          90,
+          280
+        ],
+        "over": 0,
+        "overAt": [],
+        "detail": {
+          "actual": [
+            27,
+            73,
+            54,
+            255
+          ],
+          "expected": [
+            27,
+            76,
+            53,
+            255
+          ]
+        },
+        "slackAtWorst": 2.27,
+        "maxSlack": 4.44
+      },
+      "cornerPixels": 640,
+      "packetBlends": 8,
+      "parentLayers": [
+        {
+          "nodeId": "f2",
+          "bound": {
+            "x": 176,
+            "y": 12,
+            "width": 158,
+            "height": 138
+          }
+        },
+        {
+          "nodeId": "f3",
+          "bound": {
+            "x": 340,
+            "y": 12,
+            "width": 158,
+            "height": 138
+          }
+        },
+        {
+          "nodeId": "n",
+          "bound": {
+            "x": 288,
+            "y": 168,
+            "width": 216,
+            "height": 136
+          }
+        }
+      ],
+      "blendNotices": [],
+      "splits": {
+        "frames": 2,
+        "splits": 16,
+        "perFrame": 8,
+        "draws": {
+          "plain": 12,
+          "clip": 0,
+          "shifted": 4,
+          "clip-shifted": 0
+        },
+        "fromPacket": 8
+      }
+    },
+    {
+      "fixture": "R3 and R4",
+      "variant": "tile 64",
+      "comparison": {
+        "worst": 3,
+        "at": [
+          90,
+          280
+        ],
+        "over": 0,
+        "overAt": [],
+        "detail": {
+          "actual": [
+            27,
+            73,
+            54,
+            255
+          ],
+          "expected": [
+            27,
+            76,
+            53,
+            255
+          ]
+        },
+        "slackAtWorst": 2.27,
+        "maxSlack": 4.44
+      },
+      "cornerPixels": 640,
+      "packetBlends": 8,
+      "parentLayers": [
+        {
+          "nodeId": "f2",
+          "bound": {
+            "x": 176,
+            "y": 12,
+            "width": 158,
+            "height": 138
+          }
+        },
+        {
+          "nodeId": "f3",
+          "bound": {
+            "x": 340,
+            "y": 12,
+            "width": 158,
+            "height": 138
+          }
+        },
+        {
+          "nodeId": "n",
+          "bound": {
+            "x": 288,
+            "y": 168,
+            "width": 216,
+            "height": 136
+          }
+        }
+      ],
+      "blendNotices": [],
+      "splits": {
+        "frames": 2,
+        "splits": 90,
+        "perFrame": 45,
+        "draws": {
+          "plain": 66,
+          "clip": 0,
+          "shifted": 36,
+          "clip-shifted": 0
+        },
+        "fromPacket": 45
+      }
+    },
+    {
+      "fixture": "R3 and R4",
+      "variant": "production usage",
+      "comparison": {
+        "worst": 3,
+        "at": [
+          90,
+          280
+        ],
+        "over": 0,
+        "overAt": [],
+        "detail": {
+          "actual": [
+            27,
+            73,
+            54,
+            255
+          ],
+          "expected": [
+            27,
+            76,
+            53,
+            255
+          ]
+        },
+        "slackAtWorst": 2.27,
+        "maxSlack": 4.44
+      },
+      "cornerPixels": 640,
+      "packetBlends": 8,
+      "parentLayers": [
+        {
+          "nodeId": "f2",
+          "bound": {
+            "x": 176,
+            "y": 12,
+            "width": 158,
+            "height": 138
+          }
+        },
+        {
+          "nodeId": "f3",
+          "bound": {
+            "x": 340,
+            "y": 12,
+            "width": 158,
+            "height": 138
+          }
+        },
+        {
+          "nodeId": "n",
+          "bound": {
+            "x": 288,
+            "y": 168,
+            "width": 216,
+            "height": 136
+          }
+        }
+      ],
+      "blendNotices": []
+    }
+  ],
+  "pageErrors": [],
+  "failures": []
+}

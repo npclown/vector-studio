@@ -482,4 +482,21 @@ describe('V35-E2 SVG', () => {
     expect(svg).toContain('style="mix-blend-mode: color-dodge"');
     expect(svg).toContain('style="mix-blend-mode: multiply; isolation: isolate"');
   });
+
+  it('blends a frame child inside the frame clip group (the disclosed SVG isolation)', () => {
+    const target = createEditor({
+      document: doc([
+        node('f', 'p', 'frame', { children: ['k'] }),
+        node('k', 'f', 'rectangle', { blendMode: 'multiply' }),
+      ]),
+    });
+    const svg = target.query({ type: 'exportSvg' } as never) as unknown as string;
+    // The frame's content is a `<g clip-path>` (an isolated group in SVG), and the child's
+    // mix-blend-mode sits inside it, so in SVG it blends with the frame's content only.
+    const clipGroup = svg.indexOf('clip-path="url(#');
+    const blended = svg.indexOf('mix-blend-mode: multiply');
+    expect(clipGroup).toBeGreaterThan(-1);
+    expect(blended).toBeGreaterThan(clipGroup);
+    expect(svg.slice(clipGroup, blended)).not.toContain('</g>');
+  });
 });
