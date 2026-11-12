@@ -54,6 +54,18 @@ export {
 } from './effect-plan.js';
 export type { EffectBudgetNotice } from './effect-plan.js';
 export {
+  V35_BLEND_ROOTS_MAX,
+  blendResourceLimitDiagnostic,
+  planBackdropSplits,
+} from './backdrop-plan.js';
+export type {
+  BackdropLayer,
+  BackdropSplit,
+  BlendResourceNotice,
+  BlendResourceReason,
+} from './backdrop-plan.js';
+export type { BlendRootMode } from './layer-plan.js';
+export {
   E28_ATLAS_PAGES_MAX,
   E28_ATLAS_PAGE_SIZE,
   E28_RASTER_CAP,

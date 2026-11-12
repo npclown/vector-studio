@@ -2,6 +2,7 @@ import {
   DIAGNOSTIC_CODES,
   type DiagnosticInput,
   type SceneAffine,
+  type SceneBlendMode,
   type SceneEffect,
 } from '@vector-studio/contracts';
 import type { ClipChain } from './clip-resolution.js';
@@ -56,7 +57,25 @@ export type LayerScope = {
   readonly outerChain?: ClipChain | null;
   /** E41-K2: whether the root's subtree holds a mask group (target clamp). */
   hasMask?: boolean;
+  /**
+   * V-35 contract, V35-K3: a blend root's mode (outside `normal` and `passThrough`); its `R` is
+   * composited into its parent target with this mode (V35-K5). Absent for other scopes.
+   */
+  readonly blend?: BlendRootMode;
+  /** V35-K4: a blend root's backdrop snapshot, grown by `margin` device pixels (0 for blend). */
+  readonly backdrop?: Readonly<{ margin: number }>;
+  /** V35-K3: an isolating container (mode `normal`), composited with source-over. */
+  readonly isolating?: boolean;
+  /**
+   * V35-K6, K7: the scope is a layer only because V-35 asks for one (a blend root or an
+   * isolating container that is neither an E25 layer nor an E41 effect root); dropping V-35's
+   * layers dissolves it.
+   */
+  readonly blendOnly?: boolean;
 };
+
+/** V35-K3: the modes of a blend root, every scene blend mode but `normal` and `passThrough`. */
+export type BlendRootMode = Exclude<SceneBlendMode, 'normal' | 'passThrough'>;
 
 /** A device rectangle in whole target pixels. */
 export type DeviceRect = Readonly<{ x: number; y: number; width: number; height: number }>;

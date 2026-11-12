@@ -20,6 +20,7 @@ import {
   DiagnosticChannel,
   FrameScheduler,
   ResourceAccounting,
+  blendResourceLimitDiagnostic,
   clipResourceLimitDiagnostic,
   effectResourceLimitDiagnostic,
   layerResourceLimitDiagnostic,
@@ -152,6 +153,12 @@ const DEFAULT_CAPTURE_TIMEOUT_MS = 5000;
 /** E10 contract, section 3.2: the canvas usage that a frame capture needs. */
 const CAPTURE_CANVAS_USAGE = 0x10 | 0x01;
 const COPY_SOURCE_USAGE = 0x01;
+/**
+ * V35-K4 (amending E10 section 3.2): under blend 'v0' the canvas is configured with
+ * TEXTURE_BINDING as well, so a 1x main pass's backdrop snapshot can read it.
+ */
+const TEXTURE_BINDING_USAGE = 0x04;
+const RENDER_ATTACHMENT_USAGE = 0x10;
 /** A packet carries at most this many path mesh failure notices (P3 V3 contract, section h). */
 const NOTICES_PER_PACKET = 32;
 
@@ -193,6 +200,10 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   /** E28 contract, U3: the attached source draws text through the glyph atlas. */
   #textPipelineRequired = false;
   #effectPipelineRequired = false;
+  /** V35-K2: the attached source draws blend modes (`blend: 'v0'`). */
+  #blendPipelineRequired = false;
+  /** V35-K7: whether the canvas was configured with TEXTURE_BINDING (or its usage is unknown). */
+  #canvasReadable = false;
   /** E28-D1: the generation that last reported `render.text-unavailable`. */
   #textUnavailableGeneration = 0;
   #primitiveMode = false;
@@ -326,6 +337,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     this.#layerPipelineRequired = source.requiresLayerPipeline === true;
     this.#textPipelineRequired = source.requiresTextPipeline === true;
     this.#effectPipelineRequired = source.requiresEffectPipeline === true;
+    this.#blendPipelineRequired = source.requiresBlendPipeline === true;
     let disposed = false;
     return {
       get disposed() {
@@ -342,6 +354,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
           this.#layerPipelineRequired = false;
           this.#textPipelineRequired = false;
           this.#effectPipelineRequired = false;
+          this.#blendPipelineRequired = false;
         }
       },
     };
@@ -445,6 +458,39 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
    */
   getEffectPassesForTesting(): number {
     return this.#primitiveScene?.effectPasses ?? 0;
+  }
+
+  /**
+   * @internal Tests only (V35-A07): the current generation's backdrop splits so far, one per
+   * end-and-resume of a pass around a snapshot; 0 without the blend pipeline.
+   */
+  getBlendSplitsForTesting(): number {
+    return this.#primitiveScene?.blendSplits ?? 0;
+  }
+
+  /**
+   * @internal Tests only (V35-A05): the current generation's blend composite draws so far, per
+   * variant (plain, clip and their shifted forms); zeros without the blend pipeline.
+   */
+  getBlendCompositeDrawsForTesting(): Readonly<
+    Record<'plain' | 'clip' | 'shifted' | 'clip-shifted', number>
+  > {
+    return (
+      this.#primitiveScene?.blendCompositeDrawsForTesting?.() ??
+      Object.freeze({ plain: 0, clip: 0, shifted: 0, 'clip-shifted': 0 })
+    );
+  }
+
+  /**
+   * V35-K7: whether this generation draws blend roots with their mode; false before
+   * initialization, for a source that does not ask for them, when the blend pipelines are
+   * unavailable, or when the canvas could not be configured to be read at 1x.
+   */
+  get blendPipelineAvailable(): boolean {
+    const scene = this.#primitiveScene;
+    return (
+      scene?.blendPipelineAvailable === true && (scene.sampleCount === 4 || this.#canvasReadable)
+    );
   }
 
   /**
@@ -774,12 +820,29 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         maxTextureDimension2D,
       );
       contextConfigured = true;
+      // V35-K4: blend 'v0' adds TEXTURE_BINDING (the E10 section 3.2 amendment); without it
+      // and without a capture the configuration is the same as before (V35-A06).
+      const blendUsage = this.#blendPipelineRequired && this.#primitiveMode;
       context.configure({
         device,
         format,
         alphaMode: 'premultiplied',
-        ...(this.#frameCapture ? { usage: CAPTURE_CANVAS_USAGE } : {}),
+        ...(blendUsage
+          ? {
+              usage:
+                RENDER_ATTACHMENT_USAGE |
+                TEXTURE_BINDING_USAGE |
+                (this.#frameCapture ? COPY_SOURCE_USAGE : 0),
+            }
+          : this.#frameCapture
+            ? { usage: CAPTURE_CANVAS_USAGE }
+            : {}),
       });
+      // V35-K7: a platform that drops the usage draws blend roots as `normal` at 1x.
+      this.#canvasReadable =
+        blendUsage &&
+        (context.configuredUsage === undefined ||
+          (context.configuredUsage & TEXTURE_BINDING_USAGE) !== 0);
       // E10 contract, section 3.2: a platform that drops the usage is refused, never copied.
       if (this.#frameCapture && ((context.configuredUsage ?? 0) & COPY_SOURCE_USAGE) === 0) {
         throw new TestHookCreationError('The canvas was configured without COPY_SRC.', {
@@ -856,6 +919,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
           this.#layerPipelineRequired ||
           this.#textPipelineRequired ||
           this.#effectPipelineRequired ||
+          this.#blendPipelineRequired ||
           Object.keys(hooks).length > 0
             ? device.createPrimitiveScene(context, format, generation, tracker, {
                 ...(this.#meshPipelineRequired ? { meshPipeline: true } : {}),
@@ -869,6 +933,9 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
                 ...(this.#layerPipelineRequired ? { layerPipeline: true } : {}),
                 ...(this.#textPipelineRequired ? { textPipeline: true } : {}),
                 ...(this.#effectPipelineRequired ? { effectPipeline: true } : {}),
+                ...(this.#blendPipelineRequired && this.#layerPipelineRequired
+                  ? { blendPipeline: true }
+                  : {}),
                 ...hooks,
               })
             : device.createPrimitiveScene(context, format, generation, tracker);
@@ -1442,6 +1509,13 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
             this.#diagnostics.emit(effectResourceLimitDiagnostic(notice, generation));
           }
         }
+        // V35-K6: blend resource notices, likewise CPU state.
+        const blendNotices = packet.layers?.blendNotices;
+        if (blendNotices !== undefined && isList(blendNotices)) {
+          for (const notice of blendNotices.slice(0, NOTICES_PER_PACKET)) {
+            this.#diagnostics.emit(blendResourceLimitDiagnostic(notice, generation));
+          }
+        }
         // E28 contract, section 5: E28-D2 and D3, likewise CPU state.
         const textNotices = packet.text?.notices;
         if (textNotices !== undefined && isList(textNotices)) {
@@ -1670,6 +1744,13 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       // E41 U5b: effect layers may reach past the target once the shifted variants exist.
       ...(this.#effectPipelineRequired && scene.effectPipelineAvailable
         ? { offTargetEffectLayers: true }
+        : {}),
+      // V35-K7: blend roots draw with their mode once the blend pipeline exists and the main
+      // pass's attachment can be read (the canvas at 1x, the multisample attachment at 4x).
+      ...(this.#blendPipelineRequired &&
+      scene.blendPipelineAvailable === true &&
+      (scene.sampleCount === 4 || this.#canvasReadable)
+        ? { blendLayers: true }
         : {}),
     });
   }

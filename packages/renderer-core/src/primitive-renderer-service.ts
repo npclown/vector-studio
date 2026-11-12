@@ -75,6 +75,14 @@ export type PrimitiveRendererServiceOptions = Readonly<{
    */
   effects?: 'none' | 'v0' | 'v1';
   /**
+   * V-35 contract, V35-K2: 'v0' accepts node blend modes and plans each blend root and each
+   * isolating container (mode `normal`) as a layer (V35-K3); blend roots composite with their
+   * mode over a backdrop snapshot through the blend pipeline, which the backend then creates
+   * (K4, K5). It needs `groups: 'isolated'`. Default 'none': a node with a non-default
+   * `blendMode` is reported as `unsupported-feature`, and nothing else changes (V35-A06).
+   */
+  blend?: 'none' | 'v0';
+  /**
    * @internal Tests only (E25-A05): with `groups: 'isolated'`, every visible container with
    * opacity 1 is drawn as a layer too, so its layer variants can be compared with the main pass.
    */
@@ -123,6 +131,8 @@ export class PrimitiveRendererService
   public readonly requiresTextPipeline: boolean;
   /** E41 contract, U5: true exactly when the `effects` option is 'v0' or 'v1'; read at attach. */
   public readonly requiresEffectPipeline: boolean;
+  /** V-35 contract, V35-K2: true exactly when the `blend` option is 'v0'; read at attach. */
+  public readonly requiresBlendPipeline: boolean;
   /** V-32 (V32-P1): the image source port under `paints: 'image'`; read at attach. */
   public readonly imageSource?: ImageSourcePort;
   #unsubscribeImages: (() => void) | null = null;
@@ -180,6 +190,13 @@ export class PrimitiveRendererService
     if (effects !== 'none' && groups !== 'isolated') {
       throw new TypeError(`effects: '${effects}' needs groups: 'isolated'.`);
     }
+    const blend = options.blend ?? 'none';
+    if (blend !== 'none' && blend !== 'v0') {
+      throw new TypeError("blend must be 'none' or 'v0'.");
+    }
+    if (blend === 'v0' && groups !== 'isolated') {
+      throw new TypeError("blend: 'v0' needs groups: 'isolated'.");
+    }
     const text = options.text ?? 'none';
     if (text !== 'none' && text !== 'atlas') {
       throw new TypeError("text must be 'none' or 'atlas'.");
@@ -220,6 +237,7 @@ export class PrimitiveRendererService
     }
     this.requiresLayerPipeline = groups === 'isolated';
     this.requiresEffectPipeline = effects !== 'none';
+    this.requiresBlendPipeline = blend === 'v0';
     const anyPort = port !== undefined || strokePort !== undefined;
     this.requiresMeshPipeline = anyPort;
     // P3 V3 section a with the B2 section 9.1 amendment (S4): path nodes are supported when a
@@ -236,6 +254,7 @@ export class PrimitiveRendererService
       groupOpacity: groups === 'isolated' ? 'supported' : 'unsupported',
       textNodes: text === 'atlas' ? 'supported' : 'unsupported',
       effects,
+      blend,
     });
     this.#source = new PrimitiveSceneSource(
       this.#mirror,

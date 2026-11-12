@@ -1,7 +1,8 @@
 import type { ImageSourcePort, SceneColor, SceneVersion } from '@vector-studio/contracts';
 import type { ClipStateRecord, MaskBudgetNotice, MaskLevelRecord } from './clip-resolution.js';
 import type { EffectBudgetNotice } from './effect-plan.js';
-import type { DeviceRect, LayerResourceNotice } from './layer-plan.js';
+import type { BlendResourceNotice } from './backdrop-plan.js';
+import type { BlendRootMode, DeviceRect, LayerResourceNotice } from './layer-plan.js';
 import type { GradientPaintRecord } from './paint-records.js';
 import type { PathMeshNotice } from './path-mesh-pipeline.js';
 import type { TextClear, TextNotice, TextReceiptPart, TextUpload } from './text-atlas.js';
@@ -29,6 +30,12 @@ export type PrimitiveTarget = Readonly<{
    * carries a clip state; a backend sets it only when it draws the effect passes.
    */
   offTargetEffectLayers?: boolean;
+  /**
+   * V-35 contract, V35-K7: whether the backend draws blend roots (the backdrop snapshot and the
+   * blend composite). Absent or false, the source drops every V-35 layer: blend roots draw as
+   * `normal` and isolating containers as `passThrough`.
+   */
+  blendLayers?: boolean;
 }>;
 export type PrimitiveRecordVersion = Readonly<{ index: number; version: symbol }>;
 export type PrimitiveResource = Readonly<{
@@ -231,6 +238,14 @@ export type LayerPacketPart = Readonly<{
      * the effect passes (U5) the layer composites as an E25 layer (5.3).
      */
     effect?: LayerEffectRecord;
+    /**
+     * V-35 contract, V35-K3 and K5: present on a drawn blend root, whose `R` (its layer, or an
+     * effect root's result) is composited into its parent target with this mode over a backdrop
+     * snapshot; absent for source-over (E25 layers and isolating containers).
+     */
+    blend?: BlendRootMode;
+    /** V35-K4: the backdrop snapshot of a blend root, present exactly with `blend`. */
+    backdrop?: Readonly<{ margin: number }>;
   }>[];
   /** One per layer, each in its target's paint order. */
   composites: readonly Readonly<{
@@ -259,6 +274,11 @@ export type LayerPacketPart = Readonly<{
    * `render.effect-resource-limit`. Absent when none is pending.
    */
   effectNotices?: readonly EffectBudgetNotice[];
+  /**
+   * V35-K6: trees and blend roots whose V-35 layers were newly dropped, at most 32. Emitted as
+   * `render.blend-resource-limit`. Absent when none is pending.
+   */
+  blendNotices?: readonly BlendResourceNotice[];
 }>;
 
 /** E41 contract, section 5.2: an effect root's passes, in device pixels (E41-S9, K2). */
@@ -419,6 +439,12 @@ export interface PrimitiveFrameSource {
    * pipeline) at initialization and recovery. Optional; absent means false.
    */
   readonly requiresEffectPipeline?: boolean;
+  /**
+   * V-35 contract, V35-K2: true when the backend must create the backdrop snapshot and blend
+   * composite pipelines (with the layer pipeline) and the attachment usages they read
+   * (V35-K4). Optional; absent means false.
+   */
+  readonly requiresBlendPipeline?: boolean;
   /**
    * V-32 contract (V32-P1): the image source port the backend's texture store requests drawn
    * image keys from. Optional; absent means image paints bind the transparent texture.

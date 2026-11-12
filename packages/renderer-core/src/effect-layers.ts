@@ -53,6 +53,11 @@ export type EffectLayerPlan = Readonly<{
   effectNotices: readonly EffectBudgetNotice[];
   /** E41-K4: σ clamped over the drawn effect roots (frame statistics). */
   clampedSigmas: number;
+  /**
+   * V35-K6: the layer trees not admitted whole, by root scope, with the bytes they would have
+   * needed (their V-35 layers are then dropped and the tree is planned again).
+   */
+  rejected: ReadonlyMap<LayerScope, number>;
 }>;
 
 type Scale = Readonly<{ camera: LayerCamera; scale: number }>;
@@ -337,6 +342,10 @@ export function planEffectLayers(
   // the root of its own E25 tree.
   const isolated = (scope: LayerScope) => scope.isolated !== false;
   const plain = plainBounds(scopes, isolated, content, camera, target);
+  // V35-K6: a blend root's backdrop snapshot covers its composite, the output bound of an
+  // effect root, else its layer bound.
+  const snapshot = (scope: LayerScope, area: number) =>
+    scope.backdrop === undefined ? {} : { snapshot: area };
   const plainRootOf = (scope: LayerScope): LayerScope => {
     let root = scope;
     for (let parent = scope.parent; parent !== null; parent = parent.parent) {
@@ -350,7 +359,7 @@ export function planEffectLayers(
     LayerScope,
     {
       layers: BudgetLayer[];
-      withoutEffects: Map<LayerScope, { width: number; height: number }[]>;
+      withoutEffects: Map<LayerScope, { width: number; height: number; snapshot?: number }[]>;
       effectRoots: string[];
     }
   >();
@@ -376,13 +385,26 @@ export function planEffectLayers(
         source: effect.source,
         output: effect.output,
         ...(effect.innerScratch === undefined ? {} : { innerScratch: effect.innerScratch }),
+        ...snapshot(scope, effect.output.width * effect.output.height),
       });
     } else if (bound !== undefined) {
-      tree.layers.push({ kind: 'layer', width: bound.width, height: bound.height });
+      tree.layers.push({
+        kind: 'layer',
+        width: bound.width,
+        height: bound.height,
+        ...snapshot(scope, bound.width * bound.height),
+      });
     }
     if (plainBound !== undefined) {
       const sub = plainRootOf(scope);
-      tree.withoutEffects.set(sub, [...(tree.withoutEffects.get(sub) ?? []), plainBound]);
+      tree.withoutEffects.set(sub, [
+        ...(tree.withoutEffects.get(sub) ?? []),
+        {
+          width: plainBound.width,
+          height: plainBound.height,
+          ...snapshot(scope, plainBound.width * plainBound.height),
+        },
+      ]);
     }
   }
   const budget = planEffectBudget(
@@ -451,5 +473,11 @@ export function planEffectLayers(
     layerNotices: budget.layerNotices,
     effectNotices: budget.effectNotices,
     clampedSigmas,
+    rejected: new Map(
+      [...trees.keys()].flatMap((root) => {
+        const bytes = budget.rejected.get(root.nodeId);
+        return bytes === undefined ? [] : [[root, bytes] as const];
+      }),
+    ),
   });
 }

@@ -50,6 +50,7 @@ The `RenderNodeSnapshot` type does not change. `SceneNodeBase.opacity` is alread
   - The *isolation depth* of a node is the number of its proper ancestors that are containers with `0 < opacity < 1` and `visible: true`.
   - A candidate scene in which any node's isolation depth is 33 or more is rejected with `unsupported-feature`.
   - This is a graph rule in `validateCandidateGraph`. It runs in the same walk as P4's clip depth, after it (E25-Q4).
+  - **Amendment (V-35 U4, 2026-11-12).** Under the renderer's `blend: 'v0'`, the isolating set also holds V-35's blend roots (a visible node with opacity above 0 whose `blendMode` is outside `normal` and `passThrough`, leaf or container) and isolating containers (a visible container with opacity above 0 and `blendMode: 'normal'`), as E41-S7 added effect roots. Scene validation's `isIsolating` counts them ([V-35 contract](viz-v35-fills-blend-contract.md), V35-K3). A scene without `blendMode` keys has the same depth as before.
 - **E25-S3 compatibility.** A scene whose containers all have opacity 1 is accepted and drawn exactly as before (E25-A08). No producer changes.
 
 ## 3. Rendering semantics
@@ -74,6 +75,7 @@ The rules:
   - A container with `α_g = 0` draws nothing of its subtree and reports nothing. It makes no path request, no layer and no mask pass. This is P4-K2b's rule for `visible: false`.
   - A leaf mask source's own `opacity` still does not affect its mask (P4-S2). But a mask container under an ancestor with opacity 0 draws nothing, so its source is not meshed.
   - A container with `α_g = 1` is not isolated. It draws exactly as today, with no layer.
+  - **Amendment (V-35 U4, 2026-11-12).** A container with `α_g = 1` is isolated when its `blendMode` is `normal` (a V-35 isolating container, composited with E25's source-over composite) or another mode outside `passThrough` (a V-35 blend root, composited with V-35's blend composite over a backdrop snapshot). `passThrough` and an absent `blendMode` keep the rule above. Under the V-35 budget fallback (V35-K6) or without the blend pipeline (V35-K7), those layers are dropped and the container draws as today. The 4x attachment and layer tile colour textures gain `TEXTURE_BINDING`, and the main pass stores colour and stencil across a snapshot, only under `blend: 'v0'` ([V-35 contract](viz-v35-fills-blend-contract.md), V35-K3, K4).
 - **E25-K4 quantization.** `L_g` is stored in the target's colour format: 8 bits per channel, premultiplied. The composite adds one rounding step per isolation level, so a value may drift from a full-precision oracle by at most 1/255 per level.
 - **E25-K5 bound and culling.** A layer covers the device rectangle `B_g`, built in five steps:
   1. Take the union of the device bounds of `g`'s drawn descendants. These are P4-K5's leaf bounds after its clip culling, and nested layers contribute their own `B`.
