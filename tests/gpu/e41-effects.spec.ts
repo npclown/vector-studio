@@ -22,6 +22,7 @@ import {
   type OracleImage,
 } from '../support/e41-effect-oracle.js';
 import { decodeFrame } from '../support/p4-clip-oracle.js';
+import { blendColor } from '../support/v35-blend-oracle.js';
 
 declare global {
   interface Window {
@@ -489,8 +490,16 @@ function snapshot(nodes: readonly RenderNodeSnapshot[]): RenderSceneSnapshot {
   };
 }
 
-/** `effects`: false for none, true for E41's 'v0', or 'v1' (V-36, V36-S4). */
-type PageOptions = Readonly<{ samples: 1 | 4; effects: boolean | 'v1'; content?: boolean }>;
+/**
+ * `effects`: false for none, true for E41's 'v0', or 'v1' (V-36, V36-S4). `blend`: V-35's
+ * `blend=v0` (V36-U4's blend-root fixture).
+ */
+type PageOptions = Readonly<{
+  samples: 1 | 4;
+  effects: boolean | 'v1';
+  content?: boolean;
+  blend?: boolean;
+}>;
 
 async function open(page: Page, options: PageOptions) {
   const pageErrors: string[] = [];
@@ -505,6 +514,7 @@ async function open(page: Page, options: PageOptions) {
   });
   if (options.effects !== false) query.set('effects', options.effects === 'v1' ? 'v1' : 'v0');
   if (options.content === true) query.set('effectcontent', '1');
+  if (options.blend === true) query.set('blend', 'v0');
   await page.goto(`/e23-gradient-paint.html?${query.toString()}`);
   const ready = await page.evaluate(() => window.__vectorStudioE23.ready);
   expect(ready.supported, JSON.stringify(ready)).toBe(true);
@@ -1384,3 +1394,188 @@ test('V36-A07 background-blur edits cost no port calls or geometry; textures rel
   expect(pageErrors).toEqual([]);
   expect(failures).toEqual([]);
 });
+
+// --- V-36 U4: background blur on a V-35 blend root (V36-A04, section 5.2 step 4). ---
+
+type BlendGlassFixture = Readonly<{
+  name: string;
+  node: RenderNodeSnapshot;
+  mode: 'multiply' | 'screen';
+  sigma: number;
+  contentOpacity: number;
+}>;
+
+const blendGlass = (
+  id: string,
+  rect: readonly [number, number, number, number],
+  mode: 'multiply' | 'screen',
+  sigma: number,
+  fill: SceneColor,
+  opacity = 1,
+  extra: readonly SceneEffect[] = [],
+): RenderNodeSnapshot => ({
+  ...shape(id, null, 'rectangle', rect, fill, {
+    effects: [...extra, backgroundBlur(sigma)],
+    opacity,
+  }),
+  blendMode: mode,
+});
+
+const BLEND_GLASS_FIXTURES: readonly BlendGlassFixture[] = [
+  {
+    name: 'G10 background blur radius 20 on a multiply leaf, 50 % amber fill',
+    node: blendGlass('g10', [120, 70, 180, 120], 'multiply', 10, { ...AMBER, a: 0.5 }),
+    mode: 'multiply',
+    sigma: 10,
+    contentOpacity: 1,
+  },
+  {
+    name: 'G10b background blur radius 16 on a screen leaf at opacity 0.6 with a drop shadow',
+    node: blendGlass('g10b', [260, 150, 160, 110], 'screen', 8, { ...TEAL, a: 0.4 }, 0.6, [
+      dropShadow(10, 8, 4),
+    ]),
+    mode: 'screen',
+    sigma: 8,
+    contentOpacity: 0.6,
+  },
+];
+
+const withoutBlendMode = (node: RenderNodeSnapshot) =>
+  Object.fromEntries(
+    Object.entries(node).filter(([key]) => key !== 'blendMode'),
+  ) as RenderNodeSnapshot;
+
+for (const samples of [1, 4] as const) {
+  test(`V36-A04 background blur on a blend root against the oracle at ${samples}x`, async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const effectsPage = await browser.newPage();
+    const contentPage = await browser.newPage();
+    const effects = await open(effectsPage, { samples, effects: 'v1', blend: true });
+    const content = await open(contentPage, { samples, effects: 'v1', content: true });
+    const rows: unknown[] = [];
+    for (const fixture of BLEND_GLASS_FIXTURES) {
+      const under = stripes();
+      const before = await counters(effectsPage);
+      const drawn = await render(effectsPage, [...under, fixture.node]);
+      const after = drawn.result.counters;
+      const { width, height } = drawn.result.frame;
+      const target = { x: 0, y: 0, width, height };
+      // D: the frame without the root.
+      const d = imageOf((await render(effectsPage, under)).rgba, width, height);
+      // L: the root's content alone (its mode does not change L), over black and over white.
+      const alone = withoutBlendMode(fixture.node);
+      const black = await render(contentPage, [alone]);
+      const white = await render(contentPage, [backdrop(width, height), alone]);
+      const l = contentOf(black.rgba, white.rgba, width, height);
+      const c = fixture.contentOpacity;
+      const r = effectOracle(l, target, {
+        shadows: fixture.node.effects!.flatMap((effect) =>
+          effect.kind === 'dropShadow'
+            ? [
+                {
+                  color: effect.color,
+                  dx: effect.offsetX,
+                  dy: effect.offsetY,
+                  sigmaPx: effect.sigma,
+                },
+              ]
+            : [],
+        ),
+        blurSigmaPx: null,
+        contentOpacity: c,
+      });
+      // Section 5.1: P ← B × o over D (source-over), then R × o composites with the root's
+      // mode over that (V35-R2 with an opaque backdrop: as · B(Cb, Cs) + (1 − as) · Cb).
+      const b = backgroundBlurOracle(d, target, target, fixture.sigma, l, c);
+      const expected = new Float64Array(width * height * 4);
+      for (let index = 0; index < width * height; index += 1) {
+        const at = index * 4;
+        const glassAlpha = b.data[at + 3]! * c;
+        const cb = [0, 1, 2].map(
+          (lane) => b.data[at + lane]! * c + d.data[at + lane]! * (1 - glassAlpha),
+        ) as [number, number, number];
+        const as = r.data[at + 3]! * c;
+        const cs = [0, 1, 2].map((lane) => (as > 0 ? (r.data[at + lane]! * c) / as : 0)) as [
+          number,
+          number,
+          number,
+        ];
+        const mixed = blendColor(fixture.mode, cb, cs);
+        for (let lane = 0; lane < 3; lane += 1)
+          expected[at + lane] = as * mixed[lane]! + (1 - as) * cb[lane]!;
+        expected[at + 3] = 1;
+      }
+      // V36-A04: texels where 0 < α(L) < 2/255 are left out (the 127× gain of `h`).
+      const faint = (x: number, y: number) => {
+        const alpha = l.data[(y * width + x) * 4 + 3]!;
+        return alpha > 0 && alpha < 2 / 255;
+      };
+      // The expected frame is the backdrop argument; an empty image adds nothing over it.
+      const result = compare(drawn.rgba, oracleImage(target), 1, expected, undefined, faint);
+      const tolerance = oracleLevels(fixture.sigma) > 0 ? 6 : 3;
+      // The mode shows: pixels that differ from the same root drawn `normal`.
+      const normal = await render(effectsPage, [
+        ...under,
+        { ...fixture.node, blendMode: 'normal' },
+      ]);
+      // The blur shows: pixels that differ from the root without its background blur.
+      const sharp = await render(effectsPage, [
+        ...under,
+        {
+          ...fixture.node,
+          effects: fixture.node.effects!.map((effect) =>
+            effect.kind === 'backgroundBlur' ? backgroundBlur(0) : effect,
+          ),
+        },
+      ]);
+      const differing = (other: Uint8Array) => {
+        let count = 0;
+        for (let index = 0; index < width * height; index += 1) {
+          const at = index * 4;
+          if ([0, 1, 2].some((lane) => Math.abs(drawn.rgba[at + lane]! - other[at + lane]!) > 8))
+            count += 1;
+        }
+        return count;
+      };
+      const composites =
+        Object.values(after.blendCompositeDraws).reduce((sum, n) => sum + n, 0) -
+        Object.values(before.blendCompositeDraws).reduce((sum, n) => sum + n, 0);
+      const row = {
+        fixture: fixture.name,
+        tolerance,
+        ...result,
+        modeChanged: differing(normal.rgba),
+        blurChanged: differing(sharp.rgba),
+        // Per submitted frame (a render settles over a few frames; counters are totals).
+        frames: after.statistics.framesSubmitted - before.statistics.framesSubmitted,
+        blendSplits: after.blendSplits - before.blendSplits,
+        blendComposites: composites,
+        backgroundBlurSkipped: after.backgroundBlurSkipped - before.backgroundBlurSkipped,
+        blendPipelineAvailable: after.blendPipelineAvailable,
+      };
+      rows.push(row);
+      expect(row.blendPipelineAvailable, fixture.name).toBe(true);
+      expect(row.backgroundBlurSkipped, fixture.name).toBe(0);
+      // One snapshot per frame serves the blur and the blend composite (section 5.2), and the
+      // root draws with its mode in every frame.
+      expect(row.frames, fixture.name).toBeGreaterThan(0);
+      expect(row.blendSplits, fixture.name).toBe(row.frames);
+      expect(row.blendComposites, fixture.name).toBeGreaterThanOrEqual(row.frames);
+      expect(row.modeChanged, fixture.name).toBeGreaterThan(500);
+      expect(row.blurChanged, fixture.name).toBeGreaterThan(500);
+      expect(result.worst, `${fixture.name} at ${result.at.join(', ')}`).toBeLessThanOrEqual(
+        tolerance,
+      );
+    }
+    const diagnostics = await effectsPage.evaluate(() => window.__vectorStudioE23.diagnostics());
+    writeReport(`v36-u4-blend-background-${samples}x`, {
+      adapter: effects.ready.adapter,
+      rows,
+      errors: diagnostics.filter((event) => event.severity === 'error').map((event) => event.code),
+    });
+    expect(effects.pageErrors).toEqual([]);
+    expect(content.pageErrors).toEqual([]);
+  });
+}
