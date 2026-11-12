@@ -118,3 +118,6 @@ docs/evidence/pa-u9/**
 # Preserve the E41-U8 main-PC sitting records byte-for-byte.
 docs/evidence/e41/pc-*/**/*.json
 docs/evidence/v35/**/*.json
+# V-36 U4 reference-PC records, kept byte-for-byte.
+docs/evidence/v36/a10-*/**/*.json
+docs/evidence/v36/u4-gpu-*/**/*.json

@@ -1,0 +1,35 @@
+{
+  "rows": {
+    "edit-sigma": {
+      "portCalls": 0,
+      "strokePortCalls": 0,
+      "geometryBuilds": 0
+    },
+    "edit-withShadow": {
+      "portCalls": 0,
+      "strokePortCalls": 0,
+      "geometryBuilds": 0
+    },
+    "edit-removed": {
+      "portCalls": 0,
+      "strokePortCalls": 0,
+      "geometryBuilds": 0
+    },
+    "edit-added": {
+      "portCalls": 0,
+      "strokePortCalls": 0,
+      "geometryBuilds": 0
+    },
+    "textures": {
+      "baseline": {
+        "live": 3,
+        "liveBytes": 3276801
+      },
+      "after": {
+        "live": 3,
+        "liveBytes": 3276801
+      }
+    }
+  },
+  "failures": []
+}

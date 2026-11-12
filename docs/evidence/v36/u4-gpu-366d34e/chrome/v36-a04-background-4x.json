@@ -1,0 +1,90 @@
+{
+  "adapter": {
+    "architecture": "turing",
+    "description": "",
+    "vendor": "nvidia"
+  },
+  "rows": [
+    {
+      "fixture": "G5 background blur radius 20 of a 30 % fill over stripes",
+      "tolerance": 3,
+      "worst": 0.8114404840479494,
+      "at": [
+        127,
+        70
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 153,
+        "expected": 152.18855951595205,
+        "alpha": 0.29803921568627456,
+        "lane": 0
+      },
+      "changed": 21601,
+      "effectPasses": 2,
+      "blendSplits": 2,
+      "backgroundBlurSkipped": 0
+    },
+    {
+      "fixture": "G6 G5 in a clipping frame",
+      "tolerance": 3,
+      "worst": 0.8114404840479494,
+      "at": [
+        175,
+        100
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 153,
+        "expected": 152.18855951595205,
+        "alpha": 0.29803921568627456,
+        "lane": 0
+      },
+      "changed": 7701,
+      "effectPasses": 6,
+      "blendSplits": 4,
+      "backgroundBlurSkipped": 0
+    },
+    {
+      "fixture": "G7 G5 at the target edge, radius 40 (downsampled, clamp)",
+      "tolerance": 6,
+      "worst": 0.9093178835369997,
+      "at": [
+        1,
+        180
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 98,
+        "expected": 98.909317883537,
+        "alpha": 0.29803921568627456,
+        "lane": 2
+      },
+      "changed": 23800,
+      "effectPasses": 10,
+      "blendSplits": 6,
+      "backgroundBlurSkipped": 0
+    },
+    {
+      "fixture": "G9 background blur with a drop shadow on a leaf at opacity 0.5",
+      "tolerance": 3,
+      "worst": 1.2228419461022213,
+      "at": [
+        316,
+        248
+      ],
+      "over3": 0,
+      "detail": {
+        "actual": 232,
+        "expected": 230.77715805389778,
+        "alpha": 0.04637537994257111,
+        "lane": 0
+      },
+      "changed": 14001,
+      "effectPasses": 14,
+      "blendSplits": 8,
+      "backgroundBlurSkipped": 0
+    }
+  ],
+  "errors": []
+}
