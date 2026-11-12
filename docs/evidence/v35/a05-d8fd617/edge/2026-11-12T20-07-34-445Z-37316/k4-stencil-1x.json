@@ -1,0 +1,35 @@
+{
+  "rows": {
+    "main pass": {
+      "outsideWorst": 0,
+      "outsideAt": null,
+      "insideWorst": 1,
+      "frames": 2,
+      "splits": 2,
+      "perFrame": 1,
+      "draws": {
+        "plain": 2,
+        "clip": 0,
+        "shifted": 0,
+        "clip-shifted": 0
+      },
+      "expectedSplits": 1
+    },
+    "tile passes": {
+      "outsideWorst": 0,
+      "outsideAt": null,
+      "insideWorst": 1,
+      "frames": 2,
+      "splits": 24,
+      "perFrame": 12,
+      "draws": {
+        "plain": 64,
+        "clip": 0,
+        "shifted": 0,
+        "clip-shifted": 0
+      },
+      "expectedSplits": 12
+    }
+  },
+  "failures": []
+}

@@ -1,0 +1,75 @@
+{
+  "samples": 1,
+  "identical": true,
+  "splits": {
+    "frames": 2,
+    "splits": 0,
+    "perFrame": 0,
+    "draws": {
+      "plain": 0,
+      "clip": 0,
+      "shifted": 0,
+      "clip-shifted": 0
+    },
+    "packet": {
+      "generation": 1,
+      "analytic": [
+        {
+          "count": 8,
+          "clipState": 0,
+          "paint": false
+        }
+      ],
+      "mesh": [],
+      "paint": null,
+      "clipStates": 0,
+      "maskLevels": 0,
+      "clipNotices": 0,
+      "layers": {
+        "layers": [
+          {
+            "nodeId": "g",
+            "opacity": 0.6,
+            "bound": {
+              "x": 28,
+              "y": 28,
+              "width": 294,
+              "height": 214
+            },
+            "parent": -1,
+            "draws": 1,
+            "meshDraws": 0,
+            "effectOutput": null,
+            "blend": null
+          },
+          {
+            "nodeId": "e",
+            "opacity": 1,
+            "bound": {
+              "x": 328,
+              "y": 58,
+              "width": 144,
+              "height": 204
+            },
+            "parent": -1,
+            "draws": 1,
+            "meshDraws": 0,
+            "effectOutput": {
+              "x": 310,
+              "y": 40,
+              "width": 180,
+              "height": 240
+            },
+            "blend": null
+          }
+        ],
+        "composites": 2,
+        "notices": [],
+        "blendNotices": []
+      },
+      "text": null
+    }
+  },
+  "noneSplits": 0,
+  "nonePipeline": false
+}
