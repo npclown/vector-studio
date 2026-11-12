@@ -197,7 +197,8 @@ function effectMargin(document: DocumentV8, node: NodeV8): number {
   for (const effect of effects) {
     if (!effect.visible) continue;
     if (effect.kind === 'layerBlur') blur = 1.5 * effect.radius;
-    else {
+    else if (effect.kind === 'dropShadow') {
+      // Inner shadows and background blur draw inside the node (V-36 contract, section 6).
       const offset = Math.max(Math.abs(effect.offsetX), Math.abs(effect.offsetY));
       shadow = Math.max(shadow, 1.5 * effect.radius + offset);
     }

@@ -8,6 +8,7 @@ import {
   type BudgetLayer,
   type DeviceBox,
   type DeviceEffects,
+  type EffectBounds,
   type EffectBudgetNotice,
   type TreeNotice,
 } from './effect-plan.js';
@@ -34,6 +35,8 @@ export type EffectLayer = Readonly<{
   effects: DeviceEffects;
   source: DeviceRect;
   output: DeviceRect;
+  /** V36-K1b: the source bound before any clamp, with inner shadows only. */
+  uncut?: DeviceRect;
   /** A leaf root's opacity, which its draws in `L` keep (U5 builds `R` with it); else 1. */
   contentOpacity: number;
 }>;
@@ -298,10 +301,7 @@ export function planEffectLayers(
   }
 
   // Top-down: each scope's bound inside its enclosing layer.
-  const effectBoundsOf = new Map<
-    LayerScope,
-    Readonly<{ source: DeviceRect; output: DeviceRect }>
-  >();
+  const effectBoundsOf = new Map<LayerScope, EffectBounds>();
   const withEffects = new Map<LayerScope, DeviceRect>();
   for (const scope of scopes) {
     const own = reach.get(scope);
@@ -382,7 +382,9 @@ export function planEffectLayers(
     if (effect !== undefined) {
       tree.layers.push({
         kind: 'effect',
-        ...effect,
+        source: effect.source,
+        output: effect.output,
+        ...(effect.innerScratch === undefined ? {} : { innerScratch: effect.innerScratch }),
         ...snapshot(scope, effect.output.width * effect.output.height),
       });
     } else if (bound !== undefined) {
@@ -443,6 +445,7 @@ export function planEffectLayers(
             effects: deviceEffect,
             source: effect.source,
             output: effect.output,
+            ...(effect.uncut === undefined ? {} : { uncut: effect.uncut }),
             contentOpacity: scope.contentOpacity ?? 1,
           }),
         );

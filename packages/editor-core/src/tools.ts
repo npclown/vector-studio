@@ -156,7 +156,8 @@ function lazySnapSet(
   const document = context.query({ type: 'document' });
   const page = context.query({ type: 'activePage' });
   let set: SnapSet | null = null;
-  return () => (set ??= snapSet(document, page, scope, moving));
+  const layoutGrids = context.query({ type: 'layoutGridsVisible' });
+  return () => (set ??= snapSet(document, page, scope, moving, { layoutGrids }));
 }
 
 /** A dragged point (box corner, line end) after snapping, and the overlay to show. */

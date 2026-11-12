@@ -14,6 +14,7 @@ export const TOOL_NAMES: Readonly<Record<string, string>> = Object.freeze({
   text: 'Text',
   pencil: 'Pencil',
   polygon: 'Polygon',
+  eyedropper: 'Eyedropper',
 });
 
 /** The display names of the action buttons, by test ID. */

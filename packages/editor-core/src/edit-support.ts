@@ -1,4 +1,10 @@
-import { isValidId, type DocumentV8, type NodeV8, type PathData } from '@vector-studio/model';
+import {
+  isValidId,
+  tableIds,
+  type DocumentV8,
+  type NodeV8,
+  type PathData,
+} from '@vector-studio/model';
 import { fail, type Draft, type Failure } from './draft.js';
 import { expansionFailure, type ExpansionCache } from './expansion.js';
 import type { CustomDefaults, CustomFailure } from './extensions.js';
@@ -82,12 +88,15 @@ export const ID_ATTEMPTS = 1000;
 export const PENDING_ID = 'pending';
 
 export function freshId(document: DocumentV8, ids: IdSource): string | null {
+  // V39-S3: style, variable and mode IDs are taken too.
+  const tables = new Set(tableIds(document));
   for (let attempt = 0; attempt < ID_ATTEMPTS; attempt += 1) {
     const id = ids();
     if (
       isValidId(id) &&
       !document.pages.some((page) => page.id === id) &&
-      !Object.hasOwn(document.nodes, id)
+      !Object.hasOwn(document.nodes, id) &&
+      !tables.has(id)
     ) {
       return id;
     }
@@ -195,9 +204,14 @@ export function isPoint(value: unknown): value is PagePoint {
  */
 export function placeholderIds(document: DocumentV8, count: number): string[] {
   const placeholders: string[] = [];
+  const tables = new Set(tableIds(document));
   for (let n = 1; placeholders.length < count; n += 1) {
     const id = `${PENDING_ID}-${n}`;
-    if (!document.pages.some((page) => page.id === id) && !Object.hasOwn(document.nodes, id)) {
+    if (
+      !document.pages.some((page) => page.id === id) &&
+      !Object.hasOwn(document.nodes, id) &&
+      !tables.has(id)
+    ) {
       placeholders.push(id);
     }
   }
@@ -224,14 +238,15 @@ export function remapFailure(
 }
 
 /**
- * Draws `count` fresh IDs (M2 contract, S8) in call order: each must be a valid ID that no page
- * or node of `document` has and that this draw has not returned; at most `ID_ATTEMPTS` calls per
- * ID. Null when an ID cannot be drawn (`editor.duplicate-id`). Callers run every other check
+ * Draws `count` fresh IDs (M2 contract, S8) in call order: each must be a valid ID that no page,
+ * node or table entry (V39-S3) of `document` has and that this draw has not returned; at most
+ * `ID_ATTEMPTS` calls per ID. Null when an ID cannot be drawn (`editor.duplicate-id`). Callers run every other check
  * first, so a failed command draws no ID.
  */
 export function drawIds(document: DocumentV8, ids: IdSource, count: number): string[] | null {
   const drawn: string[] = [];
-  const seen = new Set<string>();
+  // V39-S3: style, variable and mode IDs are taken too.
+  const seen = new Set<string>(tableIds(document));
   for (let i = 0; i < count; i += 1) {
     let id: string | null = null;
     for (let attempt = 0; attempt < ID_ATTEMPTS && id === null; attempt += 1) {

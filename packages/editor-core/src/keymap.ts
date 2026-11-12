@@ -16,6 +16,7 @@ export const TOOL_NAMES: readonly ToolName[] = [
   'text',
   'pencil',
   'polygon',
+  'eyedropper',
 ];
 
 /**
@@ -54,6 +55,9 @@ export const BUILTIN_ACTIONS: ReadonlySet<string> = new Set([
   // V-31 contract, V31-E5.
   'toggleLocked',
   'toggleVisible',
+  // V-38 contract, V38-C4.
+  'toggleRulers',
+  'toggleLayoutGrids',
 ]);
 
 /**
@@ -70,6 +74,7 @@ export const DEFAULT_KEYMAP: readonly KeyBinding[] = deepFreeze([
   // V-40: the pencil on Shift+P (Figma); the polygon tool has no default chord.
   { chord: 'Shift+P', action: 'setTool', args: { tool: 'pencil' } },
   { chord: 'T', action: 'setTool', args: { tool: 'text' } },
+  { chord: 'I', action: 'setTool', args: { tool: 'eyedropper' } },
   { chord: 'Delete', action: 'delete' },
   { chord: 'Backspace', action: 'delete' },
   { chord: 'Mod+Z', action: 'undo' },
@@ -105,6 +110,9 @@ export const DEFAULT_KEYMAP: readonly KeyBinding[] = deepFreeze([
   { chord: 'Shift+)', action: 'zoomTo100' },
   { chord: 'Enter', action: 'enterScope' },
   { chord: 'Escape', action: 'exitScope' },
+  // V-38 contract, V38-C4 (US-layout key tokens; Ctrl on every platform, as Figma).
+  { chord: 'Shift+R', action: 'toggleRulers' },
+  { chord: 'Ctrl+Shift+$', action: 'toggleLayoutGrids' },
 ]);
 
 const MODIFIER_ORDER = ['Ctrl', 'Meta', 'Alt', 'Shift'] as const;

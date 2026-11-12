@@ -114,13 +114,18 @@ describe('M8-A01 editor-core re-exports its model and contracts reach', () => {
       'DEFAULT_PATH_STROKE',
       'DEFAULT_RECTANGLE_FILL',
       'DEFAULT_SHAPE_STROKE',
+      'MAX_GRID_LINES',
       'ZOOM_MAX',
       'ZOOM_MIN',
       'createCounterIdSource',
       'createEditor',
       'eventChord',
       'extensionCommand',
+      // V-33 (SVG import contract, section 2).
+      'isSvgText',
+      'layoutGridLines',
       'starExtension',
+      'svgToFragment',
     ]);
     const others = new Set([...(await runtimeKeys(MODEL)), ...(await runtimeKeys(CONTRACTS))]);
     expect(own.filter((name) => others.has(name))).toEqual([]);

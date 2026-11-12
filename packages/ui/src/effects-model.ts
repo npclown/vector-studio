@@ -1,4 +1,11 @@
-import type { Color, Command, CommandResult, DocumentV8, NodeV8 } from '@vector-studio/react';
+import type {
+  Color,
+  Command,
+  CommandResult,
+  DocumentV8,
+  Effect,
+  NodeV8,
+} from '@vector-studio/react';
 import { numberText, parseHex, parseNumber, type Common } from './appearance-model.js';
 
 // E41-U7 (E41 contract, section 6): the property panel's "Effects" section. Each row is one
@@ -6,17 +13,29 @@ import { numberText, parseHex, parseNumber, type Common } from './appearance-mod
 // at that index ("holders"), and a field shows "mixed" where they differ. Add appends to each
 // selected node (`addEffect`); a field edit patches the row's index on each holder
 // (`setEffect`, which applies a key only to holders whose kind takes it); remove removes it
-// (`removeEffect`). One committed value is one command and one undo step.
+// (`removeEffect`). One committed value is one command and one undo step. V-36 (contract
+// section 6) adds inner shadow and background blur, offered only when the host projects them
+// (the `effectKinds` query), and a kind select per row within the row's family.
 
-export type EffectKind = 'dropShadow' | 'layerBlur' | 'mixed';
+export type EffectKind = Effect['kind'] | 'mixed';
+
+/** A kind's family: the kinds a row's kind select switches between. */
+export const effectFamily = (kind: Effect['kind']): 'shadow' | 'blur' =>
+  kind === 'dropShadow' || kind === 'innerShadow' ? 'shadow' : 'blur';
+
+const ids = (nodes: readonly NodeV8[]) => nodes.map((node) => node.id);
+
+const isShadow = (effect: Effect) => effect.kind === 'dropShadow' || effect.kind === 'innerShadow';
 
 /** One effect index over the selected nodes. */
 export type EffectRow = Readonly<{
   index: number;
   /** The kind the holders share, or 'mixed'. */
   kind: EffectKind;
-  /** Whether any holder is a drop shadow (the colour and offset fields then show). */
+  /** Whether any holder is a shadow (the colour and offset fields then show). */
   shadow: boolean;
+  /** The family the holders share, or 'mixed' (the kind select is then disabled). */
+  family: 'shadow' | 'blur' | 'mixed';
   visible: Common<boolean>;
   color: Common<Color>;
   offsetX: Common<number>;
@@ -48,12 +67,16 @@ export function effectRows(nodes: readonly NodeV8[]): readonly EffectRow[] {
     const effects = nodes.flatMap((node) =>
       index < node.effects.length ? [node.effects[index]!] : [],
     );
-    const shadows = effects.flatMap((effect) => (effect.kind === 'dropShadow' ? [effect] : []));
+    const shadows = effects.flatMap((effect) =>
+      effect.kind === 'dropShadow' || effect.kind === 'innerShadow' ? [effect] : [],
+    );
     const kind = commonOf(effects, (effect) => effect.kind);
+    const family = commonOf(effects, (effect) => effectFamily(effect.kind));
     rows.push({
       index,
       kind: kind.state === 'one' ? kind.value : 'mixed',
-      shadow: shadows.length > 0,
+      shadow: effects.some(isShadow),
+      family: family.state === 'one' ? family.value : 'mixed',
       visible: commonOf(effects, (effect) => effect.visible),
       color: commonOf(shadows, (effect) => effect.color),
       offsetX: commonOf(shadows, (effect) => effect.offsetX),
@@ -64,9 +87,36 @@ export function effectRows(nodes: readonly NodeV8[]): readonly EffectRow[] {
   return rows;
 }
 
+const LABELS: Readonly<Record<EffectKind, string>> = {
+  dropShadow: 'Drop shadow',
+  innerShadow: 'Inner shadow',
+  layerBlur: 'Layer blur',
+  backgroundBlur: 'Background blur',
+  mixed: 'Mixed',
+};
+
 /** A row's label as the panel shows it. */
-export const effectLabel = (kind: EffectKind): string =>
-  kind === 'dropShadow' ? 'Drop shadow' : kind === 'layerBlur' ? 'Layer blur' : 'Mixed';
+export const effectLabel = (kind: EffectKind): string => LABELS[kind];
+
+/**
+ * The kinds a row's kind select offers: the offered kinds of the row's family, or none when the
+ * holders differ in family. A row whose kind the host no longer offers keeps it listed.
+ */
+export function kindOptions(
+  row: EffectRow,
+  offered: readonly Effect['kind'][],
+): readonly Effect['kind'][] {
+  if (row.family === 'mixed') return [];
+  const options = offered.filter((kind) => effectFamily(kind) === row.family);
+  return row.kind !== 'mixed' && !options.includes(row.kind) ? [...options, row.kind] : options;
+}
+
+/** The kind select's commit: a `kind` patch at the row's index (within the family). */
+export const effectKindCommand = (
+  nodes: readonly NodeV8[],
+  row: EffectRow,
+  kind: Effect['kind'],
+): Command => ({ type: 'setEffect', ids: ids(nodes), index: row.index, patch: { kind } });
 
 /**
  * Whether a selected node is a mask group's source (its first child): its effects stay in the
@@ -79,12 +129,11 @@ export function isMaskSource(document: DocumentV8, node: NodeV8): boolean {
   return owner?.type === 'maskGroup' && owner.children[0] === node.id;
 }
 
-const ids = (nodes: readonly NodeV8[]) => nodes.map((node) => node.id);
-
-export const addEffectCommand = (
-  nodes: readonly NodeV8[],
-  kind: 'dropShadow' | 'layerBlur',
-): Command => ({ type: 'addEffect', ids: ids(nodes), kind });
+export const addEffectCommand = (nodes: readonly NodeV8[], kind: Effect['kind']): Command => ({
+  type: 'addEffect',
+  ids: ids(nodes),
+  kind,
+});
 
 export const removeEffectCommand = (nodes: readonly NodeV8[], index: number): Command => ({
   type: 'removeEffect',
@@ -148,6 +197,6 @@ export function effectOpacityCommand(
 /** The notice for `editor.effect-limit`, or null for any other result. */
 export function effectNotice(result: CommandResult | null): string | null {
   return result !== null && !result.ok && result.code === 'editor.effect-limit'
-    ? 'A layer takes at most 8 effects and one layer blur'
+    ? 'A layer takes at most 8 effects, at most one layer blur and one background blur'
     : null;
 }

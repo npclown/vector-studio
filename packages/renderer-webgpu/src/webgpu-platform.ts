@@ -98,6 +98,8 @@ export interface WebGpuPrimitiveScenePort extends PrimitivePacketConsumer {
   readonly effectPipelineAvailable?: boolean;
   /** E41 U5: effect roots this generation has drawn with their effects, one per root and frame. */
   readonly effectPasses?: number;
+  /** V-36 section 5.4: drawn effect roots whose background blur was not drawn. */
+  readonly backgroundBlurSkipped?: number;
   /** E41 section 5.4: the device's `maxTextureDimension2D`, which effect bounds respect. */
   readonly maxTextureDimension2D?: number;
   /**

@@ -572,3 +572,73 @@ describe('V35-K4 backdrop splits', () => {
     expect(splits[0]!.rect).toEqual({ x: 0, y: 7, width: 23, height: 26 });
   });
 });
+
+describe('V-35 with V-36 effects v1 (merge of U4 with V-36 U2)', () => {
+  const V1: RetainedSceneMirrorOptions = { ...V0, effects: 'v1' };
+  const INNER: SceneEffect = {
+    kind: 'innerShadow',
+    color: { r: 0, g: 0, b: 0, a: 0.5 },
+    offsetX: 2,
+    offsetY: 2,
+    sigma: 1,
+  };
+
+  it('a blend root with an inner shadow is one layer with its effect and mode', () => {
+    const { source } = setup(
+      [
+        group('g', null, ['a'], { blendMode: 'multiply', effects: [INNER] }),
+        box('a', 'g', 100),
+        box('b', null, 200, { blendMode: 'screen', effects: [INNER] }),
+      ],
+      V1,
+    );
+    expect(layerSummary(source.prepare(target)!)).toEqual([
+      {
+        nodeId: 'g',
+        opacity: 1,
+        parent: -1,
+        blend: 'multiply',
+        backdrop: { margin: 0 },
+        effect: true,
+      },
+      {
+        nodeId: 'b',
+        opacity: 1,
+        parent: -1,
+        blend: 'screen',
+        backdrop: { margin: 0 },
+        effect: true,
+      },
+    ]);
+  });
+
+  it('inner-shadow roots count toward the isolation depth with blend roots', () => {
+    const chain: RenderNodeSnapshot[] = [];
+    for (let depth = 0; depth < SCENE_MAX_ISOLATION_DEPTH; depth += 1) {
+      const id = `n${depth}`;
+      const child = depth + 1 < SCENE_MAX_ISOLATION_DEPTH ? `n${depth + 1}` : 'leaf';
+      const extra =
+        depth % 2 === 0 ? { effects: [INNER] } : { blendMode: 'overlay' as SceneBlendMode };
+      chain.push(group(id, depth === 0 ? null : `n${depth - 1}`, [child], extra));
+    }
+    const last = `n${SCENE_MAX_ISOLATION_DEPTH - 1}`;
+    expect(replace([...chain, box('leaf', last, 0)], V1)).toBe('applied');
+    // A leaf root at depth 32 (its own layer would be the 33rd) is refused.
+    expect(replace([...chain, box('leaf', last, 0, { effects: [INNER] })], V1)).toBe(
+      'unsupported-feature',
+    );
+  });
+
+  it('an inner-shadow tree over the budget drops its V-35 layers, with one notice on its root', () => {
+    const big: PrimitiveTarget = { ...target, width: 3840, height: 2160, sampleCount: 4 };
+    const nodes = [
+      group('outer', null, ['inner'], { effects: [INNER] }),
+      group('inner', 'outer', ['leaf'], { blendMode: 'multiply' }),
+      box('leaf', 'inner', -100, { size: 5000, y: -100 }),
+    ];
+    const packet = setup(nodes, V1).source.prepare(big)!;
+    expect(packet.layers!.blendNotices?.map((notice) => notice.nodeId)).toEqual(['outer']);
+    const summary = layerSummary(packet);
+    expect(summary.some((layer) => 'blend' in layer)).toBe(false);
+  });
+});

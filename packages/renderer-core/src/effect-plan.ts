@@ -43,6 +43,10 @@ export type DeviceShadow = Readonly<{
 /** An effect root's effects in device pixels (E41-S9). */
 export type DeviceEffects = Readonly<{
   shadows: readonly DeviceShadow[];
+  /** V-36 contract, V36-K1: inner shadows in list order; absent when there are none. */
+  innerShadows?: readonly DeviceShadow[];
+  /** V36 section 5: the background blur's `σ_px` after the clamp; absent without one. */
+  backgroundBlur?: Readonly<{ sigmaPx: number }>;
   /** The layer blur's `σ_px` after the clamp, or null without a layer blur. */
   blurSigmaPx: number | null;
   /** How many σ were clamped to E41_SIGMA_PX_MAX (frame statistics, K4). */
@@ -83,14 +87,20 @@ export function deviceEffects(
     return px;
   };
   const shadows: DeviceShadow[] = [];
+  const innerShadows: DeviceShadow[] = [];
   let blurSigmaPx: number | null = null;
+  let backgroundBlur: DeviceEffects['backgroundBlur'];
   for (const effect of effects) {
     if (effect.kind === 'layerBlur') {
       blurSigmaPx = clamp(effect.sigma);
       continue;
     }
+    if (effect.kind === 'backgroundBlur') {
+      backgroundBlur = Object.freeze({ sigmaPx: clamp(effect.sigma) });
+      continue;
+    }
     const [a, b, c, d] = world;
-    shadows.push(
+    (effect.kind === 'innerShadow' ? innerShadows : shadows).push(
       Object.freeze({
         color: effect.color,
         dx: (a * effect.offsetX + c * effect.offsetY) * scale,
@@ -99,7 +109,14 @@ export function deviceEffects(
       }),
     );
   }
-  return Object.freeze({ shadows: Object.freeze(shadows), blurSigmaPx, clamped });
+  // V-36: the fields exist only with their effects, so E41's records are unchanged.
+  return Object.freeze({
+    shadows: Object.freeze(shadows),
+    ...(innerShadows.length === 0 ? {} : { innerShadows: Object.freeze(innerShadows) }),
+    blurSigmaPx,
+    ...(backgroundBlur === undefined ? {} : { backgroundBlur }),
+    clamped,
+  });
 }
 
 /** `⌈3 σ⌉`, the blur's reach in device pixels (0 for σ = 0). */
@@ -183,6 +200,16 @@ export type EffectBounds = Readonly<{
   source: DeviceRect;
   /** Where `R` is built and the composite quad covers. */
   output: DeviceRect;
+  /**
+   * V36-K1b: with inner shadows, the source bound before any clamp to the target, so a later
+   * cut of `L` is known by side; absent without inner shadows.
+   */
+  uncut?: DeviceRect;
+  /**
+   * V-36 section 5.5: with inner shadows, the largest harden region `H` in pixels (the output
+   * bound grown by a shadow's read reach and K4's chain slack); absent without inner shadows.
+   */
+  innerScratch?: number;
 }>;
 
 /**
@@ -202,7 +229,8 @@ export function effectBounds(
   const b = blurReach(effects.blurSigmaPx);
   const v = boxOf(view);
   let reach = grow(v, b);
-  for (const shadow of effects.shadows) {
+  // V36-K1: an inner shadow samples `L` at `p − offset` as a drop shadow does.
+  for (const shadow of [...effects.shadows, ...(effects.innerShadows ?? [])]) {
     const shifted = {
       minX: v.minX - shadow.dx,
       minY: v.minY - shadow.dy,
@@ -212,6 +240,7 @@ export function effectBounds(
     reach = union(reach, grow(shifted, blurReach(shadow.sigmaPx) + b));
   }
   let source = intersect(content, reach);
+  const uncut = effects.innerShadows === undefined ? null : evenRect(source);
   let output = intersect(grow(content, effectMargin(effects)), grow(v, b));
   if (clampTo !== null) {
     const target = boxOf(clampTo);
@@ -226,13 +255,32 @@ export function effectBounds(
     outputRect = outputRect === null ? null : clampRect(outputRect, clampTo);
   }
   if (sourceRect === null || outputRect === null) return null;
-  return Object.freeze({ source: sourceRect, output: outputRect });
+  if (effects.innerShadows === undefined || uncut === null) {
+    return Object.freeze({ source: sourceRect, output: outputRect });
+  }
+  let innerScratch = 0;
+  for (const shadow of effects.innerShadows) {
+    const r =
+      blurReach(shadow.sigmaPx) +
+      Math.ceil(Math.hypot(shadow.dx, shadow.dy)) +
+      2 +
+      2 ** (blurLevels(shadow.sigmaPx) + 1);
+    innerScratch = Math.max(innerScratch, (outputRect.width + 2 * r) * (outputRect.height + 2 * r));
+  }
+  return Object.freeze({ source: sourceRect, output: outputRect, uncut, innerScratch });
 }
 
 /** One planned layer of a tree for the budget: an E25 layer, or an effect root's two bounds. */
 export type BudgetLayer =
   | Readonly<{ kind: 'layer'; width: number; height: number; snapshot?: number }>
-  | Readonly<{ kind: 'effect'; source: DeviceRect; output: DeviceRect; snapshot?: number }>;
+  | Readonly<{
+      kind: 'effect';
+      source: DeviceRect;
+      output: DeviceRect;
+      /** V-36 section 5.5: the largest inner-shadow harden region, in pixels. */
+      innerScratch?: number;
+      snapshot?: number;
+    }>;
 
 /** A layer tree for the effect budget, in paint order. */
 export type EffectBudgetTree = Readonly<{
@@ -266,7 +314,8 @@ export type TreeNotice = Readonly<{ nodeId: string; bytes: number; limit: number
  * in paint order while the resident bytes fit `limit`:
  *
  * - an E25 layer at 4 bytes per pixel; an effect root at `4 (S + O)`;
- * - shared scratch `4 × (2 + 2/3) × max O` over the admitted effect roots;
+ * - shared scratch `4 × (2 + 2/3) × max O` over the admitted effect roots (V-36 section 5.5:
+ *   or the largest inner-shadow harden region `H`, when larger);
  * - V35-K6: a blend root's backdrop snapshot, 4 bytes per pixel of its `snapshot` area;
  * - E25's tile set over the widest admitted layer or source bound.
  *
@@ -321,7 +370,7 @@ export function planEffectBudget(
       bytes += 4 * (source.width * source.height + out.width * out.height);
       width = Math.max(width, source.width);
       height = Math.max(height, source.height);
-      output = Math.max(output, out.width * out.height);
+      output = Math.max(output, out.width * out.height, layer.innerScratch ?? 0);
     }
     const total = resident + bytes + scratch(output) + layerTileBytes(width, height, sampleCount);
     if (!oversize && total <= limit) {
@@ -402,8 +451,9 @@ export type EffectReach = Readonly<{ margin: number; clip: ClipChain | null }>;
 
 /**
  * E41-K1 in world units, without K4's clamp (which only shrinks the reach): `3 σ_blur` plus the
- * largest `3 σᵢ + |offsetᵢ|`, σ through `world`'s largest singular value, offsets through its
- * linear part. Device rounding is within the cull's 2 px guard.
+ * largest `3 σᵢ + |offsetᵢ|` over drop and (V36-K1) inner shadows, σ through `world`'s largest
+ * singular value, offsets through its linear part. Device rounding is within the cull's 2 px
+ * guard.
  */
 export function worldEffectMargin(effects: readonly SceneEffect[], world: SceneAffine): number {
   const scale = largestSingularValue(world);
@@ -415,6 +465,10 @@ export function worldEffectMargin(effects: readonly SceneEffect[], world: SceneA
       blurReachWorld = 3 * effect.sigma * scale;
       continue;
     }
+    // V36-K1: the background blur reads nothing of the root's content past its own pixels; an
+    // inner shadow's output stays inside the content bound but samples content at its offset,
+    // so it joins the drop shadows' max (this margin is the cull reach only).
+    if (effect.kind === 'backgroundBlur') continue;
     const dx = a * effect.offsetX + c * effect.offsetY;
     const dy = b * effect.offsetX + d * effect.offsetY;
     shadow = Math.max(shadow, 3 * effect.sigma * scale + Math.hypot(dx, dy));

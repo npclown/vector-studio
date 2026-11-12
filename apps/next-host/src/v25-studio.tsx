@@ -2,6 +2,7 @@ import {
   EditorPanels,
   EditorToolbar,
   ExportPanel,
+  ImportPanel,
   LayerTree,
   PageList,
   PropertyPanel,
@@ -12,6 +13,7 @@ import {
 import { useEffect, useState, type ReactNode } from 'react';
 import { ArtboardLabels, ArtboardList, ArtboardPresets } from './v25-artboards';
 import { PathDebugPanel } from './v25-path-debug';
+import { ViewToggles } from './v38-rulers';
 
 // V-25 (editor UI usability, slice 1): next-host's full-window "studio" layout, the default for a
 // person opening the page. The canvas fills the space between a top bar (file controls, the
@@ -141,6 +143,7 @@ export function StudioShell({ canvas, fileControls, ...status }: StudioShellProp
         </div>
         <EditorToolbar />
         <div className="vs-topbar-end">
+          <ViewToggles />
           <ZoomMenu />
         </div>
       </header>
@@ -167,6 +170,7 @@ export function StudioShell({ canvas, fileControls, ...status }: StudioShellProp
         <PropertyPanel />
         <PathDebugPanel />
         <EditorPanels />
+        <ImportPanel />
         <ExportPanel />
       </aside>
       <StudioStatus {...status} />

@@ -804,6 +804,11 @@ type LayerEffectFrame = Readonly<{
    * Roots run one after another, so a pair is shared by every root that fits it.
    */
   scratchSlot: number;
+  /**
+   * V-36 section 5.4: true when the root has a background blur that this frame does not draw
+   * (until U3 every background blur is skipped).
+   */
+  backgroundBlurSkipped?: boolean;
 }>;
 
 /** E25 U3: a frame's layer resources, released with the frame's transients. */
@@ -974,14 +979,10 @@ function validateEffectRecord(effect: LayerEffectRecord): void {
   const sigma = (value: unknown) =>
     typeof value === 'number' && value >= 0 && value <= E41_SIGMA_PX_MAX;
   const unit = (value: unknown) => typeof value === 'number' && value >= 0 && value <= 1;
-  if (
-    typeof effect !== 'object' ||
-    effect === null ||
-    !rect(effect.source) ||
-    !rect(effect.output) ||
-    !Array.isArray(effect.shadows) ||
-    effect.shadows.length > 8 ||
-    !(effect.shadows as readonly unknown[]).every((value) => {
+  const shadowList = (list: unknown) =>
+    Array.isArray(list) &&
+    list.length <= 8 &&
+    (list as readonly unknown[]).every((value) => {
       const shadow = value as Partial<LayerEffectRecord['shadows'][number]> | null;
       const color = shadow?.color as Partial<LayerEffectRecord['shadows'][number]['color']> | null;
       return (
@@ -994,7 +995,25 @@ function validateEffectRecord(effect: LayerEffectRecord): void {
         color !== null &&
         [color.r, color.g, color.b, color.a].every(unit)
       );
-    }) ||
+    });
+  if (
+    typeof effect !== 'object' ||
+    effect === null ||
+    !rect(effect.source) ||
+    !rect(effect.output) ||
+    !shadowList(effect.shadows) ||
+    !(effect.innerShadows === undefined || shadowList(effect.innerShadows)) ||
+    (effect.innerShadows?.length ?? 0) + effect.shadows.length > 8 ||
+    !(
+      effect.backgroundBlur === undefined ||
+      (typeof effect.backgroundBlur === 'object' &&
+        effect.backgroundBlur !== null &&
+        sigma(effect.backgroundBlur.sigmaPx))
+    ) ||
+    !(
+      effect.innerClamp === undefined ||
+      (Number.isInteger(effect.innerClamp) && effect.innerClamp > 0 && effect.innerClamp < 16)
+    ) ||
     !(effect.blurSigmaPx === null || sigma(effect.blurSigmaPx)) ||
     typeof effect.contentOpacity !== 'number' ||
     !(effect.contentOpacity > 0 && effect.contentOpacity <= 1)
@@ -1114,6 +1133,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     shifted: 0,
     'clip-shifted': 0,
   };
+  #backgroundBlurSkipped = 0;
   readonly textPipelineAvailable: boolean;
   readonly #text: TextPipelineState | null;
   /** E28 section 4, Atlas pages: index i holds page i, as the packet's `pageCount` asks. */
@@ -1908,6 +1928,9 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         for (const variant of BLEND_COMPOSITE_VARIANTS) {
           this.#blendCompositeDraws[variant] += this.#frameBlendCompositeDraws[variant];
         }
+        this.#backgroundBlurSkipped += layers.effects.filter(
+          (effect) => effect?.result != null && effect.backgroundBlurSkipped === true,
+        ).length;
       }
       this.#observeCompletion();
       return Object.freeze({
@@ -2405,6 +2428,14 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   /** @internal Tests only (V35-A05): blend composite draws submitted so far, per variant. */
   public blendCompositeDrawsForTesting(): Readonly<Record<BlendCompositeVariant, number>> {
     return Object.freeze({ ...this.#blendCompositeDraws });
+  }
+
+  /**
+   * V-36 section 5.4: drawn effect roots whose background blur was not drawn, one per root and
+   * frame, this generation.
+   */
+  public get backgroundBlurSkipped(): number {
+    return this.#backgroundBlurSkipped;
   }
 
   /** E41 section 5.4: the device limit that bounds effect textures. */
@@ -3041,7 +3072,13 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         if (plan.scratch.width > maximum || plan.scratch.height > maximum) return null;
         const recordBase = effectRecords;
         effectRecords += plan.passes.length;
-        return { result, plan, recordBase, scratchSlot: -1 };
+        return {
+          result,
+          plan,
+          recordBase,
+          scratchSlot: -1,
+          ...(layer.effect.backgroundBlur === undefined ? {} : { backgroundBlurSkipped: true }),
+        };
       },
     );
     // Scratch pairs: largest roots first, each root takes the first pair that fits it, or that
