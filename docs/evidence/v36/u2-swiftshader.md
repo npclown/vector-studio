@@ -20,12 +20,12 @@ E41's sixteen fixtures (F1 to F12 and U5b-U7b's) on the same `'v1'` pages: worst
 ## V36-A05 identity
 
 - Under `'v0'` and `'v1'` on this tree: E41's sixteen fixtures with their effects, at 1x and 4x, 32/32 byte-identical.
-- Before and after the module re-pin: the test `V36-A05 capture digests of the E41 fixtures` writes the SHA-256 of each of those 32 captures (on a `'v0'` page) and of the same scenes without effects (on a `'none'` page). The identical test, added temporarily to a worktree of origin/main 73d6b68 (module `e41-effect`) and run there with the same command and browser, wrote the same 64 digests as this tree (module `e41-effect-v1`): 64/64 equal.
+- Before and after the module re-pin: the test `V36-A05 capture digests of the E41 fixtures` writes the SHA-256 of each of those 32 captures (on a `'v0'` page) and of the same scenes without effects (on a `'none'` page). The identical test, added temporarily to a worktree of origin/main 73d6b68 (module `e41-effect`) and run there with the same command and browser, wrote the same 64 digests as this tree (module `e41-effect-v1`): 64/64 equal. The main-side digests are committed in [u2-a05-digests-main.json](u2-a05-digests-main.json); a rerun compares the test's `v36-a05-digests.json` report with it.
 - E41-A06 now also runs a `'v1'` page: scenes without effects draw byte-identically under `'none'`, `'v0'` and `'v1'` at 1x and 4x (64/64 rows identical, 0 effect passes).
 
 ## V36-A07, inner-shadow half
 
-E41-A07's edit costs now run on a `'v1'` page with four inner-shadow edits added (an inner shadow added, its offset and σ edited, a second one, removed). Each cost 0 port calls, 0 stroke port calls and 0 geometry builds, as E41's drop-shadow and layer-blur edits do on the same page. Pan, zoom and the per-frame effect-pass count pass unchanged.
+E41-A07's edit costs now run on a `'v1'` page with four inner-shadow edits added (an inner shadow added, its offset and σ edited, a second one, removed). Each cost 0 port calls, 0 stroke port calls and 0 geometry builds, as E41's drop-shadow and layer-blur edits do on the same page. Pan, zoom and the per-frame effect-pass count pass unchanged. The test moved from a `'v0'` page to the `'v1'` page; E41's own edit costs on `'v0'` follow from V36-A05 (E41's kinds draw byte-identically on both, through the same records and passes).
 
 `backgroundBlurSkipped` follows E41's `effectPasses`: a counter of the generation's drawn roots per frame on the native scene, read through a tests-only backend hook. U3 decides whether it joins a host-visible statistic.
 
