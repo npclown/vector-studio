@@ -81,6 +81,10 @@ describe('V-25 artboards: top-level frames of the active page', () => {
       frame: { x: 0, y: 0, width: 400, height: 300 },
     });
     expect(boards.artboardsOf(snapshot.document, 'p2')).toEqual([]);
+    // V-31: a locked artboard is marked, so its canvas label selects nothing.
+    ok(target, { type: 'setLayerState', ids: [a], locked: true });
+    const locked = boards.artboardsOf(target.getSnapshot().document, 'p1')[1];
+    expect(locked).toMatchObject({ id: a, locked: true });
     expect(boards.artboardsOf(snapshot.document, 'missing')).toEqual([]);
   });
 

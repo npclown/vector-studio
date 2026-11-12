@@ -38,7 +38,7 @@ import {
   toolOverlay,
   type RegisteredTool,
 } from './extensions.js';
-import { boundsOf } from './hit-test.js';
+import { boundsOf, isLocked } from './hit-test.js';
 import { createCounterIdSource } from './ids.js';
 import {
   allAnchors,
@@ -83,10 +83,13 @@ import {
   type TextToolSupport,
 } from './text-edit.js';
 import { normalizeInputText, textKeyRoute } from './text-input.js';
+import { POLYGON_SIDES, isPolygonSides } from './freehand.js';
 import {
   createBoxTool,
   createLineTool,
   createPathTool,
+  createPencilTool,
+  createPolygonTool,
   createSelectTool,
   createTextTool,
   selectionHandles,
@@ -333,6 +336,18 @@ export const ZOOM_MIN = 1 / 64;
 export const ZOOM_MAX = 256;
 /** The zoom-to-fit padding: 32 CSS px on each side (M2-Q2). */
 const FIT_PADDING = 64;
+/**
+ * V31-E2b: whether a document change from `previous` locked `id` (it or an ancestor), which
+ * ends path or text edit mode on it, as `exitScope` does.
+ */
+function becameLocked(
+  previous: DocumentV8 | null | undefined,
+  document: DocumentV8,
+  id: string,
+): boolean {
+  return previous != null && !isLocked(previous, id) && isLocked(document, id);
+}
+
 const DEFAULT_VIEWPORT: RenderCamera = deepFreeze({ position: { x: 0, y: 0 }, zoom: 1 });
 const DOCUMENT_COMMANDS = new Set([
   'createRectangle',
@@ -343,6 +358,7 @@ const DOCUMENT_COMMANDS = new Set([
   'createCustomNode',
   'setFrames',
   'setNodeProps',
+  'setLayerState',
   'setStyle',
   'deleteNodes',
   'groupNodes',
@@ -803,6 +819,8 @@ class EditorCore implements Editor {
   private textScopeExit = false;
   /** The text tool style (M6b-S2). */
   private textStyle: TextStyle;
+  /** V-40: the polygon tool's side count. */
+  private polygonSides: number = POLYGON_SIDES.default;
   /**
    * The caret model of the last layout edit mode read, rebuilt when the cached layout object
    * changes (a text change, or a generation change dropping the cache).
@@ -969,6 +987,19 @@ class EditorCore implements Editor {
     this.tools.set('frame', createBoxTool('createFrame', draw));
     this.tools.set('line', createLineTool(draw));
     this.tools.set('path', createPathTool(draw));
+    this.tools.set('pencil', createPencilTool(draw));
+    this.tools.set(
+      'polygon',
+      createPolygonTool(
+        {
+          get: () => this.polygonSides,
+          set: (sides) => {
+            this.setPolygonSides(sides);
+          },
+        },
+        draw,
+      ),
+    );
     this.tools.set(
       'text',
       createTextTool((node) => this.extensions.geometry(node), this.expansions, this.textSupport),
@@ -1569,6 +1600,10 @@ class EditorCore implements Editor {
       case 'endComposition':
         // The forced end above committed an active composition (M6b-H2); else a no-op.
         return { ok: true, ids: [] };
+      case 'setPolygonSides':
+        if (!isPolygonSides(command.sides)) return failure('editor.invalid-command', '/sides');
+        this.setPolygonSides(command.sides);
+        return { ok: true, ids: [] };
       case 'setTextToolStyle': {
         const style = checkTextStyle(command.style);
         if ('ok' in style) return style;
@@ -1922,8 +1957,13 @@ class EditorCore implements Editor {
       case 'delete':
         return selection.length === 0 ? nothing : this.run({ type: 'deleteNodes', ids: selection });
       case 'selectAll': {
-        // The scope's children, or the page's (section 7).
-        const ids = childrenOf(documentTree(this.document), this.scope ?? this.activePage);
+        // The scope's children, or the page's (section 7), except hidden and locked ones (V31-E3).
+        const ids = childrenOf(documentTree(this.document), this.scope ?? this.activePage).filter(
+          (id) => {
+            const node = this.document.nodes[id];
+            return node !== undefined && node.visible && !isLocked(this.document, id);
+          },
+        );
         return this.run({ type: 'setSelection', ids });
       }
       case 'enterScope': {
@@ -1931,6 +1971,8 @@ class EditorCore implements Editor {
         // single selected path enters edit mode (M3 contract, section 4); any other selection
         // does nothing (still consumed).
         const node = selection.length === 1 ? this.document.nodes[selection[0]!] : undefined;
+        // V31-E2b: a locked node is neither entered nor edited (consumed).
+        if (node !== undefined && isLocked(this.document, node.id)) return nothing;
         if (node?.type === 'path') return this.run({ type: 'enterPathEdit', id: node.id });
         // One selected text node enters text edit mode, all text selected (M6b section 3.2).
         if (node?.type === 'text') return this.run({ type: 'enterTextEdit', id: node.id });
@@ -1991,9 +2033,23 @@ class EditorCore implements Editor {
         return result;
       }
       case 'nudge': {
-        if (selection.length === 0) return nothing;
+        // V31-E2b: locked nodes stay put; with none left the nudge is a consumed no-op.
+        const free = selection.filter((id) => !isLocked(this.document, id));
+        if (free.length === 0) return nothing;
         const { dx, dy } = binding.args as { dx: number; dy: number };
-        return this.run({ type: 'nudgeNodes', ids: selection, dx, dy });
+        return this.run({ type: 'nudgeNodes', ids: free, dx, dy });
+      }
+      case 'toggleLocked': {
+        // V31-E5: lock all when any selected node is unlocked, else unlock all; one step.
+        if (selection.length === 0) return nothing;
+        const lock = selection.some((id) => this.document.nodes[id]?.locked !== true);
+        return this.run({ type: 'setLayerState', ids: selection, locked: lock });
+      }
+      case 'toggleVisible': {
+        // V31-E5: hide all when any selected node is visible, else show all; one step.
+        if (selection.length === 0) return nothing;
+        const show = !selection.some((id) => this.document.nodes[id]?.visible !== false);
+        return this.run({ type: 'setLayerState', ids: selection, visible: show });
       }
       case 'reorder': {
         if (selection.length === 0) return nothing;
@@ -2579,7 +2635,8 @@ class EditorCore implements Editor {
       node !== undefined &&
       this.tool === 'select' &&
       this.selection.length === 1 &&
-      this.selection[0] === edit.id;
+      this.selection[0] === edit.id &&
+      !becameLocked(previous, this.document, edit.id);
     if (!kept) {
       this.setPathEditState(null);
       return;
@@ -3499,7 +3556,8 @@ class EditorCore implements Editor {
       edit.id !== null
         ? editableText(this.document, this.activePage, edit.id) !== undefined &&
           selection.length === 1 &&
-          selection[0] === edit.id
+          selection[0] === edit.id &&
+          !becameLocked(previous, this.document, edit.id)
         : selection.length === 0 &&
           pendingParentHolds(this.document, this.activePage, edit.pending!.parent);
     const kept = previous !== null && !this.textScopeExit && this.tool === 'select' && holds;
@@ -3562,8 +3620,17 @@ class EditorCore implements Editor {
       pathEdit: this.pathEdit,
       textEdit: this.textEdit,
       textStyle: this.textStyle,
+      polygonSides: this.polygonSides,
       history: { undoDepth: this.undoStack.length, redoDepth: this.redoStack.length },
     });
+  }
+
+  /** V-40: sets the polygon side count, clamped to 3..60 (the tool's arrow keys step it). */
+  private setPolygonSides(sides: number): void {
+    const next = Math.min(POLYGON_SIDES.max, Math.max(POLYGON_SIDES.min, Math.round(sides)));
+    if (!Number.isFinite(next) || next === this.polygonSides) return;
+    this.polygonSides = next;
+    this.refresh({ type: 'session', field: 'polygonSides' });
   }
 
   private refresh(event: EditorEvent): void {

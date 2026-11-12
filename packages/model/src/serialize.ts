@@ -126,8 +126,8 @@ function fill(value: Fill): Ordered {
 }
 
 /**
- * A v8 node: the v6 fields with `fills` in `fill`'s place (V35-S2), then `blendMode` and
- * `effects` (E41-S1).
+ * A v8 node: the v6 fields with `fills` in `fill`'s place (V35-S2), then `blendMode`, `effects`
+ * (E41-S1), and `locked` only when true (V31-S1).
  */
 function nodeV8(value: NodeV8): Ordered {
   const fills = 'fills' in value ? value.fills : null;
@@ -137,7 +137,8 @@ function nodeV8(value: NodeV8): Ordered {
     if (key === 'fill') ordered.fills = (fills ?? []).map(fill);
     else ordered[key] = field;
   }
-  return { ...ordered, blendMode: value.blendMode, effects: value.effects.map(effect) };
+  const v8 = { ...ordered, blendMode: value.blendMode, effects: value.effects.map(effect) };
+  return value.locked === true ? { ...v8, locked: true } : v8;
 }
 
 function nodeV6(value: NodeV6): Ordered {

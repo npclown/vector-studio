@@ -297,12 +297,14 @@ test('M2-A13 section 7: every default chord reaches the editor', async ({ page }
 
   // Tools. `T` (the text tool) joined the default keymap in M6b-U3; the expected chords below
   // come from the live keymap, so it is pressed here too, before `V` returns to the select tool.
+  // V-40 added the pencil on `Shift+P`.
   for (const [chord, tool] of [
     ['R', 'rectangle'],
     ['O', 'ellipse'],
     ['L', 'line'],
     ['F', 'frame'],
     ['P', 'path'],
+    ['Shift+P', 'pencil'],
     ['T', 'text'],
     ['V', 'select'],
   ] as const) {
@@ -389,6 +391,46 @@ test('M2-A13 section 7: every default chord reaches the editor', async ({ page }
     children: [ids.p, ids.a],
   });
   await press(page, 'Mod+Z');
+
+  // E41 booleans: each chord combines `a` with an overlapping rectangle into one result path,
+  // then undo. The rectangle is created through the API and undone afterwards.
+  const overlap = await page.evaluate(() => {
+    const result = window.__p5Host!.editor.execute({
+      type: 'createRectangle',
+      frame: { x: 140, y: 120, width: 80, height: 60 },
+      fill: { r: 0, g: 0, b: 0, a: 1 },
+    });
+    return result.ok ? result.ids[0]! : null;
+  });
+  expect(overlap).not.toBeNull();
+  for (const chord of ['Mod+Alt+U', 'Mod+Alt+S', 'Mod+Alt+I', 'Mod+Alt+X']) {
+    await page.evaluate(
+      (selected) => window.__p5Host!.editor.execute({ type: 'setSelection', ids: selected }),
+      [ids.a, overlap!],
+    );
+    await step(chord);
+    const [result] = (await snapshotOf(page)).selection;
+    expect(result, `${chord} selects its result`).toBeDefined();
+    expect(result).not.toBe(ids.a);
+    expect((await readDocument(page)).nodes[result!]).toMatchObject({ type: 'path' });
+    await press(page, 'Mod+Z');
+    expect((await readDocument(page)).nodes[ids.a]).toBeDefined();
+  }
+  await press(page, 'Mod+Z');
+  expect((await readDocument(page)).nodes[overlap!]).toBeUndefined();
+
+  // V-31: lock and hide toggle the selection, each in one step, and keep it.
+  await click(page, await screen(AT.a));
+  expect((await snapshotOf(page)).selection).toEqual([ids.a]);
+  await step('Mod+Shift+L');
+  expect((await readDocument(page)).nodes[ids.a]).toMatchObject({ locked: true });
+  await press(page, 'Mod+Shift+L');
+  expect((await readDocument(page)).nodes[ids.a]!.locked).toBeUndefined();
+  await step('Mod+Shift+H');
+  expect((await readDocument(page)).nodes[ids.a]).toMatchObject({ visible: false });
+  expect((await snapshotOf(page)).selection).toEqual([ids.a]);
+  await press(page, 'Mod+Shift+H');
+  expect((await readDocument(page)).nodes[ids.a]).toMatchObject({ visible: true });
 
   // Zoom: in and out about the viewport centre, to the selection, to fit and to 100%.
   // About the viewport centre c = (480, 320) of the 960 x 640 canvas (M2 contract, section 3):

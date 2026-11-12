@@ -37,7 +37,17 @@ import type {
 // Public command, query and event shapes (P5 plan, sections 4.1 to 4.3; MVP M1 contract,
 // sections 3 and 4).
 
-export type ToolName = 'select' | 'rectangle' | 'ellipse' | 'line' | 'frame' | 'path' | 'text';
+export type ToolName =
+  | 'select'
+  | 'rectangle'
+  | 'ellipse'
+  | 'line'
+  | 'frame'
+  | 'path'
+  | 'text'
+  /** V-40: the freehand pencil and the regular polygon tools. */
+  | 'pencil'
+  | 'polygon';
 
 /**
  * A built-in tool name or a registered extension tool ID (MVP M2 contract, section 7; M2-Q13).
@@ -237,6 +247,8 @@ export type NodeProps = Readonly<{
   stroke?: Stroke | null;
   opacity?: number;
   visible?: boolean;
+  /** V31-E4: `false` removes the key (V31-S1). */
+  locked?: boolean;
   /** Custom nodes only. */
   data?: JsonValue;
   /** Rectangles only. */
@@ -352,6 +364,11 @@ export type DocumentCommand =
       frames: readonly Readonly<{ id: string; frame: Frame; rotation?: number }>[];
     }>
   | Readonly<{ type: 'setNodeProps'; id: string; props: NodeProps }>
+  /**
+   * V-31 contract, V31-E4: sets `locked` and/or `visible` on nodes of the active page in one
+   * transaction (one undo step); `locked: false` removes the key; returns empty `ids`.
+   */
+  | Readonly<{ type: 'setLayerState'; ids: readonly string[]; locked?: boolean; visible?: boolean }>
   /**
    * Sets appearance on nodes of the active page at any depth in one transaction (MVP M4
    * contract, section 4.2); returns empty `ids`, and a change of no value records no step.
@@ -625,7 +642,9 @@ export type SessionCommand =
   /** Commits an active composition (section 7.3); a no-op without one. */
   | Readonly<{ type: 'endComposition' }>
   /** Sets the text tool style (M6b-S2), a full `TextStyle`. */
-  | Readonly<{ type: 'setTextToolStyle'; style: TextStyle }>;
+  | Readonly<{ type: 'setTextToolStyle'; style: TextStyle }>
+  /** V-40: sets the polygon tool's side count, an integer from 3 to 60. */
+  | Readonly<{ type: 'setPolygonSides'; sides: number }>;
 
 export type Command =
   | DocumentCommand
@@ -748,6 +767,8 @@ export type EditorSnapshot = Readonly<{
   textEdit: TextEditState | null;
   /** The style the text tool gives a new node (M6b-S2). */
   textStyle: TextStyle;
+  /** V-40: the side count the polygon tool draws with, 3 to 60; 3 by default. */
+  polygonSides: number;
 }>;
 
 export type Query =
@@ -965,7 +986,9 @@ export type EditorEvent =
         | 'textLayout'
         /** Text edit mode and the text tool style (M6b contract, M6b-S1 and S2). */
         | 'textEdit'
-        | 'textStyle';
+        | 'textStyle'
+        /** The polygon tool's side count (V-40). */
+        | 'polygonSides';
     }>
   | DiagnosticEvent;
 

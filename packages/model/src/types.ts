@@ -474,16 +474,42 @@ export type LeafBlend = Readonly<{ blendMode: BlendMode }>;
 /** V35-S2: a container's or instance's blend mode. */
 export type ContainerBlend = Readonly<{ blendMode: ContainerBlendMode }>;
 
-export type RectangleNodeV8 = Omit<RectangleNodeV6, 'fill'> & NodeFills & LeafBlend & NodeEffects;
-export type EllipseNodeV8 = Omit<EllipseNodeV6, 'fill'> & NodeFills & LeafBlend & NodeEffects;
-export type LineNodeV8 = LineNodeV6 & LeafBlend & NodeEffects;
-export type PathNodeV8 = Omit<PathNodeV6, 'fill'> & NodeFills & LeafBlend & NodeEffects;
-export type CustomNodeV8 = Omit<CustomNodeV6, 'fill'> & NodeFills & LeafBlend & NodeEffects;
-export type TextNodeV8 = TextNode & LeafBlend & NodeEffects;
-export type InstanceNodeV8 = InstanceNodeV5 & ContainerBlend & NodeEffects;
-export type GroupNodeV8 = GroupNode & ContainerBlend & NodeEffects;
-export type FrameNodeV8 = Omit<FrameNodeV6, 'fill'> & NodeFills & ContainerBlend & NodeEffects;
-export type SymbolNodeV8 = Omit<SymbolNodeV6, 'fill'> & NodeFills & ContainerBlend & NodeEffects;
+/**
+ * V-31 contract, V31-S1: the optional lock. Absent or `false` is unlocked, and a validated node
+ * has the key only when locked; locked nodes cannot be picked or transformed on the canvas.
+ */
+export type NodeLock = Readonly<{ locked?: boolean }>;
+
+export type RectangleNodeV8 = Omit<RectangleNodeV6, 'fill'> &
+  NodeFills &
+  LeafBlend &
+  NodeEffects &
+  NodeLock;
+export type EllipseNodeV8 = Omit<EllipseNodeV6, 'fill'> &
+  NodeFills &
+  LeafBlend &
+  NodeEffects &
+  NodeLock;
+export type LineNodeV8 = LineNodeV6 & LeafBlend & NodeEffects & NodeLock;
+export type PathNodeV8 = Omit<PathNodeV6, 'fill'> & NodeFills & LeafBlend & NodeEffects & NodeLock;
+export type CustomNodeV8 = Omit<CustomNodeV6, 'fill'> &
+  NodeFills &
+  LeafBlend &
+  NodeEffects &
+  NodeLock;
+export type TextNodeV8 = TextNode & LeafBlend & NodeEffects & NodeLock;
+export type InstanceNodeV8 = InstanceNodeV5 & ContainerBlend & NodeEffects & NodeLock;
+export type GroupNodeV8 = GroupNode & ContainerBlend & NodeEffects & NodeLock;
+export type FrameNodeV8 = Omit<FrameNodeV6, 'fill'> &
+  NodeFills &
+  ContainerBlend &
+  NodeEffects &
+  NodeLock;
+export type SymbolNodeV8 = Omit<SymbolNodeV6, 'fill'> &
+  NodeFills &
+  ContainerBlend &
+  NodeEffects &
+  NodeLock;
 
 export type LeafNodeV8 =
   | RectangleNodeV8

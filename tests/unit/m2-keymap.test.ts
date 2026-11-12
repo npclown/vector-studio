@@ -251,7 +251,7 @@ describe('M2-A11 default bindings run their actions through input', () => {
     const chords = keymap.map((binding) => binding.chord);
     expect(chords).toEqual([...chords].sort());
     // M2-U4 adds duplicate, nudge and reorder, M2-U5 Enter and Escape (section 7), E41-U3 the
-    // four booleans.
+    // four booleans, V-31 lock and hide (V31-E5).
     expect(chords).toEqual([
       '-',
       '=',
@@ -271,6 +271,8 @@ describe('M2-A11 default bindings run their actions through input', () => {
       'Ctrl+KeyY',
       'Ctrl+KeyZ',
       'Ctrl+Shift+KeyG',
+      'Ctrl+Shift+KeyH',
+      'Ctrl+Shift+KeyL',
       'Ctrl+Shift+KeyZ',
       'Ctrl+Shift+{',
       'Ctrl+Shift+}',
@@ -293,6 +295,7 @@ describe('M2-A11 default bindings run their actions through input', () => {
       'Shift+ArrowLeft',
       'Shift+ArrowRight',
       'Shift+ArrowUp',
+      'Shift+KeyP',
     ]);
     expect(keymap.find((binding) => binding.chord === 'KeyR')).toEqual({
       chord: 'KeyR',
@@ -772,6 +775,8 @@ describe('M2-A11 rest (M2-U7): every default binding through input, and host-bou
     { chord: 'L', key: 'l', check: tool('line') },
     { chord: 'F', key: 'f', check: tool('frame') },
     { chord: 'P', key: 'p', check: tool('path') },
+    // V-40: the pencil on Shift+P (Figma).
+    { chord: 'Shift+P', key: 'P', modifiers: mods('shift'), check: tool('pencil') },
     // M6b-U3 (M6b contract, section 1.2).
     { chord: 'T', key: 't', check: tool('text') },
     { chord: 'Delete', key: 'Delete', check: order(['a', 'c']) },
@@ -875,6 +880,25 @@ describe('M2-A11 rest (M2-U7): every default binding through input, and host-bou
         expect(children(s.target)).toEqual([s.a, s.b, 'n6', s.c]);
         expect(frameOf(s.target, 'n6')).toEqual(frameOf(s.target, s.b));
         expect(s.target.query({ type: 'selection' })).toEqual(['n6']);
+      },
+    },
+    // V31-E5: b is selected; one step each.
+    {
+      chord: 'Mod+Shift+L',
+      key: 'L',
+      modifiers: mods('ctrl', 'shift'),
+      check: (s) => {
+        expect(s.target.query({ type: 'node', id: s.b })?.locked).toBe(true);
+        expect(s.target.query({ type: 'selection' })).toEqual([s.b]);
+      },
+    },
+    {
+      chord: 'Mod+Shift+H',
+      key: 'H',
+      modifiers: mods('ctrl', 'shift'),
+      check: (s) => {
+        expect(s.target.query({ type: 'node', id: s.b })?.visible).toBe(false);
+        expect(s.target.query({ type: 'selection' })).toEqual([s.b]);
       },
     },
     { chord: 'ArrowLeft', key: 'ArrowLeft', check: nudged(-1, 0) },

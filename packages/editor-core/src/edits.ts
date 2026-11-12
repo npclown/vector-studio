@@ -143,7 +143,7 @@ const MAX_CLIP_CONTAINER_DEPTH = 31;
 const MAX_CLIP_DEPTH = 32;
 
 /** The props each node type has (section 4.2); any other prop is `editor.invalid-command`. */
-const COMMON_PROPS = ['name', 'opacity', 'visible', 'constraints', 'blendMode'];
+const COMMON_PROPS = ['name', 'opacity', 'visible', 'constraints', 'locked', 'blendMode'];
 
 /**
  * V35-S5: `fill` in a command's props as the `fills` it stands for (one fill of the paint at
@@ -334,6 +334,8 @@ export function applyEdit(
       draft.setChecked(result.node, true);
       return success(finish(draft), draft, []);
     }
+    case 'setLayerState':
+      return setLayerState(document, command, context, custom, finish);
     case 'setStyle':
       return setStyle(document, command, context, custom, finish);
     case 'deleteNodes': {
@@ -1044,6 +1046,53 @@ function setStyle(
       continue;
     }
     changed.push(result.node);
+  }
+  if (changed.length === 0) return { ok: true, document, touched: [], created: [] };
+  const draft = new Draft(document);
+  for (const node of changed) draft.setChecked(node, true);
+  return success(finish(draft), draft, []);
+}
+
+/**
+ * V-31 contract, V31-E4: `locked` and `visible` on nodes of the active page in one transaction.
+ * `locked: false` removes the key (V31-S1); a change of no value records no step.
+ */
+function setLayerState(
+  document: DocumentV8,
+  command: Extract<DocumentCommand, { type: 'setLayerState' }>,
+  context: EditContext,
+  custom: CustomRules,
+  finish: (draft: Draft) => DocumentV8 | Failure,
+): EditResult {
+  const ids = uniqueIds(command.ids);
+  if (ids === null || ids.length === 0) return fail('editor.invalid-command', '/ids');
+  const { locked, visible } = command as { locked?: unknown; visible?: unknown };
+  if (locked === undefined && visible === undefined) return fail('editor.invalid-command', '');
+  if (locked !== undefined && typeof locked !== 'boolean') {
+    return fail('editor.invalid-command', '/locked');
+  }
+  if (visible !== undefined && typeof visible !== 'boolean') {
+    return fail('editor.invalid-command', '/visible');
+  }
+  const tree = documentTree(document);
+  if (
+    ids.some((id) => nodeOf(document, id) === undefined || pageOf(tree, id) !== context.activePage)
+  ) {
+    return fail('editor.unknown-node');
+  }
+  const changed: NodeV8[] = [];
+  for (const id of ids) {
+    const node = document.nodes[id]!;
+    const lock = locked === undefined ? node.locked === true : locked;
+    const show = visible === undefined ? node.visible : visible;
+    if (lock === (node.locked === true) && show === node.visible) continue;
+    const rest: Record<string, unknown> = { ...node, visible: show };
+    delete rest.locked;
+    const next = deepFreeze((lock ? { ...rest, locked: true } : rest) as NodeV8);
+    // As `setNodeProps`: a custom node's extension may refuse the change.
+    const rejected = custom.check(next);
+    if (rejected !== null) return fail(rejected.code, nodePath(id, rejected.path));
+    changed.push(next);
   }
   if (changed.length === 0) return { ok: true, document, touched: [], created: [] };
   const draft = new Draft(document);
