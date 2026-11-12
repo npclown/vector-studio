@@ -103,9 +103,12 @@ function compareCodeUnits(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-/** E41-S2 key order: `kind`, then a shadow's `visible, color, offsetX, offsetY, radius`. */
+/**
+ * E41-S2 and V36-S1 key order: `kind`, then a blur's `visible, radius` or a shadow's
+ * `visible, color, offsetX, offsetY, radius`.
+ */
 function effect(value: Effect): Ordered {
-  if (value.kind === 'layerBlur') {
+  if (value.kind === 'layerBlur' || value.kind === 'backgroundBlur') {
     return { kind: value.kind, visible: value.visible, radius: value.radius };
   }
   return {

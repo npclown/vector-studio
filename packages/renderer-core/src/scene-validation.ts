@@ -65,10 +65,23 @@ export type GroupOpacitySupport = 'unsupported' | 'supported';
  */
 export type TextSupport = 'unsupported' | 'supported';
 /**
- * E41 contract, E41-S6: whether the renderer draws node effects. Unless 'v0', a node with a
- * non-empty `effects` is reported as `unsupported-feature`.
+ * E41 contract, E41-S6: whether the renderer draws node effects. Unless 'v0' or 'v1', a node
+ * with a non-empty `effects` is reported as `unsupported-feature`. V-36 contract, V36-S4: 'v0'
+ * draws drop shadows and layer blur only, so a node with an inner shadow or a background blur
+ * is `unsupported-feature` under it; 'v1' draws all four kinds.
  */
-export type EffectSupport = 'none' | 'v0';
+export type EffectSupport = 'none' | 'v0' | 'v1';
+
+/** V36-S4: whether `support` draws every effect in `effects`. */
+export function effectsSupported(
+  effects: readonly SceneEffect[],
+  support: EffectSupport | undefined,
+): boolean {
+  if (effects.length === 0) return true;
+  if (support === 'v1') return true;
+  if (support !== 'v0') return false;
+  return effects.every((effect) => effect.kind === 'dropShadow' || effect.kind === 'layerBlur');
+}
 
 /**
  * The port-presence facts of a mirror (V3 section a; B2 stroke contract, section 5 and the
@@ -356,7 +369,7 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
   // Absent and [] both mean none, and the copy leaves the field out, so a scene without effects
   // is held exactly as before (E41-A06).
   const effectFields = effects.length === 0 ? {} : { effects };
-  const effectsUnsupported = effects.length > 0 && pathNodes.effects !== 'v0';
+  const effectsUnsupported = !effectsSupported(effects, pathNodes.effects);
 
   const id = copyId(value.id);
   const parentId = value.parentId === null ? null : copyId(value.parentId);
@@ -834,6 +847,7 @@ function copyEffects(value: unknown): readonly SceneEffect[] | null {
   const effects = copyArray(value, copyEffect);
   if (effects === null || effects.length > SCENE_MAX_EFFECTS) return null;
   if (effects.filter((effect) => effect.kind === 'layerBlur').length > 1) return null;
+  if (effects.filter((effect) => effect.kind === 'backgroundBlur').length > 1) return null;
   return effects;
 }
 
@@ -844,14 +858,20 @@ function copyEffect(value: unknown): SceneEffect | null {
     const sigma = copyNonnegativeNumber(value.sigma);
     return sigma === null ? null : Object.freeze({ kind: 'layerBlur' as const, sigma });
   }
-  if (value.kind !== 'dropShadow') return null;
+  if (value.kind === 'backgroundBlur') {
+    if (!hasExactFields(value, ['kind', 'sigma'])) return null;
+    const sigma = copyNonnegativeNumber(value.sigma);
+    return sigma === null ? null : Object.freeze({ kind: 'backgroundBlur' as const, sigma });
+  }
+  const kind = value.kind;
+  if (kind !== 'dropShadow' && kind !== 'innerShadow') return null;
   if (!hasExactFields(value, ['kind', 'color', 'offsetX', 'offsetY', 'sigma'])) return null;
   const color = copyColor(value.color);
   const offsetX = copyFiniteNumber(value.offsetX);
   const offsetY = copyFiniteNumber(value.offsetY);
   const sigma = copyNonnegativeNumber(value.sigma);
   if (color === null || offsetX === null || offsetY === null || sigma === null) return null;
-  return Object.freeze({ kind: 'dropShadow' as const, color, offsetX, offsetY, sigma });
+  return Object.freeze({ kind, color, offsetX, offsetY, sigma });
 }
 
 function copyColor(value: unknown): SceneColor | null {
@@ -1075,8 +1095,14 @@ export function effectsEqual(
   if (a.length !== b.length) return false;
   return a.every((effect, index) => {
     const other = b[index]!;
-    if (effect.kind === 'layerBlur' || other.kind === 'layerBlur') {
-      return effect.kind === other.kind && effect.sigma === other.sigma;
+    if (effect.kind !== other.kind) return false;
+    if (
+      effect.kind === 'layerBlur' ||
+      other.kind === 'layerBlur' ||
+      effect.kind === 'backgroundBlur' ||
+      other.kind === 'backgroundBlur'
+    ) {
+      return effect.sigma === other.sigma;
     }
     return (
       effect.offsetX === other.offsetX &&

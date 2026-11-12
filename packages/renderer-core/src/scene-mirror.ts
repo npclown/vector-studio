@@ -265,7 +265,8 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     const groupOpacity: GroupOpacitySupport =
       options.groupOpacity === 'supported' ? 'supported' : 'unsupported';
     const textNodes: TextSupport = options.textNodes === 'supported' ? 'supported' : 'unsupported';
-    const effects: EffectSupport = options.effects === 'v0' ? 'v0' : 'none';
+    const effects: EffectSupport =
+      options.effects === 'v0' || options.effects === 'v1' ? options.effects : 'none';
     this.#pathNodes = Object.freeze({
       pathNodes,
       pathFills,
