@@ -18,7 +18,11 @@ export type * from './types.js';
 // built declarations and fails when a reached name is missing here.
 export type {
   Arrow,
+  BindingKey,
+  BindingRef,
+  Bindings,
   Color,
+  ColorStyle,
   Constraint,
   Constraints,
   ContainerNodeV8,
@@ -26,10 +30,10 @@ export type {
   CustomNodeV6,
   CustomNodeV8,
   Dash,
-  DropShadowEffect,
-  Effect,
   DocumentErrorCode,
   DocumentV8,
+  DropShadowEffect,
+  Effect,
   EllipseNodeV6,
   EllipseNodeV8,
   FillRule,
@@ -51,6 +55,7 @@ export type {
   LineNodeV8,
   ModelErrorCode,
   NodeBaseV2,
+  NodeBindings,
   NodeEffects,
   NodeV8,
   PageV1,
@@ -76,6 +81,9 @@ export type {
   TextNodeV8,
   TextOverride,
   TextRun,
+  Variable,
+  VariableMode,
+  VariableSet,
 } from '@vector-studio/model';
 export type {
   CameraApplyResult,
