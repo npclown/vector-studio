@@ -53,9 +53,13 @@ function doc(nodes: Json[]): DocumentV8 {
     schemaVersion: 8,
     id: 'd',
     pages: [
-      { id: 'p', name: 'P', children: nodes.filter((n) => n.parent === 'p').map((n) => n.id) },
+      {
+        id: 'p',
+        name: 'P',
+        children: nodes.filter((n) => n.parent === 'p').map((n) => n.id as string),
+      },
     ],
-    nodes: Object.fromEntries(nodes.map((n) => [n.id, n])),
+    nodes: Object.fromEntries(nodes.map((n) => [n.id as string, n] as const)),
   };
   const result = validateDocument(value);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
@@ -201,13 +205,13 @@ describe('V35-S5 and C1 setStyle, setNodeProps and the create commands', () => {
     expect(fillsOf(target, 'a')).toEqual([fill(red), fill(blue)]);
     fails(
       target,
-      { type: 'setStyle', ids: ['a'], style: { fill: red, fills: [] } as never },
+      { type: 'setStyle', ids: ['a'], style: { fill: red, fills: [] } },
       'editor.invalid-command',
       '/style/fills',
     );
     fails(
       target,
-      { type: 'setNodeProps', id: 'a', props: { fill: red, fills: [] } as never },
+      { type: 'setNodeProps', id: 'a', props: { fill: red, fills: [] } },
       'editor.invalid-command',
       '/props/fills',
     );

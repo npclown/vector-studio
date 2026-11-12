@@ -227,7 +227,7 @@ describe('M4-A08 the opacity lift (M4-L1, M4-M2, M4-S5)', () => {
         const value = containers(1);
         value.schemaVersion = version;
         for (const [key, node] of Object.entries(value.nodes)) {
-          value.nodes[key] = v6Node(node) as typeof node;
+          value.nodes[key] = v6Node(node);
         }
         for (const node of Object.values(value.nodes)) {
           if (version < 5) delete node.textOverrides;

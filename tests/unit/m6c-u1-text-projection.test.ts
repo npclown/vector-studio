@@ -156,16 +156,7 @@ function project(document: DocumentV8, page = 'p1', layout: TextLayouter = layou
       Object.entries(document.nodes).map(([id, node]) => [id, v8Node(node as Loose)]),
     ),
   } as unknown as DocumentV8;
-  return projectPage(
-    v8,
-    page,
-    none,
-    new Set(),
-    undefined,
-    new ExpansionCache(),
-    undefined,
-    layout,
-  );
+  return projectPage(v8, page, none, new Set(), undefined, new ExpansionCache(), undefined, layout);
 }
 
 function leaf(projection: PageProjection, id: string): RenderNodeSnapshot {

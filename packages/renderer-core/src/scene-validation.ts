@@ -502,7 +502,7 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
     visible,
     opacity,
     ...effectFields,
-      ...blendFields,
+    ...blendFields,
     kind: 'primitive' as const,
     geometry,
     style,

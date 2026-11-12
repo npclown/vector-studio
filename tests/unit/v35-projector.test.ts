@@ -72,9 +72,13 @@ function doc(nodes: Json[]): DocumentV8 {
     schemaVersion: 8,
     id: 'd',
     pages: [
-      { id: 'p', name: 'P', children: nodes.filter((n) => n.parent === 'p').map((n) => n.id) },
+      {
+        id: 'p',
+        name: 'P',
+        children: nodes.filter((n) => n.parent === 'p').map((n) => n.id as string),
+      },
     ],
-    nodes: Object.fromEntries(nodes.map((n) => [n.id, n])),
+    nodes: Object.fromEntries(nodes.map((n) => [n.id as string, n] as const)),
   };
   const result = validateDocument(value);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
@@ -122,7 +126,9 @@ describe('V35-P1 a single normal fill projects as one leaf', () => {
     );
     expect(projection.unitIds.get('a')).toEqual(['a']);
     expect(styleFill(at(projection, 'a'))).toEqual({ ...red, a: 0.5 });
-    const gradient = styleFill(at(projection, 'b')) as unknown as { stops: { color: { a: number } }[] };
+    const gradient = styleFill(at(projection, 'b')) as unknown as {
+      stops: { color: { a: number } }[];
+    };
     expect(gradient.stops.map((stop) => stop.color.a)).toEqual([0.25, 0.125]);
     expect(projection.unitIds.get('c')).toEqual(['c']);
     expect(styleFill(at(projection, 'c'))).toEqual(red);

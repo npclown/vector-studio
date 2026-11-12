@@ -101,7 +101,7 @@ export function addFill(
   const fill = paintFill(DEFAULT_RECTANGLE_FILL);
   return commit(
     document,
-    nodes.map((node) => ({ ...node, fills: [...node.fills, fill] }) as NodeV8),
+    nodes.map((node) => ({ ...node, fills: [...node.fills, fill] })),
     custom,
     finish,
   );
@@ -139,13 +139,10 @@ export function setFill(
   if (holders.length === 0) return fail('editor.invalid-command', '/index');
   return commit(
     document,
-    holders.map(
-      (node) =>
-        ({
-          ...node,
-          fills: node.fills.map((fill, i) => (i === index ? { ...fill, ...patch } : fill)),
-        }) as NodeV8,
-    ),
+    holders.map((node) => ({
+      ...node,
+      fills: node.fills.map((fill, i) => (i === index ? { ...fill, ...patch } : fill)),
+    })),
     custom,
     finish,
   );
@@ -167,7 +164,7 @@ export function removeFill(
   if (holders.length === 0) return fail('editor.invalid-command', '/index');
   return commit(
     document,
-    holders.map((node) => ({ ...node, fills: node.fills.filter((_, i) => i !== index) }) as NodeV8),
+    holders.map((node) => ({ ...node, fills: node.fills.filter((_, i) => i !== index) })),
     custom,
     finish,
   );
@@ -197,7 +194,7 @@ export function moveFill(
       const fills = [...node.fills];
       const [moved] = fills.splice(from, 1);
       fills.splice(to, 0, moved!);
-      return { ...node, fills } as NodeV8;
+      return { ...node, fills };
     }),
     custom,
     finish,
