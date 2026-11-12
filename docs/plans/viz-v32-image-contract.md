@@ -177,3 +177,10 @@ type ImageSourceResult =
   - `insertImages` with 0 or more than 32 assets fails `editor.image-invalid` at `/assets`. Later assets are offset cumulatively, so asset i moves by (20·i, 20·i). Without `at`, the view centre is used, and with no view size the command fails `editor.no-viewport-size`.
   - In SVG, a paint repeating on both axes is a `<pattern>`; any other image paint is a `<g clip-path>` holding an `<image>`. Each image's data is written once, as an `<image id>` in `<defs>`; every use is a `<use href xlink:href>` of it (inside the `<g clip-path>`, or inside the `<pattern>`), with the `xmlns:xlink` declaration on the root. Image ids are `i1`, `i2`, … in order of first use. A fragment's `images` holds only entries its nodes name; one nothing names is `document.invalid-field` at `/images/<key>`.
   - The eyedropper reads no colour from an image fill.
+- **Amendment (2026-11-12, U4).** Points the contract left open, as implemented:
+  - The E1 header parser lives in `@vector-studio/react` (react cannot import the model), with the V32-M1/M2 caps mirrored there.
+  - `editor.image-unsupported-file` reaches the host through react's `subscribeImageNotices`, since the editor has no host-raised diagnostics; next-host shows it as text.
+  - A place or drop of more than 32 files places the first 32 and names the rest in the notice. SVG files dropped still import as before.
+  - "Place image" is on the studio toolbar. Ctrl/Cmd+Shift+K is handled in the canvas keydown, inside the user activation.
+  - PNG export decodes at full size. A mixed wrap pair uses `repeat-x` or `repeat-y`.
+  - "Choose image…" keeps the fill's current scale mode.
