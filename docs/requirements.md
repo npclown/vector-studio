@@ -70,7 +70,7 @@ Non-destructive boolean groups, stroke outlining, and path simplification are de
 
 ## Containers
 
-Frames can contain nested children, have background and border, clip their content, act as future export or animation-scene boundaries, and support basic resize constraints. Auto layout is deferred.
+Frames can contain nested children, have background and border, clip their content, act as future export or animation-scene boundaries, and support basic resize constraints. Auto layout (direction, gap, padding, alignment, hug and fill sizing) is supported since the user's request of 2026-11-12, which lifted its deferral ([V-34](plans/viz-v34-auto-layout-contract.md)); wrap, absolute-positioned children and min/max sizes stay deferred.
 
 Groups scale their children proportionally when resized.
 
