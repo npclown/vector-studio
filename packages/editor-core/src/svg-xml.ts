@@ -141,9 +141,28 @@ class Reader {
         if (character === quote) quote = null;
       } else if (character === '"' || character === "'") quote = character;
       else if (character === '[') {
-        if (skipSubset) this.skipPast(']');
+        if (skipSubset) this.skipSubset();
         else this.subset();
       } else if (character === '>') return;
+    }
+    this.fail('unterminated DOCTYPE');
+  }
+
+  /** Skips the internal subset after its `[`, up to and including `]`, minding quotes and comments. */
+  skipSubset(): void {
+    let quote: string | null = null;
+    while (this.at < this.text.length) {
+      if (quote === null && this.startsWith('<!--')) {
+        this.at += 4;
+        this.skipPast('-->');
+        continue;
+      }
+      const character = this.text[this.at]!;
+      this.at += 1;
+      if (quote !== null) {
+        if (character === quote) quote = null;
+      } else if (character === '"' || character === "'") quote = character;
+      else if (character === ']') return;
     }
     this.fail('unterminated DOCTYPE');
   }

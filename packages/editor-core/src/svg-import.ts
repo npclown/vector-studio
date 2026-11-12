@@ -84,6 +84,8 @@ const MAX_NODE_DEPTH = 200;
 const MAX_USE_DEPTH = 32;
 /** Elements visited while converting (`<use>` copies included), so fan-out over empty leaves is bounded. */
 const MAX_VISITS = 200_000;
+/** Path points emitted (clip outlines included), so references cannot multiply the output. */
+export const MAX_SVG_POINTS = 1_000_000;
 const TEXT_LINE_HEIGHT = 1.2;
 const MAX_TEXT_SIZE = 4096;
 const GENERIC_FAMILIES: ReadonlySet<string> = new Set([
@@ -241,6 +243,7 @@ class Converter {
   private readonly skippedNames: string[] = [];
   private count = 0;
   private visits = 0;
+  private points = 0;
   /** The root viewport's normalized diagonal, the reference of percentage stroke lengths. */
   private diagonal = 100;
   private readonly parents = new Map<XmlElement, XmlElement>();
@@ -263,6 +266,12 @@ class Converter {
 
   skip(name: string): void {
     if (!this.skippedNames.includes(name)) this.skippedNames.push(name);
+  }
+
+  /** Spends `count` points of the V33-C2 point budget. */
+  private spend(count: number): void {
+    this.points += count;
+    if (this.points > MAX_SVG_POINTS) throw new TooLarge();
   }
 
   private counted(): void {
@@ -445,7 +454,7 @@ class Converter {
     rule: FillRule,
     name: string,
   ): Converted | null {
-    const mask = this.pathNode(`${name} clip`, outline, rule, BLACK, null, 1);
+    const mask = this.pathNode(`${name} clip`, outline, rule, BLACK, null, 1, false);
     if (mask === null) return null;
     this.counted();
     return { kind: 'maskGroup', name, children: [mask, node], opacity: 1 };
@@ -476,6 +485,8 @@ class Converter {
     let shapes = 0;
     for (const child of clip.children) {
       if (!isElement(child)) continue;
+      this.visits += 1;
+      if (this.visits > MAX_VISITS) throw new TooLarge();
       const childName = localName(child.name);
       const childStyle = computeStyle(child, clipStyle, this.sheet);
       if (childStyle.display === 'none' || childStyle.visibility === 'hidden') continue;
@@ -489,6 +500,8 @@ class Converter {
         geometry,
         multiply(space, parseTransform(child.attributes.get('transform'))),
       );
+      // Counted here and not again by the mask's pathNode below.
+      this.spend(mapped.points.length / 2);
       for (const verb of mapped.verbs) outline.verbs.push(verb);
       for (const value of mapped.points) outline.points.push(value);
       rule = childStyle['clip-rule'] === 'evenodd' ? 'evenodd' : 'nonzero';
@@ -784,8 +797,10 @@ class Converter {
     fill: Paint | null,
     stroke: Stroke | null,
     opacity: number,
+    spend = true,
   ): Converted | null {
     if (outline.verbs.length === 0 || !outline.points.every(Number.isFinite)) return null;
+    if (spend) this.spend(outline.points.length / 2);
     const fit = fitPoints(outline.points, 0);
     this.counted();
     return {
@@ -1150,7 +1165,15 @@ class Converter {
   /** Reports the text styles the model cannot hold (V33-M6), declared on `element` by any source. */
   private styleSkips(element: XmlElement, style: Style): void {
     for (const property of ['font-weight', 'font-style', 'text-decoration'] as const) {
-      const value = declaredValue(element, property, this.sheet);
+      // The nearest declaration on the element or an ancestor (the properties inherit).
+      let value: string | undefined;
+      for (
+        let at: XmlElement | undefined = element;
+        at !== undefined && (value === undefined || value === 'inherit');
+      ) {
+        value = declaredValue(at, property, this.sheet);
+        at = this.parents.get(at);
+      }
       if (value !== undefined && value !== 'normal' && value !== 'none' && value !== '400') {
         this.skip(property);
       }
@@ -1194,12 +1217,12 @@ class Converter {
 
   private measure(runs: readonly SvgTextRun[]): SvgTextMeasure {
     if (this.options.layout !== undefined) return this.options.layout(runs);
-    const size = Math.max(...runs.map((run) => run.size));
+    const size = runs.reduce((most, run) => Math.max(most, run.size), -Infinity);
     const lines = runs
       .map((run) => run.text)
       .join('')
       .split('\n');
-    const longest = Math.max(...lines.map((line) => line.length));
+    const longest = lines.reduce((most, line) => Math.max(most, line.length), -Infinity);
     return {
       width: Math.max(1, 0.6 * size * longest),
       height: TEXT_LINE_HEIGHT * size * lines.length,

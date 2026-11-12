@@ -509,6 +509,41 @@ describe('V33-A03 mapping', () => {
     ).toEqual(['animate']);
   });
 
+  it('fails references that multiply the output past the point budget (V33-C2)', () => {
+    // One clip of many shapes referenced by many elements.
+    const clipRects = Array.from(
+      { length: 1000 },
+      (_, i) => `<rect x="${i}" width="1" height="1"/>`,
+    );
+    const users = Array.from(
+      { length: 300 },
+      (_, i) => `<rect x="${i}" width="5" height="5" clip-path="url(#c)"/>`,
+    );
+    expect(
+      svgToFragment(svg(`<clipPath id="c">${clipRects.join('')}</clipPath>${users.join('')}`)),
+    ).toEqual({ ok: false, code: 'editor.invalid-svg' });
+    // A heavy path copied through nested <use>.
+    const d = `M0 0 ${Array.from({ length: 30_000 }, (_, i) => `L${i % 97} ${i % 89}`).join(' ')} Z`;
+    const ten = (href: string, id: string) =>
+      `<g id="${id}">${Array.from({ length: 10 }, () => `<use href="#${href}"/>`).join('')}</g>`;
+    const heavy = svg(
+      `<defs><path id="p" d="${d}"/>${ten('p', 'a')}${ten('a', 'b')}</defs>${ten('b', 'c')}`,
+    );
+    expect(svgToFragment(heavy)).toEqual({ ok: false, code: 'editor.invalid-svg' });
+    // The same path drawn a few times imports.
+    expect(svgToFragment(svg(`<path d="${d}"/><use href="#x"/>`)).ok).toBe(true);
+  });
+
+  it('detects SVG past a quoted ] in an entity value and reports inherited font weight', () => {
+    expect(isSvgText('<!DOCTYPE svg [<!ENTITY a "x]y">]><svg>')).toBe(true);
+    expect(convert(svg('<g font-weight="bold"><text>a</text></g>')).skipped).toEqual([
+      'font-weight',
+    ]);
+    expect(
+      convert(svg('<g font-weight="bold"><text font-weight="inherit">a</text></g>')).skipped,
+    ).toEqual(['font-weight']);
+  });
+
   it('names the wrapping group by title, then options.name, then SVG', () => {
     const two = '<rect width="1" height="1"/><rect x="3" width="1" height="1"/>';
     expect(nodes(svg(`<title>Logo</title>${two}`))[0]!.name).toBe('Logo');
