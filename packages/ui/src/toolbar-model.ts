@@ -33,8 +33,10 @@ export function toolbarTools(extensions: readonly ExtensionSummary[]): readonly 
 
 /**
  * Row 1 labels that differ from the tool ID. M8-N3 bounds row 1 by the 17a2b0a canvas row's
- * width (1268 px at 1280 x 900); the full word `eyedropper` (V-39) took the row to 1272 px, so
- * the M8 row names it `dropper`. The studio toolbar keeps `Eyedropper`.
+ * width (1265 px at 1280 x 720 headed, 1268 px at 1280 x 900); the full word `eyedropper`
+ * (V-39) took the row to 1272 px, so the M8 row names it `dropper` (row 1 then ends near
+ * 1258 px). About 10 px remain: another built-in row 1 tool needs a layout change, not another
+ * short label. The studio toolbar keeps `Eyedropper`.
  */
 const TOOL_LABELS: Readonly<Partial<Record<ToolId, string>>> = { eyedropper: 'dropper' };
 
