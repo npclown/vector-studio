@@ -129,6 +129,8 @@ export function alignNodes(
     at === 0 ? origin : at === 0.5 ? origin + extent / 2 : origin + extent;
   const goal = value(low, size);
   const draft = new Draft(document);
+  // V-34 section 4.1: the targets are drop-order candidates in an auto-layout frame.
+  for (const id of roots) draft.markPlaced(id);
   for (const id of roots) {
     const node = document.nodes[id]!;
     // The exact path needs the box to be the frame: not for a path whose curve box is inside it.
@@ -183,6 +185,8 @@ export function distributeNodes(
   const span = last.min + last.size - first.min;
   const gap = (span - total) / (entries.length - 1);
   const draft = new Draft(document);
+  // V-34 section 4.1: the targets are drop-order candidates in an auto-layout frame.
+  for (const id of entries.map((entry) => entry.id)) draft.markPlaced(id);
   let previous = first.min + first.size;
   for (const entry of entries.slice(1, -1)) {
     const min = previous + gap;
@@ -299,6 +303,8 @@ export function nudgeNodes(
   if ('ok' in checked) return checked;
   const { tree, roots } = checked;
   const draft = new Draft(document);
+  // V-34 section 4.1: the targets are drop-order candidates in an auto-layout frame.
+  for (const id of roots) draft.markPlaced(id);
   for (const id of roots) {
     const node = document.nodes[id]!;
     place(draft, node, translated(tree, node, dx as number, dy as number));

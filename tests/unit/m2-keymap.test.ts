@@ -251,10 +251,12 @@ describe('M2-A11 default bindings run their actions through input', () => {
     const chords = keymap.map((binding) => binding.chord);
     expect(chords).toEqual([...chords].sort());
     // M2-U4 adds duplicate, nudge and reorder, M2-U5 Enter and Escape (section 7), E41-U3 the
-    // four booleans, V-31 lock and hide (V31-E5), V-38 the rulers and layout grid toggles.
+    // four booleans, V-31 lock and hide (V31-E5), V-38 the rulers and layout grid toggles, V-34 the
+    // two auto-layout bindings.
     expect(chords).toEqual([
       '-',
       '=',
+      'Alt+Shift+KeyA',
       'ArrowDown',
       'ArrowLeft',
       'ArrowRight',
@@ -297,6 +299,7 @@ describe('M2-A11 default bindings run their actions through input', () => {
       'Shift+ArrowLeft',
       'Shift+ArrowRight',
       'Shift+ArrowUp',
+      'Shift+KeyA',
       'Shift+KeyP',
       'Shift+KeyR',
     ]);
@@ -876,6 +879,31 @@ describe('M2-A11 rest (M2-U7): every default binding through input, and host-bou
       before: overlapped,
       result: () => ({ ok: true, ids: ['n7'], consumed: true }),
       check: booleanResult,
+    },
+    // V-34 contract, section 5: Shift+A wraps the selection in an auto-layout frame and selects
+    // it; Shift+Alt+A removes the auto layout.
+    {
+      chord: 'Shift+A',
+      key: 'A',
+      modifiers: mods('shift'),
+      result: () => ({ ok: true, ids: ['n6'], consumed: true }),
+      check: (s) => {
+        expect(s.target.query({ type: 'selection' })).toEqual(['n6']);
+        expect(s.target.query({ type: 'node', id: s.b })?.parent).toBe('n6');
+      },
+    },
+    {
+      chord: 'Shift+Alt+A',
+      key: 'A',
+      modifiers: mods('shift', 'alt'),
+      before: (s) => {
+        const [frame] = ok(s.target, { type: 'addAutoLayout', ids: [s.b] });
+        ok(s.target, { type: 'setSelection', ids: [frame!] });
+      },
+      check: (s) => {
+        const [frame] = s.target.query({ type: 'selection' });
+        expect(s.target.query({ type: 'node', id: frame! })).not.toHaveProperty('autoLayout');
+      },
     },
     {
       chord: 'Mod+D',
