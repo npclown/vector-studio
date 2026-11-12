@@ -77,4 +77,5 @@ Hiding or locking keeps the selection (Figma keeps it, and the layer tree still 
 
 ## 7. Record
 
+- 2026-11-12 headed, reference PC (Windows 11 Pro 26200, GTX 1660 SUPER, Chrome 157.0.8103.51, Edge 157.0.4341.46) at `3a1df88`: `test:m2-next-host` 10/10 (V31-A06; the M2-A13 every-default-chord check now also presses the E41 boolean chords), `playwright.e41-studio.config.ts` `v31-lock-hide` + `e41-booleans` 4/4 (V31-A07). Container SwiftShader smoke of both: PASS.
 - 2026-11-12: contract review r1 NOT READY (11 findings) and r2 READY WITH FOLLOW-UPS, applied. Implementation review r1 NOT READY (detach dropped the lock; an empty double-click test), r2 READY WITH FOLLOW-UPS, applied. A locked artboard's on-canvas name label selects nothing (E1); it can still be renamed by double-click. Rebased onto the v8 scaffold (73d6b68): the key is read only under the parser's `locked` schema dimension (`read` at v8), so a v7 input with `locked` fails as an unknown key.
