@@ -1,6 +1,6 @@
 # V-39 contract: eyedropper, colour styles and variables
 
-Status: APPROVED 2026-11-12 (independent review r3 READY), Full tier. Visualization-track item [V-39](d9-visualization-track.md#status-index). Owners: the visualization track (Primary). Requested by the user on 2026-11-12 (item 9 of the Figma gap list, "1~10번까지 다 진행해줘"). It moves colour styles and variables (design tokens) into the supported behavior of [requirements](../requirements.md#initial-appearance-model). Questions V39-Q1 to V39-Q8 (section 9) take the recommended option under the user's standing instruction of 2026-10-24 (추천안 자동 채택, recommended option auto-adopted) unless the user picks otherwise. Section 11 records the reviews.
+Status: DONE 2026-11-12 (section 12); contract APPROVED 2026-11-12 (independent review r3 READY), Full tier. Visualization-track item [V-39](d9-visualization-track.md#status-index). Owners: the visualization track (Primary). Requested by the user on 2026-11-12 (item 9 of the Figma gap list, "1~10번까지 다 진행해줘"). It moves colour styles and variables (design tokens) into the supported behavior of [requirements](../requirements.md#initial-appearance-model). Questions V39-Q1 to V39-Q8 (section 9) take the recommended option under the user's standing instruction of 2026-10-24 (추천안 자동 채택, recommended option auto-adopted) unless the user picks otherwise. Section 11 records the reviews.
 
 It changes `model` (optional document and node fields of schema v8), `editor-core` (commands, two queries, one tool, the binding rules), `react` (re-exports), `ui` (panels and controls) and `apps/next-host` (the studio mounts the panel, the overlay draws the eyedropper). It changes no scene contract, renderer, projector output or export: a bound property always holds its concrete value (V39-Q1), so every reader of the document reads it as today.
 
@@ -161,3 +161,16 @@ E4 runs over the draft's touched nodes, so a gesture update costs O(touched) plu
 - r3 (2026-11-12) READY; its optional note (`binding-range` cannot fire at `addVariableMode`) applied. The spike goes through its own diff review as V39-U-b.
 - Implementation alignment (2026-11-12, V39-U-c): `createVariable` takes `kind` instead of `type` (the command discriminator), and S3 uniqueness leaves out the document ID, as the model's existing ID rules do.
 - Diff review r1 of V39-U-c (2026-11-12) NOT READY: node IDs drawn by duplicate, paste and detach could take table IDs (blocker); detached frames dropped bindings; `createVariable` ID draw; binding ref IDs by the ID rule; `values` checked before keys; resync touched held bindings. All fixed; E3 now names an unknown `values` key `editor.unknown-mode`, and E4 says the clipboard holders carry no tables.
+- Diff review of V39-U-d (2026-11-12) READY WITH FOLLOW-UPS, all applied (disabled mode controls without a set, menu focus and arrow keys, unique value labels, markup tests, a wider spec). The headed run then found the style menu covered by the studio's scrolling right column; the menu became fixed to the viewport, and its review (READY WITH FOLLOW-UPS) added client-size placement and follow-or-close on scroll.
+
+## 12. Record
+
+Done 2026-11-12. Merged: contract #572 (a62c28c), eyedropper V39-U-b #575 (755350f), model and commands V39-U-c #577 (e28c892), UI V39-U-d #586 (d6e18d1).
+
+- **M8 row 1 regression (#587, 042f71f).** The eyedropper tool button took toolbar row 1 of the M8 page to 1272 px, past the M8-N3 bound of the 17a2b0a canvas row (1265 px at 1280 x 720 headed, 1268 px at 1280 x 900). Headed `test:m8-next-host` on main e28c892 gave 18/36. The M8 row now labels the tool `dropper`; its test ID, the `I` key and the studio's `Eyedropper` are unchanged. Row 1 ends near 1258 px, so about 10 px remain: another built-in row 1 tool needs a layout change.
+- **Headed evidence (V39-A07, V39-A09), main PC, Chrome 157.0.8103.51 and Edge 157.0.4341.46:** #587 at cd4d686 gave `test:m8-next-host` 36/36. #586 at d6eca44 gave `test:v39-styles` 2/2 and `test:m8-next-host` 36/36; after the V-35 merge, at 6f25e0e, it gave `test:v39-styles` 2/2. The headless smoke projects passed (v39-styles 1/1, m8 18/18).
+- **Unit (V39-A01 to A06, A08):** CI green on each merged head. Locally the suite passes except `p3-b0r-identity`, which fails only in the Node 22 container.
+- **Disclosures:**
+  - The headed menu failure did not reproduce headless. The spec now checks that each clicked menu item is the top element at its centre, and stubs `EyeDropper` (`??=`, so branded browsers keep the real API) so that headless colour rows match branded ones.
+  - After V-35 (#580) a `fill` binding writes the top fill. A row with more than one fill shows main's "Multiple fills" note and no Style button, until V-35's fill list lands.
+  - "Create style" is two commands and two undo steps.
