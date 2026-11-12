@@ -1,6 +1,11 @@
 import type { RendererFactory, RendererHandle } from '@vector-studio/react';
 import { benchBackendOptions, pageBench } from './e26-bench';
-import { createGlyphRasterLog, hostRendererOptions, type GlyphRasterLog } from './renderer-options';
+import {
+  createGlyphRasterLog,
+  hostRendererOptions,
+  type GlyphRasterLog,
+  type HostImageSource,
+} from './renderer-options';
 
 // P5-U6 (P5 plan, section 6 and P5-Q8): the host's renderer, composed as the V-1 playground page
 // composes it: the P1 primitive and P3 path renderer service on the WebGPU backend, with the
@@ -26,6 +31,8 @@ import { createGlyphRasterLog, hostRendererOptions, type GlyphRasterLog } from '
 // AR-U1 (alpha release plan, ADR 0004): the composition itself is `@vector-studio/webgpu-host`'s
 // `createWebGpuRendererFactory`; this module only adds next-host's `?test=1` and `?bench=1`
 // hooks through its stages, in the order they ran here before.
+// V-32 (image contract, V32-H1): `createWebGpuRenderer(imageSource)` also gives the service the
+// host's image source, so image fills draw (`paints: 'image'`).
 
 const WASM_URL = '/geometry-kernel.wasm';
 
@@ -60,97 +67,101 @@ function nextAnimationFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
-export const createWebGpuRenderer: RendererFactory = async (canvas, size) => {
-  const host = await import('@vector-studio/webgpu-host');
-  const testing = new URLSearchParams(window.location.search).get('test') === '1';
-  const bench = pageBench();
-  // M6c-U4: under `?test=1` the host's service calls the port through a log (the probe does not).
-  let rasterLog: GlyphRasterLog | null = null;
-  const factory = host.createWebGpuRendererFactory({
-    wasm: async () => {
-      const response = await fetch(WASM_URL, { cache: 'no-store' });
-      if (!response.ok) {
-        throw new host.GeometryWasmUnavailableError(
-          `The geometry kernel WASM is not available at ${WASM_URL} (HTTP ${response.status}). ` +
-            'Build it with `pnpm test:geometry`, or set VECTOR_STUDIO_GEOMETRY_WASM.',
-        );
-      }
-      return response.arrayBuffer();
-    },
-    backendOptions: () => benchBackendOptions(window.location.search, bench?.clock ?? null),
-    wrapGlyphRaster: (port) => {
-      if (!testing) return port;
-      rasterLog = createGlyphRasterLog(port);
-      return rasterLog.port;
-    },
-    beforeInitialize: testing
-      ? async ({ backend, service, glyphRaster, addRelease }) => {
-          // Each release is registered as it is created, so a throw here still cleans up.
-          const releases = { push: addRelease };
-          const diagnostics: NextHostDiagnostic[] = [];
-          const subscription = backend.subscribeDiagnostics(({ code, severity, message }) => {
-            diagnostics.push({ code, severity, message });
-          });
-          releases.push(() => subscription.dispose());
-          const log = rasterLog!;
-          const hook = {
-            diagnostics,
-            capture: async (): Promise<NextHostFrame> => {
-              // Two frames for the last change to settle, then the next presented frame.
-              backend.invalidate({ reason: 'scene' });
-              await nextAnimationFrame();
-              await nextAnimationFrame();
-              const frame = await backend.captureFrameForTesting({ timeoutMs: 30_000 });
-              return {
-                width: frame.width,
-                height: frame.height,
-                devicePixelRatio: frame.devicePixelRatio,
-                rgba: frame.rgba,
-              };
-            },
-            get glyphRasterCalls() {
-              return service.getGlyphRasterCallsForTesting();
-            },
-            get glyphUploads() {
-              return service.getGlyphUploadsForTesting();
-            },
-            /** M6c-U4: the host service's raster port calls, with the generation of each. */
-            glyphRasterLog: log,
-          };
-          window.__nextHostRenderer = hook;
-          releases.push(() => {
-            if (window.__nextHostRenderer === hook) delete window.__nextHostRenderer;
-          });
-          const [probe, core, webgpu] = await Promise.all([
-            import('./m6c-text-probe'),
-            import('@vector-studio/renderer-core'),
-            import('@vector-studio/renderer-webgpu'),
-          ]);
-          const recorder = new probe.SceneRecorder();
-          const renderer = recorder.wrap(service);
-          log.setGeneration(() => recorder.newestTextGeneration());
-          releases.push(
-            probe.attachTextProbe({
-              recorder,
-              size,
-              glyphRaster,
-              createBackend: () => new webgpu.WebGpuBackend({ frameCaptureForTesting: true }),
-              createService: (target) =>
-                new core.PrimitiveRendererService(target, hostRendererOptions(glyphRaster)),
-            }),
+/** The host's renderer factory; with an `imageSource`, image fills draw (V32-H1). */
+export const createWebGpuRenderer =
+  (imageSource?: HostImageSource): RendererFactory =>
+  async (canvas, size) => {
+    const host = await import('@vector-studio/webgpu-host');
+    const testing = new URLSearchParams(window.location.search).get('test') === '1';
+    const bench = pageBench();
+    // M6c-U4: under `?test=1` the host's service calls the port through a log (the probe does not).
+    let rasterLog: GlyphRasterLog | null = null;
+    const factory = host.createWebGpuRendererFactory({
+      imageSource,
+      wasm: async () => {
+        const response = await fetch(WASM_URL, { cache: 'no-store' });
+        if (!response.ok) {
+          throw new host.GeometryWasmUnavailableError(
+            `The geometry kernel WASM is not available at ${WASM_URL} (HTTP ${response.status}). ` +
+              'Build it with `pnpm test:geometry`, or set VECTOR_STUDIO_GEOMETRY_WASM.',
           );
-          return { renderer };
         }
-      : undefined,
-    afterInitialize:
-      bench !== null
-        ? ({ backend, renderer, addRelease }) => {
-            bench.attach(backend, canvas);
-            addRelease(() => bench.detach());
-            return { renderer: bench.wrapRenderer(renderer) };
+        return response.arrayBuffer();
+      },
+      backendOptions: () => benchBackendOptions(window.location.search, bench?.clock ?? null),
+      wrapGlyphRaster: (port) => {
+        if (!testing) return port;
+        rasterLog = createGlyphRasterLog(port);
+        return rasterLog.port;
+      },
+      beforeInitialize: testing
+        ? async ({ backend, service, glyphRaster, addRelease }) => {
+            // Each release is registered as it is created, so a throw here still cleans up.
+            const releases = { push: addRelease };
+            const diagnostics: NextHostDiagnostic[] = [];
+            const subscription = backend.subscribeDiagnostics(({ code, severity, message }) => {
+              diagnostics.push({ code, severity, message });
+            });
+            releases.push(() => subscription.dispose());
+            const log = rasterLog!;
+            const hook = {
+              diagnostics,
+              capture: async (): Promise<NextHostFrame> => {
+                // Two frames for the last change to settle, then the next presented frame.
+                backend.invalidate({ reason: 'scene' });
+                await nextAnimationFrame();
+                await nextAnimationFrame();
+                const frame = await backend.captureFrameForTesting({ timeoutMs: 30_000 });
+                return {
+                  width: frame.width,
+                  height: frame.height,
+                  devicePixelRatio: frame.devicePixelRatio,
+                  rgba: frame.rgba,
+                };
+              },
+              get glyphRasterCalls() {
+                return service.getGlyphRasterCallsForTesting();
+              },
+              get glyphUploads() {
+                return service.getGlyphUploadsForTesting();
+              },
+              /** M6c-U4: the host service's raster port calls, with the generation of each. */
+              glyphRasterLog: log,
+            };
+            window.__nextHostRenderer = hook;
+            releases.push(() => {
+              if (window.__nextHostRenderer === hook) delete window.__nextHostRenderer;
+            });
+            const [probe, core, webgpu] = await Promise.all([
+              import('./m6c-text-probe'),
+              import('@vector-studio/renderer-core'),
+              import('@vector-studio/renderer-webgpu'),
+            ]);
+            const recorder = new probe.SceneRecorder();
+            const renderer = recorder.wrap(service);
+            log.setGeneration(() => recorder.newestTextGeneration());
+            releases.push(
+              probe.attachTextProbe({
+                recorder,
+                size,
+                glyphRaster,
+                createBackend: () => new webgpu.WebGpuBackend({ frameCaptureForTesting: true }),
+                createService: (target) =>
+                  new core.PrimitiveRendererService(target, hostRendererOptions(glyphRaster)),
+              }),
+            );
+            return { renderer };
           }
         : undefined,
-  });
-  const handle: RendererHandle = await factory(canvas, size);
-  return handle;
-};
+      afterInitialize:
+        bench !== null
+          ? ({ backend, renderer, addRelease }) => {
+              bench.attach(backend, canvas);
+              addRelease(() => bench.detach());
+              return { renderer: bench.wrapRenderer(renderer) };
+            }
+          : undefined,
+    });
+    const handle: RendererHandle = await factory(canvas, size);
+    return handle;
+  };

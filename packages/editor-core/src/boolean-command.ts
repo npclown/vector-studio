@@ -1,5 +1,5 @@
 import { nodeFills } from './fills.js';
-import type { DocumentV8, NodeV8, Paint, PathNodeV8, PathVerb } from '@vector-studio/model';
+import type { DocumentV8, FillPaint, NodeV8, PathNodeV8, PathVerb } from '@vector-studio/model';
 import {
   booleanOp,
   type BooleanOp,
@@ -170,13 +170,17 @@ function inverse(m: Matrix): Matrix | null {
  * (and page) pixels in the unit box `to`. A colour is unchanged. A gradient whose new transform
  * is not invertible (a zero-size input, which paints no area) keeps its own.
  */
-export function remapPaint(paint: Paint, from: Matrix, to: Matrix): Paint {
-  if (!('kind' in paint)) return paint;
+export function remapPaint<P extends FillPaint>(paint: P, from: Matrix, to: Matrix): P {
+  // V32-M6: an image paint is kept; its scale mode re-fits the result's box.
+  if (!('kind' in paint) || paint.kind === 'image') return paint;
   const back = inverse(to);
   if (back === null) return paint;
   const transform = multiply(back, multiply(from, paint.transform));
   if (inverse(transform) === null) return paint;
-  return { ...paint, transform: transform.map((v) => (v === 0 ? 0 : v)) as unknown as Matrix };
+  return {
+    ...paint,
+    transform: transform.map((v) => (v === 0 ? 0 : v)) as unknown as Matrix,
+  };
 }
 
 /** `booleanNodes` (E41 contract, sections 2.1 to 2.3). */
@@ -197,6 +201,8 @@ export function booleanNodes(
     return fail('editor.boolean-unsupported');
   }
   const parent = nodeOf(document, owner);
+  // A path never sits directly in a set (V-37 contract, section 2.1).
+  if (parent?.type === 'symbolSet') return fail('editor.invalid-parent', '/parent');
   const siblings = childrenOf(documentTree(document), owner);
   if (parent?.type === 'maskGroup' && ids.includes(siblings[0]!)) {
     return fail('editor.boolean-unsupported');

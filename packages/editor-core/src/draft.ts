@@ -1,16 +1,23 @@
 import {
   BINDING_KEYS,
+  MAX_IMAGE_TABLE_BYTES,
   MAX_TREE_DEPTH,
   bindingHolds,
+  imageDataBytes,
+  isImagePaint,
   tablesOf,
   validateNode,
   type BindingTables,
   type Bindings,
   type DocumentV8,
+  type InstanceNodeV8,
+  type NodeOverride,
   type Frame,
   type LayoutFields,
+  type ImageAsset,
   type NodeV8,
   type PageV8,
+  type SymbolNodeV8,
   type TextNodeV8,
 } from '@vector-studio/model';
 import {
@@ -23,6 +30,7 @@ import {
 import type { ExpansionCache } from './expansion.js';
 import { rotatedBounds } from './geometry.js';
 import { deepFreeze } from './freeze.js';
+import { distinctVariant, namesOf, tupleKey, valueFromName } from './variant-names.js';
 import { refitGroup, type WritableTree } from './resize.js';
 import { refitFrame, type TextLayouter } from './text.js';
 import { childrenOf, isContainer, isGroup, nodePath, treeDepth } from './tree.js';
@@ -93,8 +101,12 @@ export class Draft implements WritableTree {
   /** V-39: the colour styles and variables (V39-S1, S2), carried over and replaceable. */
   private tableState: BindingTables;
 
+  /** V-32: the image table (V32-M1), carried and replaceable; absent means none. */
+  private imageState: Readonly<Record<string, ImageAsset>> | undefined;
+
   constructor(base: DocumentV8) {
     this.base = base;
+    this.imageState = base.images;
     this.nodes = new Map(Object.entries(base.nodes));
     this.pages = [...base.pages];
     this.tableState = tablesOf(base);
@@ -111,6 +123,16 @@ export class Draft implements WritableTree {
       ...(tables.colorStyles === undefined ? {} : { colorStyles: tables.colorStyles }),
       ...(tables.variables === undefined ? {} : { variables: tables.variables }),
     };
+  }
+
+  /** The draft's image table (V32-M1), undefined when it has none. */
+  get images(): Readonly<Record<string, ImageAsset>> | undefined {
+    return this.imageState;
+  }
+
+  /** Replaces the image table (V32-E1); undefined removes it. `finish` checks and prunes it. */
+  setImages(images: Readonly<Record<string, ImageAsset>> | undefined): void {
+    this.imageState = images;
   }
 
   /** The IDs of every node, for the V-39 resync. */
@@ -225,6 +247,7 @@ export class Draft implements WritableTree {
     for (const id of options.placed ?? []) this.placed.add(id);
     for (const [id, frame] of options.resized ?? []) this.markResized(id, frame);
     this.deleteEmptyGroups();
+    this.normalizeVariants();
     const text = this.refitText(options.layout);
     if (text !== null) return text;
     try {
@@ -249,6 +272,52 @@ export class Draft implements WritableTree {
       if (rejected !== null) return fail(rejected.code, nodePath(id, rejected.path));
     }
     this.unchecked.clear();
+    return this.finishImages();
+  }
+
+  /**
+   * V32-M4: every image paint of a touched node names an entry of the table (`editor.image-invalid`
+   * at the paint's `/image`); then, when a touched node of the base or the draft had an image
+   * paint, the entries no node names are dropped (a full scan, and an emptied table leaves the
+   * key absent); the table's decoded total must then be within the limit
+   * (`editor.image-too-large`, measured after pruning).
+   */
+  private finishImages(): DocumentV8 | Failure {
+    let held = false;
+    for (const id of this.touched) {
+      const node = this.nodes.get(id);
+      const before = Object.hasOwn(this.base.nodes, id) ? this.base.nodes[id] : undefined;
+      if (hasImagePaint(before)) held = true;
+      if (node === undefined || !('fills' in node)) continue;
+      for (const [index, fill] of node.fills.entries()) {
+        if (!isImagePaint(fill.paint)) continue;
+        held = true;
+        if (this.imageState === undefined || !Object.hasOwn(this.imageState, fill.paint.image)) {
+          return fail('editor.image-invalid', nodePath(id, `/fills/${index}/paint/image`));
+        }
+      }
+    }
+    // A command that changed the table (a paste merging entries) prunes as well.
+    if ((held || this.imageState !== this.base.images) && this.imageState !== undefined) {
+      const named = new Set<string>();
+      for (const node of this.nodes.values()) {
+        if (!('fills' in node)) continue;
+        for (const fill of node.fills) if (isImagePaint(fill.paint)) named.add(fill.paint.image);
+      }
+      const keys = Object.keys(this.imageState);
+      const kept = keys.filter((key) => named.has(key));
+      if (kept.length !== keys.length) {
+        this.imageState =
+          kept.length === 0
+            ? undefined
+            : Object.fromEntries(kept.map((key) => [key, this.imageState![key]!]));
+      }
+    }
+    if (this.imageState !== undefined && this.imageState !== this.base.images) {
+      let total = 0;
+      for (const asset of Object.values(this.imageState)) total += imageDataBytes(asset.data);
+      if (total > MAX_IMAGE_TABLE_BYTES) return fail('editor.image-too-large', '/images');
+    }
     return this.document();
   }
 
@@ -286,6 +355,8 @@ export class Draft implements WritableTree {
       pages: this.pages,
       // fromEntries defines own properties, so a "__proto__" ID stays data.
       nodes: Object.fromEntries(this.nodes),
+      // V32-M4: the image table is carried; `finish` checks and prunes it.
+      ...(this.imageState === undefined ? {} : { images: this.imageState }),
     });
   }
 
@@ -306,19 +377,25 @@ export class Draft implements WritableTree {
   }
 
   /**
-   * Drops the text override keys left without their text node (deleted, moved out of the
-   * source, retyped) or whose instance now names another source. Runs only when the change can
-   * have done so: a touched instance, or a touched node that was a text node or a container in
-   * `base`; then it visits every instance with overrides.
+   * Drops the override keys left without their node (deleted, moved out of the source, retyped)
+   * or whose instance now names another source: a text key needs a text node (M7-T3), a property
+   * key any node of the source subtree (V37-S3). A property field that no longer applies to its
+   * node is dropped (V37-X4), an override left empty and an empty map are removed. Runs only when
+   * the change can have done so: a touched instance, or a touched node that was a text node or a
+   * container in `base`, or left, changed type or changed parent; then it visits every instance
+   * with overrides.
    */
   private pruneOverrides(): void {
     let possible = false;
     for (const id of this.touched) {
       const before = Object.hasOwn(this.base.nodes, id) ? this.base.nodes[id] : undefined;
+      const now = this.nodes.get(id);
       if (
-        this.nodes.get(id)?.type === 'instance' ||
+        now?.type === 'instance' ||
         before?.type === 'text' ||
-        isContainer(before)
+        isContainer(before) ||
+        (before !== undefined &&
+          (now === undefined || now.type !== before.type || now.parent !== before.parent))
       ) {
         possible = true;
         break;
@@ -328,26 +405,67 @@ export class Draft implements WritableTree {
     for (const [id, node] of this.nodes) {
       if (node.type !== 'instance') continue;
       const keys = Object.keys(node.textOverrides);
-      if (keys.length === 0) continue;
       const kept = keys.filter((key) => this.isSourceText(key, node.symbol));
-      if (kept.length === keys.length) continue;
-      const textOverrides = Object.fromEntries(kept.map((key) => [key, node.textOverrides[key]!]));
+      const props = this.keptProps(node);
+      if (kept.length === keys.length && props === node.overrides) continue;
+      const next: Record<string, unknown> = {
+        ...node,
+        textOverrides: Object.fromEntries(kept.map((key) => [key, node.textOverrides[key]!])),
+      };
+      if (props === undefined) delete next.overrides;
+      else next.overrides = props;
       // Removing keys keeps a valid node valid, so it needs no new field check.
       const unchecked = this.unchecked.has(id);
-      this.setChecked({ ...node, textOverrides }, this.customChecked.has(id));
+      this.setChecked(next as NodeV8, this.customChecked.has(id));
       if (unchecked) this.unchecked.add(id);
     }
   }
 
-  /** Whether `id` is a text node with the `symbol` node `symbol` among its ancestors. */
-  private isSourceText(id: string, symbol: string): boolean {
-    if (this.nodes.get(id)?.type !== 'text') return false;
-    let up = this.nodes.get(this.nodes.get(id)!.parent);
+  /**
+   * The property overrides of `instance` that still satisfy V37-S3 (V37-X4): the same object when
+   * none changes, undefined when none is left.
+   */
+  private keptProps(instance: InstanceNodeV8): InstanceNodeV8['overrides'] {
+    const overrides = instance.overrides;
+    if (overrides === undefined) return undefined;
+    let changed = false;
+    const out: Record<string, NodeOverride> = {};
+    for (const key of Object.keys(overrides)) {
+      const target = this.nodes.get(key);
+      const isSource = key === instance.symbol;
+      if (
+        target === undefined ||
+        (isSource ? target.type !== 'symbol' : !this.isBelow(key, instance.symbol))
+      ) {
+        changed = true;
+        continue;
+      }
+      const override = overrides[key]!;
+      const fields: Record<string, unknown> = {};
+      for (const [field, value] of Object.entries(override)) {
+        const own = field === 'fills' || field === 'stroke';
+        if (own ? field in target : !isSource) fields[field] = value;
+      }
+      if (Object.keys(fields).length !== Object.keys(override).length) changed = true;
+      if (Object.keys(fields).length > 0) out[key] = fields;
+    }
+    if (!changed) return overrides;
+    return Object.keys(out).length === 0 ? undefined : out;
+  }
+
+  /** Whether `symbol` is a proper ancestor of `id`. */
+  private isBelow(id: string, symbol: string): boolean {
+    let up = this.nodes.get(this.nodes.get(id)?.parent ?? '');
     for (let steps = 0; up !== undefined && steps <= MAX_TREE_DEPTH + 1; steps += 1) {
       if (up.id === symbol) return up.type === 'symbol';
       up = this.nodes.get(up.parent);
     }
     return false;
+  }
+
+  /** Whether `id` is a text node with the `symbol` node `symbol` among its ancestors. */
+  private isSourceText(id: string, symbol: string): boolean {
+    return this.nodes.get(id)?.type === 'text' && this.isBelow(id, symbol);
   }
 
   private deleteEmptyGroups(): void {
@@ -356,7 +474,8 @@ export class Draft implements WritableTree {
       const next: string[] = [];
       for (const id of queue) {
         const node = this.nodes.get(id);
-        if (!isGroup(node) || node.children.length > 0) continue;
+        // A set left without children goes with its last variant (V-37 contract, section 2.1).
+        if (!(isGroup(node) || node?.type === 'symbolSet') || node.children.length > 0) continue;
         const owner = node.parent;
         this.setChildren(
           owner,
@@ -366,6 +485,60 @@ export class Draft implements WritableTree {
         next.push(owner);
       }
       queue = next;
+    }
+  }
+
+  /**
+   * V-37 contract, sections 2.1 and 4.1: a symbol outside a set loses its `variant` (it left a
+   * set), and a symbol that entered a set (a new node, or one whose parent changed) takes the
+   * names of the set's first child before the command with that child's values, then V37-N2
+   * suffixes in the set's child order. A new symbol of a new set, and a copy of a variant, keep
+   * their own values (then N2). Runs only for the sets and symbols the change touched.
+   */
+  private normalizeVariants(): void {
+    const sets = new Set<string>();
+    for (const id of this.touched) {
+      const node = this.nodes.get(id);
+      if (node?.type === 'symbolSet') sets.add(id);
+      if (node?.type !== 'symbol') continue;
+      if (this.nodes.get(node.parent)?.type === 'symbolSet') sets.add(node.parent);
+      else if (node.variant !== undefined) {
+        const next: Record<string, unknown> = { ...node };
+        delete next.variant;
+        this.set(next as NodeV8);
+      }
+    }
+    for (const id of sets) {
+      const set = this.nodes.get(id);
+      if (set?.type !== 'symbolSet') continue;
+      const kids = set.children.map((child) => this.nodes.get(child)).filter(isSymbol);
+      const baseSet = Object.hasOwn(this.base.nodes, id) ? this.base.nodes[id] : undefined;
+      const wasHere = (kid: SymbolNodeV8) =>
+        baseSet !== undefined &&
+        Object.hasOwn(this.base.nodes, kid.id) &&
+        this.base.nodes[kid.id]!.parent === id;
+      const entering = kids.filter((kid) => !wasHere(kid));
+      if (entering.length === 0) continue;
+      const first =
+        baseSet?.type === 'symbolSet' && baseSet.children.length > 0
+          ? this.base.nodes[baseSet.children[0]!]
+          : undefined;
+      const template = first?.type === 'symbol' ? first.variant : undefined;
+      const seen = new Set<string>();
+      for (const kid of kids) {
+        if (wasHere(kid) && kid.variant !== undefined) {
+          seen.add(tupleKey(kid.variant, namesOf(kid.variant)));
+        }
+      }
+      for (const kid of entering) {
+        const isNew = !Object.hasOwn(this.base.nodes, kid.id);
+        const own =
+          baseSet === undefined || (isNew && kid.variant !== undefined)
+            ? (kid.variant ?? { 'Property 1': valueFromName(kid.name) })
+            : (template ?? { 'Property 1': valueFromName(kid.name) });
+        const variant = distinctVariant(own, seen);
+        if (variant !== kid.variant) this.set({ ...kid, variant });
+      }
     }
   }
 
@@ -533,3 +706,12 @@ export function withSizing(node: NodeV8, sizing: LayoutFields['layoutSizing']): 
   }
   return copy;
 }
+
+/** Whether a node has a fill with an image paint. */
+function hasImagePaint(node: NodeV8 | undefined): boolean {
+  return (
+    node !== undefined && 'fills' in node && node.fills.some((fill) => isImagePaint(fill.paint))
+  );
+}
+
+const isSymbol = (node: NodeV8 | undefined): node is SymbolNodeV8 => node?.type === 'symbol';

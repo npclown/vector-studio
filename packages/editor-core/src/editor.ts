@@ -41,7 +41,7 @@ import {
   toolOverlay,
   type RegisteredTool,
 } from './extensions.js';
-import { boundsOf, isLocked } from './hit-test.js';
+import { boundsOf, instanceLayerAt, instanceLayerCorners, isLocked } from './hit-test.js';
 import { createEyedropperTool, sampleColor } from './eyedropper.js';
 import { createCounterIdSource } from './ids.js';
 import {
@@ -190,6 +190,14 @@ export type EditorOptions = Readonly<{
    * and fill draws as `normal`.
    */
   projectBlend?: boolean;
+  /**
+   * V-32 contract, V32-S4: when true, the scene the editor projects to an attached renderer
+   * carries image fills as image paints, which needs a renderer on `paints: 'image'` and an
+   * `imageSource`. Defaults to false: an image fill projects as no fill, and the editor raises
+   * `editor.renderer-unsupported` (`unsupported-feature`) naming those nodes once per renderer
+   * attachment and page. Export always draws images.
+   */
+  projectImages?: boolean;
   /**
    * V-25 slice 4: when true, the drawing tools create a node in the innermost frame under the
    * press point (inside the scope when it holds the point), and a select-tool move that ends with
@@ -398,6 +406,11 @@ const DOCUMENT_COMMANDS = new Set([
   'detachInstances',
   'setInstanceText',
   'clearInstanceText',
+  'combineAsVariants',
+  'setVariantProperties',
+  'setInstanceVariant',
+  'setInstanceOverride',
+  'resetInstanceOverrides',
   'addPage',
   'removePage',
   'renamePage',
@@ -421,6 +434,10 @@ const DOCUMENT_COMMANDS = new Set([
   'setTextStyle',
   'setTextProps',
   'refitText',
+  // V-32 contract, V32-E2.
+  'insertImages',
+  'setImageFill',
+  'setImagePaint',
   // V-39 contract, section 3.
   'createColorStyle',
   'updateColorStyle',
@@ -527,6 +544,9 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.boolean-failed',
   'editor.effect-limit',
   'editor.fill-limit',
+  'editor.image-invalid',
+  'editor.image-too-large',
+  'editor.image-no-target',
   'editor.invalid-svg',
   'editor.empty-svg',
 ]);
@@ -914,6 +934,10 @@ class EditorCore implements Editor {
   private readonly projectEffects: EffectProjection;
   /** V35-P4: whether the projector emits blend modes (`EditorOptions.projectBlend`). */
   private readonly projectBlend: boolean;
+  /** V32-S4: whether the projector emits image paints (`EditorOptions.projectImages`). */
+  private readonly projectImages: boolean;
+  /** V-25 slice 4: `EditorOptions.adoptIntoFrames`, which `insertImages` follows (V32-E2). */
+  private readonly adoptIntoFrames: boolean;
 
   /**
    * The IDs of `returned` that a draw on `drawnOn` accepted: `drawIds` and `freshId` skip only
@@ -1020,6 +1044,8 @@ class EditorCore implements Editor {
         ? options.projectEffects
         : false;
     this.projectBlend = options.projectBlend === true;
+    this.projectImages = options.projectImages === true;
+    this.adoptIntoFrames = options.adoptIntoFrames === true;
     this.snapshot = this.buildSnapshot();
     this.tools.set(
       'select',
@@ -1348,6 +1374,12 @@ class EditorCore implements Editor {
         return this.pastePlainText(command, source);
       }
     }
+    // V32-E2: `insertImages` without `at` centres the first rectangle on the viewport centre.
+    if (command.type === 'insertImages' && command.at === undefined) {
+      const centre = this.viewportCentre();
+      if (centre === null) return failure('editor.no-viewport-size');
+      command = { ...command, at: centre };
+    }
     if (DOCUMENT_COMMANDS.has(command.type)) {
       // A host command during a drag would leave the gesture's base stale, so it applies to the
       // pre-gesture document and, only if it succeeds, cancels the drag first.
@@ -1366,7 +1398,8 @@ class EditorCore implements Editor {
       this.interrupt();
       // E41-B3: the boolean result becomes the selection, and undo restores the inputs'. A
       // result on another page than the active one is not selectable (`normalizeSelection`).
-      const selects = command.type === 'booleanNodes';
+      // V32-E2: the inserted rectangles become the selection, and undo restores the old one.
+      const selects = command.type === 'booleanNodes' || command.type === 'insertImages';
       const selected = selects
         ? (normalizeSelection(result.document, this.activePage, result.created) ?? [])
         : result.created;
@@ -1756,6 +1789,7 @@ class EditorCore implements Editor {
       selection: this.selection,
       expansions: this.expansions,
       layout: this.layout,
+      adoptIntoFrames: this.adoptIntoFrames,
     };
   }
 
@@ -1832,6 +1866,28 @@ class EditorCore implements Editor {
         }
         case 'extensions':
           return this.extensionSummaries;
+        case 'instanceLayerAt': {
+          const point: unknown = query.point;
+          const id: unknown = query.id;
+          if (typeof id !== 'string' || typeof point !== 'object' || point === null) return null;
+          const { x, y } = point as Record<string, unknown>;
+          if (typeof x !== 'number' || typeof y !== 'number') return null;
+          return instanceLayerAt(
+            this.document,
+            this.activePage,
+            id,
+            { x, y },
+            this.viewport.zoom,
+            (node) => this.extensions.geometry(node),
+            this.expansions,
+          );
+        }
+        case 'instanceLayerCorners': {
+          const id: unknown = query.id;
+          const node: unknown = query.node;
+          if (typeof id !== 'string' || typeof node !== 'string') return null;
+          return instanceLayerCorners(this.document, id, node, this.expansions);
+        }
         case 'exportScene':
         case 'exportSvg': {
           const ids: unknown = query.ids;
@@ -1880,6 +1936,7 @@ class EditorCore implements Editor {
       this.layout,
       this.projectEffects,
       this.projectBlend,
+      this.projectImages,
     );
     this.projector = projector;
     this.renderer = renderer;
@@ -2610,7 +2667,12 @@ class EditorCore implements Editor {
     const scopeChanged =
       scope !== null &&
       (cause === 'load' || pageChanged || pageOf(documentTree(document), scope) !== page);
-    if (scopeChanged) this.scope = null;
+    if (scopeChanged) {
+      // A scope at or inside a removed set falls back to the set's parent scope (V-37 contract,
+      // section 2.1); any other lost scope ends it.
+      this.scope =
+        cause === 'load' || pageChanged ? null : scopeAfterSetRemoval(previous, document, scope);
+    }
     if (pageChanged) {
       selectionChanged = this.selection.length > 0;
       // A load has already reset the tool (interrupt), so it is reset once.
@@ -3849,4 +3911,24 @@ export function internalsOf(
 ): Pick<EditorCore, 'tools' | 'gesture' | 'expansions' | 'clipboardGeneration' | 'textLayouts'> {
   if (!(editor instanceof EditorCore)) throw new Error('not an editor-core editor');
   return editor;
+}
+
+/**
+ * The scope that replaces `scope` after a change that removed it: the parent of the removed
+ * symbol set at or above it, when that parent survives and is a container, else null.
+ */
+function scopeAfterSetRemoval(
+  previous: DocumentV8,
+  document: DocumentV8,
+  scope: string,
+): string | null {
+  const chain = [scope, ...ancestors(documentTree(previous), scope).map((node) => node.id)];
+  const at = chain.findIndex(
+    (id) => !Object.hasOwn(document.nodes, id) && previous.nodes[id]?.type === 'symbolSet',
+  );
+  if (at < 0) return null;
+  const parent = previous.nodes[chain[at]!]!.parent;
+  return Object.hasOwn(document.nodes, parent) && isContainer(document.nodes[parent])
+    ? parent
+    : null;
 }

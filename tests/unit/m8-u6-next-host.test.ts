@@ -119,7 +119,7 @@ describe('M8-N1: next-host composes the UI package', () => {
     expect(existsSync(path.join(app, 'src/m4-appearance.ts'))).toBe(false);
     expect(existsSync(path.join(app, 'src/m4-appearance-panel.tsx'))).toBe(false);
     expect(PAGE).toMatch(
-      /^import \{\s+PageList,\s+PanelProvider,\s+ToolbarPrimaryRow,\s+ToolbarSecondaryRow,\s+usePanelErrors,\s+\} from '@vector-studio\/ui';/mu,
+      /^import \{\s+PageList,\s+PanelProvider,\s+focusInstanceAt,\s+useInstanceFocus,\s+ToolbarPrimaryRow,\s+ToolbarSecondaryRow,\s+usePanelErrors,\s+\} from '@vector-studio\/ui';/mu,
     );
     expect(LAYOUT).toMatch(
       /^import \{\s+AppearancePanel,\s+EditorPanels,\s+LayerTree,\s+PropertyPanel,\s+type UiExtension,\s+\} from '@vector-studio\/ui';/mu,

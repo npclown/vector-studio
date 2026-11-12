@@ -78,6 +78,11 @@ export type EditContext = Readonly<{
   scope?: string | null;
   selection?: readonly string[];
   /**
+   * V-25 slice 4 (`EditorOptions.adoptIntoFrames`): `insertImages` places its rectangles in the
+   * innermost frame under `at` (V32-E2) instead of on the active page.
+   */
+  adoptIntoFrames?: boolean;
+  /**
    * The editor's expansion cache (M7 contract, M7-X4), which the expansion checks of every
    * command use; without it a command uses a fresh cache with `custom`'s check.
    */

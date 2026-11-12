@@ -1,4 +1,5 @@
 import type { DocumentV8, Frame, NodeV8, Stroke } from '@vector-studio/model';
+import { sourceAppearance } from './expansion.js';
 import { apply, boundsOfPoints, localTransform } from './geometry.js';
 import type { PagePoint } from './types.js';
 
@@ -144,11 +145,12 @@ function ownBox(document: DocumentV8, node: NodeV8): Box {
       return lineBox(node);
     case 'frame':
     case 'symbol':
+    case 'symbolSet':
       // Content is clipped to the frame; a border is centred on its edge.
       return grow(boxOf(node.frame), node.stroke === null ? 0 : node.stroke.width / 2);
     case 'instance': {
       const source = document.nodes[node.symbol];
-      const stroke = source?.type === 'symbol' ? source.stroke : null;
+      const stroke = source?.type === 'symbol' ? sourceAppearance(node, source).stroke : null;
       return grow(boxOf(node.frame), stroke === null ? 0 : stroke.width / 2);
     }
     case 'group':

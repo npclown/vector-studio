@@ -6,13 +6,17 @@ import type {
   DocumentV8,
   Effect,
   Fill,
+  FillPaint,
+  ImagePaint,
   JsonValue,
   LayoutGrid,
   LayoutFields,
   NodeV6,
+  NodeOverride,
   NodeV8,
   Paint,
   Stroke,
+  SymbolSetNodeV6,
   TextRun,
 } from './types.js';
 
@@ -39,6 +43,15 @@ function paint(value: Paint): Ordered {
     stops: value.stops.map((stop) => ({ offset: stop.offset, color: color(stop.color) })),
     spread: value.spread,
   };
+}
+
+/** V32-M3 key order: `kind, image, scaleMode, scale`. */
+function imagePaint(value: ImagePaint): Ordered {
+  return { kind: 'image', image: value.image, scaleMode: value.scaleMode, scale: value.scale };
+}
+
+function fillPaint(value: FillPaint): Ordered {
+  return 'kind' in value && value.kind === 'image' ? imagePaint(value) : paint(value);
 }
 
 function dash(value: Dash): Ordered {
@@ -126,7 +139,7 @@ function effect(value: Effect): Ordered {
 /** V35-S2 key order: `paint, visible, opacity, blendMode`. */
 function fill(value: Fill): Ordered {
   return {
-    paint: paint(value.paint),
+    paint: fillPaint(value.paint),
     visible: value.visible,
     opacity: value.opacity,
     blendMode: value.blendMode,
@@ -186,7 +199,8 @@ function nodeV8(value: NodeV8): Ordered {
     }
     node.bindings = bindings;
   }
-  return node;
+  // V-37: a symbol's `variant` or an instance's `overrides`, last among the keys.
+  return { ...node, ...optionalFields(value) };
 }
 
 /** V39-S7: `modes` (`id`, `name`), `mode`, `items` (`id`, `name`, `type`, `values`). */
@@ -227,7 +241,43 @@ function layoutGrid(value: LayoutGrid): Ordered {
   };
 }
 
-function nodeV6(value: NodeV6): Ordered {
+/** A symbol's `variant` and an instance's non-empty `overrides` (V-37), in code unit order. */
+function optionalFields(value: NodeV8): Ordered {
+  if (value.type === 'symbol' && value.variant !== undefined) {
+    const variant = value.variant;
+    return {
+      variant: Object.fromEntries(
+        Object.keys(variant)
+          .sort(compareCodeUnits)
+          .map((name) => [name, variant[name]]),
+      ),
+    };
+  }
+  if (value.type === 'instance' && value.overrides !== undefined) {
+    const overrides = value.overrides;
+    const keys = Object.keys(overrides);
+    if (keys.length === 0) return {};
+    return {
+      overrides: Object.fromEntries(
+        keys.sort(compareCodeUnits).map((key) => [key, override(overrides[key]!)]),
+      ),
+    };
+  }
+  return {};
+}
+
+/** V37-S3 field order: `fills, stroke, opacity, visible, effects`. */
+function override(value: NodeOverride): Ordered {
+  return {
+    ...(value.fills !== undefined && { fills: value.fills.map(fill) }),
+    ...(value.stroke !== undefined && { stroke: nullable(value.stroke, stroke) }),
+    ...(value.opacity !== undefined && { opacity: value.opacity }),
+    ...(value.visible !== undefined && { visible: value.visible }),
+    ...(value.effects !== undefined && { effects: value.effects.map(effect) }),
+  };
+}
+
+function nodeV6(value: NodeV6 | SymbolSetNodeV6): Ordered {
   const base = {
     id: value.id,
     name: value.name,
@@ -272,6 +322,7 @@ function nodeV6(value: NodeV6): Ordered {
       return { ...base, children: [...value.children] };
     case 'frame':
     case 'symbol':
+    case 'symbolSet':
       return {
         ...base,
         children: [...value.children],
@@ -306,6 +357,7 @@ function nodeV6(value: NodeV6): Ordered {
  * persistence envelope (MVP M5 contract, M5-E3). Not exported from the package.
  */
 export function orderedDocument(document: DocumentV8): Ordered {
+  const images = document.images;
   return {
     schemaVersion: document.schemaVersion,
     id: document.id,
@@ -333,6 +385,28 @@ export function orderedDocument(document: DocumentV8): Ordered {
         .sort(compareCodeUnits)
         .map((key) => [key, nodeV8(document.nodes[key]!)]),
     ),
+    // V32-M1: the image table after the nodes, keys in code unit order; omitted when empty, so a
+    // document without images serializes as before V-32.
+    ...(images === undefined || Object.keys(images).length === 0
+      ? {}
+      : {
+          images: Object.fromEntries(
+            Object.keys(images)
+              .sort(compareCodeUnits)
+              .map((key) => {
+                const asset = images[key]!;
+                return [
+                  key,
+                  {
+                    mimeType: asset.mimeType,
+                    width: asset.width,
+                    height: asset.height,
+                    data: asset.data,
+                  },
+                ];
+              }),
+          ),
+        }),
   };
 }
 

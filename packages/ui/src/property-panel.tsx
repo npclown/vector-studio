@@ -1,5 +1,6 @@
 import {
   useActivePage,
+  useEditor,
   useEditorCommands,
   useEditorQuery,
   useEditorSelector,
@@ -16,7 +17,7 @@ import {
   type TextNodeV8,
 } from '@vector-studio/react';
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
-import { colorHex, parseNumber, type Common } from './appearance-model.js';
+import { colorHex, fillOf, parseNumber, type Common } from './appearance-model.js';
 import { booleanActions } from './boolean-model.js';
 import {
   addEffectCommand,
@@ -114,7 +115,37 @@ import {
   type TransformKey,
   type TransformTarget,
 } from './property-model.js';
+import {
+  setInstanceFocus,
+  targetInstance,
+  useInstanceFocus,
+  type InstanceFocus,
+} from './instance-focus.js';
 import { countRender } from './render-probe.js';
+import {
+  addPropertyCommand,
+  addVariantAction,
+  combineAction,
+  effectOverrideCommand,
+  fillOverrideCommand,
+  fillText,
+  instanceLayers,
+  instanceVariantCommand,
+  layerControls,
+  opacityOverrideCommand,
+  opacityPercent,
+  removePropertyCommand,
+  renamePropertyCommand,
+  resetAllAction,
+  resetLayerAction,
+  selectedSet,
+  setProperties,
+  strokeOverrideCommand,
+  variantDropdowns,
+  variantFields,
+  variantValueCommand,
+  visibleOverrideCommand,
+} from './variant-model.js';
 import { RowBinding, type BindRun } from './style-controls.js';
 import { bindingState, tablesOfDocument } from './styles-model.js';
 
@@ -487,6 +518,7 @@ function SymbolSection({
 }) {
   const section = symbolSection(document, selection);
   if (section === null) return null;
+  const resetAll = resetAllAction(selection[0]!);
   if (section.kind === 'source') {
     return (
       <Section legend="Symbol">
@@ -500,6 +532,7 @@ function SymbolSection({
     <Section legend="Instance">
       <Row>
         <ActionButton action={section.detach} onRun={() => runAction(section.detach)} />
+        <ActionButton action={resetAll} onRun={() => runAction(resetAll)} />
       </Row>
       {section.resets.map((reset) => (
         <div key={reset.node} role="group" aria-label={reset.name} style={ROW_STYLE}>
@@ -660,17 +693,20 @@ function EffectsSection({
   document,
   nodes,
   run,
+  legend = 'Effects',
 }: {
   document: DocumentV8;
   nodes: readonly NodeV8[];
   run: Run;
+  /** V-37: "Layer effects" for the focused layer of an instance. */
+  legend?: string;
 }) {
   const masked = nodes.some((node) => isMaskSource(document, node));
   const rows = effectRows(nodes);
   // The kinds the host projects (V-36 contract, section 6).
   const offered = useEditorQuery({ type: 'effectKinds' });
   return (
-    <Section legend="Effects">
+    <Section legend={legend}>
       <Row>
         {offered.map((kind) => (
           <button
@@ -917,6 +953,342 @@ function ResizingSection({ state, run }: { state: ResizingState; run: Run }) {
   );
 }
 
+/** V-37 section 6.1: a selected set's properties, and "Add variant". */
+function SetSection({
+  document,
+  set,
+  run,
+  runAction,
+}: {
+  document: DocumentV8;
+  set: NonNullable<ReturnType<typeof selectedSet>>;
+  run: Run;
+  runAction: (action: PropertyAction) => void;
+}) {
+  const properties = setProperties(document, set);
+  const addVariant = addVariantAction(document, set);
+  // A rename or a removal rewrites the variants, so the field drafts reset with their values.
+  const identity = `${set.id} ${JSON.stringify(properties)}`;
+  return (
+    <Section legend="Properties">
+      {properties.map((property, index) => (
+        <div
+          key={property.name}
+          role="group"
+          aria-label={`Property ${property.name}`}
+          style={{ ...ROW_STYLE, marginBottom: 4 }}
+        >
+          <TextField
+            identity={identity}
+            label={`Property ${index + 1} name`}
+            value={property.name}
+            commit={(text) => {
+              const command = renamePropertyCommand(document, set, property.name, text);
+              return command !== null && run(command);
+            }}
+          />
+          <span data-testid={`property-values-${index}`} style={{ opacity: 0.7 }}>
+            {property.values.join(', ')}
+          </span>
+          <button
+            type="button"
+            aria-label={`Remove property ${property.name}`}
+            disabled={properties.length < 2}
+            onClick={() => {
+              const command = removePropertyCommand(document, set, property.name);
+              if (command !== null) void run(command);
+            }}
+          >
+            −
+          </button>
+        </div>
+      ))}
+      <Row>
+        <button type="button" onClick={() => void run(addPropertyCommand(document, set))}>
+          Add property
+        </button>
+        {addVariant !== null && (
+          <ActionButton action={addVariant} onRun={() => runAction(addVariant)} />
+        )}
+      </Row>
+    </Section>
+  );
+}
+
+/** V-37 section 6.1: one value field per property of a selected variant. */
+function VariantFieldsSection({
+  document,
+  selection,
+  run,
+}: {
+  document: DocumentV8;
+  selection: readonly string[];
+  run: Run;
+}) {
+  const section = variantFields(document, selection);
+  if (section === null) return null;
+  return (
+    <Section legend="Variant properties">
+      {section.fields.map((field) => (
+        <label key={field.name} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <span style={{ minWidth: 60 }}>{field.name}</span>
+          <TextField
+            identity={section.id}
+            label={`Variant ${field.name}`}
+            value={field.value}
+            commit={(text) => {
+              const command = variantValueCommand(document, section.id, field.name, text);
+              return command !== null && run(command);
+            }}
+          />
+        </label>
+      ))}
+    </Section>
+  );
+}
+
+/** V-37 section 6.2: one dropdown per property of an instance whose source is in a set. */
+function InstanceVariantSection({
+  document,
+  id,
+  run,
+}: {
+  document: DocumentV8;
+  id: string;
+  run: Run;
+}) {
+  const dropdowns = variantDropdowns(document, id);
+  if (dropdowns === null) return null;
+  return (
+    <Section legend="Variant">
+      {dropdowns.map((dropdown) => (
+        <label key={dropdown.name} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <span style={{ minWidth: 60 }}>{dropdown.name}</span>
+          <select
+            aria-label={`Variant ${dropdown.name}`}
+            value={dropdown.value}
+            onChange={(event) =>
+              void run(instanceVariantCommand(id, dropdown.name, event.currentTarget.value))
+            }
+          >
+            {dropdown.options.map((option) => (
+              <option key={option.value} value={option.value} disabled={option.disabled}>
+                {option.value}
+              </option>
+            ))}
+          </select>
+        </label>
+      ))}
+    </Section>
+  );
+}
+
+/** V-37 section 6.2: the source subtree of an instance; a row focuses its layer. */
+function InstanceLayersSection({
+  document,
+  id,
+  focus,
+}: {
+  document: DocumentV8;
+  id: string;
+  focus: InstanceFocus | null;
+}) {
+  const editor = useEditor();
+  const rows = instanceLayers(document, id);
+  if (rows.length === 0) return null;
+  return (
+    <Section legend="Layers">
+      <div data-testid="instance-layers" style={{ display: 'flex', flexDirection: 'column' }}>
+        {rows.map((row) => {
+          const focused = focus?.instance === id && focus.layer === row.id;
+          return (
+            <button
+              key={row.id}
+              type="button"
+              data-testid={`instance-layer-${row.id}`}
+              data-overridden={row.overridden ? 'true' : undefined}
+              aria-pressed={focused}
+              aria-label={row.overridden ? `${row.name} (overridden)` : row.name}
+              style={{ textAlign: 'left', paddingLeft: 4 + row.depth * 12 }}
+              onClick={() => setInstanceFocus(editor, id, row.id)}
+            >
+              {row.name}
+              {row.overridden ? ' •' : ''}
+            </button>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
+/**
+ * V-37 section 6.2: the focused layer's controls: fill and stroke colour, opacity, visibility,
+ * the effects list and "Reset". Each writes `setInstanceOverride`; opacity, visibility and
+ * effects do not apply to the source itself (V37-S3).
+ */
+function LayerControlsSection({
+  document,
+  id,
+  layer,
+  run,
+  runAction,
+}: {
+  document: DocumentV8;
+  id: string;
+  layer: string;
+  run: Run;
+  runAction: (action: PropertyAction) => void;
+}) {
+  const controls = layerControls(document, id, layer);
+  if (controls === null) return null;
+  const { node } = controls;
+  const fillShown = fillOf(node);
+  const strokeShown = 'stroke' in node ? node.stroke : null;
+  const fill = fillText(fillShown);
+  const strokeText = strokeShown === null ? '' : fillText(strokeShown.color);
+  const identity = `${id}/${layer}`;
+  const reset = resetLayerAction(id, layer);
+  const setFill = (hex: string) => {
+    const command = fillOverrideCommand(id, layer, fillShown, hex);
+    return command !== null && run(command);
+  };
+  const setStroke = (hex: string) => {
+    const command = strokeOverrideCommand(id, layer, strokeShown, hex);
+    return command !== null && run(command);
+  };
+  // The effects rows build node-level effect commands; they become overrides of the layer.
+  const effectRun: Run = (command) => {
+    const override = effectOverrideCommand(id, layer, node.effects, command);
+    return override !== null && run(override);
+  };
+  return (
+    <>
+      <Section legend="Layer overrides">
+        <div role="group" aria-label={`Layer ${node.name}`} data-testid="layer-controls">
+          <p style={{ margin: '0 0 4px' }}>{node.name}</p>
+          {controls.fill && 'fills' in node && node.fills.length > 1 && (
+            // A single-colour edit would replace every fill (V35-S5), as in the appearance panel.
+            <p data-testid="layer-fill-multiple">Multiple fills</p>
+          )}
+          {controls.fill && !('fills' in node && node.fills.length > 1) && (
+            <Row>
+              <TextField
+                identity={`${identity} ${fill ?? ''}`}
+                label="Layer fill colour"
+                value={fill}
+                commit={setFill}
+              />
+              <ColorWell
+                label="Layer fill colour picker"
+                testId="layer-fill-picker"
+                value={fill === null || fill === '' ? null : fill}
+                commit={setFill}
+              />
+            </Row>
+          )}
+          {controls.stroke && (
+            <Row>
+              <TextField
+                identity={`${identity} ${strokeText ?? ''}`}
+                label="Layer stroke colour"
+                value={strokeText}
+                commit={setStroke}
+              />
+              <ColorWell
+                label="Layer stroke colour picker"
+                testId="layer-stroke-picker"
+                value={strokeText === '' ? null : strokeText}
+                commit={setStroke}
+              />
+            </Row>
+          )}
+          {controls.inner && (
+            <Row>
+              <TextField
+                identity={`${identity} ${node.opacity}`}
+                label="Layer opacity"
+                value={opacityPercent(node.opacity)}
+                commit={(text) => {
+                  const command = opacityOverrideCommand(id, layer, text);
+                  return command !== null && run(command);
+                }}
+              />
+              <label>
+                <input
+                  type="checkbox"
+                  aria-label="Layer visible"
+                  checked={node.visible}
+                  onChange={() => void run(visibleOverrideCommand(id, layer, node.visible))}
+                />{' '}
+                visible
+              </label>
+            </Row>
+          )}
+          <Row>
+            <ActionButton action={reset} onRun={() => runAction(reset)} />
+          </Row>
+        </div>
+      </Section>
+      {controls.inner && (
+        <EffectsSection document={document} nodes={[node]} run={effectRun} legend="Layer effects" />
+      )}
+    </>
+  );
+}
+
+/**
+ * V-37 sections 6.1 and 6.2: "Combine as variants", a set's properties, a variant's value
+ * fields and, for the target instance (the one selected, or under the selected group's focus),
+ * its Variant dropdowns, Layers list and focused layer controls.
+ */
+function VariantSections({
+  document,
+  selection,
+  focus,
+  run,
+  runAction,
+}: {
+  document: DocumentV8;
+  selection: readonly string[];
+  focus: InstanceFocus | null;
+  run: Run;
+  runAction: (action: PropertyAction) => void;
+}) {
+  const combine = combineAction(document, selection);
+  const set = selectedSet(document, selection);
+  const target = targetInstance(document, selection, focus);
+  const layer = target !== null && focus?.instance === target ? focus.layer : null;
+  return (
+    <>
+      {combine !== null && (
+        <Section legend="Component">
+          <Row>
+            <ActionButton action={combine} onRun={() => runAction(combine)} />
+          </Row>
+        </Section>
+      )}
+      {set !== null && <SetSection document={document} set={set} run={run} runAction={runAction} />}
+      <VariantFieldsSection document={document} selection={selection} run={run} />
+      {target !== null && !(selection.length === 1 && selection[0] === target) && (
+        // A selected group: the focused instance inside it is shown as the target.
+        <SymbolSection document={document} selection={[target]} runAction={runAction} />
+      )}
+      {target !== null && <InstanceVariantSection document={document} id={target} run={run} />}
+      {target !== null && <InstanceLayersSection document={document} id={target} focus={focus} />}
+      {target !== null && layer !== null && (
+        <LayerControlsSection
+          document={document}
+          id={target}
+          layer={layer}
+          run={run}
+          runAction={runAction}
+        />
+      )}
+    </>
+  );
+}
+
 /**
  * V-38 (contract, V38-U1): the layout grids of one selected frame or symbol: add a grid, columns
  * or rows, and per grid a visible checkbox, type, colour, opacity, its numbers and remove; each
@@ -1071,6 +1443,7 @@ export function PropertySections() {
   const textEdit = useEditorSelector((snapshot) => snapshot.textEdit);
   const handles = useEditorQuery({ type: 'handles' });
   const page = useActivePage();
+  const focus = useInstanceFocus();
   // A refusal shows only while the selection it was made on stays selected.
   const [refusal, setRefusal] = useState({ selection: '', text: '' });
   const nodes = selectedNodes(document, selection);
@@ -1138,6 +1511,13 @@ export function PropertySections() {
       <SymbolSection
         document={document}
         selection={selection}
+        runAction={(action) => setStatus(refusalText(runPropertyAction(execute, action)))}
+      />
+      <VariantSections
+        document={document}
+        selection={selection}
+        focus={focus}
+        run={run}
         runAction={(action) => setStatus(refusalText(runPropertyAction(execute, action)))}
       />
       {status !== '' && (

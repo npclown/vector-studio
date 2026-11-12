@@ -19,6 +19,8 @@ import type {
   BindingRef,
   Bindings,
   BlendMode,
+  ImageAsset,
+  ImageMimeType,
   Color,
   ColorStyle,
   ContainerBlendMode,
@@ -50,6 +52,9 @@ import type {
   JsonValue,
   NodeV1,
   Paint,
+  FillPaint,
+  ImagePaint,
+  ImageScaleMode,
   PageV1,
   PathData,
   PathStroke,
@@ -58,6 +63,8 @@ import type {
   Stroke,
   StrokeCap,
   StrokeJoin,
+  SymbolSetNodeV6,
+  NodeOverride,
   TextNode,
   TextOverride,
   TextRun,
@@ -80,6 +87,8 @@ export const DOCUMENT_ERROR_CODES = [
   'document.invalid-mask-source',
   // Schema v3 (MVP M7 contract, section 2).
   'document.invalid-symbol',
+  // Schema v8 (V-37 contract, section 2).
+  'document.invalid-variant',
 ] as const;
 
 export type DocumentErrorCode = (typeof DOCUMENT_ERROR_CODES)[number];
@@ -115,7 +124,13 @@ export type ParseResultV5 = Readonly<{ ok: true; document: DocumentV5 }> | Model
 
 /** The result of `validateFragmentTree`: a node map, never a document. */
 export type FragmentTreeResult =
-  Readonly<{ ok: true; nodes: Readonly<Record<string, NodeV8>> }> | ModelFailure;
+  | Readonly<{
+      ok: true;
+      nodes: Readonly<Record<string, NodeV8>>;
+      /** V32-M4: the holder's `images`, normalized, when it carried any. */
+      images?: Readonly<Record<string, ImageAsset>>;
+    }>
+  | ModelFailure;
 
 export type NodeResult =
   | Readonly<{ ok: true; node: NodeV8 }>
@@ -137,6 +152,15 @@ export const MAX_DASH_ENTRIES = 16;
 export const MAX_EFFECTS = 8;
 /** V35-S3: the most fills a node holds. */
 export const MAX_FILLS = 16;
+
+/** V32-M1: the largest side of an image asset, in pixels. */
+export const MAX_IMAGE_SIDE = 32768;
+/** V32-M1: the most pixels of one image asset. */
+export const MAX_IMAGE_PIXELS = 2 ** 26;
+/** V32-M2: the most decoded bytes of one image asset. */
+export const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
+/** V32-M2: the most decoded bytes of a document's whole image table. */
+export const MAX_IMAGE_TABLE_BYTES = 256 * 1024 * 1024;
 
 /** The largest effect radius, and the largest shadow offset magnitude (E41-S3). */
 export const MAX_EFFECT_RADIUS = 1000;
@@ -265,12 +289,30 @@ export function validateAnyDocument(value: unknown): ParseResult {
  * nesting and the base tree depth still run. Returns the normalized node map, never a document;
  * no document entry point skips these rules.
  */
-export function validateFragmentTree(value: unknown): FragmentTreeResult {
+export function validateFragmentTree(
+  value: unknown,
+  /**
+   * V32-M4: an `images` table a previous `validateFragmentTree` returned, used as the holder's
+   * table without validating it again. Any other object is validated like a holder's `images`.
+   */
+  checked?: Readonly<Record<string, ImageAsset>>,
+): FragmentTreeResult {
   const version = checkVersion(value, [8]);
   if (version !== null) return version;
   try {
-    const tree = readTree(value as Record<string, unknown>, V8, false);
-    return { ok: true, nodes: tree.nodes };
+    const holder = value as Record<string, unknown>;
+    const tree = readTree(holder, V8, false);
+    // V32-M4: image paints name entries of the fragment's own `images`.
+    const images =
+      checked !== undefined
+        ? VALIDATED_TABLES.has(checked)
+          ? checked
+          : readImages(checked, ['images'])
+        : Object.hasOwn(holder, 'images')
+          ? readImages(holder.images, ['images'])
+          : undefined;
+    checkImageKeys(tree.nodes, images);
+    return { ok: true, nodes: tree.nodes, ...(images === undefined ? {} : { images }) };
   } catch (error) {
     if (error instanceof Failure) return { ok: false, code: error.code, path: pointer(error.path) };
     throw error;
@@ -778,7 +820,9 @@ const NODE_KEYS_V2 = {
   // Schema v4 (M6a contract, section 2).
   text: [...BASE_KEYS_V2, 'runs', 'sizing', 'align', 'letterSpacing', 'lineHeight'],
 } as const;
-type NodeTypeKey = keyof typeof NODE_KEYS_V2;
+type NodeTypeKey = keyof typeof NODE_KEYS_V8;
+/** Schema v8 (V-37-S1): a set's keys are a frame's. */
+const NODE_KEYS_V8 = { ...NODE_KEYS_V2, symbolSet: NODE_KEYS_V2.frame } as const;
 /** Schema v5 (M6a contract, section 9, M7-T3): `textOverrides` follows `symbol`. */
 const INSTANCE_KEYS_V5 = [...NODE_KEYS_V2.instance, 'textOverrides'] as const;
 
@@ -834,15 +878,26 @@ type Schema = Readonly<{
    */
   layout?: 'read';
   /**
+   * A symbol's `variant` and an instance's `overrides` (V-37 contract, section 2), both optional:
+   * `none` before v8 (the keys are unknown), `added` when an older input is read into v8 (nothing
+   * is added, an absent field meaning none), `read` at v8 (V37-S2, S3).
+   */
+  variants: 'none' | 'added' | 'read';
+  /**
    * V-34's optional `autoLayout` and `layoutSizing` (contract, section 2; viz-schema-v8.md): read
    * only at v8 (`V8`). Every schema that reads an older input leaves it unset, so there the keys
    * are unknown and their default (absent: no auto layout, fixed sizing) is what the v8 result
    * holds.
    */
   autoLayout?: 'read';
+  /**
+   * V-32 (V32-M1): the document's optional `images` table, read only at v8 (`V8`). Every other
+   * schema leaves it unset, so there the key is unknown and an absent table stays absent in the v8 result.
+   */
+  images?: 'read';
 }>;
 
-const V4_TYPES = Object.keys(NODE_KEYS_V2) as NodeTypeKey[];
+const V4_TYPES = Object.keys(NODE_KEYS_V2) as Exclude<NodeTypeKey, 'symbolSet'>[];
 const V3_TYPES = V4_TYPES.filter((type) => type !== 'text');
 const V2_TYPES = V3_TYPES.filter((type) => type !== 'symbol' && type !== 'instance');
 const OLDER = { containerOpacity: 'one' } as const;
@@ -853,12 +908,15 @@ const ADD_EFFECTS = {
   fills: 'added',
   locked: 'added',
 } as const;
+const NO_VARIANTS = { variants: 'none' } as const;
+const ADD_VARIANTS = { variants: 'added' } as const;
 const V2: Schema = {
   types: V2_TYPES,
   overrides: 'none',
   appearance: 'none',
   ...OLDER,
   ...NO_EFFECTS,
+  ...NO_VARIANTS,
 };
 const V3: Schema = { ...V2, types: V3_TYPES };
 const V4_TO_V5: Schema = { ...V2, types: V4_TYPES, overrides: 'added' };
@@ -868,6 +926,7 @@ const V5_TO_V6: Schema = {
   appearance: 'added',
   ...OLDER,
   ...NO_EFFECTS,
+  ...NO_VARIANTS,
 };
 const V2_TO_V7: Schema = {
   types: V2_TYPES,
@@ -875,6 +934,7 @@ const V2_TO_V7: Schema = {
   appearance: 'added',
   ...OLDER,
   ...ADD_EFFECTS,
+  ...ADD_VARIANTS,
 };
 const V3_TO_V7: Schema = { ...V2_TO_V7, types: V3_TYPES };
 const V4_TO_V7: Schema = { ...V2_TO_V7, types: V4_TYPES };
@@ -885,6 +945,7 @@ const V6_TO_V7: Schema = {
   appearance: 'read',
   containerOpacity: 'any',
   ...ADD_EFFECTS,
+  ...ADD_VARIANTS,
 };
 /** `migrateV6toV7` only: a v7 result keeps v6's `fill`. */
 const V6_TO_V7_ONLY: Schema = { ...V6_TO_V7, fills: 'none' };
@@ -899,12 +960,15 @@ const V7: Schema = { ...V6_TO_V7, effects: 'read' };
 const V7_TO_V8: Schema = { ...V7, fills: 'added', locked: 'added' };
 const V8: Schema = {
   ...V7,
+  types: [...V4_TYPES, 'symbolSet'],
   effectKinds: 'v8',
   fills: 'read',
   locked: 'read',
   layout: 'read',
   tables: 'read',
+  variants: 'read',
   autoLayout: 'read',
+  images: 'read',
 };
 /** v8 nodes of an input below v6, already migrated: v8 fields, the older opacity rule. */
 const V8_OLDER_OPACITY: Schema = { ...V8, ...OLDER };
@@ -929,6 +993,53 @@ function readPaint(value: unknown, path: Path): Paint {
   if (hasExactKeys(value, COLOR_KEYS)) return readColor(value, path);
   if (hasExactKeys(value, GRADIENT_KEYS)) return readGradient(value, path);
   invalid(path);
+}
+
+const IMAGE_PAINT_KEYS = ['kind', 'image', 'scaleMode', 'scale'] as const;
+const IMAGE_SCALE_MODES: readonly ImageScaleMode[] = ['fill', 'fit', 'stretch', 'tile'];
+const MIN_IMAGE_SCALE = 0.01;
+const MAX_IMAGE_SCALE = 100;
+
+/**
+ * V32-M3: a fill slot's paint, a `Paint` or an image paint (exactly `kind, image, scaleMode,
+ * scale`). Whether `image` names a table entry is checked with the document (V32-M4).
+ */
+function readFillPaint(value: unknown, path: Path): FillPaint {
+  if (!hasExactKeys(value, IMAGE_PAINT_KEYS) || value.kind !== 'image') {
+    return readPaint(value, path);
+  }
+  if (typeof value.image !== 'string' || !IMAGE_KEY.test(value.image)) {
+    invalid([...path, 'image']);
+  }
+  return {
+    kind: 'image',
+    image: value.image,
+    scaleMode: readEnum(value.scaleMode, IMAGE_SCALE_MODES, [...path, 'scaleMode']),
+    scale: readNumber(value.scale, [...path, 'scale'], MIN_IMAGE_SCALE, MAX_IMAGE_SCALE),
+  };
+}
+
+/** V32-M3: whether a fill paint is an image paint. */
+export function isImagePaint(paint: FillPaint): paint is ImagePaint {
+  return 'kind' in paint && paint.kind === 'image';
+}
+
+/**
+ * V32-M4: every image paint of `nodes` names an entry of `images` (absent means none), else
+ * `document.invalid-field` at the paint's `image`.
+ */
+function checkImageKeys(nodes: DocumentV8['nodes'], images: DocumentV8['images']): void {
+  for (const [key, node] of Object.entries(nodes)) {
+    if (!('fills' in node)) continue;
+    node.fills.forEach((fill, index) => {
+      if (
+        isImagePaint(fill.paint) &&
+        !(images !== undefined && Object.hasOwn(images, fill.paint.image))
+      ) {
+        invalid(['nodes', key, 'fills', index, 'paint', 'image']);
+      }
+    });
+  }
 }
 
 /**
@@ -1043,7 +1154,13 @@ function strokeReaders(schema: Schema): Readers {
 }
 
 function isContainerType(type: string): boolean {
-  return type === 'group' || type === 'maskGroup' || type === 'frame' || type === 'symbol';
+  return (
+    type === 'group' ||
+    type === 'maskGroup' ||
+    type === 'frame' ||
+    type === 'symbol' ||
+    type === 'symbolSet'
+  );
 }
 
 const SIZINGS: readonly TextNode['sizing'][] = ['autoWidth', 'autoHeight', 'fixed'];
@@ -1159,6 +1276,85 @@ function readOverrides(value: unknown, path: Path): Record<string, TextOverride>
   );
 }
 
+/** The most entries of one variant, and the most UTF-16 units of a name or a value (V37-S2). */
+const MAX_VARIANT_ENTRIES = 16;
+const MAX_VARIANT_TEXT = 64;
+
+/** A name or value of 1 to 64 units without a control or a lone surrogate (V37-S2). */
+function isVariantText(text: string): boolean {
+  if (text.length === 0 || text.length > MAX_VARIANT_TEXT) return false;
+  for (let i = 0; i < text.length; i += 1) if (isControl(text.charCodeAt(i))) return false;
+  return loneSurrogate(text) === -1;
+}
+
+/**
+ * V37-S2 for one set whose children are symbols: each has 1 to 16 valid entries (at `variant` or
+ * the entry), then every later child has the first child's names and values no earlier child
+ * has (`document.invalid-variant` at its `variant`).
+ */
+function readSetVariants(children: readonly string[], nodes: Record<string, NodeV8>): void {
+  const variantOf = (child: string) => {
+    const node = nodes[child]!;
+    return node.type === 'symbol' ? node.variant : undefined;
+  };
+  for (const child of children) {
+    const variant = variantOf(child);
+    const path = ['nodes', child, 'variant'];
+    if (variant === undefined) invalid(path);
+    const names = Object.keys(variant);
+    if (names.length < 1 || names.length > MAX_VARIANT_ENTRIES) invalid(path);
+    for (const name of names) {
+      if (!isVariantText(name) || name.includes('=') || name.includes(','))
+        invalid([...path, name]);
+      if (!isVariantText(variant[name]!)) invalid([...path, name]);
+    }
+  }
+  const first = variantOf(children[0]!)!;
+  const names = Object.keys(first);
+  const seen = new Set<string>();
+  children.forEach((child, index) => {
+    const variant = variantOf(child)!;
+    const own = Object.keys(variant);
+    if (
+      index > 0 &&
+      (own.length !== names.length || !names.every((name) => Object.hasOwn(variant, name)))
+    ) {
+      throw new Failure('document.invalid-variant', ['nodes', child, 'variant']);
+    }
+    const tuple = JSON.stringify(names.map((name) => variant[name]));
+    if (seen.has(tuple)) throw new Failure('document.invalid-variant', ['nodes', child, 'variant']);
+    seen.add(tuple);
+  });
+}
+
+/**
+ * V37-S3 for one instance: each key names a node of the source subtree, the source included
+ * (`document.invalid-symbol`, as M7-T3), and each field applies to it (`document.invalid-field`):
+ * `fills` and `stroke` to a node with that field, the rest to a descendant only.
+ */
+function readOverrideTargets(
+  key: string,
+  source: string,
+  overrides: Readonly<Record<string, NodeOverride>>,
+  nodes: Record<string, NodeV8>,
+  symbolAbove: ReadonlyMap<string, string>,
+): void {
+  for (const [name, override] of Object.entries(overrides)) {
+    const target = Object.hasOwn(nodes, name) ? nodes[name]! : undefined;
+    const isSource = name === source;
+    if (target === undefined || (!isSource && symbolAbove.get(name) !== source)) {
+      throw new Failure('document.invalid-symbol', ['nodes', key, 'overrides', name]);
+    }
+    for (const field of OVERRIDE_FIELDS) {
+      if (!Object.hasOwn(override, field)) continue;
+      const own = field === 'fills' || field === 'stroke';
+      if (own ? !(field in target) : isSource) {
+        throw new Failure('document.invalid-field', ['nodes', key, 'overrides', name, field]);
+      }
+    }
+  }
+}
+
 /**
  * One node of any schema from v2 on, read with `schema`; the result is a v6 node when
  * `schema.appearance` is not `none`, else typed by the caller's version.
@@ -1224,13 +1420,98 @@ function readNode(key: string, value: unknown, path: Path, schema: Schema): Node
     readBoolean(record.locked, [...path, 'locked'])
       ? { locked: true as const }
       : {};
-  const result = { ...withFills, blendMode, effects, ...lock };
+  // V-37: a symbol's `variant` or an instance's non-empty `overrides` (read at v8 only).
+  const optional = schema.variants === 'read' ? readOptional(node.type, record, path, schema) : {};
+  const result = { ...withFills, blendMode, effects, ...lock, ...optional };
   const bound = (hasBindings
     ? { ...result, bindings: readBindings(bindings, node.type, [...path, 'bindings']) }
     : result) as unknown as NodeV8;
   return layoutKeys
     ? readLayoutFields(bound, value as Record<string, unknown>, autoLayout, layoutSizing, path)
     : bound;
+}
+
+/** The optional fields of a v8 node: a symbol's `variant`, an instance's non-empty `overrides`. */
+function readOptional(
+  type: string,
+  value: Record<string, unknown>,
+  path: Path,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the schema is already v8 here
+  _schema: Schema,
+) {
+  if (type === 'symbol' && Object.hasOwn(value, 'variant')) {
+    return { variant: readVariant(value.variant, [...path, 'variant']) };
+  }
+  if (type === 'instance' && Object.hasOwn(value, 'overrides')) {
+    const overrides = readNodeOverrides(value.overrides, [...path, 'overrides']);
+    return Object.keys(overrides).length === 0 ? {} : { overrides };
+  }
+  return {};
+}
+
+function compareCodeUnits(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * V37-S2, the shape only: a plain object of strings, its keys read in UTF-16 code unit order. The
+ * entry count, the name and value rules and the set rules are tree rules (`readTree`).
+ */
+function readVariant(value: unknown, path: Path): Record<string, string> {
+  if (!isPlainObject(value)) invalid(path);
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort(compareCodeUnits)
+      .map((name) => [name, readString(value[name], [...path, name])]),
+  );
+}
+
+const OVERRIDE_FIELDS = ['fill', 'fills', 'stroke', 'opacity', 'visible', 'effects'] as const;
+
+/**
+ * V37-S3, the values: each override a non-empty object of the fields above, read in that order
+ * with the node field's own rules, keys in UTF-16 code unit order. Whether each key names a node
+ * of the instance's source and each field applies to it is a tree rule (`readTree`).
+ */
+function readNodeOverrides(value: unknown, path: Path): Record<string, NodeOverride> {
+  if (!isPlainObject(value)) invalid(path);
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort(compareCodeUnits)
+      .map((key) => {
+        const entry = value[key];
+        const at = [...path, key];
+        if (!isPlainObject(entry)) invalid(at);
+        for (const field of Object.keys(entry)) {
+          if (!(OVERRIDE_FIELDS as readonly string[]).includes(field)) invalid([...at, field]);
+        }
+        if (Object.keys(entry).length === 0) invalid(at);
+        const result: { -readonly [K in keyof NodeOverride]: NodeOverride[K] } = {};
+        // V37-S4: `fills` is the node field's list. An override written as `fill` by a v8 build
+        // before V-35 reads as V-35 reads a node's `fill`: null is no fills, a paint one fill; both
+        // keys fail at `fill`.
+        if (Object.hasOwn(entry, 'fill')) {
+          if (Object.hasOwn(entry, 'fills')) invalid([...at, 'fill']);
+          const old = readNullable(entry.fill, [...at, 'fill'], readPaint);
+          result.fills = old === null ? [] : [defaultFill(old)];
+        } else if (Object.hasOwn(entry, 'fills')) {
+          result.fills = readFills(entry.fills, [...at, 'fills']);
+        }
+        if (Object.hasOwn(entry, 'stroke')) {
+          result.stroke = readNullable(entry.stroke, [...at, 'stroke'], readStroke);
+        }
+        if (Object.hasOwn(entry, 'opacity')) {
+          result.opacity = readNumber(entry.opacity, [...at, 'opacity'], 0, 1);
+        }
+        if (Object.hasOwn(entry, 'visible')) {
+          result.visible = readBoolean(entry.visible, [...at, 'visible']);
+        }
+        if (Object.hasOwn(entry, 'effects')) {
+          result.effects = readEffects(entry.effects, [...at, 'effects'], EFFECT_KINDS_V8);
+        }
+        return [key, result];
+      }),
+  );
 }
 
 /** V35-S2: the node types that hold `fills`. */
@@ -1241,6 +1522,7 @@ const FILL_TYPES: ReadonlySet<string> = new Set([
   'custom',
   'frame',
   'symbol',
+  'symbolSet',
 ]);
 /** V35-S2: the node types that take `passThrough`. */
 const CONTAINER_BLEND_TYPES: ReadonlySet<string> = new Set([
@@ -1248,6 +1530,7 @@ const CONTAINER_BLEND_TYPES: ReadonlySet<string> = new Set([
   'maskGroup',
   'frame',
   'symbol',
+  'symbolSet',
   'instance',
 ]);
 const BLEND_MODES: readonly BlendMode[] = [
@@ -1294,7 +1577,7 @@ function readFills(value: unknown, path: Path): Fill[] {
   return readArray(value, path, (entry, entryPath): Fill => {
     const record = readRecord(entry, ['paint', 'visible', 'opacity', 'blendMode'], entryPath);
     return {
-      paint: readPaint(record.paint, [...entryPath, 'paint']),
+      paint: readFillPaint(record.paint, [...entryPath, 'paint']),
       visible: readBoolean(record.visible, [...entryPath, 'visible']),
       opacity: readNumber(record.opacity, [...entryPath, 'opacity'], 0, 1),
       blendMode: readEnum(record.blendMode, BLEND_MODES, [...entryPath, 'blendMode']),
@@ -1565,11 +1848,16 @@ function readEffects(value: unknown, path: Path, kinds: readonly Effect['kind'][
 }
 
 /** One node's fields before `effects`; typed as v6 whatever the schema. */
-function readNodeFields(key: string, value: unknown, path: Path, schema: Schema): NodeV6 {
+function readNodeFields(
+  key: string,
+  value: unknown,
+  path: Path,
+  schema: Schema,
+): NodeV6 | SymbolSetNodeV6 {
   if (!isPlainObject(value)) invalid(path);
   const type = readEnum(value.type, schema.types, [...path, 'type']);
   const typeKeys =
-    type === 'instance' && schema.overrides === 'read' ? INSTANCE_KEYS_V5 : NODE_KEYS_V2[type];
+    type === 'instance' && schema.overrides === 'read' ? INSTANCE_KEYS_V5 : NODE_KEYS_V8[type];
   const keys: string[] = [...typeKeys];
   // V38-S2: `layoutGrids` is optional, after `stroke` and before `effects`.
   if (
@@ -1583,6 +1871,11 @@ function readNodeFields(key: string, value: unknown, path: Path, schema: Schema)
   // V31-S1: the optional `locked` key at v8, after every other field.
   if (schema.effects === 'read' && schema.locked === 'read' && Object.hasOwn(value, 'locked')) {
     keys.push('locked');
+  }
+  // V-37: a symbol's `variant` and an instance's `overrides`, after `locked`.
+  const optionalKey = type === 'symbol' ? 'variant' : type === 'instance' ? 'overrides' : null;
+  if (schema.variants === 'read' && optionalKey !== null && Object.hasOwn(value, optionalKey)) {
+    keys.push(optionalKey);
   }
   const record = readRecord(value, keys, path);
   if (!isValidId(key) || record.id !== key) invalid([...path, 'id']);
@@ -1661,7 +1954,8 @@ function readNodeFields(key: string, value: unknown, path: Path, schema: Schema)
     case 'maskGroup':
       return { ...base, type, children: children() };
     case 'frame':
-    case 'symbol': {
+    case 'symbol':
+    case 'symbolSet': {
       const container = {
         ...base,
         type,
@@ -1804,6 +2098,12 @@ type Tree<D extends { pages: unknown; nodes: unknown } = DocumentV8> = Readonly<
 /** A v8 document read with the schema of its source version (an older one when migrating). */
 function readDocumentV8(value: Record<string, unknown>, schema: Schema): DocumentV8 {
   const { id, colorStyles, variables, pages, nodes } = readTree(value, schema, true);
+  // V32-M1: absent stays absent, which means no images.
+  const images =
+    schema.images === 'read' && Object.hasOwn(value, 'images')
+      ? readImages(value.images, ['images'])
+      : undefined;
+  checkImageKeys(nodes, images);
   return {
     schemaVersion: 8,
     id,
@@ -1811,14 +2111,138 @@ function readDocumentV8(value: Record<string, unknown>, schema: Schema): Documen
     ...(variables === undefined ? {} : { variables }),
     pages,
     nodes,
+    ...(images === undefined ? {} : { images }),
   };
+}
+
+const IMAGE_KEY = /^[0-9a-f]{64}$/u;
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/u;
+const IMAGE_MIME_TYPES: readonly ImageMimeType[] = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+];
+const IMAGE_ASSET_KEYS = ['mimeType', 'width', 'height', 'data'] as const;
+
+/**
+ * V32-M1, M2: the image table, keys in code unit order. Each key is 64 lowercase hex characters
+ * (not re-hashed); each asset has exactly `mimeType`, `width`, `height`, `data`; the base64 is
+ * checked for alphabet, padding and length, and only its first 16 bytes are decoded, for the
+ * format's magic bytes. The decoded sizes are bounded per asset and for the table.
+ */
+/** Tables `readImages` returned, which `validateFragmentTree` may take without re-reading. */
+const VALIDATED_TABLES = new WeakSet<object>();
+
+function readImages(value: unknown, path: Path): Record<string, ImageAsset> {
+  if (!isPlainObject(value)) invalid(path);
+  const images: Record<string, ImageAsset> = {};
+  let total = 0;
+  for (const key of Object.keys(value).sort(compareKeys)) {
+    const assetPath = [...path, key];
+    if (!IMAGE_KEY.test(key)) invalid(assetPath);
+    const record = readRecord(value[key], IMAGE_ASSET_KEYS, assetPath);
+    const mimeType = record.mimeType as ImageMimeType;
+    if (!IMAGE_MIME_TYPES.includes(mimeType)) invalid([...assetPath, 'mimeType']);
+    const width = readImageSide(record.width, [...assetPath, 'width']);
+    const height = readImageSide(record.height, [...assetPath, 'height']);
+    if (width * height > MAX_IMAGE_PIXELS) invalid([...assetPath, 'height']);
+    const dataPath = [...assetPath, 'data'];
+    const data = readString(record.data, dataPath);
+    const bytes = base64Length(data);
+    if (bytes === null || bytes === 0 || bytes > MAX_IMAGE_BYTES) invalid(dataPath);
+    if (!hasImageMagic(mimeType, data)) invalid(dataPath);
+    total += bytes;
+    if (total > MAX_IMAGE_TABLE_BYTES) invalid(assetPath);
+    images[key] = { mimeType, width, height, data };
+  }
+  VALIDATED_TABLES.add(images);
+  return images;
+}
+
+/**
+ * V32-E1: one asset of the image table checked with the rules of `parseDocument` (V32-M1, M2) for
+ * its key and fields, or null. The returned asset is a normalized copy.
+ */
+export function validateImageAsset(key: unknown, value: unknown): ImageAsset | null {
+  if (typeof key !== 'string') return null;
+  try {
+    const table = readImages(Object.fromEntries([[key, value]]), []);
+    return Object.hasOwn(table, key) ? table[key]! : null;
+  } catch (error) {
+    if (error instanceof Failure) return null;
+    throw error;
+  }
+}
+
+/**
+ * V32-M2: the decoded size in bytes of an asset's base64 `data`, which must already be valid (a
+ * parsed document's or a command's checked asset); other strings give a meaningless size.
+ */
+export function imageDataBytes(data: string): number {
+  // From the length and padding only: callers pass data a parse or command already validated.
+  const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0;
+  return Math.max(0, (data.length / 4) * 3 - padding);
+}
+
+function readImageSide(value: unknown, path: Path): number {
+  const side = readNumber(value, path, 1, MAX_IMAGE_SIDE);
+  if (!Number.isInteger(side)) invalid(path);
+  return side;
+}
+
+/** The decoded length of padded standard base64, or null when the text is not such base64. */
+function base64Length(data: string): number | null {
+  if (data.length % 4 !== 0 || !BASE64.test(data)) return null;
+  const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0;
+  return (data.length / 4) * 3 - padding;
+}
+
+const BASE64_DIGITS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/** Decodes padded standard base64 already checked by `base64Length` (the model has no DOM). */
+function decodeBase64(data: string): number[] {
+  const bytes: number[] = [];
+  for (let index = 0; index + 4 <= data.length; index += 4) {
+    const digits = [...data.slice(index, index + 4)].map((char) =>
+      char === '=' ? 0 : BASE64_DIGITS.indexOf(char),
+    );
+    const value = (digits[0]! << 18) | (digits[1]! << 12) | (digits[2]! << 6) | digits[3]!;
+    bytes.push((value >> 16) & 0xff);
+    if (data[index + 2] !== '=') bytes.push((value >> 8) & 0xff);
+    if (data[index + 3] !== '=') bytes.push(value & 0xff);
+  }
+  return bytes;
+}
+
+/** V32-M2: the first bytes of the decoded data match the format. */
+function hasImageMagic(mimeType: ImageMimeType, data: string): boolean {
+  const head = decodeBase64(data.slice(0, 24));
+  const byte = (index: number) => head[index] ?? -1;
+  const text = (from: number, to: number) =>
+    String.fromCharCode(...head.slice(from, Math.min(to, head.length)));
+  switch (mimeType) {
+    case 'image/png':
+      return byte(0) === 0x89 && text(1, 4) === 'PNG';
+    case 'image/jpeg':
+      return byte(0) === 0xff && byte(1) === 0xd8 && byte(2) === 0xff;
+    case 'image/gif':
+      return text(0, 4) === 'GIF8';
+    case 'image/webp':
+      return text(0, 4) === 'RIFF' && text(8, 12) === 'WEBP';
+  }
+}
+
+function compareKeys(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 /**
  * The document rules in the M7 contract's section 2 order: fields, ownership, M7-S2, the cycle
- * walk with the base tree depth, M7-S3, the M7-T3 override keys, the M7-S5 tree depth, then the
- * group and mask rules.
- * `references` false skips only M7-S2, the override keys and M7-S5, for `validateFragmentTree`.
+ * walk with the base tree depth, M7-S3 together with V37-S1, V37-S2, the M7-T3 override keys with
+ * V37-S3, the M7-S5 tree depth, then the group and mask rules.
+ * `references` false skips only M7-S2, the override keys (M7-T3 and V37-S3) and M7-S5, for
+ * `validateFragmentTree`.
  */
 function readTree(value: Record<string, unknown>, schema: Schema, references: boolean): Tree {
   // V39-S1, S2: a v8 document (not a fragment) may add `colorStyles` and `variables`.
@@ -1826,7 +2250,13 @@ function readTree(value: Record<string, unknown>, schema: Schema, references: bo
     schema.tables === 'read' && references && isPlainObject(value)
       ? (['colorStyles', 'variables'] as const).filter((key) => Object.hasOwn(value, key))
       : [];
-  const record = readRecord(value, ['schemaVersion', 'id', ...optional, 'pages', 'nodes'], []);
+  // V32-M1: a v8 document may carry `images`, which `readDocumentV8` reads.
+  const images = schema.images === 'read' && isPlainObject(value) && Object.hasOwn(value, 'images');
+  const record = readRecord(
+    value,
+    ['schemaVersion', 'id', ...optional, 'pages', 'nodes', ...(images ? ['images'] : [])],
+    [],
+  );
   const id = readIdV2(record.id, ['id']);
   if (!Array.isArray(record.pages) || record.pages.length === 0) invalid(['pages']);
   const pages = readArray(record.pages, ['pages'], (entry, entryPath) =>
@@ -1889,29 +2319,55 @@ function readTree(value: Record<string, unknown>, schema: Schema, references: bo
   const reached = new Set<string>();
   const depthOf = new Map<string, number>();
   const symbolAbove = new Map<string, string>();
-  const stack: [string, number, string | null][] = [];
-  for (const page of pages) for (const child of page.children) stack.push([child, 0, null]);
+  const setAbove = new Set<string>();
+  const stack: [string, number, string | null, boolean][] = [];
+  for (const page of pages) for (const child of page.children) stack.push([child, 0, null, false]);
   while (stack.length > 0) {
-    const [key, depth, above] = stack.pop()!;
+    const [key, depth, above, inSet] = stack.pop()!;
     reached.add(key);
     depthOf.set(key, depth);
     if (above !== null) symbolAbove.set(key, above);
+    if (inSet) setAbove.add(key);
     const node = nodes[key]!;
     if (depth > MAX_TREE_DEPTH) invalid(['nodes', key, 'parent']);
     if ('children' in node) {
       const inner = node.type === 'symbol' ? key : above;
-      for (const child of node.children) stack.push([child, depth + 1, inner]);
+      const innerSet = inSet || node.type === 'symbolSet';
+      for (const child of node.children) stack.push([child, depth + 1, inner, innerSet]);
     }
   }
   for (const [key] of entries) {
     if (!reached.has(key)) throw new Failure('document.cyclic-parent', ['nodes', key, 'parent']);
   }
 
-  // M7-S3: no instance and no symbol inside a symbol. A text node may be (M7-T1).
+  // M7-S3: no instance and no symbol inside a symbol. A text node may be (M7-T1). V37-S1, in the
+  // same pass: a set holds only symbols and is never inside a symbol or a set.
   for (const [key, node] of entries) {
+    if (node.type === 'symbolSet') {
+      if (symbolAbove.has(key) || setAbove.has(key)) {
+        throw new Failure('document.invalid-symbol', ['nodes', key, 'parent']);
+      }
+      if (node.children.length === 0) invalid(['nodes', key, 'children']);
+      for (const child of node.children) {
+        if (nodes[child]!.type !== 'symbol') {
+          throw new Failure('document.invalid-symbol', ['nodes', child, 'parent']);
+        }
+      }
+      continue;
+    }
     const nested = node.type === 'instance' || node.type === 'symbol';
     if (nested && symbolAbove.has(key)) {
       throw new Failure('document.invalid-symbol', ['nodes', key, 'parent']);
+    }
+  }
+
+  // V37-S2: variants of a set's symbols, then none outside a set.
+  for (const [, node] of entries) {
+    if (node.type === 'symbolSet') readSetVariants(node.children, nodes);
+  }
+  for (const [key, node] of entries) {
+    if (node.type === 'symbol' && node.variant !== undefined && !setAbove.has(key)) {
+      invalid(['nodes', key, 'variant']);
     }
   }
 
@@ -1924,6 +2380,12 @@ function readTree(value: Record<string, unknown>, schema: Schema, references: bo
         if (target?.type !== 'text' || symbolAbove.get(name) !== node.symbol) {
           throw new Failure('document.invalid-symbol', ['nodes', key, 'textOverrides', name]);
         }
+      }
+    }
+    // V37-S3, after the M7-T3 keys of every instance.
+    for (const [key, node] of entries) {
+      if (node.type === 'instance' && node.overrides !== undefined) {
+        readOverrideTargets(key, node.symbol, node.overrides, nodes, symbolAbove);
       }
     }
   }

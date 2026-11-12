@@ -1,15 +1,15 @@
-import type { Fill, NodeV8, Paint } from '@vector-studio/model';
+import type { Fill, FillPaint, NodeV8 } from '@vector-studio/model';
 
 // V-35 contract (docs/plans/viz-v35-fills-blend-contract.md), section 2: helpers over a node's
 // `fills`, which replace v7's single `fill`.
 
 /** V35-S1: the one fill a paint becomes (visible, opacity 1, `normal`). */
-export function paintFill(paint: Paint): Fill {
+export function paintFill(paint: FillPaint): Fill {
   return { paint, visible: true, opacity: 1, blendMode: 'normal' };
 }
 
 /** V35-S5: the fills that `fill: paint | null` stands for. */
-export function fillsOf(paint: Paint | null): Fill[] {
+export function fillsOf(paint: FillPaint | null): Fill[] {
   return paint === null ? [] : [paintFill(paint)];
 }
 

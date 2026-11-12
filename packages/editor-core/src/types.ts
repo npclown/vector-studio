@@ -27,12 +27,17 @@ import type {
   Frame,
   JsonValue,
   ModelErrorCode,
+  NodeOverride,
   NodeV8,
   PageV2,
   Paint,
   BlendMode,
   ContainerBlendMode,
   Fill,
+  FillPaint,
+  ImageAsset,
+  ImageMimeType,
+  ImageScaleMode,
   PathVerb,
   Stroke,
   TextNodeV8,
@@ -254,7 +259,7 @@ export type SnapOverlay = Readonly<{
 export type NodeProps = Readonly<{
   name?: string;
   /** V35-S5: replaces all fills by this one fill (opacity 1, `normal`), or none. */
-  fill?: Paint | null;
+  fill?: FillPaint | null;
   /** V35-S5: replaces the fills; with `fill` it is `editor.invalid-command`. */
   fills?: readonly Fill[];
   blendMode?: ContainerBlendMode;
@@ -287,7 +292,7 @@ export type StrokePatch = Readonly<Partial<Stroke>>;
  * node whose type has that prop, and other nodes are left unchanged; `stroke: null` removes it.
  */
 export type StyleProps = Readonly<{
-  fill?: Paint | null;
+  fill?: FillPaint | null;
   fills?: readonly Fill[];
   /** V35-C1: `passThrough` applies to groups, mask groups, frames, symbols and instances only. */
   blendMode?: ContainerBlendMode;
@@ -309,13 +314,26 @@ export type Placement = Readonly<{
   index?: number;
 }>;
 
+/**
+ * V-32 contract, V32-E1: an image asset as a command takes it. The host reads `width` and
+ * `height` from the file header and computes `key`, the lowercase hex SHA-256 of the decoded
+ * bytes, so commands stay synchronous.
+ */
+export type ImageAssetInput = Readonly<{
+  key: string;
+  mimeType: ImageMimeType;
+  width: number;
+  height: number;
+  data: string;
+}>;
+
 /** Commands that change the document; each successful one is one transaction. */
 export type DocumentCommand =
   | (Readonly<{
       type: 'createRectangle';
       frame: Frame;
       name?: string;
-      fill?: Paint | null;
+      fill?: FillPaint | null;
       fills?: readonly Fill[];
       stroke?: Stroke | null;
       cornerRadii?: CornerRadii;
@@ -325,7 +343,7 @@ export type DocumentCommand =
       type: 'createEllipse';
       frame: Frame;
       name?: string;
-      fill?: Paint | null;
+      fill?: FillPaint | null;
       fills?: readonly Fill[];
       stroke?: Stroke | null;
     }> &
@@ -345,7 +363,7 @@ export type DocumentCommand =
       type: 'createFrame';
       frame: Frame;
       name?: string;
-      fill?: Paint | null;
+      fill?: FillPaint | null;
       fills?: readonly Fill[];
       stroke?: Stroke | null;
     }> &
@@ -357,7 +375,7 @@ export type DocumentCommand =
       points: readonly number[];
       fillRule?: FillRule;
       name?: string;
-      fill?: Paint | null;
+      fill?: FillPaint | null;
       fills?: readonly Fill[];
       stroke?: Stroke | null;
     }> &
@@ -369,7 +387,7 @@ export type DocumentCommand =
       /** Defaults to the extension's `defaults()`. */
       data?: JsonValue;
       name?: string;
-      fill?: Paint | null;
+      fill?: FillPaint | null;
       fills?: readonly Fill[];
       stroke?: Stroke | null;
     }> &
@@ -430,7 +448,7 @@ export type DocumentCommand =
       ids: readonly string[];
       index: number;
       patch: Readonly<{
-        paint?: Paint;
+        paint?: FillPaint;
         visible?: boolean;
         opacity?: number;
         blendMode?: BlendMode;
@@ -490,6 +508,29 @@ export type DocumentCommand =
   | Readonly<{ type: 'setInstanceText'; id: string; node: string; runs: readonly TextRun[] }>
   /** Removes the text override of `node` in instance `id`, or every one without `node`. */
   | Readonly<{ type: 'clearInstanceText'; id: string; node?: string }>
+  // Variant and override commands (V-37 contract, sections 4.1 and 4.2).
+  /**
+   * Moves two or more sibling symbols of the active page, none in a set, into a new
+   * `symbolSet`, each with `variant { 'Property 1': <value from its name> }`. Returns the set's ID.
+   */
+  | Readonly<{ type: 'combineAsVariants'; ids: readonly string[] }>
+  /** Replaces the `variant` of each listed symbol of a set in one step; returns empty `ids`. */
+  | Readonly<{
+      type: 'setVariantProperties';
+      updates: readonly Readonly<{ id: string; variant: Readonly<Record<string, string>> }>[];
+    }>
+  /**
+   * Makes instance `id` refer to the variant of its set that has its current variant's values
+   * with `values` applied; overrides carry by layer path. Returns empty `ids`.
+   */
+  | Readonly<{ type: 'setInstanceVariant'; id: string; values: Readonly<Record<string, string>> }>
+  /**
+   * Sets property overrides of the source node `node` (the source itself included) inside
+   * instance `id`; a value equal to the source node's removes that field. Returns empty `ids`.
+   */
+  | Readonly<{ type: 'setInstanceOverride'; id: string; node: string; props: NodeOverride }>
+  /** Removes the property and text overrides of `node` in instance `id`, or every one. */
+  | Readonly<{ type: 'resetInstanceOverrides'; id: string; node?: string }>
   /**
    * Rotates by `angle` (radians, clockwise) about the page point `pivot`, by default the centre
    * of the `handles` box (MVP M2 contract, section 4.1). A relative command: inside a gesture it
@@ -614,6 +655,37 @@ export type DocumentCommand =
    * document, as one step; with no frame change no step is recorded.
    */
   | Readonly<{ type: 'refitText'; ids?: readonly string[] }>
+  // V-32 contract, V32-E2: images.
+  /**
+   * Adds one rectangle per asset with the image as its fill, at the image's natural size, to the
+   * active page (or the frame under `at` with `adoptIntoFrames`); the first is centred on `at`
+   * (default: the viewport centre), the next ones offset by (20, 20) each. `names` has one name
+   * per asset. The new rectangles become the selection. Returns their IDs.
+   */
+  | Readonly<{
+      type: 'insertImages';
+      assets: readonly ImageAssetInput[];
+      at?: PagePoint;
+      names?: readonly string[];
+    }>
+  /**
+   * Sets the topmost fill's paint of each listed node that takes fills to the image (adding a
+   * fill when it has none; mode `fill` by default). Nodes without fills are skipped; none
+   * qualifying is `editor.image-no-target`. Returns empty `ids`.
+   */
+  | Readonly<{
+      type: 'setImageFill';
+      ids: readonly string[];
+      asset: ImageAssetInput;
+      scaleMode?: ImageScaleMode;
+    }>
+  /** Changes mode or scale of each listed node whose topmost fill is an image paint. */
+  | Readonly<{
+      type: 'setImagePaint';
+      ids: readonly string[];
+      scaleMode?: ImageScaleMode;
+      scale?: number;
+    }>
   // V-39 contract, section 3: colour styles, variables, modes and bindings. A change of a
   // style's paint, a variable's value or the active mode rewrites every bound node (E1).
   /** Appends a colour style; returns its ID. */
@@ -826,7 +898,16 @@ export type EditorErrorCode =
   | 'editor.table-limit'
   | 'editor.last-mode'
   /** V-35 contract, V35-C1: `addFill` past 16 fills. */
-  | 'editor.fill-limit';
+  | 'editor.fill-limit'
+  // V-32 contract, V32-E1, M4: an invalid asset, a dangling image key, or a key with other data;
+  // the image table over its limit; `setImageFill` or `setImagePaint` with no target node.
+  | 'editor.image-invalid'
+  | 'editor.image-too-large'
+  | 'editor.image-no-target'
+  // V-37 contract, section 6.4.
+  | 'editor.invalid-variant'
+  | 'editor.no-such-variant'
+  | 'editor.invalid-override';
 
 /**
  * `consumed` is present on `input` results only (M2-I3): whether navigation, the tool or a key
@@ -951,7 +1032,18 @@ export type Query =
    * `projectEffects: 'v1'`, else E41's drop shadow and layer blur. Frozen; it raises no event and
    * is the same value for the editor's lifetime.
    */
-  | Readonly<{ type: 'effectKinds' }>;
+  | Readonly<{ type: 'effectKinds' }>
+  /**
+
+   * The deepest visible source node of the instance `id` under `point` (page space), or null
+   * (V-37 section 6.3).
+   */
+  | Readonly<{ type: 'instanceLayerAt'; id: string; point: PagePoint }>
+  /**
+   * The page-space corners of the rotated frame of source node `node` as the expansion of
+   * instance `id` places it, or null (V-37 section 6.3).
+   */
+  | Readonly<{ type: 'instanceLayerCorners'; id: string; node: string }>;
 
 /**
  * What one registered extension contributes (MVP M8 contract, M8-X1), as the `extensions` query
@@ -1030,6 +1122,11 @@ export type ExportScene = Readonly<{
   nodes: ReadonlyMap<string, ExportNode>;
   /** The roots in paint order, back to front. */
   rootOrder: readonly string[];
+  /**
+   * V32-E4: the document's image entries that the nodes' image paints name; absent without any.
+   * An image paint's `image` is a key of it.
+   */
+  images?: Readonly<Record<string, ImageAsset>>;
 }>;
 
 export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'committedDocument' }
@@ -1084,7 +1181,11 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'commi
                                                   ? Color | null
                                                   : Q extends { type: 'effectKinds' }
                                                     ? readonly Effect['kind'][]
-                                                    : number;
+                                                    : Q extends { type: 'instanceLayerAt' }
+                                                      ? string | null
+                                                      : Q extends { type: 'instanceLayerCorners' }
+                                                        ? readonly PagePoint[] | null
+                                                        : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';

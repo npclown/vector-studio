@@ -1,6 +1,12 @@
 import {
+  imageAssetFromBlob,
+  pickImageFiles,
+  raiseImageNotice,
+  useEditor,
   useEditorCommands,
   useEditorSelector,
+  type FillPaint,
+  type ImageAsset,
   type BlendMode,
   type Command,
   type ContainerBlendMode,
@@ -19,9 +25,17 @@ import {
   common,
   dashPatch,
   dashText,
+  fillPaintOf,
   idsTaking,
+  IMAGE_SCALE_MODE_LABELS,
+  IMAGE_SCALE_MODES,
+  imageModeCommand,
+  imageThumbnailBlob,
   isGradient,
+  isImagePaint,
+  isSolid,
   leadGradient,
+  leadImage,
   linearAngle,
   linearTransform,
   numberText,
@@ -36,6 +50,8 @@ import {
   solidFromHex,
   strokeOf,
   styleCommand,
+  tileScaleCommand,
+  tileScaleText,
   toDegrees,
   toRadians,
   withSpread,
@@ -97,11 +113,12 @@ function PaintControls({
   write,
   binder,
   nodes,
+  image,
 }: {
   /** 'Fill', 'Stroke', or a fill row's 'Fill 2' and so on (labels use it, test IDs its slug). */
   prefix: string;
-  /** The paints of the nodes the controls write. */
-  paints: readonly (Paint | null)[];
+  /** The paints of the nodes the controls write (V-32: a fill may be an image paint). */
+  paints: readonly (FillPaint | null)[];
   kinds: readonly PaintKind[];
   write: (paint: Paint | null) => boolean;
   /**
@@ -111,21 +128,21 @@ function PaintControls({
   binder?: Binder;
   /** The nodes the controls write, in `paints` order (V-39 U2). */
   nodes: readonly NodeV8[];
+  /** V32-H3: the fill's image controls; absent for the stroke, which takes no image. */
+  image?: ImageSupport;
 }) {
   const kindValue = useMemo(() => {
     const values = new Set(paints.map(paintKind));
     return values.size === 1 ? [...values][0]! : null;
   }, [paints]);
-  const sameText = (read: (paint: Paint | null) => string | null) => {
+  const sameText = (read: (paint: FillPaint | null) => string | null) => {
     const values = new Set(paints.map(read));
     return values.size === 1 ? [...values][0]! : null;
   };
   const lower = prefix.toLowerCase().replaceAll(' ', '-');
   const lead = leadGradient(paints);
   const kind = kindValue;
-  const hexValue = sameText((paint) =>
-    paint === null || isGradient(paint) ? null : colorHex(paint),
-  );
+  const hexValue = sameText((paint) => (isSolid(paint) ? colorHex(paint) : null));
   const bindingKey = prefix.startsWith('Fill') ? 'fill' : 'stroke';
   // U2: a row bound to one style or variable shows it in place of the hex and alpha fields.
   const bound =
@@ -137,7 +154,13 @@ function PaintControls({
           label={`${prefix} type`}
           value={kind}
           options={kinds}
+          format={(option) => (option === 'image' ? 'Image' : option)}
           onChange={(next) => {
+            // An image needs a file: the chooser opens, and the choice writes the fill.
+            if (next === 'image') {
+              image?.choose();
+              return;
+            }
             const first = paints.find((paint) => paint !== null) ?? null;
             void write(paintForKind(next, first));
           }}
@@ -149,7 +172,9 @@ function PaintControls({
             bindingKey={bindingKey}
             label={`${prefix} style`}
             testId={lower}
-            paint={paints.find((paint) => paint !== null) ?? null}
+            paint={
+              paints.find((paint): paint is Paint => paint !== null && !isImagePaint(paint)) ?? null
+            }
           />
         )}
       </Row>
@@ -170,9 +195,8 @@ function PaintControls({
                 label={`${prefix} colour`}
                 value={hexValue}
                 commit={(text) => {
-                  const first = paints.find((paint) => paint !== null && !isGradient(paint));
-                  const alpha =
-                    first !== undefined && first !== null && !isGradient(first) ? first.a : 1;
+                  const first = paints.find(isSolid);
+                  const alpha = first === undefined ? 1 : first.a;
                   const color = parseHex(text, alpha);
                   if (color === null) return false;
                   return write(color);
@@ -180,14 +204,11 @@ function PaintControls({
               />
               <TextField
                 label={`${prefix} alpha`}
-                value={sameText((paint) =>
-                  paint === null || isGradient(paint) ? null : numberText(paint.a),
-                )}
+                value={sameText((paint) => (isSolid(paint) ? numberText(paint.a) : null))}
                 commit={(text) => {
                   const a = parseNumber(text, 0, 1);
-                  const first = paints.find((paint) => paint !== null && !isGradient(paint));
-                  if (a === null || first === undefined || first === null || isGradient(first))
-                    return false;
+                  const first = paints.find(isSolid);
+                  if (a === null || first === undefined) return false;
                   return write({ ...first, a });
                 }}
               />
@@ -206,6 +227,7 @@ function PaintControls({
           }}
         />
       )}
+      {kind === 'image' && image !== undefined && <ImageControls paints={paints} image={image} />}
       {(kind === 'linear' || kind === 'radial') && lead !== null && (
         <GradientControls
           prefix={prefix}
@@ -215,6 +237,100 @@ function PaintControls({
           write={write}
         />
       )}
+    </>
+  );
+}
+
+/** What the fill's image controls need (V32-H3). */
+type ImageSupport = Readonly<{
+  /** The nodes the image fill commands address. */
+  ids: readonly string[];
+  /** The document's image table, for the thumbnail. */
+  images: Readonly<Record<string, ImageAsset>> | undefined;
+  /** Opens the file chooser and sets the chosen image as the fill; call it from a click. */
+  choose: () => void;
+  /** Runs a command; false when the editor refused it (the panel shows its code). */
+  run: (command: Command) => boolean;
+}>;
+
+/**
+ * The object URL of image `key`'s thumbnail, made when the table entry changes and revoked when
+ * it does or the panel unmounts; null until then (an object URL needs an effect, so the first
+ * render and a server render have none).
+ */
+function useThumbnailUrl(
+  images: Readonly<Record<string, ImageAsset>> | undefined,
+  key: string | null,
+): string | null {
+  const entry = key === null || images === undefined ? undefined : images[key];
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const blob = key === null ? null : imageThumbnailBlob(images, key);
+    if (blob === null || typeof URL.createObjectURL !== 'function') {
+      setUrl(null);
+      return undefined;
+    }
+    const made = URL.createObjectURL(blob);
+    setUrl(made);
+    return () => URL.revokeObjectURL(made);
+    // The entry is the data the blob is made from; `images` itself changes with every edit.
+  }, [entry, key]);
+  return url;
+}
+
+/**
+ * The image fill's controls (V32-H3): a thumbnail of the first selected image, "Choose image…",
+ * the scale mode and, for Tile, the scale in percent (100 is the image's own size).
+ */
+function ImageControls({
+  paints,
+  image,
+}: {
+  paints: readonly (FillPaint | null)[];
+  image: ImageSupport;
+}) {
+  const lead = leadImage(paints);
+  const modes = new Set(paints.map((paint) => (isImagePaint(paint) ? paint.scaleMode : null)));
+  const scales = new Set(paints.map((paint) => (isImagePaint(paint) ? paint.scale : null)));
+  const mode = modes.size === 1 ? [...modes][0]! : null;
+  const src = useThumbnailUrl(image.images, lead?.image ?? null);
+  return (
+    <>
+      <Row>
+        {lead !== null && (
+          <img
+            data-testid="fill-image-thumbnail"
+            alt="Fill image"
+            src={src ?? undefined}
+            width={32}
+            height={32}
+            style={{ objectFit: 'contain', background: '#8883' }}
+          />
+        )}
+        <button type="button" data-testid="fill-image-choose" onClick={() => image.choose()}>
+          Choose image…
+        </button>
+      </Row>
+      <Row>
+        <Choice
+          label="Fill scale mode"
+          value={mode}
+          options={IMAGE_SCALE_MODES}
+          format={(option) => IMAGE_SCALE_MODE_LABELS[option]}
+          onChange={(next) => void image.run(imageModeCommand(image.ids, next))}
+        />
+        {mode === 'tile' && (
+          <TextField
+            label="Tile scale"
+            value={scales.size === 1 ? tileScaleText([...scales][0]!) : null}
+            commit={(text) => {
+              const command = tileScaleCommand(image.ids, text);
+              return command !== null && image.run(command);
+            }}
+          />
+        )}
+        {mode === 'tile' && <span aria-hidden>%</span>}
+      </Row>
     </>
   );
 }
@@ -229,7 +345,7 @@ function GradientControls({
   prefix: string;
   lower: string;
   lead: Gradient;
-  paints: readonly (Paint | null)[];
+  paints: readonly (FillPaint | null)[];
   write: (paint: Paint) => boolean;
 }) {
   // A field shows its common value over the selected gradients, or mixed.
@@ -494,12 +610,14 @@ function FillRow({
   position,
   run,
   binder,
+  image,
 }: {
   nodes: readonly NodeV8[];
   fills: readonly Fill[];
   position: number;
   run: (command: Command | null) => boolean;
   binder?: Binder;
+  image?: ImageSupport;
 }) {
   const index = modelIndex(fills.length, position);
   const fill = fills[index]!;
@@ -566,7 +684,11 @@ function FillRow({
       <PaintControls
         prefix={prefix}
         paints={[fill.paint]}
-        kinds={['none', 'solid', 'linear', 'radial']}
+        kinds={
+          image !== undefined || isImagePaint(fill.paint)
+            ? ['none', 'solid', 'linear', 'radial', 'image']
+            : ['none', 'solid', 'linear', 'radial']
+        }
         // "none" removes the fill (a fill always has a paint); any other kind patches its paint.
         write={(paint) =>
           run(
@@ -577,6 +699,7 @@ function FillRow({
         }
         nodes={nodes}
         {...(binder === undefined ? {} : { binder })}
+        {...(image === undefined ? {} : { image })}
       />
     </div>
   );
@@ -592,11 +715,14 @@ function FillSection({
   run,
   commit,
   binder,
+  image,
 }: {
   nodes: readonly NodeV8[];
   run: (command: Command | null) => boolean;
   commit: Commit;
   binder: Binder;
+  /** V32-H3: the image controls, offered where the edit addresses the top fill. */
+  image: ImageSupport;
 }) {
   const holders = fillHolders(nodes);
   const view = fillView(holders);
@@ -631,19 +757,21 @@ function FillSection({
         <PaintControls
           prefix="Fill"
           paints={holders.map((node) => node.fills.at(-1)?.paint ?? null)}
-          kinds={['none', 'solid', 'linear', 'radial']}
+          kinds={['none', 'solid', 'linear', 'radial', 'image']}
           write={(paint) => run(singleFillCommand(holders, paint))}
           binder={binder}
           nodes={holders}
+          image={image}
         />
       ) : view.fills.length === 0 ? (
         <PaintControls
           prefix="Fill"
           paints={[null]}
-          kinds={['none', 'solid', 'linear', 'radial']}
+          kinds={['none', 'solid', 'linear', 'radial', 'image']}
           write={(fill) => commit({ fill })}
           binder={binder}
           nodes={holders}
+          image={image}
         />
       ) : (
         [...view.fills].reverse().map((_, position) => (
@@ -653,8 +781,9 @@ function FillSection({
             fills={view.fills}
             position={position}
             run={run}
-            // V-39: the top row binds the `fill` binding (the top fill's paint).
-            {...(position === 0 ? { binder } : {})}
+            // V-39: the top row binds the `fill` binding (the top fill's paint); V32-H3: the
+            // image commands address the top fill, so only its row offers the image controls.
+            {...(position === 0 ? { binder, image } : {})}
           />
         ))
       )}
@@ -797,6 +926,7 @@ const SECTION_STYLE = { fontSize: 13 } as const;
  */
 export function AppearancePanel({ layout = 'aside' }: AppearancePanelProps) {
   countRender(layout === 'aside' ? 'aside' : 'appearance');
+  const editor = useEditor();
   const execute = useEditorCommands();
   const selection = useEditorSelector((snapshot) => snapshot.selection);
   const content = useEditorSelector((snapshot) => snapshot.document);
@@ -829,6 +959,38 @@ export function AppearancePanel({ layout = 'aside' }: AppearancePanelProps) {
   };
   const blend = blendCommon(nodes);
   const fillTakers = nodes.filter((node) => idsTaking([node], 'fill').length > 0);
+  // V32-H3: the fill's image controls. The chooser opens from the click (the user activation),
+  // then the chosen file is read, hashed and set as the fill of every fill-taking node, keeping
+  // the lead image's scale mode when there is one.
+  const fillIds = fillTakers.map((node) => node.id);
+  const leadMode = leadImage(fillTakers.map(fillPaintOf))?.scaleMode;
+  const image: ImageSupport = {
+    ids: fillIds,
+    images: content.images,
+    run: (command) => {
+      const result = execute(command);
+      setStatus(result.ok ? '' : `${result.code} ${result.path ?? ''}`.trimEnd());
+      return result.ok;
+    },
+    choose: () => {
+      void (async () => {
+        const file = (await pickImageFiles())[0];
+        if (file === undefined) return;
+        const asset = await imageAssetFromBlob(file).catch(() => null);
+        if (asset === null) {
+          raiseImageNotice(editor, [file.name]);
+          return;
+        }
+        const result = execute({
+          type: 'setImageFill',
+          ids: fillIds,
+          asset,
+          ...(leadMode === undefined ? {} : { scaleMode: leadMode }),
+        });
+        setStatus(result.ok ? '' : `${result.code} ${result.path ?? ''}`.trimEnd());
+      })();
+    },
+  };
   const opacity = common(nodes, 'opacity', (node) => node.opacity);
   return (
     <aside
@@ -841,7 +1003,13 @@ export function AppearancePanel({ layout = 'aside' }: AppearancePanelProps) {
       ) : (
         <>
           {fillTakers.length > 0 && (
-            <FillSection nodes={nodes} run={runCommand} commit={commit} binder={binder} />
+            <FillSection
+              nodes={nodes}
+              run={runCommand}
+              commit={commit}
+              binder={binder}
+              image={image}
+            />
           )}
           {nodes.some((node) => idsTaking([node], 'stroke').length > 0) && (
             <StrokeControls nodes={nodes} commit={commit} binder={binder} />

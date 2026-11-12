@@ -11,6 +11,8 @@ import {
 import {
   EditorCanvas,
   EditorProvider,
+  createImageSource,
+  subscribeImageNotices,
   useEditor,
   useEditorCommands,
   useEditorSelector,
@@ -18,6 +20,8 @@ import {
 import {
   PageList,
   PanelProvider,
+  focusInstanceAt,
+  useInstanceFocus,
   ToolbarPrimaryRow,
   ToolbarSecondaryRow,
   usePanelErrors,
@@ -162,6 +166,10 @@ const FIXTURES: Readonly<
   containers: { url: '/m1-containers.json', camera: { position: { x: -20, y: -20 }, zoom: 2 } },
   'path-edit': { url: '/m3-path-edit.json', camera: { position: { x: 0, y: 0 }, zoom: 1 } },
   symbols: { url: '/m7-symbols.json', camera: { position: { x: -20, y: -20 }, zoom: 2 } },
+  'v37-variants': {
+    url: '/v37-variants.json',
+    camera: { position: { x: -40, y: -40 }, zoom: 2 },
+  },
   text: { url: '/m6a-text.json', camera: { position: { x: -20, y: -20 }, zoom: 2 }, font: true },
   'text-edit': {
     url: '/m6b-text-edit.json',
@@ -542,6 +550,40 @@ function Surface({
   const [renderer, setRenderer] = useState('pending');
   const [fixture, setFixture] = useState('none');
   const [file, setFile] = useState('');
+  // V-32 (V32-H1): the image source over the editor's document, and the renderer factory that
+  // gives the service it, so image fills draw. One per editor, stable across renders.
+  const imageSource = useMemo(
+    () => createImageSource(() => editor.getSnapshot().document),
+    [editor],
+  );
+  const createRenderer = useMemo(() => createWebGpuRenderer(imageSource), [imageSource]);
+  // The source is released when the editor changes or the page unmounts. A development remount
+  // (strict mode) runs the cleanup and the effect back to back, so the release waits a task and
+  // the effect cancels it.
+  const releasing = useRef<{
+    source: typeof imageSource;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
+  useEffect(() => {
+    // Only a release of this same source is cancelled: another source's is left to run.
+    if (releasing.current?.source === imageSource) clearTimeout(releasing.current.timer);
+    return () => {
+      releasing.current = {
+        source: imageSource,
+        timer: setTimeout(() => imageSource.dispose(), 0),
+      };
+    };
+  }, [imageSource]);
+  // V32-H2: files a paste, drop or picker skipped show as a file status line.
+  useEffect(
+    () =>
+      subscribeImageNotices(editor, (notice) =>
+        setFile(
+          `${notice.code}${notice.reason === undefined ? '' : ` (${notice.reason})`}: ${notice.files.join(', ')}`,
+        ),
+      ),
+    [editor],
+  );
   const bench = useMemo(() => pageBench(), []);
   const width = bench === null ? WIDTH : BENCH_CANVAS.width;
   const height = bench === null ? HEIGHT : BENCH_CANVAS.height;
@@ -622,6 +664,16 @@ function Surface({
   const handles = editor.query({ type: 'handles' });
   const pathOverlay = usePathOverlay();
   const textEdit = useTextEditMarkers();
+  // V-37 section 6.3: the focused layer of an instance, outlined in the overlay.
+  const instanceFocus = useInstanceFocus();
+  const focusBox =
+    instanceFocus === null
+      ? null
+      : editor.query({
+          type: 'instanceLayerCorners',
+          id: instanceFocus.instance,
+          node: instanceFocus.layer,
+        });
   // V-28: the resize cursor over a handle and the rotate cursor over a rotate zone, both turned to
   // the box, while no button is held; during the drag a press there starts it stays at its
   // press-time angle (the hover does not run while a button is held).
@@ -738,13 +790,14 @@ function Surface({
       <EditorCanvas
         width={size.width}
         height={size.height}
-        createRenderer={createWebGpuRenderer}
+        createRenderer={createRenderer}
         onRendererError={(error) => {
           setRenderer('error');
           setErrors((list) => [...list, String(error)]);
         }}
         onRendererReady={() => setRenderer('ready')}
         onPressChange={persistence.onPressChange}
+        onCanvasDoubleClick={(point) => focusInstanceAt(editor, point)}
         style={{ border: '1px solid #ccc' }}
       >
         {studio ? (
@@ -753,6 +806,7 @@ function Surface({
         <SelectionOverlay
           snapshot={snapshot}
           handles={handles}
+          instanceFocus={focusBox}
           pathOverlay={pathOverlay}
           textEdit={textEdit}
           textBox={studio ? textEditBox(snapshot) : null}

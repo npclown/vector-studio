@@ -315,6 +315,16 @@ const LayerRowItem = memo(function LayerRowItem({
           {row.name}
         </button>
       )}
+      {row.image ? (
+        <span data-testid={`layer-image-${row.id}`} title="Image fill" aria-label="image fill">
+          <Icon name="image" />
+        </span>
+      ) : null}
+      {row.type === 'symbolSet' ? (
+        <span data-testid={`layer-icon-${row.id}`} data-icon="symbol-set">
+          <Icon name="symbol-set" />
+        </span>
+      ) : null}
       <span>{row.type}</span>
       <button
         type="button"
