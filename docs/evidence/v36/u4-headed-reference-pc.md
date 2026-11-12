@@ -6,7 +6,7 @@ Contract: [V-36](../../plans/viz-v36-inner-shadow-background-blur-contract.md), 
 
 - Date: 2026-11-12, on the reference PC (`nvidia/turing`, GTX 1660 SUPER).
 - Browsers: headed Chrome 157.0.8103.51 and Edge 157.0.4341.46.
-- Tree: branch `claude/viz-v36-u4-exit` at `366d34e`, the code merged as #598 (`c863fa6`). `pnpm install` and `pnpm build` passed.
+- Tree: branch `claude/viz-v36-u4-exit` at `366d34e`, the same product code as #598's merge (`c863fa6`). The browser versions and commit are as relayed by the coordinator (the GPU-spec records carry neither); the Chrome and Edge records are byte-identical. `pnpm install` and `pnpm build` passed.
 - The coordinator relayed the run from the PC.
 
 **Commands and results**
@@ -42,7 +42,7 @@ On each G10 fixture:
 - `backgroundBlurSkipped` was 0;
 - more than 17,000 pixels changed both against the `normal` render and against the render without blur.
 
-E41's own fixtures on the same pages: at most 2.07/255.
+E41's own fixtures on the same pages: at most 1.94/255.
 
 ## V36-A05 to A07
 

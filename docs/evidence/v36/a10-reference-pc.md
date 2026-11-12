@@ -16,7 +16,7 @@ Glass cards 0, 10, 20, 30 and 40 keep their `e41-cards` layer blur.
 
 ## Sitting
 
-- **Date and tree.** 2026-11-12, branch `claude/viz-v36-u4-exit` at `366d34e`. That is main `cf5e7c8` plus U4, the same code as #598's merge `c863fa6` apart from documentation. `pnpm install` and `pnpm build` passed.
+- **Date and tree.** 2026-11-12, branch `claude/viz-v36-u4-exit` at `366d34e`. That is main `cf5e7c8` plus U4, the same code as #598's merge `c863fa6` in product code (`packages/` and `apps/` are identical; tests and docs from main's #595 to #597 differ). `pnpm install` and `pnpm build` passed.
 - **Environment.** The reference PC (the user's main PC) with an NVIDIA GTX 1660 SUPER (`nvidia/turing`) and Chrome 157.0.8103.51, which is the records' `browser`. The records' `userAgent` says Chrome/151, as in the E41 and V-35 records.
 - **Projects.** `chrome-dpr1` and `chrome-dpr2`, five repetitions each, at the harness viewport of 1280 × 720 CSS px. No record is dirty.
 - **Command.** PowerShell: `$env:M8_N3_BASELINE='docs/evidence/m8-a14-2026-11-01/17a2b0a-main-pc-headed.json'; $env:E26_SCENARIOS='v36'; $env:E26_RESULTS_DIR='test-results/v36-a10'; pnpm test:e26 --project=chrome-dpr1 --project=chrome-dpr2`.
@@ -28,7 +28,7 @@ All values are in ms.
 
 - **rAF:** the median and p95 of the frame interval over the 10 s window.
 - **Idle rAF:** the same page's median before any load.
-- **GPU:** the median and p95 of `vs-gpu`. `vs-gpu` runs from submit to `onSubmittedWorkDone` and is sampled on every eighth frame (71 samples). It is a latency proxy: it includes time queued behind earlier work and the callback delay, not only the GPU's busy time.
+- **GPU:** the median and p95 of `vs-gpu`. `vs-gpu` runs from submit to `onSubmittedWorkDone` and is sampled on every eighth frame (70 or 71 samples). It is a latency proxy: it includes time queued behind earlier work and the callback delay, not only the GPU's busy time.
 - **Encode:** the median and p95 of `encodeAndSubmitMs`.
 
 | Project | Scenario | rAF median | rAF p95 | idle rAF | GPU median | GPU p95 | encode median / p95 | frames | effect passes / splits per frame |
@@ -50,19 +50,19 @@ Run checks:
 - rAF median 16.7 ms, equal to its idle median;
 - GPU median 10.6 to 12.9 ms;
 - encode median 2.6 to 3.4 ms;
-- 600 frames per window.
+- 599 to 600 frames per window.
 
 So the 10 glass cards add about 7 ms to the GPU latency proxy and about 1.2 ms to encode. These are two different sittings, and the display paced differently in each (below).
 
 ## Verdict
 
-**Not met as written. Disclosed for the user's decision.**
+**Not met as written. Disclosed for the user's decision.** As for E41 and V-35 the verdict is read at DPR 2; DPR 1 is an observation and agrees.
 
 1. **The ceiling is missed by about 1 ms.** Every median is 17.6 to 17.9 ms against 16.7 ms. As in V-35's sitting, the idle frame interval on the same page is already 17.4 to 17.9 ms, about 57 Hz, with Windows reporting 60 Hz. The loaded interval equals the idle one.
 2. **Frames keep pace on this PC.** There are 562 to 566 frames in each 10 s window, about one per vsync, and every drag move was applied. The scene does not drop frames on this display.
 3. **The GPU has no headroom left, unlike V-35.** The GPU latency proxy's median, 18.0 to 19.7 ms, is above one frame interval, and its p95 reaches 26 to 40 ms. V-35's 15 blend roots measured 7 to 8 ms on the same PC and display.
-   - Frames still keep pace because the proxy counts queueing and callback delay as well as GPU work, and frames overlap in the queue.
-   - Even so, this scene uses about the whole frame. On a display that really paces at 60 Hz, or with more glass cards than 10, frames would likely be dropped.
+   - The steady pacing shows the GPU's mean busy time per frame is at most about 17.7 ms (otherwise work would pile up and the frame rate would halve). The proxy adds callback delay and any contention to that busy time; the split is unmeasured, as there are no timestamp queries.
+   - So the scene uses at most, and possibly close to, the whole frame. On a display that really paces at 60 Hz, or with more glass cards than 10, frames could be dropped.
    - The cost comes from the background blurs. Each one ends and resumes the main pass, copies its backdrop with MSAA stored, and runs a radius-20 blur chain (contract section 11, "Pass splits").
 
 Recommended follow-up, if the user accepts: a backlog item to reduce background-blur cost. Options include blurring the backdrop at reduced resolution for large radii, and sharing one snapshot between neighbouring glass roots. This was not measured in this sitting.
