@@ -9,8 +9,8 @@ Contract: [viz-v35-fills-blend-contract.md](../../plans/viz-v35-fills-blend-cont
 | 1 | `6f94aa2` (#588) | view 10 of 10 passed; drag 0 of 10 (harness bug, below) | [a10-6f94aa2-view/](a10-6f94aa2-view/) (view only; the drag runs wrote no record) |
 | 2 | `d8fd617` (#592) | 20 of 20 passed | [a10-d8fd617/](a10-d8fd617/) |
 
-- **Environment.** Main PC with a GTX 1660 SUPER (`nvidia/turing`), driver 32.0.16.1088 and Chrome 157.0.8103.51. Windows reports 60 Hz, the only mode at 1920 × 1080. The Balanced power plan was on and nothing ran fullscreen.
-- **Projects and runs.** `chrome-dpr1` and `chrome-dpr2`, with the E26 harness viewport of 1280 × 720 CSS px, five repetitions each. No record is dirty. `blendPipelineAvailable` is true in every record.
+- **Environment.** The reference PC (the user's main PC) with a GTX 1660 SUPER (`nvidia/turing`), driver 32.0.16.1088 and Chrome 157.0.8103.51 (the records' `browser`; their `userAgent` string says Chrome/151, as in the E41 records). Windows reports 60 Hz, the only mode at 1920 × 1080. The Balanced power plan was on and nothing ran fullscreen.
+- **Projects and runs.** `chrome-dpr1` and `chrome-dpr2`, with the E26 harness viewport of 1280 × 720 CSS px, five repetitions each. No record is dirty. The records do not state the MSAA sample count; the hosts' renderer default applies. `blendPipelineAvailable` is true in every record.
 - **Command.** PowerShell, after `pnpm build`: `$env:M8_N3_BASELINE='docs/evidence/m8-a14-2026-11-01/17a2b0a-main-pc-headed.json'; $env:E26_SCENARIOS='v35'; $env:E26_RESULTS_DIR='test-results/v35-a10-r2'; pnpm test:e26 --project=chrome-dpr1 --project=chrome-dpr2`.
 - **Sitting 1's drag failure.** The pressed card background has three fills, so it projects as `<id>\0fill<i>` leaves (V35-P1). The harness looked up its bounds under the bare id and threw "the pressed leaf has no draw bounds". #592 takes the union of the node's fill and stroke leaves; the press point is unchanged from `e41-cards`. No product code changed between the sittings.
 

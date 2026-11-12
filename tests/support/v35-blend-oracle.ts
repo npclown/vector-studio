@@ -14,22 +14,27 @@ import type { RenderNodeSnapshot, SceneBlendMode, SceneColor } from '@vector-stu
 // Every target and layer is stored at 8 bits, as the GPU stores them, so the oracle quantizes
 // after each draw and each layer's content before its composite.
 //
-// One 8-bit step (V35-A05 amendment, 2026-11-12): a GPU's float-to-unorm conversion is exact
-// only to about 0.6 of a step (D3D12 and Vulkan), and ties differ between adapters: the band
-// colour 0.9 (229.5) is stored as 230 on SwiftShader and 229 on the reference PC's NVIDIA GPU.
-// Every mode then sees a backdrop and a stored `R` that may each be one step away from the
-// oracle's, and steep modes (colorBurn, colorDodge) multiply that step by up to about 3. So each
-// blend composite also records `slack`, the largest change of its result when the backdrop
-// colour and the source colour each move one step, carried through later composites. The
-// tolerance already holds one step, so the comparison allows the tolerance plus the slack beyond
-// one step: `tolerance + max(0, slack − 1)` in 1/255. For the gentle modes that adds at most a
-// fraction of a step; colorBurn and colorDodge get their amplification.
+// One 8-bit step (V35-A05 amendment, 2026-11-12): a GPU stores each target value to within
+// about one step of the oracle's. Ties differ between adapters: the band colour 0.9 (229.5) is
+// 230 on SwiftShader and, inferred from the composite drawn over it, 229 on the reference PC's
+// NVIDIA GPU. The reference PC also stored a normal composite of 175.75 as 175 (inferred the
+// same way), a value that is not a tie; the cause is unverified, blend precision suspected.
+// A mode composited over such a backdrop moves by the backdrop step times the mode's slope: at
+// most 1 for multiply, screen, darken, lighten, difference and exclusion; about 1.3 to 2.3 for
+// overlay, softLight and the non-separable modes over these fixtures; about 3 to 5 for
+// colorBurn and colorDodge. So each blend composite records `slack`, the largest change of its
+// result when the stored backdrop moves one step (the source `R` is modelled exactly and not
+// perturbed), carried through later composites by their (1 − αs). The tolerance already holds
+// one step, so a pixel passes within `tolerance + max(0, slack − 1)` in 1/255: a mode of slope
+// at most 1 keeps the tolerance, a steeper one gets its slope. The model is first order and one
+// level deep: earlier slack is not passed through a later mode's slope, nor are opposite-sign
+// channel moves in the non-separable modes; both err strict.
 
 export type BlendImage = {
   width: number;
   height: number;
   data: Float64Array;
-  /** Per pixel, the result's change (0 to 1) when stored inputs move one 8-bit step. */
+  /** Per pixel, the result's change (0 to 1) when a stored backdrop moves one 8-bit step. */
   slack: Float64Array;
 };
 
@@ -160,23 +165,21 @@ function compositePixel(
   const cb: Rgb = ab > 0 ? [pb[0] / ab, pb[1] / ab, pb[2] / ab] : [0, 0, 0];
   const cs: Rgb = [ps[0] / as, ps[1] / as, ps[2] / as];
   const mixed = blendColor(mode, cb, cs);
-  // One step of the backdrop's and of the source's stored colour, through the mode.
+  // One step of the stored backdrop, through the whole composite: (1 − αs) of it directly and
+  // αs · αb through the mode. A gentle mode's slope is at most 1, so this is at most one step,
+  // which the tolerance already holds; a steep mode's is larger.
   const step = 1 / 255;
   const db = ab > 0 ? step / ab : 0;
-  const ds = step / as;
   const clamp = (value: number) => Math.min(1, Math.max(0, value));
   let slack = 0;
-  for (const sb of [-db, 0, db]) {
-    for (const ss of [-ds, 0, ds]) {
-      if (sb === 0 && ss === 0) continue;
-      const moved = blendColor(
-        mode,
-        [clamp(cb[0] + sb), clamp(cb[1] + sb), clamp(cb[2] + sb)],
-        [clamp(cs[0] + ss), clamp(cs[1] + ss), clamp(cs[2] + ss)],
+  for (const sb of [-db, db]) {
+    const moved = blendColor(mode, [clamp(cb[0] + sb), clamp(cb[1] + sb), clamp(cb[2] + sb)], cs);
+    for (let lane = 0; lane < 3; lane += 1) {
+      const direct = (1 - as) * Math.min(step, Math.abs(sb) * ab);
+      slack = Math.max(
+        slack,
+        Math.abs(Math.sign(sb) * direct + as * ab * (moved[lane]! - mixed[lane]!)),
       );
-      for (let lane = 0; lane < 3; lane += 1) {
-        slack = Math.max(slack, as * ab * Math.abs(moved[lane]! - mixed[lane]!));
-      }
     }
   }
   target.slack[at / 4] = target.slack[at / 4]! + slack;
@@ -391,7 +394,7 @@ export type BlendComparison = Readonly<{
   /** The first pixels over the tolerance, for the report. */
   overAt: readonly (readonly [number, number])[];
   detail: Readonly<{ actual: readonly number[]; expected: readonly number[] }> | null;
-  /** The largest excess over the tolerance alone, and the slack (in 1/255) at the worst pixel. */
+  /** The slack (in 1/255) at the worst pixel, and the largest slack over the compared pixels. */
   slackAtWorst: number;
   maxSlack: number;
 }>;
@@ -464,7 +467,7 @@ export function cornerPixels(
 
 /** The slack at pixel `index` beyond the one step the tolerance holds, in 1/255. */
 export const excessSlack = (image: BlendImage, index: number): number =>
-  Math.max(0, image.slack[index]! * 255 - 1);
+  Math.max(0, image.slack[index]! * 255 - 1 - 1e-9);
 
 export function compareBlend(
   actual: Uint8Array,

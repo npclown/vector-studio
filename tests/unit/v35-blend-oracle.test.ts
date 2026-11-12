@@ -36,10 +36,14 @@ describe('V35-A05 oracle slack', () => {
       true,
     );
     const slack = (mode: SceneBlendMode) => blendOracle(scene(mode), 8, 8).slack[0]! * 255;
-    // darken takes the source here, so one source step moves it by αs · αb · ds · 255 = 1.
+    // darken keeps the backdrop's green and blue, slope 1: one step, held by the tolerance.
     expect(slack('darken')).toBeCloseTo(1, 5);
-    expect(slack('colorBurn')).toBeGreaterThan(3);
-    expect(slack('colorBurn')).toBeGreaterThan(slack('multiply'));
+    // Gentle modes stay within the one step the tolerance holds; colorBurn's slope exceeds it.
+    for (const mode of ['multiply', 'screen', 'darken', 'difference', 'exclusion'] as const) {
+      expect(slack(mode)).toBeLessThanOrEqual(1 + 1e-9);
+      expect(excessSlack(blendOracle(scene(mode), 8, 8), 0)).toBe(0);
+    }
+    expect(slack('colorBurn')).toBeGreaterThan(2.5);
   });
 
   it('accepts the reference GPU colorBurn pixel, and no more than its excess', () => {
