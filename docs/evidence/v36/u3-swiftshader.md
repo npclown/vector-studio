@@ -3,7 +3,7 @@
 Contract: [V-36](../../plans/viz-v36-inner-shadow-background-blur-contract.md), V36-A02 to A04 (background half: G5, G6, G7, G9), A06 and A07 (background half).
 
 - Date: 2026-11-12. Environment and geometry WASM as in [u2-swiftshader.md](u2-swiftshader.md); tree: branch `claude/viz-v36-u3-background-blur` on main 6f94aa2 (V-35 U4/U5 with the backdrop snapshot).
-- Command: `pnpm build`, then `E41_CHROMIUM=/opt/pw-browsers/chromium VECTOR_STUDIO_GEOMETRY_WASM=<wasm> pnpm test:e41-swiftshader`: 12/12 passed (8.4 min). V-35's spec (`playwright.v35-swiftshader.config.ts`, with `V35_CHROMIUM` set): 7/7 passed.
+- Command: `pnpm build`, then `E41_CHROMIUM=/opt/pw-browsers/chromium VECTOR_STUDIO_GEOMETRY_WASM=<wasm> pnpm test:e41-swiftshader`: 12/12 passed (8.4 min, and again 8.8 min on the committed tree, with the same 64 V36-A05 digests). V-35's spec (`playwright.v35-swiftshader.config.ts`, with `V35_CHROMIUM` set): 7/7 passed.
 
 ## V36-A04, background half (worst channel difference, /255, 1x and 4x)
 
@@ -25,7 +25,7 @@ Each fixture drew its blur (`backgroundBlurSkipped` 0) and differs from the same
 
 ## V36-A07, background half
 
-A σ edit, adding a drop shadow, removing and re-adding the background blur each cost 0 port calls and 0 geometry builds; live textures return to the baseline (3 textures, 3,276,801 bytes) after the frame. Device loss and dispose go through the frame's transients as E41's layer textures do (unit); no background-blur GPU loss test.
+A σ edit, adding a drop shadow, removing and re-adding the background blur each cost 0 port calls and 0 geometry builds; live textures return to the baseline (3 textures, 3,276,801 bytes) after the frame. `D` and `B` are frame transients released as E41's layer textures are, so device loss and dispose rely on E41-A09's shared transient mechanism; no test loses the device or disposes with them in flight (the U3 unit test checks release after submission).
 
 ## Notes
 
