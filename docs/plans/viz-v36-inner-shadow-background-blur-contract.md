@@ -130,7 +130,7 @@ G1 to G9 above in `tests/gpu/e41-effects.spec.ts` beside F1-F12, and a `v36-glas
 | --- | --- | --- |
 | U1 | This contract, requirements.md, track row | Independent review READY |
 | U2 | Inner shadow end to end: model kinds (v8), scene, gate and projector `'v1'`, K1-K3, the pre-U3 fallback, commands, panel (inner shadow only), hosts on `'v1'`, host-api.md, SwiftShader G1-G4, G8 | V36-A01-A03, A05, A07, A08 (inner-shadow half), A06's pre-U3 case (a `backgroundBlur` scene on `'v1'`, unit); CI |
-| U3 | Background blur: snapshot use, 5.2 passes, 5.3-5.5, panel kind and message | V36-A02-A04, A06, A07 (background half); CI |
+| U3 | Background blur: snapshot use, 5.2 passes, 5.3-5.5 (including `backgroundBlurSkipped` as a host-visible frame statistic; U2 keeps it a tests-only counter like E41's `effectPasses`), panel kind and message | V36-A02-A04, A06, A07 (background half); CI |
 | U4 | Headed A04/A09 on the reference PC, `v36-glass` bench, evidence index and exit record | V36-A04, A09, A10; user accepts |
 
 U2 can merge before V-35; U3 follows V-35's snapshot (or Q4 (a)'s fallback).

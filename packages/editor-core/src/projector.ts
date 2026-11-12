@@ -535,24 +535,44 @@ export function textContent(node: TextNodeV8, layout: TextLayoutResult): TextCon
 }
 
 /**
- * E41-S5: the scene effects of a node's `effects`, its visible entries in list order with
- * `σ = radius / 2` (E41-S4), in node-local units, which are the node's scene-local units.
+ * Which node effects the projector emits (`EditorOptions.projectEffects`): `false` none, `true`
+ * E41's kinds (E41-S6), `'v1'` V-36's kinds too (V36-S5).
  */
-export function sceneEffects(effects: readonly Effect[]): readonly SceneEffect[] {
+export type EffectProjection = boolean | 'v1';
+
+/**
+ * E41-S5 and V36-S5: the scene effects of a node's `effects`, its visible entries in list order
+ * with `σ = radius / 2` (E41-S4), in node-local units, which are the node's scene-local units.
+ * Below `'v1'` the kinds V-36 adds are left out, so a host on `effects: 'v0'` keeps drawing the
+ * node.
+ */
+export function sceneEffects(
+  effects: readonly Effect[],
+  projection: EffectProjection = 'v1',
+): readonly SceneEffect[] {
   const out: SceneEffect[] = [];
   for (const effect of effects) {
     if (!effect.visible) continue;
-    out.push(
-      effect.kind === 'dropShadow'
-        ? {
-            kind: 'dropShadow',
-            color: effect.color,
-            offsetX: effect.offsetX,
-            offsetY: effect.offsetY,
-            sigma: effect.radius / 2,
-          }
-        : { kind: 'layerBlur', sigma: effect.radius / 2 },
-    );
+    const sigma = effect.radius / 2;
+    switch (effect.kind) {
+      case 'dropShadow':
+      case 'innerShadow':
+        if (effect.kind === 'innerShadow' && projection !== 'v1') continue;
+        out.push({
+          kind: effect.kind,
+          color: effect.color,
+          offsetX: effect.offsetX,
+          offsetY: effect.offsetY,
+          sigma,
+        });
+        break;
+      case 'layerBlur':
+        out.push({ kind: 'layerBlur', sigma });
+        break;
+      case 'backgroundBlur':
+        if (projection === 'v1') out.push({ kind: 'backgroundBlur', sigma });
+        break;
+    }
   }
   return out;
 }
@@ -564,10 +584,10 @@ export function sceneEffects(effects: readonly Effect[]): readonly SceneEffect[]
  */
 function effectField(
   effects: readonly Effect[],
-  emit: boolean,
+  emit: EffectProjection,
 ): { effects?: readonly SceneEffect[] } {
-  if (!emit) return {};
-  const scene = sceneEffects(effects);
+  if (emit === false) return {};
+  const scene = sceneEffects(effects, emit);
   return scene.length === 0 ? {} : { effects: scene };
 }
 
@@ -581,7 +601,7 @@ export function projectNode(
   custom: CustomProjection,
   parentId: string | null = null,
   layout?: TextLayouter,
-  effects = false,
+  effects: EffectProjection = false,
 ): RenderNodeSnapshot | null {
   const base = {
     id: node.id,
@@ -690,7 +710,7 @@ function frameSnapshots(
   node: FrameUnit,
   parentId: string | null,
   children: readonly string[],
-  effects: boolean,
+  effects: EffectProjection,
 ): RenderNodeSnapshot[] {
   const { width, height } = node.frame;
   const content = frameContentId(node.id);
@@ -851,7 +871,7 @@ function groupSnapshot(
   node: NodeV8,
   parentId: string | null,
   children: readonly string[],
-  effects: boolean,
+  effects: EffectProjection,
 ): RenderNodeSnapshot {
   return {
     id,
@@ -884,7 +904,7 @@ function projectExpanded(
   out: RenderNodeSnapshot[],
   layout: TextLayouter | undefined,
   textless: string[],
-  effects: boolean,
+  effects: EffectProjection,
 ): string[] {
   const walk = (ids: readonly string[], parentId: string, maskSource?: string): string[] => {
     const projected: string[] = [];
@@ -892,7 +912,7 @@ function projectExpanded(
       const node = expansion.nodes.get(id);
       if (node === undefined) continue;
       // E41-S5: a mask source's effects are not projected; it draws only coverage.
-      const emit = effects && id !== maskSource;
+      const emit = id !== maskSource && effects;
       const scene = expandedId(instance, id);
       const old = previous?.get(id);
       const at = out.length;
@@ -965,7 +985,7 @@ export function projectPage(
   expansions: ExpansionCache = new ExpansionCache(),
   scope?: ProjectionScope,
   layout?: TextLayouter,
-  effects = false,
+  effects: EffectProjection = false,
 ): PageProjection {
   const built = new Map<string, RenderNodeSnapshot>();
   const order: string[] = [];
@@ -1048,7 +1068,7 @@ export function projectPage(
       if (omit.has(id) || !Object.hasOwn(document.nodes, id)) continue;
       const node = document.nodes[id]!;
       // E41-S5: a mask source's effects are not projected; it draws only coverage.
-      const emit = effects && id !== maskSource;
+      const emit = id !== maskSource && effects;
       if (scope !== undefined && !scope.path.has(id)) {
         const held = memo?.get(id);
         if (holds(held, node, parentId, id === maskSource) && scope.held(id)) {
@@ -1228,7 +1248,7 @@ export class SceneProjector {
   /** Whether `editor.text-unavailable` was raised for the current page (M6c-P3). */
   private textReported = false;
   /** E41-S6: whether snapshots carry node effects; fixed for the projector's life. */
-  private readonly effects: boolean;
+  private readonly effects: EffectProjection;
 
   /**
    * `expansions` is the editor's one expansion cache, shared with its checks and hit testing
@@ -1243,7 +1263,7 @@ export class SceneProjector {
     report: (event: DiagnosticEvent) => void,
     expansions: ExpansionCache = new ExpansionCache(),
     layout?: TextLayouter,
-    effects = false,
+    effects: EffectProjection = false,
   ) {
     this.renderer = renderer;
     this.custom = custom;

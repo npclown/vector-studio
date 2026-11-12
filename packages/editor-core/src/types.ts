@@ -19,6 +19,7 @@ import type {
   CornerRadii,
   DocumentErrorCode,
   DocumentV8,
+  Effect,
   FillRule,
   Frame,
   JsonValue,
@@ -375,15 +376,22 @@ export type DocumentCommand =
   | Readonly<{ type: 'groupNodes'; ids: readonly string[]; kind: 'group' | 'maskGroup' }>
   /**
    * E41 contract, section 6: appends the default effect of `kind` to each node (one step); past
-   * E41-S3's limits (8 effects, one layer blur) it refuses with `editor.effect-limit`.
+   * E41-S3's and V36-S2's limits (8 effects, one layer blur, one background blur) it refuses with
+   * `editor.effect-limit`.
    */
-  | Readonly<{ type: 'addEffect'; ids: readonly string[]; kind: 'dropShadow' | 'layerBlur' }>
-  /** Patches the effect at `index` of each listed node that has one (a toggle sets `visible`). */
+  | Readonly<{ type: 'addEffect'; ids: readonly string[]; kind: Effect['kind'] }>
+  /**
+   * Patches the effect at `index` of each listed node that has one (a toggle sets `visible`). A
+   * `kind` patch changes the kind within its family (V-36 contract, section 6): shadows keep
+   * their fields, blurs their radius, and a node whose effect is in the other family is left
+   * unchanged.
+   */
   | Readonly<{
       type: 'setEffect';
       ids: readonly string[];
       index: number;
       patch: Readonly<{
+        kind?: Effect['kind'];
         visible?: boolean;
         color?: Color;
         offsetX?: number;
@@ -879,7 +887,13 @@ export type Query =
    */
   | Readonly<{ type: 'sampleColor'; point: PagePoint }>
   /** The eyedropper's last pick, or null (V-39 contract, E7). */
-  | Readonly<{ type: 'pickedColor' }>;
+  | Readonly<{ type: 'pickedColor' }>
+  /**
+   * The effect kinds a panel offers (V-36 contract, section 6), in panel order: all four under
+   * `projectEffects: 'v1'`, else E41's drop shadow and layer blur. Frozen; it raises no event and
+   * is the same value for the editor's lifetime.
+   */
+  | Readonly<{ type: 'effectKinds' }>;
 
 /**
  * What one registered extension contributes (MVP M8 contract, M8-X1), as the `extensions` query
@@ -1004,7 +1018,9 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'commi
                                                 ? string | null
                                                 : Q extends { type: 'sampleColor' | 'pickedColor' }
                                                   ? Color | null
-                                                  : number;
+                                                  : Q extends { type: 'effectKinds' }
+                                                    ? readonly Effect['kind'][]
+                                                    : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';
