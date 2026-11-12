@@ -1,0 +1,75 @@
+{
+  "rows": {
+    "edit-offsetAndSigma": {
+      "portCalls": 0,
+      "strokePortCalls": 0,
+      "geometryBuilds": 0
+    },
+    "edit-secondShadow": {
+      "portCalls": 0,
+      "strokePortCalls": 0,
+      "geometryBuilds": 0
+    },
+    "edit-withBlur": {
+      "portCalls": 0,
+      "strokePortCalls": 0,
+      "geometryBuilds": 0
+    },
+    "edit-removed": {
+      "portCalls": 0,
+      "strokePortCalls": 0,
+      "geometryBuilds": 0
+    },
+    "edit-innerAdded": {
+      "portCalls": 0,
+      "strokePortCalls": 0,
+      "geometryBuilds": 0
+    },
+    "edit-innerOffsetAndSigma": {
+      "portCalls": 0,
+      "strokePortCalls": 0,
+      "geometryBuilds": 0
+    },
+    "edit-innerSecond": {
+      "portCalls": 0,
+      "strokePortCalls": 0,
+      "geometryBuilds": 0
+    },
+    "edit-innerRemoved": {
+      "portCalls": 0,
+      "strokePortCalls": 0,
+      "geometryBuilds": 0
+    },
+    "pan": {
+      "withEffects": {
+        "pan": {
+          "portCalls": 0,
+          "strokePortCalls": 0,
+          "geometryBuilds": 0
+        },
+        "zoom": {
+          "portCalls": 1,
+          "strokePortCalls": 1,
+          "geometryBuilds": 0
+        }
+      },
+      "withoutEffects": {
+        "pan": {
+          "portCalls": 0,
+          "strokePortCalls": 0,
+          "geometryBuilds": 0
+        },
+        "zoom": {
+          "portCalls": 1,
+          "strokePortCalls": 1,
+          "geometryBuilds": 0
+        }
+      }
+    },
+    "passes": {
+      "frames": 3,
+      "passes": 9
+    }
+  },
+  "failures": []
+}
