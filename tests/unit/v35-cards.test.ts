@@ -44,10 +44,12 @@ describe('V35-A10 v35-cards', () => {
     expect(loaded.bounds.has(pressed)).toBe(false);
     const box = nodeDrawBounds(loaded.bounds, pressed);
     expect(box).toEqual(nodeDrawBounds(loaded.bounds, `${pressed}\u0000fill0`));
-    expect(box!.maxX).toBeGreaterThan(box!.minX);
     expect(nodeDrawBounds(loaded.bounds, 'missing')).toBeUndefined();
+    // The drag presses the same point as on e41-cards, whose background is one leaf.
     const e41 = loadScenarioDocument('e41-cards');
+    expect(e41.bounds.get(pressed)).toBeDefined();
     expect(nodeDrawBounds(e41.bounds, pressed)).toEqual(e41.bounds.get(pressed));
+    expect(box).toEqual(e41.bounds.get(pressed));
   });
 
   it('projects its blend roots only with the blend gate on', () => {

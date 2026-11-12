@@ -623,7 +623,8 @@ export function nodeDrawBounds(
   if (own !== undefined) return own;
   let result: SceneBounds | null | undefined;
   for (const [leaf, box] of bounds) {
-    if (!leaf.startsWith(`${id}\u0000`) || box === null) continue;
+    const suffix = leaf.startsWith(`${id}\u0000`) ? leaf.slice(id.length + 1) : null;
+    if (suffix === null || !/^(fill\d+|stroke)$/u.test(suffix) || box === null) continue;
     result = result == null ? box : union(result, box);
   }
   return result;
