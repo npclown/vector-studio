@@ -18,12 +18,14 @@ import {
 import {
   PageList,
   PanelProvider,
+  focusInstanceAt,
+  useInstanceFocus,
   ToolbarPrimaryRow,
   ToolbarSecondaryRow,
   usePanelErrors,
 } from '@vector-studio/ui';
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
-import { handleCursorAt, type HandleCursor } from '../src/m2-geometry';
+import { focusedLayerCorners, handleCursorAt, type HandleCursor } from '../src/m2-geometry';
 import { handleCursorCss } from '../src/v28-handle-cursor';
 import { useStudioContextMenu } from '../src/v25-context-menu';
 import {
@@ -162,6 +164,10 @@ const FIXTURES: Readonly<
   containers: { url: '/m1-containers.json', camera: { position: { x: -20, y: -20 }, zoom: 2 } },
   'path-edit': { url: '/m3-path-edit.json', camera: { position: { x: 0, y: 0 }, zoom: 1 } },
   symbols: { url: '/m7-symbols.json', camera: { position: { x: -20, y: -20 }, zoom: 2 } },
+  'v37-variants': {
+    url: '/v37-variants.json',
+    camera: { position: { x: -40, y: -40 }, zoom: 2 },
+  },
   text: { url: '/m6a-text.json', camera: { position: { x: -20, y: -20 }, zoom: 2 }, font: true },
   'text-edit': {
     url: '/m6b-text-edit.json',
@@ -622,6 +628,10 @@ function Surface({
   const handles = editor.query({ type: 'handles' });
   const pathOverlay = usePathOverlay();
   const textEdit = useTextEditMarkers();
+  // V-37 section 6.3: the focused layer of an instance, outlined in the overlay.
+  const instanceFocus = useInstanceFocus();
+  const focusBox =
+    instanceFocus === null ? null : focusedLayerCorners(snapshot.document, instanceFocus);
   // V-28: the resize cursor over a handle and the rotate cursor over a rotate zone, both turned to
   // the box, while no button is held; during the drag a press there starts it stays at its
   // press-time angle (the hover does not run while a button is held).
@@ -745,6 +755,7 @@ function Surface({
         }}
         onRendererReady={() => setRenderer('ready')}
         onPressChange={persistence.onPressChange}
+        onCanvasDoubleClick={(point) => focusInstanceAt(editor, point)}
         style={{ border: '1px solid #ccc' }}
       >
         {studio ? (
@@ -753,6 +764,7 @@ function Surface({
         <SelectionOverlay
           snapshot={snapshot}
           handles={handles}
+          instanceFocus={focusBox}
           pathOverlay={pathOverlay}
           textEdit={textEdit}
           textBox={studio ? textEditBox(snapshot) : null}

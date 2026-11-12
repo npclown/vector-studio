@@ -283,3 +283,11 @@ export { ExportPanel } from './export-panel.js';
 // V-33 (SVG import): the Import section, SVG files as editable nodes.
 export { ImportPanel } from './import-panel.js';
 export { importMessages } from './import-model.js';
+// V-37 (variants and overrides): the focused layer of an instance (UI state, section 6.3).
+export {
+  clearInstanceFocus,
+  focusInstanceAt,
+  setInstanceFocus,
+  useInstanceFocus,
+  type InstanceFocus,
+} from './instance-focus.js';

@@ -76,6 +76,52 @@ export function nodePageCorners(document: DocumentV8, id: string): Quad | null {
 }
 
 /**
+ * V-37 section 6.3: the rotated frame of the focused source layer of an instance in page space,
+ * in the layer's own axes. The layer's frame is composed up its source chain, scaled by the
+ * instance's size over its source's (the instance's content scale, M7-X1), then placed by the
+ * instance's own page frame. Exact for an unscaled instance; for a scaled one a rotated layer
+ * is drawn through the same scale, so its box may skew where the expansion keeps it rigid. The
+ * source itself is the instance's own box. Null for a layer outside the source or a broken chain.
+ */
+export function focusedLayerCorners(
+  document: DocumentV8,
+  focus: Readonly<{ instance: string; layer: string }>,
+): Quad | null {
+  const instance = document.nodes[focus.instance];
+  if (instance?.type !== 'instance') return null;
+  const source = document.nodes[instance.symbol];
+  const box = nodePageCorners(document, instance.id);
+  if (source?.type !== 'symbol' || box === null) return null;
+  if (focus.layer === source.id) return box;
+  const node = document.nodes[focus.layer];
+  if (node === undefined) return null;
+  let matrix = local(node.frame, node.rotation);
+  let parent = node.parent;
+  for (let steps = 0; parent !== source.id; steps += 1) {
+    const owner = document.nodes[parent];
+    if (owner === undefined || steps > Object.keys(document.nodes).length) return null;
+    matrix = multiply(local(owner.frame, owner.rotation), matrix);
+    parent = owner.parent;
+  }
+  const { width, height } = node.frame;
+  const iw = instance.frame.width;
+  const ih = instance.frame.height;
+  if (source.frame.width === 0 || source.frame.height === 0 || iw === 0 || ih === 0) return null;
+  const sx = iw / source.frame.width;
+  const sy = ih / source.frame.height;
+  const place = (x: number, y: number): PagePoint => {
+    const p = apply(matrix, x, y);
+    const u = (p.x * sx) / iw;
+    const v = (p.y * sy) / ih;
+    return {
+      x: box[0].x + (box[1].x - box[0].x) * u + (box[3].x - box[0].x) * v,
+      y: box[0].y + (box[1].y - box[0].y) * u + (box[3].y - box[0].y) * v,
+    };
+  };
+  return [place(0, 0), place(width, 0), place(width, height), place(0, height)];
+}
+
+/**
  * Whether a select-tool press at the page point `point` would start the rotate gesture (M2
  * contract, section 4.1): no active resize handle within `6 / zoom`, the point strictly outside
  * the handle box in the box's own axes, and within `18 / zoom` of one of its corners. The page

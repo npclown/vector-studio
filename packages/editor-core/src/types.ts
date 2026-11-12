@@ -960,7 +960,13 @@ export type Query =
    * `projectEffects: 'v1'`, else E41's drop shadow and layer blur. Frozen; it raises no event and
    * is the same value for the editor's lifetime.
    */
-  | Readonly<{ type: 'effectKinds' }>;
+  | Readonly<{ type: 'effectKinds' }>
+  /**
+
+   * The deepest visible source node of the instance `id` under `point` (page space), or null
+   * (V-37 section 6.3).
+   */
+  | Readonly<{ type: 'instanceLayerAt'; id: string; point: PagePoint }>;
 
 /**
  * What one registered extension contributes (MVP M8 contract, M8-X1), as the `extensions` query
@@ -1093,7 +1099,9 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'commi
                                                   ? Color | null
                                                   : Q extends { type: 'effectKinds' }
                                                     ? readonly Effect['kind'][]
-                                                    : number;
+                                                    : Q extends { type: 'instanceLayerAt' }
+                                                      ? string | null
+                                                      : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';

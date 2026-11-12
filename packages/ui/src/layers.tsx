@@ -315,6 +315,11 @@ const LayerRowItem = memo(function LayerRowItem({
           {row.name}
         </button>
       )}
+      {row.type === 'symbolSet' ? (
+        <span data-testid={`layer-icon-${row.id}`} data-icon="symbol-set">
+          <Icon name="symbol-set" />
+        </span>
+      ) : null}
       <span>{row.type}</span>
       <button
         type="button"

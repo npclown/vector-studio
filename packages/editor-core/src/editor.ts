@@ -40,7 +40,7 @@ import {
   toolOverlay,
   type RegisteredTool,
 } from './extensions.js';
-import { boundsOf, isLocked } from './hit-test.js';
+import { boundsOf, instanceLayerAt, isLocked } from './hit-test.js';
 import { createEyedropperTool, sampleColor } from './eyedropper.js';
 import { createCounterIdSource } from './ids.js';
 import {
@@ -1821,6 +1821,22 @@ class EditorCore implements Editor {
         }
         case 'extensions':
           return this.extensionSummaries;
+        case 'instanceLayerAt': {
+          const point: unknown = query.point;
+          const id: unknown = query.id;
+          if (typeof id !== 'string' || typeof point !== 'object' || point === null) return null;
+          const { x, y } = point as Record<string, unknown>;
+          if (typeof x !== 'number' || typeof y !== 'number') return null;
+          return instanceLayerAt(
+            this.document,
+            this.activePage,
+            id,
+            { x, y },
+            this.viewport.zoom,
+            (node) => this.extensions.geometry(node),
+            this.expansions,
+          );
+        }
         case 'exportScene':
         case 'exportSvg': {
           const ids: unknown = query.ids;

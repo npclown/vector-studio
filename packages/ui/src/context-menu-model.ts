@@ -8,6 +8,7 @@ import type {
 } from '@vector-studio/react';
 import { booleanActions } from './boolean-model.js';
 import { chordLabel, macKeymap, shortcutFor } from './editor-toolbar-model.js';
+import { combineAction } from './variant-model.js';
 import { runAction, symbolActions, type ActionButton } from './toolbar-model.js';
 
 // V-25 slice 10 (editor UI usability): the pure parts of `CanvasContextMenu`, the canvas's right
@@ -135,7 +136,7 @@ function pasteItem(keymap: readonly KeyBinding[], point: PagePoint): ContextMenu
  * more), booleans (union, subtract, intersect, exclude, only when the selection qualifies,
  * E41), show or hide (hide when any selected node is visible) and lock or unlock (lock when any
  * selected node is unlocked, V31-U2), symbols (the toolbar's symbol,
- * instance and detach rules) and zoom to selection. Without one (empty canvas): paste here,
+ * instance and detach rules, and V-37's "Combine as variants") and zoom to selection. Without one (empty canvas): paste here,
  * select all (the scope's visible unlocked children, else the page's), zoom to fit and zoom to 100%.
  */
 export function contextMenuItems({ snapshot, point }: ContextMenuInput): ContextMenuModel {
@@ -189,6 +190,7 @@ export function contextMenuItems({ snapshot, point }: ContextMenuInput): Context
   const anyUnlocked = nodes.some((node) => node?.locked !== true);
   const symbols = new Map(symbolActions(ids, types).map((button) => [button.testId, button]));
   const booleans = booleanActions(document, ids, keymap);
+  const combine = combineAction(document, ids);
   const symbolItem = (id: string, label: string) =>
     item(id, label, null, fromButton(symbols.get(id)!));
   return [
@@ -270,6 +272,13 @@ export function contextMenuItems({ snapshot, point }: ContextMenuInput): Context
       symbolItem('create-symbol', 'Create symbol'),
       symbolItem('create-instance', 'Create instance'),
       symbolItem('detach', 'Detach instance'),
+      // V-37 section 6.1: two or more symbols, none in a set, become a component set.
+      item(
+        'combine-variants',
+        'Combine as variants',
+        null,
+        combine === null ? null : thenSelect(combine.command),
+      ),
     ],
     [
       item(

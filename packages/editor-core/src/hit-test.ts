@@ -436,7 +436,8 @@ function unitOf(x: number, y: number, frame: Frame): PagePoint {
  * section 6): leaves, and frames and symbols on their background or border; never a group, a
  * mask group or a mask source. An instance is visited as a frame with its source's fill and
  * stroke, and once for each hit of a node of its expansion (M7 contract, section 4.3); with an
- * invalid expansion (M7-X3) only its background and border are hit. `take` returns true to stop.
+ * invalid expansion (M7-X3) only its background and border are hit. `take` returns true to stop;
+ * it gets the instance ID and, for a hit of its expansion, the source node ID as `layer`.
  * A frame hit on both its border and its background is visited twice.
  */
 function visitHits(
@@ -445,7 +446,7 @@ function visitHits(
   point: PagePoint,
   zoom: number,
   custom: CustomGeometry,
-  take: (id: string, hit: PaintHit) => boolean,
+  take: (id: string, hit: PaintHit, layer?: string) => boolean,
   expansions: ExpansionCache,
   paint = false,
 ): void {
@@ -468,7 +469,10 @@ function visitHits(
       return false;
     }
     const hit = (painted: NodeV8, part: HitPart, unit: PagePoint) =>
-      clip() && take(owner ?? id, { node: painted, part, unit });
+      clip() &&
+      (owner === null
+        ? take(id, { node: painted, part, unit })
+        : take(owner, { node: painted, part, unit }, id));
     if (!isContainer(node) && node.type !== 'instance') {
       const part = hitPart(node, parentPoint, zoom, custom, paint);
       if (part === null) return false;
@@ -764,4 +768,40 @@ export function boundsOf(document: DocumentV8, ids: readonly string[]): Frame | 
     }
   }
   return boundsOfPoints(points);
+}
+
+/**
+ * V-37 section 6.3: the deepest visible source node of the instance `id` hit at `point` (page
+ * space), by the M1 section 6 rules over its expansion: the topmost leaf, or frame on its
+ * background or border, in reverse paint order. A point on the instance's own background or
+ * border gives its source's ID. Null for a point outside the instance, a hidden or locked
+ * instance (or one under such an ancestor), an invalid expansion, or a node that is no
+ * instance. Other nodes drawn over the instance do not hide it from the query.
+ */
+export function instanceLayerAt(
+  document: DocumentV8,
+  page: string,
+  id: string,
+  point: PagePoint,
+  zoom: number,
+  custom: CustomGeometry,
+  expansions: ExpansionCache = new ExpansionCache(),
+): string | null {
+  const instance = Object.hasOwn(document.nodes, id) ? document.nodes[id] : undefined;
+  if (instance?.type !== 'instance') return null;
+  let found: string | null = null;
+  visitHits(
+    document,
+    page,
+    point,
+    zoom,
+    custom,
+    (hit, layer) => {
+      if (hit !== id) return false;
+      found = layer ?? instance.symbol;
+      return true;
+    },
+    expansions,
+  );
+  return found;
 }
