@@ -434,6 +434,41 @@ export type CustomNodeV7 = CustomNodeV6 & NodeEffectsV7;
 export type TextNodeV7 = TextNode & NodeEffectsV7;
 export type InstanceNodeV7 = InstanceNodeV5 & NodeEffectsV7;
 export type GroupNodeV7 = GroupNode & NodeEffectsV7;
+/**
+ * A page guide (V-38 contract, V38-S1): `axis: 'x'` is a vertical line at page x = `value`,
+ * `'y'` a horizontal line at page y = `value`.
+ */
+export type Guide = Readonly<{ axis: 'x' | 'y'; value: number }>;
+
+/** A uniform layout grid (V38-S2): lines every `size` page units from the frame's top-left. */
+export type UniformLayoutGrid = Readonly<{
+  type: 'grid';
+  size: number;
+  color: Color;
+  visible: boolean;
+}>;
+
+/**
+ * Columns or rows (V38-S2): `count` bands of `size` (ignored by `stretch`) with `gutter` between
+ * them, `offset` from the aligned side (the margin for `stretch`, ignored by `center`).
+ */
+export type BandLayoutGrid = Readonly<{
+  type: 'columns' | 'rows';
+  count: number;
+  align: 'stretch' | 'start' | 'center' | 'end';
+  size: number;
+  gutter: number;
+  offset: number;
+  color: Color;
+  visible: boolean;
+}>;
+
+/** A frame's or symbol's layout grid (V38-S2). */
+export type LayoutGrid = UniformLayoutGrid | BandLayoutGrid;
+
+/** The optional field V-38 adds to a frame or symbol (V38-S2); absent means none. */
+export type NodeLayoutGrids = Readonly<{ layoutGrids?: readonly LayoutGrid[] }>;
+
 export type FrameNodeV7 = FrameNodeV6 & NodeEffectsV7;
 export type SymbolNodeV7 = SymbolNodeV6 & NodeEffectsV7;
 
@@ -463,16 +498,25 @@ export type DocumentV7 = Readonly<{
 // so the ten items can each add their fields to one unreleased version instead of bumping it in
 // turn. The v7 to v8 migration changes only `schemaVersion` until an item adds a field.
 
-export type RectangleNodeV8 = RectangleNodeV6 & NodeEffects;
-export type EllipseNodeV8 = EllipseNodeV6 & NodeEffects;
-export type LineNodeV8 = LineNodeV6 & NodeEffects;
-export type PathNodeV8 = PathNodeV6 & NodeEffects;
-export type CustomNodeV8 = CustomNodeV6 & NodeEffects;
-export type TextNodeV8 = TextNode & NodeEffects;
-export type InstanceNodeV8 = InstanceNodeV5 & NodeEffects;
-export type GroupNodeV8 = GroupNode & NodeEffects;
-export type FrameNodeV8 = FrameNodeV6 & NodeEffects;
-export type SymbolNodeV8 = SymbolNodeV6 & NodeEffects;
+/** The field V-39 adds to every v8 node (V39-S4): its bindings, absent when it has none. */
+export type NodeBindings = Readonly<{ bindings?: Bindings }>;
+
+/**
+ * V-31 contract, V31-S1: the optional lock. Absent or `false` is unlocked, and a validated node
+ * has the key only when locked; locked nodes cannot be picked or transformed on the canvas.
+ */
+export type NodeLock = Readonly<{ locked?: boolean }>;
+
+export type RectangleNodeV8 = RectangleNodeV6 & NodeEffects & NodeLock & NodeBindings;
+export type EllipseNodeV8 = EllipseNodeV6 & NodeEffects & NodeLock & NodeBindings;
+export type LineNodeV8 = LineNodeV6 & NodeEffects & NodeLock & NodeBindings;
+export type PathNodeV8 = PathNodeV6 & NodeEffects & NodeLock & NodeBindings;
+export type CustomNodeV8 = CustomNodeV6 & NodeEffects & NodeLock & NodeBindings;
+export type TextNodeV8 = TextNode & NodeEffects & NodeLock & NodeBindings;
+export type InstanceNodeV8 = InstanceNodeV5 & NodeEffects & NodeLock & NodeBindings;
+export type GroupNodeV8 = GroupNode & NodeEffects & NodeLock & NodeBindings;
+export type FrameNodeV8 = FrameNodeV6 & NodeEffects & NodeLock & NodeLayoutGrids & NodeBindings;
+export type SymbolNodeV8 = SymbolNodeV6 & NodeEffects & NodeLock & NodeLayoutGrids & NodeBindings;
 
 export type LeafNodeV8 =
   | RectangleNodeV8
@@ -486,12 +530,53 @@ export type ContainerNodeV8 = GroupNodeV8 | FrameNodeV8 | SymbolNodeV8;
 export type NodeV8 = LeafNodeV8 | ContainerNodeV8;
 export type NodeTypeV8 = NodeV8['type'];
 
-export type PageV8 = PageV6;
+/** A page with its optional guides (V38-S1); absent means none. */
+export type PageV8 = PageV6 & Readonly<{ guides?: readonly Guide[] }>;
 
 export type DocumentV8 = Readonly<{
   schemaVersion: 8;
   id: string;
+  /** V-39 (V39-S1): named paints, 1 to 1,000 when present, in panel order. */
+  colorStyles?: readonly ColorStyle[];
+  /** V-39 (V39-S2): the variables and their modes, present only with a variable. */
+  variables?: VariableSet;
   /** One or more pages. */
   pages: readonly PageV8[];
   nodes: Readonly<Record<string, NodeV8>>;
 }>;
+
+// V-39 contract (docs/plans/viz-v39-styles-variables-contract.md), section 2: colour styles,
+// variables with modes, and the bindings of node properties to them. A bound property keeps its
+// concrete value (V39-Q1), equal to the reference's resolved value (V39-S5).
+
+/** A named paint (V39-S1). */
+export type ColorStyle = Readonly<{ id: string; name: string; paint: Paint }>;
+
+/** One mode of the variable set (V39-S2). */
+export type VariableMode = Readonly<{ id: string; name: string }>;
+
+/** A colour or number variable with exactly one value per mode (V39-S2). */
+export type Variable =
+  | Readonly<{ id: string; name: string; type: 'color'; values: Readonly<Record<string, Color>> }>
+  | Readonly<{
+      id: string;
+      name: string;
+      type: 'number';
+      values: Readonly<Record<string, number>>;
+    }>;
+
+/** The variables, their 1 to 16 modes and the active `mode` (V39-S2). */
+export type VariableSet = Readonly<{
+  modes: readonly VariableMode[];
+  mode: string;
+  items: readonly Variable[];
+}>;
+
+/** What a binding names: a colour style or a variable (V39-S4). */
+export type BindingRef = Readonly<{ style: string }> | Readonly<{ variable: string }>;
+
+/** The node properties a binding can hold (V39-S4), in canonical order. */
+export type BindingKey = 'fill' | 'stroke' | 'text' | 'opacity' | 'strokeWidth' | 'cornerRadius';
+
+/** A node's bindings (V39-S4): never empty when present. */
+export type Bindings = Readonly<Partial<Record<BindingKey, BindingRef>>>;

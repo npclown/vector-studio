@@ -695,6 +695,9 @@ describe('M2-A01 EditorCanvas wiring (M2-I4)', () => {
       ['copy', undefined],
       ['cut', undefined],
       ['paste', undefined],
+      // V33-P3: SVG files dropped on the canvas.
+      ['dragover', undefined],
+      ['drop', undefined],
     ]);
     expect(view.listeners.map(({ type }) => type)).toEqual(['blur']);
     let prevented = false;

@@ -12,6 +12,8 @@ import type {
 } from '@vector-studio/contracts';
 import type {
   Arrow,
+  BindingKey,
+  BindingRef,
   Color,
   Constraints,
   CornerRadii,
@@ -29,12 +31,26 @@ import type {
   Stroke,
   TextNodeV8,
   TextRun,
+  Guide,
+  LayoutGrid,
 } from '@vector-studio/model';
 
 // Public command, query and event shapes (P5 plan, sections 4.1 to 4.3; MVP M1 contract,
 // sections 3 and 4).
 
-export type ToolName = 'select' | 'rectangle' | 'ellipse' | 'line' | 'frame' | 'path' | 'text';
+export type ToolName =
+  | 'select'
+  | 'rectangle'
+  | 'ellipse'
+  | 'line'
+  | 'frame'
+  | 'path'
+  | 'text'
+  /** V-40: the freehand pencil and the regular polygon tools. */
+  | 'pencil'
+  | 'polygon'
+  /** V-39 contract, E7. */
+  | 'eyedropper';
 
 /**
  * A built-in tool name or a registered extension tool ID (MVP M2 contract, section 7; M2-Q13).
@@ -203,7 +219,12 @@ export type TextEditOverlay = Readonly<{
 /** Tool state the host UI draws over the canvas; it is never document content. */
 export type ToolOverlay =
   | Readonly<{ kind: 'marquee'; frame: Frame }>
-  | Readonly<{ kind: 'path'; anchors: readonly PathAnchor[] }>;
+  | Readonly<{ kind: 'path'; anchors: readonly PathAnchor[] }>
+  /**
+   * The eyedropper's hover (V-39 contract, E7): the pointer's last page point and the colour
+   * `sampleColor` gives there, or null over nothing.
+   */
+  | Readonly<{ kind: 'eyedropper'; point: PagePoint; color: Color | null }>;
 
 /** A page-space segment of the snap overlay. */
 export type Segment = Readonly<{ a: PagePoint; b: PagePoint }>;
@@ -230,6 +251,8 @@ export type NodeProps = Readonly<{
   stroke?: Stroke | null;
   opacity?: number;
   visible?: boolean;
+  /** V31-E4: `false` removes the key (V31-S1). */
+  locked?: boolean;
   /** Custom nodes only. */
   data?: JsonValue;
   /** Rectangles only. */
@@ -238,6 +261,8 @@ export type NodeProps = Readonly<{
   startArrow?: Arrow;
   endArrow?: Arrow;
   constraints?: Constraints;
+  /** Frames and symbols only (V-38 contract, V38-C2); an empty list removes them. */
+  layoutGrids?: readonly LayoutGrid[];
 }>;
 
 /**
@@ -337,6 +362,11 @@ export type DocumentCommand =
       frames: readonly Readonly<{ id: string; frame: Frame; rotation?: number }>[];
     }>
   | Readonly<{ type: 'setNodeProps'; id: string; props: NodeProps }>
+  /**
+   * V-31 contract, V31-E4: sets `locked` and/or `visible` on nodes of the active page in one
+   * transaction (one undo step); `locked: false` removes the key; returns empty `ids`.
+   */
+  | Readonly<{ type: 'setLayerState'; ids: readonly string[]; locked?: boolean; visible?: boolean }>
   /**
    * Sets appearance on nodes of the active page at any depth in one transaction (MVP M4
    * contract, section 4.2); returns empty `ids`, and a change of no value records no step.
@@ -528,9 +558,56 @@ export type DocumentCommand =
    * document, as one step; with no frame change no step is recorded.
    */
   | Readonly<{ type: 'refitText'; ids?: readonly string[] }>
+  // V-39 contract, section 3: colour styles, variables, modes and bindings. A change of a
+  // style's paint, a variable's value or the active mode rewrites every bound node (E1).
+  /** Appends a colour style; returns its ID. */
+  | Readonly<{ type: 'createColorStyle'; name: string; paint: Paint }>
+  | Readonly<{ type: 'updateColorStyle'; id: string; name?: string; paint?: Paint }>
+  /** Removes a style; its users keep their values, detached (V39-Q7). */
+  | Readonly<{ type: 'removeColorStyle'; id: string }>
+  /**
+   * Appends a variable of `kind` with `value` in every mode, creating the set with one mode
+   * `Mode 1` when there is none; returns its ID.
+   */
+  | Readonly<{
+      type: 'createVariable';
+      name: string;
+      kind: 'color' | 'number';
+      value: Color | number;
+    }>
+  /** Renames, or sets the values of the listed modes (by mode ID). */
+  | Readonly<{
+      type: 'updateVariable';
+      id: string;
+      name?: string;
+      values?: Readonly<Record<string, Color | number>>;
+    }>
+  | Readonly<{ type: 'removeVariable'; id: string }>
+  /** Appends a mode whose values copy the active mode's; returns its ID. */
+  | Readonly<{ type: 'addVariableMode'; name: string }>
+  | Readonly<{ type: 'renameVariableMode'; id: string; name: string }>
+  | Readonly<{ type: 'removeVariableMode'; id: string }>
+  /** Sets the active mode. */
+  | Readonly<{ type: 'setVariableMode'; id: string }>
+  /**
+   * Binds `key` of the listed nodes (active page, any depth) to a style or variable, setting the
+   * property to its resolved value, or with `ref: null` detaches it (V39-E2). Returns the IDs it
+   * changed.
+   */
+  | Readonly<{
+      type: 'bindProperty';
+      ids: readonly string[];
+      key: BindingKey;
+      ref: BindingRef | null;
+    }>
   | Readonly<{ type: 'addPage'; name?: string; index?: number }>
   | Readonly<{ type: 'removePage'; id: string }>
   | Readonly<{ type: 'renamePage'; id: string; name: string }>
+  /**
+   * Replaces the guides of `page` (V-38 contract, V38-C1) as one step; guides equal to the
+   * page's record no step. Each guide is validated as a load would (V38-S1).
+   */
+  | Readonly<{ type: 'setGuides'; page: string; guides: readonly Guide[] }>
   | Readonly<{ type: 'movePage'; id: string; index: number }>;
 
 export type AlignEdge = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom';
@@ -553,6 +630,10 @@ export type SessionCommand =
   | Readonly<{ type: 'setKeymap'; bindings: readonly KeyBinding[] }>
   /** Turns snapping on or off (M2 contract, section 4.2); Ctrl or Meta held also disables it. */
   | Readonly<{ type: 'setSnapping'; enabled: boolean }>
+  /** Shows or hides the host's rulers and guides (V-38 contract, V38-C3). */
+  | Readonly<{ type: 'setRulersVisible'; visible: boolean }>
+  /** Shows or hides layout grids, and with them snapping to grid lines (V38-C3, V38-N1). */
+  | Readonly<{ type: 'setLayoutGridsVisible'; visible: boolean }>
   /**
    * Enters a container (group, mask group or frame) of the active page, or leaves every scope
    * with null (M2 contract, section 5).
@@ -596,7 +677,9 @@ export type SessionCommand =
   /** Commits an active composition (section 7.3); a no-op without one. */
   | Readonly<{ type: 'endComposition' }>
   /** Sets the text tool style (M6b-S2), a full `TextStyle`. */
-  | Readonly<{ type: 'setTextToolStyle'; style: TextStyle }>;
+  | Readonly<{ type: 'setTextToolStyle'; style: TextStyle }>
+  /** V-40: sets the polygon tool's side count, an integer from 3 to 60. */
+  | Readonly<{ type: 'setPolygonSides'; sides: number }>;
 
 export type Command =
   | DocumentCommand
@@ -674,7 +757,18 @@ export type EditorErrorCode =
   | 'editor.boolean-too-large'
   | 'editor.boolean-failed'
   // E41 contract, section 6.
-  | 'editor.effect-limit';
+  | 'editor.effect-limit'
+  // V-33 SVG import contract, section 2.
+  | 'editor.invalid-svg'
+  | 'editor.empty-svg'
+  // V-39 contract, section 3 (V39-E3).
+  | 'editor.unknown-style'
+  | 'editor.unknown-variable'
+  | 'editor.unknown-mode'
+  | 'editor.binding-type'
+  | 'editor.binding-range'
+  | 'editor.table-limit'
+  | 'editor.last-mode';
 
 /**
  * `consumed` is present on `input` results only (M2-I3): whether navigation, the tool or a key
@@ -709,6 +803,10 @@ export type EditorSnapshot = Readonly<{
   snap: SnapOverlay | null;
   /** Whether snapping is on; true by default. */
   snapping: boolean;
+  /** Whether the host shows rulers and guides (V-38 contract, V38-C3); false by default. */
+  rulersVisible: boolean;
+  /** Whether layout grids show and snap (V38-C3, V38-N1); true by default. */
+  layoutGridsVisible: boolean;
   /** The entered container of the active page (M2 contract, section 5), or null. */
   scope: string | null;
   /** Path edit mode (M3 contract, section 4), or null. */
@@ -717,6 +815,10 @@ export type EditorSnapshot = Readonly<{
   textEdit: TextEditState | null;
   /** The style the text tool gives a new node (M6b-S2). */
   textStyle: TextStyle;
+  /** V-40: the side count the polygon tool draws with, 3 to 60; 3 by default. */
+  polygonSides: number;
+  /** The eyedropper's last pick (V-39 contract, E7), or null. */
+  pickedColor: Color | null;
 }>;
 
 export type Query =
@@ -743,6 +845,9 @@ export type Query =
   /** The snap overlay of the active gesture, or null. */
   | Readonly<{ type: 'snap' }>
   | Readonly<{ type: 'snapping' }>
+  /** V-38 contract, V38-C3. */
+  | Readonly<{ type: 'rulersVisible' }>
+  | Readonly<{ type: 'layoutGridsVisible' }>
   /** The entered container, or null. */
   | Readonly<{ type: 'scope' }>
   /**
@@ -775,6 +880,14 @@ export type Query =
   | Readonly<{ type: 'exportScene'; ids?: readonly string[] }>
   /** The SVG text of the same export, or null (V30-S5). */
   | Readonly<{ type: 'exportSvg'; ids?: readonly string[] }>
+  /**
+   * The colour under the page point on the active page at the current zoom, or null (V-39
+   * contract, E6): the paint of the topmost painted part, a gradient evaluated at the point,
+   * node and ancestor opacity not applied.
+   */
+  | Readonly<{ type: 'sampleColor'; point: PagePoint }>
+  /** The eyedropper's last pick, or null (V-39 contract, E7). */
+  | Readonly<{ type: 'pickedColor' }>
   /**
    * The effect kinds a panel offers (V-36 contract, section 6), in panel order: all four under
    * `projectEffects: 'v1'`, else E41's drop shadow and layer blur. Frozen; it raises no event and
@@ -881,7 +994,7 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'commi
                         ? readonly KeyBinding[]
                         : Q extends { type: 'snap' }
                           ? SnapOverlay | null
-                          : Q extends { type: 'snapping' }
+                          : Q extends { type: 'snapping' | 'rulersVisible' | 'layoutGridsVisible' }
                             ? boolean
                             : Q extends { type: 'scope' }
                               ? string | null
@@ -903,9 +1016,11 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'commi
                                               ? ExportScene | null
                                               : Q extends { type: 'exportSvg' }
                                                 ? string | null
-                                                : Q extends { type: 'effectKinds' }
-                                                  ? readonly Effect['kind'][]
-                                                  : number;
+                                                : Q extends { type: 'sampleColor' | 'pickedColor' }
+                                                  ? Color | null
+                                                  : Q extends { type: 'effectKinds' }
+                                                    ? readonly Effect['kind'][]
+                                                    : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';
@@ -930,13 +1045,20 @@ export type EditorEvent =
         | 'keymap'
         | 'snap'
         | 'snapping'
+        /** V-38 contract, V38-C3. */
+        | 'rulersVisible'
+        | 'layoutGridsVisible'
         | 'scope'
         | 'pathEdit'
         /** The text layout port's generation changed (M6a contract, section 5). */
         | 'textLayout'
         /** Text edit mode and the text tool style (M6b contract, M6b-S1 and S2). */
         | 'textEdit'
-        | 'textStyle';
+        | 'textStyle'
+        /** The polygon tool's side count (V-40). */
+        | 'polygonSides'
+        /** The eyedropper's last pick (V-39 contract, E7). */
+        | 'pickedColor';
     }>
   | DiagnosticEvent;
 

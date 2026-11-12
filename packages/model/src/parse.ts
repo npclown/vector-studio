@@ -1,7 +1,24 @@
 import { MAX_DEPTH, scanJson } from './json-scan.js';
+import {
+  BINDING_KEYS,
+  MAX_COLOR_STYLES,
+  MAX_TABLE_NAME_LENGTH,
+  MAX_VARIABLE_MODES,
+  MAX_VARIABLES,
+  bindingHolds,
+  bindingKeyAllowed,
+  bindingTarget,
+  type BindingTables,
+} from './bindings.js';
 import type {
   Arrow,
+  BindingKey,
+  BindingRef,
+  Bindings,
   Color,
+  ColorStyle,
+  Variable,
+  VariableSet,
   Constraint,
   Constraints,
   DocumentV1,
@@ -12,7 +29,10 @@ import type {
   DocumentV6,
   DocumentV7,
   DocumentV8,
+  BandLayoutGrid,
   Effect,
+  Guide,
+  LayoutGrid,
   NodeV6,
   NodeV8,
   PageV8,
@@ -113,6 +133,16 @@ export const MAX_EFFECTS = 8;
 /** The largest effect radius, and the largest shadow offset magnitude (E41-S3). */
 export const MAX_EFFECT_RADIUS = 1000;
 export const MAX_EFFECT_OFFSET = 10_000;
+
+/** The most guides of one page, and the largest guide value magnitude (V38-S1). */
+export const MAX_GUIDES = 1000;
+export const MAX_GUIDE_VALUE = 1e7;
+
+/** The most layout grids of one frame or symbol (V38-S2), and their number bounds. */
+export const MAX_LAYOUT_GRIDS = 16;
+export const MAX_GRID_SIZE = 1e4;
+export const MAX_GRID_COUNT = 1000;
+export const MAX_GRID_VALUE = 1e7;
 
 /**
  * IDs are opaque non-empty strings, unique across the document's pages and nodes, without
@@ -235,6 +265,19 @@ export function validateFragmentTree(value: unknown): FragmentTreeResult {
     return { ok: true, nodes: tree.nodes };
   } catch (error) {
     if (error instanceof Failure) return { ok: false, code: error.code, path: pointer(error.path) };
+    throw error;
+  }
+}
+
+/**
+ * A paint by the model's rules (M4-S1, S2), normalized, or null (V-39: a style's paint and a
+ * colour variable's value, which commands check before they write them).
+ */
+export function validatePaint(value: unknown): Paint | null {
+  try {
+    return readPaint(value, []);
+  } catch (error) {
+    if (error instanceof Failure) return null;
     throw error;
   }
 }
@@ -754,14 +797,31 @@ type Schema = Readonly<{
   effects: 'none' | 'added' | 'read';
   /** The effect kinds `read` accepts: E41's at v7, V-36's too at v8 (V36-S2). */
   effectKinds: 'v7' | 'v8';
+  /**
+   * V-39 (V39-S1 to S6): `read` reads a node's optional `bindings` and a document's optional
+   * `colorStyles` and `variables`; absent (every older input) means none, which is their default.
+   */
+  tables?: 'read';
+  /**
+   * The node's optional `locked` (V-31 contract, V31-S1): `read` at v8 only. Its default is no
+   * key (unlocked), so `added` (an older input read into v8) and `none` both add nothing and a
+   * `locked` key in an older input fails as unknown.
+   */
+  locked: 'none' | 'added' | 'read';
+  /**
+   * The optional page `guides` and frame or symbol `layoutGrids` (V-38 contract, V38-S1, S2):
+   * read only at v8 (`V8`); every schema that reads an older input leaves it unset, so there the
+   * keys are unknown and their default (absent, no guides or grids) is what the v8 result holds.
+   */
+  layout?: 'read';
 }>;
 
 const V4_TYPES = Object.keys(NODE_KEYS_V2) as NodeTypeKey[];
 const V3_TYPES = V4_TYPES.filter((type) => type !== 'text');
 const V2_TYPES = V3_TYPES.filter((type) => type !== 'symbol' && type !== 'instance');
 const OLDER = { containerOpacity: 'one' } as const;
-const NO_EFFECTS = { effects: 'none', effectKinds: 'v7' } as const;
-const ADD_EFFECTS = { effects: 'added', effectKinds: 'v7' } as const;
+const NO_EFFECTS = { effects: 'none', effectKinds: 'v7', locked: 'none' } as const;
+const ADD_EFFECTS = { effects: 'added', effectKinds: 'v7', locked: 'added' } as const;
 const V2: Schema = {
   types: V2_TYPES,
   overrides: 'none',
@@ -797,13 +857,21 @@ const V6_TO_V7: Schema = {
 };
 const V7: Schema = { ...V6_TO_V7, effects: 'read' };
 /**
- * A v7 input read into v8 (v7's fields and effect kinds), and v8 itself (V-36's effect kinds too).
- * An item adding a v8 field adds its dimension to every schema that reads into v8 (`V2_TO_V7` to
+ * A v7 input read into v8: v7's fields and effect kinds. V8 adds V-36's effect kinds and the
+ * V-38 `layout` keys, which every schema that
+ * reads an older input leaves unset, so their default (absent) is what that input gets. An item
+ * adding a v8 field adds its dimension to every schema that reads into v8 (`V2_TO_V7` to
  * `V6_TO_V7` too, which `validateAnyDocument` uses for older inputs); see
  * docs/plans/viz-schema-v8.md, Where a field addition goes.
  */
-const V7_TO_V8: Schema = V7;
-const V8: Schema = { ...V7, effectKinds: 'v8' };
+const V7_TO_V8: Schema = { ...V7, locked: 'added' };
+const V8: Schema = {
+  ...V7,
+  effectKinds: 'v8',
+  locked: 'read',
+  layout: 'read',
+  tables: 'read',
+};
 /** v8 nodes of an input below v6, already migrated: v8 fields, the older opacity rule. */
 const V8_OLDER_OPACITY: Schema = { ...V8, ...OLDER };
 
@@ -1062,17 +1130,159 @@ function readOverrides(value: unknown, path: Path): Record<string, TextOverride>
  * `schema.appearance` is not `none`, else typed by the caller's version.
  */
 function readNode(key: string, value: unknown, path: Path, schema: Schema): NodeV8 {
-  const node = readNodeFields(key, value, path, schema);
+  // V39-S4: an optional `bindings`, read after the node's own fields.
+  let raw = value;
+  let bindings: unknown;
+  if (schema.tables === 'read' && isPlainObject(value) && Object.hasOwn(value, 'bindings')) {
+    const { bindings: own, ...rest } = value;
+    raw = rest;
+    bindings = own;
+  }
+  const node = readNodeFields(key, raw, path, schema);
   if (schema.effects === 'none') return node as NodeV8;
+  const record = raw as Record<string, unknown>;
   const effects =
     schema.effects === 'read'
       ? readEffects(
-          (value as Record<string, unknown>).effects,
+          record.effects,
           [...path, 'effects'],
           schema.effectKinds === 'v8' ? EFFECT_KINDS_V8 : EFFECT_KINDS_V7,
         )
       : [];
-  return { ...node, effects };
+  // V31-S1: absent or `false` is unlocked and normalizes to no key.
+  const lock =
+    schema.locked === 'read' &&
+    Object.hasOwn(record, 'locked') &&
+    readBoolean(record.locked, [...path, 'locked'])
+      ? { locked: true as const }
+      : {};
+  if (raw === value) return { ...node, effects, ...lock };
+  return {
+    ...node,
+    effects,
+    ...lock,
+    bindings: readBindings(bindings, node.type, [...path, 'bindings']),
+  };
+}
+
+/**
+ * V39-S6's node rule: a non-empty object whose keys are binding keys the node's type has a field
+ * for, each exactly `{ style }` or `{ variable }` with a valid ID, returned in V39-S7 key order.
+ */
+function readBindings(value: unknown, type: string, path: Path): Bindings {
+  if (!isPlainObject(value) || Object.keys(value).length === 0) invalid(path);
+  for (const key of Object.keys(value)) {
+    if (!(BINDING_KEYS as readonly string[]).includes(key)) invalid([...path, key]);
+    if (!bindingKeyAllowed(type, key as BindingKey)) invalid([...path, key]);
+  }
+  const out: Partial<Record<BindingKey, BindingRef>> = {};
+  for (const key of BINDING_KEYS) {
+    if (!Object.hasOwn(value, key)) continue;
+    const entry = value[key];
+    const entryPath = [...path, key];
+    if (hasExactKeys(entry, ['style'])) {
+      out[key] = { style: readBindingId(entry.style, entryPath) };
+    } else if (hasExactKeys(entry, ['variable'])) {
+      out[key] = { variable: readBindingId(entry.variable, entryPath) };
+    } else {
+      invalid(entryPath);
+    }
+  }
+  return out;
+}
+
+/** A binding's reference ID (V39-S6): a valid ID, else `invalid-field` at the binding. */
+function readBindingId(value: unknown, path: Path): string {
+  if (typeof value !== 'string' || !isValidId(value)) invalid(path);
+  return value;
+}
+
+/** V39-S3: a table name, 1 to 200 UTF-16 units of valid run text. */
+function readTableName(value: unknown, path: Path): string {
+  const name = readString(value, path);
+  if (name.length === 0 || name.length > MAX_TABLE_NAME_LENGTH || !isValidRunText(name)) {
+    invalid(path);
+  }
+  return name;
+}
+
+/** V39-S1: 1 to 1,000 styles, each exactly `id, name, paint`. */
+function readColorStyles(value: unknown, path: Path): ColorStyle[] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_COLOR_STYLES) {
+    invalid(path);
+  }
+  return readArray(value, path, (entry, entryPath) => {
+    const record = readRecord(entry, ['id', 'name', 'paint'], entryPath);
+    return {
+      id: readIdV2(record.id, [...entryPath, 'id']),
+      name: readTableName(record.name, [...entryPath, 'name']),
+      paint: readPaint(record.paint, [...entryPath, 'paint']),
+    };
+  });
+}
+
+const VARIABLE_TYPES: readonly Variable['type'][] = ['color', 'number'];
+
+/**
+ * V39-S2: exactly `modes, mode, items`; 1 to 16 modes (`id, name`), 1 to 1,000 variables (`id,
+ * name, type, values`), each `values` exactly one key per mode, read in code-unit key order.
+ * Whether `mode` names a mode is checked with the IDs (V39-S6 (3)).
+ */
+function readVariables(value: unknown, path: Path): VariableSet {
+  const record = readRecord(value, ['modes', 'mode', 'items'], path);
+  const modesPath = [...path, 'modes'];
+  if (
+    !Array.isArray(record.modes) ||
+    record.modes.length === 0 ||
+    record.modes.length > MAX_VARIABLE_MODES
+  ) {
+    invalid(modesPath);
+  }
+  const modes = readArray(record.modes, modesPath, (entry, entryPath) => {
+    const mode = readRecord(entry, ['id', 'name'], entryPath);
+    return {
+      id: readIdV2(mode.id, [...entryPath, 'id']),
+      name: readTableName(mode.name, [...entryPath, 'name']),
+    };
+  });
+  const mode = readIdV2(record.mode, [...path, 'mode']);
+  const itemsPath = [...path, 'items'];
+  if (
+    !Array.isArray(record.items) ||
+    record.items.length === 0 ||
+    record.items.length > MAX_VARIABLES
+  ) {
+    invalid(itemsPath);
+  }
+  const modeIds = modes.map((entry) => entry.id);
+  const items = readArray(record.items, itemsPath, (entry, entryPath): Variable => {
+    const item = readRecord(entry, ['id', 'name', 'type', 'values'], entryPath);
+    const id = readIdV2(item.id, [...entryPath, 'id']);
+    const name = readTableName(item.name, [...entryPath, 'name']);
+    const type = readEnum(item.type, VARIABLE_TYPES, [...entryPath, 'type']);
+    const valuesPath = [...entryPath, 'values'];
+    if (!isPlainObject(item.values)) invalid(valuesPath);
+    const values = item.values;
+    const keys = Object.keys(values).sort(compareUnits);
+    if (keys.length !== modeIds.length || modeIds.some((key) => !Object.hasOwn(values, key))) {
+      invalid(valuesPath);
+    }
+    if (type === 'color') {
+      const read = Object.fromEntries(
+        keys.map((key) => [key, readColor(values[key], [...valuesPath, key])]),
+      );
+      return { id, name, type, values: read };
+    }
+    const read = Object.fromEntries(
+      keys.map((key) => [key, readNumber(values[key], [...valuesPath, key])]),
+    );
+    return { id, name, type, values: read };
+  });
+  return { modes, mode, items };
+}
+
+function compareUnits(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 const EFFECT_KINDS_V7: readonly Effect['kind'][] = ['dropShadow', 'layerBlur'];
@@ -1135,7 +1345,20 @@ function readNodeFields(key: string, value: unknown, path: Path, schema: Schema)
   const type = readEnum(value.type, schema.types, [...path, 'type']);
   const typeKeys =
     type === 'instance' && schema.overrides === 'read' ? INSTANCE_KEYS_V5 : NODE_KEYS_V2[type];
-  const keys = schema.effects === 'read' ? [...typeKeys, 'effects'] : typeKeys;
+  const keys: string[] = [...typeKeys];
+  // V38-S2: `layoutGrids` is optional, after `stroke` and before `effects`.
+  if (
+    schema.layout === 'read' &&
+    (type === 'frame' || type === 'symbol') &&
+    Object.hasOwn(value, 'layoutGrids')
+  ) {
+    keys.push('layoutGrids');
+  }
+  if (schema.effects === 'read') keys.push('effects');
+  // V31-S1: the optional `locked` key at v8, after every other field.
+  if (schema.effects === 'read' && schema.locked === 'read' && Object.hasOwn(value, 'locked')) {
+    keys.push('locked');
+  }
   const record = readRecord(value, keys, path);
   if (!isValidId(key) || record.id !== key) invalid([...path, 'id']);
   const base = {
@@ -1213,14 +1436,18 @@ function readNodeFields(key: string, value: unknown, path: Path, schema: Schema)
     case 'maskGroup':
       return { ...base, type, children: children() };
     case 'frame':
-    case 'symbol':
-      return {
+    case 'symbol': {
+      const container = {
         ...base,
         type,
         children: children(),
         fill: fill(),
         stroke: shapeStroke(),
       };
+      if (!keys.includes('layoutGrids')) return container;
+      const layoutGrids = readLayoutGrids(record.layoutGrids, [...path, 'layoutGrids']);
+      return layoutGrids.length === 0 ? container : ({ ...container, layoutGrids } as NodeV6);
+    }
     case 'instance': {
       const symbol = readIdV2(record.symbol, [...path, 'symbol']);
       // Before v5 the node has no overrides; the result is typed by the caller's version.
@@ -1244,27 +1471,122 @@ function readNodeFields(key: string, value: unknown, path: Path, schema: Schema)
   }
 }
 
-function readPage(value: unknown, path: Path): PageV8 {
-  const record = readRecord(value, ['id', 'name', 'children'], path);
-  return {
+function readPage(value: unknown, path: Path, schema: Schema): PageV8 {
+  const keys = ['id', 'name', 'children'];
+  if (schema.layout === 'read' && isPlainObject(value) && Object.hasOwn(value, 'guides')) {
+    keys.push('guides');
+  }
+  const record = readRecord(value, keys, path);
+  const page = {
     id: readIdV2(record.id, [...path, 'id']),
     name: readString(record.name, [...path, 'name']),
     children: readArray(record.children, [...path, 'children'], (entry, entryPath) =>
       readIdV2(entry, entryPath),
     ),
   };
+  if (!keys.includes('guides')) return page;
+  const guides = readGuides(record.guides, [...path, 'guides']);
+  return guides.length === 0 ? page : { ...page, guides };
+}
+
+const GUIDE_AXES: readonly Guide['axis'][] = ['x', 'y'];
+const BAND_ALIGNS: readonly BandLayoutGrid['align'][] = ['stretch', 'start', 'center', 'end'];
+
+/** V38-S1: at most MAX_GUIDES guides, each `axis, value`. */
+function readGuides(value: unknown, path: Path): Guide[] {
+  if (!Array.isArray(value) || value.length > MAX_GUIDES) invalid(path);
+  return readArray(value, path, (entry, entryPath) => {
+    const record = readRecord(entry, ['axis', 'value'], entryPath);
+    return {
+      axis: readEnum(record.axis, GUIDE_AXES, [...entryPath, 'axis']),
+      value: readNumber(record.value, [...entryPath, 'value'], -MAX_GUIDE_VALUE, MAX_GUIDE_VALUE),
+    };
+  });
+}
+
+/** V38-S2: at most MAX_LAYOUT_GRIDS grids in their key order. */
+function readLayoutGrids(value: unknown, path: Path): LayoutGrid[] {
+  if (!Array.isArray(value) || value.length > MAX_LAYOUT_GRIDS) invalid(path);
+  return readArray(value, path, (entry, entryPath): LayoutGrid => {
+    if (!isPlainObject(entry)) invalid(entryPath);
+    const type = readEnum(entry.type, LAYOUT_GRID_TYPES, [...entryPath, 'type']);
+    if (type === 'grid') {
+      const record = readRecord(entry, ['type', 'size', 'color', 'visible'], entryPath);
+      const size = readNumber(record.size, [...entryPath, 'size'], 0, MAX_GRID_SIZE);
+      if (size === 0) invalid([...entryPath, 'size']);
+      return {
+        type,
+        size,
+        color: readColor(record.color, [...entryPath, 'color']),
+        visible: readBoolean(record.visible, [...entryPath, 'visible']),
+      };
+    }
+    const record = readRecord(
+      entry,
+      ['type', 'count', 'align', 'size', 'gutter', 'offset', 'color', 'visible'],
+      entryPath,
+    );
+    const count = readNumber(record.count, [...entryPath, 'count'], 1, MAX_GRID_COUNT);
+    if (!Number.isInteger(count)) invalid([...entryPath, 'count']);
+    const align = readEnum(record.align, BAND_ALIGNS, [...entryPath, 'align']);
+    const size = readNumber(record.size, [...entryPath, 'size'], 0, MAX_GRID_VALUE);
+    if (size === 0) invalid([...entryPath, 'size']);
+    return {
+      type,
+      count,
+      align,
+      size,
+      gutter: readNumber(record.gutter, [...entryPath, 'gutter'], 0, MAX_GRID_VALUE),
+      offset: readNumber(record.offset, [...entryPath, 'offset'], 0, MAX_GRID_VALUE),
+      color: readColor(record.color, [...entryPath, 'color']),
+      visible: readBoolean(record.visible, [...entryPath, 'visible']),
+    };
+  });
+}
+
+const LAYOUT_GRID_TYPES: readonly LayoutGrid['type'][] = ['grid', 'columns', 'rows'];
+
+/** The result of `validateGuides`. */
+export type GuidesResult =
+  | Readonly<{ ok: true; guides: readonly Guide[] }>
+  | Readonly<{ ok: false; code: 'document.invalid-field'; path: string }>;
+
+/**
+ * Validates a page's guides with the rules of `validateDocument` (V38-S1), for the `setGuides`
+ * command; `path` is relative to the array.
+ */
+export function validateGuides(value: unknown): GuidesResult {
+  try {
+    return { ok: true, guides: readGuides(value, []) };
+  } catch (error) {
+    if (error instanceof Failure) {
+      return { ok: false, code: 'document.invalid-field', path: pointer(error.path) };
+    }
+    throw error;
+  }
 }
 
 /** A document's `id`, `pages` and `nodes`, typed as those of `D` (v8 unless migrating). */
 type Tree<D extends { pages: unknown; nodes: unknown } = DocumentV8> = Readonly<{
   id: string;
+  /** V-39: present only when read at v8 and given. */
+  colorStyles?: readonly ColorStyle[];
+  variables?: VariableSet;
   pages: D['pages'];
   nodes: D['nodes'];
 }>;
 
 /** A v8 document read with the schema of its source version (an older one when migrating). */
 function readDocumentV8(value: Record<string, unknown>, schema: Schema): DocumentV8 {
-  return { schemaVersion: 8, ...readTree(value, schema, true) };
+  const { id, colorStyles, variables, pages, nodes } = readTree(value, schema, true);
+  return {
+    schemaVersion: 8,
+    id,
+    ...(colorStyles === undefined ? {} : { colorStyles }),
+    ...(variables === undefined ? {} : { variables }),
+    pages,
+    nodes,
+  };
 }
 
 /**
@@ -1274,10 +1596,17 @@ function readDocumentV8(value: Record<string, unknown>, schema: Schema): Documen
  * `references` false skips only M7-S2, the override keys and M7-S5, for `validateFragmentTree`.
  */
 function readTree(value: Record<string, unknown>, schema: Schema, references: boolean): Tree {
-  const record = readRecord(value, ['schemaVersion', 'id', 'pages', 'nodes'], []);
+  // V39-S1, S2: a v8 document (not a fragment) may add `colorStyles` and `variables`.
+  const optional =
+    schema.tables === 'read' && references && isPlainObject(value)
+      ? (['colorStyles', 'variables'] as const).filter((key) => Object.hasOwn(value, key))
+      : [];
+  const record = readRecord(value, ['schemaVersion', 'id', ...optional, 'pages', 'nodes'], []);
   const id = readIdV2(record.id, ['id']);
   if (!Array.isArray(record.pages) || record.pages.length === 0) invalid(['pages']);
-  const pages = readArray(record.pages, ['pages'], readPage);
+  const pages = readArray(record.pages, ['pages'], (entry, entryPath) =>
+    readPage(entry, entryPath, schema),
+  );
   if (!isPlainObject(record.nodes)) invalid(['nodes']);
   const entries = Object.entries(record.nodes).map(
     ([key, node]) => [key, readNode(key, node, ['nodes', key], schema)] as const,
@@ -1398,5 +1727,64 @@ function readTree(value: Record<string, unknown>, schema: Schema, references: bo
       throw new Failure('document.invalid-mask-source', ['nodes', key, 'children', 0]);
     }
   }
-  return { id, pages, nodes };
+  if (schema.tables !== 'read' || !references) return { id, pages, nodes };
+  const { colorStyles, variables } = readTables(record, id, pages, nodes);
+  return {
+    id,
+    ...(colorStyles === undefined ? {} : { colorStyles }),
+    ...(variables === undefined ? {} : { variables }),
+    pages,
+    nodes,
+  };
+}
+
+/**
+ * V39-S6's document checks after every node and tree rule: (1) the tables' shapes; (2) ID
+ * uniqueness across the document, pages, nodes and tables; (3) the active mode; (4) each node's
+ * bindings in code-unit ID order and S4 key order: a missing target, then the kind, type, null
+ * field, value and range (V39-S5).
+ */
+function readTables(
+  record: Record<string, unknown>,
+  id: string,
+  pages: readonly PageV8[],
+  nodes: Readonly<Record<string, NodeV8>>,
+): BindingTables {
+  const colorStyles = Object.hasOwn(record, 'colorStyles')
+    ? readColorStyles(record.colorStyles, ['colorStyles'])
+    : undefined;
+  const variables = Object.hasOwn(record, 'variables')
+    ? readVariables(record.variables, ['variables'])
+    : undefined;
+  // The document ID is not in the set: an older document may share it with a node.
+  void id;
+  const taken = new Set<string>([...pages.map((page) => page.id), ...Object.keys(nodes)]);
+  const claim = (key: string, path: Path) => {
+    if (taken.has(key)) throw new Failure('document.duplicate-id', path);
+    taken.add(key);
+  };
+  colorStyles?.forEach((style, index) => claim(style.id, ['colorStyles', index, 'id']));
+  variables?.items.forEach((item, index) => claim(item.id, ['variables', 'items', index, 'id']));
+  variables?.modes.forEach((mode, index) => claim(mode.id, ['variables', 'modes', index, 'id']));
+  if (variables !== undefined && !variables.modes.some((mode) => mode.id === variables.mode)) {
+    throw new Failure('document.dangling-reference', ['variables', 'mode']);
+  }
+  const tables: BindingTables = {
+    ...(colorStyles === undefined ? {} : { colorStyles }),
+    ...(variables === undefined ? {} : { variables }),
+  };
+  for (const key of Object.keys(nodes).sort(compareUnits)) {
+    const node = nodes[key]!;
+    if (node.bindings === undefined) continue;
+    for (const name of BINDING_KEYS) {
+      const ref = node.bindings[name];
+      if (ref === undefined) continue;
+      const path = ['nodes', key, 'bindings', name];
+      if (bindingTarget(tables, ref) === null) {
+        throw new Failure('document.dangling-reference', path);
+      }
+      if (!bindingHolds(node, name, ref, tables)) invalid(path);
+    }
+  }
+  return tables;
 }

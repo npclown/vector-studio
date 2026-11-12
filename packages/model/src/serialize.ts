@@ -1,8 +1,12 @@
+import { BINDING_KEYS } from './bindings.js';
 import type {
+  Color,
+  VariableSet,
   Dash,
   DocumentV8,
   Effect,
   JsonValue,
+  LayoutGrid,
   NodeV6,
   NodeV8,
   Paint,
@@ -117,9 +121,67 @@ function effect(value: Effect): Ordered {
   };
 }
 
-/** A v8 node (v7's shape so far): the v6 fields, then `effects` (E41-S1). */
+/**
+ * A v8 node: the v6 fields, then `layoutGrids` (V38-S2), `effects` (E41-S1), `locked` only when
+ * true (V31-S1), then `bindings` when present (V39-S7).
+ */
 function nodeV8(value: NodeV8): Ordered {
-  return { ...nodeV6(value), effects: value.effects.map(effect) };
+  // V38-S2: `layoutGrids` after `stroke`, before `effects`; an empty list is not written.
+  const grids =
+    (value.type === 'frame' || value.type === 'symbol') && (value.layoutGrids?.length ?? 0) > 0
+      ? { layoutGrids: value.layoutGrids!.map(layoutGrid) }
+      : {};
+  const node: Ordered = { ...nodeV6(value), ...grids, effects: value.effects.map(effect) };
+  if (value.locked === true) node.locked = true;
+  // V39-S7: `bindings` last, keys in BINDING_KEYS order, each `{ style }` or `{ variable }`.
+  if (value.bindings !== undefined) {
+    const bindings: Ordered = {};
+    for (const key of BINDING_KEYS) {
+      const ref = value.bindings[key];
+      if (ref === undefined) continue;
+      bindings[key] = 'style' in ref ? { style: ref.style } : { variable: ref.variable };
+    }
+    node.bindings = bindings;
+  }
+  return node;
+}
+
+/** V39-S7: `modes` (`id`, `name`), `mode`, `items` (`id`, `name`, `type`, `values`). */
+function variableSet(value: VariableSet): Ordered {
+  return {
+    modes: value.modes.map((mode) => ({ id: mode.id, name: mode.name })),
+    mode: value.mode,
+    items: value.items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      type: item.type,
+      values: Object.fromEntries(
+        Object.keys(item.values)
+          .sort(compareCodeUnits)
+          .map((key) => {
+            const entry = (item.values as Readonly<Record<string, Color | number>>)[key]!;
+            return [key, typeof entry === 'number' ? entry : color(entry)];
+          }),
+      ),
+    })),
+  };
+}
+
+function layoutGrid(value: LayoutGrid): Ordered {
+  const color = { r: value.color.r, g: value.color.g, b: value.color.b, a: value.color.a };
+  if (value.type === 'grid') {
+    return { type: value.type, size: value.size, color, visible: value.visible };
+  }
+  return {
+    type: value.type,
+    count: value.count,
+    align: value.align,
+    size: value.size,
+    gutter: value.gutter,
+    offset: value.offset,
+    color,
+    visible: value.visible,
+  };
 }
 
 function nodeV6(value: NodeV6): Ordered {
@@ -204,10 +266,24 @@ export function orderedDocument(document: DocumentV8): Ordered {
   return {
     schemaVersion: document.schemaVersion,
     id: document.id,
+    ...(document.colorStyles === undefined
+      ? {}
+      : {
+          colorStyles: document.colorStyles.map((style) => ({
+            id: style.id,
+            name: style.name,
+            paint: paint(style.paint),
+          })),
+        }),
+    ...(document.variables === undefined ? {} : { variables: variableSet(document.variables) }),
     pages: document.pages.map((page) => ({
       id: page.id,
       name: page.name,
       children: [...page.children],
+      // V38-S1: an empty list is not written.
+      ...((page.guides?.length ?? 0) > 0
+        ? { guides: page.guides!.map((guide) => ({ axis: guide.axis, value: guide.value })) }
+        : {}),
     })),
     nodes: Object.fromEntries(
       Object.keys(document.nodes)
@@ -227,7 +303,8 @@ export function orderedDocument(document: DocumentV8): Ordered {
  * `textOverrides` (its keys in code unit order, each value `{ runs }`), a text
  * node's in the base order followed by `runs` (each `text`, `family`, `size`, `color`),
  * `sizing`, `align`, `letterSpacing`, `lineHeight`. Every node ends with `effects`, each effect in
- * the E41-S2 key order.
+ * the E41-S2 key order, then its V-39 `bindings` if any. The V-39 `colorStyles` and `variables`
+ * follow the document `id` when present (V39-S7).
  */
 export function serializeDocument(document: DocumentV8): string {
   return `${JSON.stringify(orderedDocument(document), null, 2)}\n`;
