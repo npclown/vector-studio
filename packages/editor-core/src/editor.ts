@@ -83,10 +83,13 @@ import {
   type TextToolSupport,
 } from './text-edit.js';
 import { normalizeInputText, textKeyRoute } from './text-input.js';
+import { POLYGON_SIDES, isPolygonSides } from './freehand.js';
 import {
   createBoxTool,
   createLineTool,
   createPathTool,
+  createPencilTool,
+  createPolygonTool,
   createSelectTool,
   createTextTool,
   selectionHandles,
@@ -805,6 +808,8 @@ class EditorCore implements Editor {
   private textScopeExit = false;
   /** The text tool style (M6b-S2). */
   private textStyle: TextStyle;
+  /** V-40: the polygon tool's side count. */
+  private polygonSides: number = POLYGON_SIDES.default;
   /**
    * The caret model of the last layout edit mode read, rebuilt when the cached layout object
    * changes (a text change, or a generation change dropping the cache).
@@ -968,6 +973,19 @@ class EditorCore implements Editor {
     this.tools.set('frame', createBoxTool('createFrame', draw));
     this.tools.set('line', createLineTool(draw));
     this.tools.set('path', createPathTool(draw));
+    this.tools.set('pencil', createPencilTool(draw));
+    this.tools.set(
+      'polygon',
+      createPolygonTool(
+        {
+          get: () => this.polygonSides,
+          set: (sides) => {
+            this.setPolygonSides(sides);
+          },
+        },
+        draw,
+      ),
+    );
     this.tools.set(
       'text',
       createTextTool((node) => this.extensions.geometry(node), this.expansions, this.textSupport),
@@ -1555,6 +1573,10 @@ class EditorCore implements Editor {
         return this.setTextSelection(command);
       case 'endComposition':
         // The forced end above committed an active composition (M6b-H2); else a no-op.
+        return { ok: true, ids: [] };
+      case 'setPolygonSides':
+        if (!isPolygonSides(command.sides)) return failure('editor.invalid-command', '/sides');
+        this.setPolygonSides(command.sides);
         return { ok: true, ids: [] };
       case 'setTextToolStyle': {
         const style = checkTextStyle(command.style);
@@ -3571,8 +3593,17 @@ class EditorCore implements Editor {
       pathEdit: this.pathEdit,
       textEdit: this.textEdit,
       textStyle: this.textStyle,
+      polygonSides: this.polygonSides,
       history: { undoDepth: this.undoStack.length, redoDepth: this.redoStack.length },
     });
+  }
+
+  /** V-40: sets the polygon side count, clamped to 3..60 (the tool's arrow keys step it). */
+  private setPolygonSides(sides: number): void {
+    const next = Math.min(POLYGON_SIDES.max, Math.max(POLYGON_SIDES.min, Math.round(sides)));
+    if (!Number.isFinite(next) || next === this.polygonSides) return;
+    this.polygonSides = next;
+    this.refresh({ type: 'session', field: 'polygonSides' });
   }
 
   private refresh(event: EditorEvent): void {
