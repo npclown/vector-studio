@@ -25,6 +25,8 @@
     "apps/next-host/src/v25-text-colour-default.ts",
     "apps/next-host/src/v25-pen-preview.ts",
     "apps/next-host/src/v25-path-debug.tsx",
+    "apps/next-host/src/v38-rulers.tsx",
+    "apps/next-host/src/v38-rulers-model.ts",
     "apps/next-host/src/m8-test-panels.tsx",
     "apps/next-host/src/overlay.tsx",
     "apps/next-host/src/renderer-options.ts",

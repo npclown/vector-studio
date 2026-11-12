@@ -115,6 +115,11 @@ const ADDED: Readonly<Record<keyof typeof AT_17A2B0A, readonly string[]>> = {
     'ExportScene',
     'ExtensionCommandBuilder',
     'ExtensionSummary',
+    // V-38 (rulers, guides and layout grids) adds the layout-grid geometry.
+    'LayoutGridBand',
+    'LayoutGridGeometry',
+    'LayoutGridLine',
+    'MAX_GRID_LINES',
     'StarCreateArgs',
     // V-33 (SVG import) adds the converter and its types.
     'SvgImport',
@@ -123,6 +128,7 @@ const ADDED: Readonly<Record<keyof typeof AT_17A2B0A, readonly string[]>> = {
     'SvgTextRun',
     'extensionCommand',
     'isSvgText',
+    'layoutGridLines',
     'svgToFragment',
   ],
   react: [
@@ -245,6 +251,7 @@ describe('M8-A13: the host API guide (docs/host-api.md, M8-Q14 (a))', () => {
       'Hooks',
       'Commands and queries',
       'Export',
+      'Rulers, guides and layout grids',
       'Events',
       'Extensions',
       'Panels',

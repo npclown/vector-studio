@@ -3,6 +3,7 @@ import type {
   DocumentV8,
   Effect,
   JsonValue,
+  LayoutGrid,
   NodeV6,
   NodeV8,
   Paint,
@@ -114,9 +115,35 @@ function effect(value: Effect): Ordered {
   };
 }
 
-/** A v8 node (v7's shape so far): the v6 fields, then `effects` (E41-S1). */
+/**
+ * A v8 node: the v6 fields, then `layoutGrids` (V38-S2), `effects` (E41-S1), then `locked` only
+ * when true (V31-S1).
+ */
 function nodeV8(value: NodeV8): Ordered {
-  return { ...nodeV6(value), effects: value.effects.map(effect) };
+  // V38-S2: `layoutGrids` after `stroke`, before `effects`; an empty list is not written.
+  const grids =
+    (value.type === 'frame' || value.type === 'symbol') && (value.layoutGrids?.length ?? 0) > 0
+      ? { layoutGrids: value.layoutGrids!.map(layoutGrid) }
+      : {};
+  const ordered = { ...nodeV6(value), ...grids, effects: value.effects.map(effect) };
+  return value.locked === true ? { ...ordered, locked: true } : ordered;
+}
+
+function layoutGrid(value: LayoutGrid): Ordered {
+  const color = { r: value.color.r, g: value.color.g, b: value.color.b, a: value.color.a };
+  if (value.type === 'grid') {
+    return { type: value.type, size: value.size, color, visible: value.visible };
+  }
+  return {
+    type: value.type,
+    count: value.count,
+    align: value.align,
+    size: value.size,
+    gutter: value.gutter,
+    offset: value.offset,
+    color,
+    visible: value.visible,
+  };
 }
 
 function nodeV6(value: NodeV6): Ordered {
@@ -205,6 +232,10 @@ export function orderedDocument(document: DocumentV8): Ordered {
       id: page.id,
       name: page.name,
       children: [...page.children],
+      // V38-S1: an empty list is not written.
+      ...((page.guides?.length ?? 0) > 0
+        ? { guides: page.guides!.map((guide) => ({ axis: guide.axis, value: guide.value })) }
+        : {}),
     })),
     nodes: Object.fromEntries(
       Object.keys(document.nodes)

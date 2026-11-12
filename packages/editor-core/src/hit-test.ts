@@ -29,6 +29,22 @@ import type { PagePoint } from './types.js';
 // on its source's background and border and wherever a node of its expansion, read from the
 // editor's expansion cache, would be hit inside its content clip, and the hit names the instance.
 
+/**
+ * V-31 contract, V31-S2: whether `id` is effectively locked, that is it or a container above it
+ * (below the page) has `locked: true`. An unknown ID is not locked.
+ */
+export function isLocked(document: DocumentV8, id: string): boolean {
+  const node = document.nodes[id];
+  if (node === undefined) return false;
+  if (node.locked === true) return true;
+  return ancestors(documentTree(document), id).some((parent) => parent.locked === true);
+}
+
+/** Whether any of `ids` is effectively locked (V31-E2). */
+export function anyLocked(document: DocumentV8, ids: readonly string[]): boolean {
+  return ids.some((id) => isLocked(document, id));
+}
+
 /** Frame-local path geometry for a custom node (its extension's `toScene`), or null. */
 export type CustomGeometry = (node: NodeV8) => PathData | null;
 
@@ -402,7 +418,11 @@ function visitHits(
     clip: Clip,
   ): boolean => {
     const node = view.node(id);
-    if (node === undefined || !node.visible) return false;
+    // V31-E1: a locked node is skipped with its subtree, as a hidden one; inside an expansion
+    // only the instance's own lock (checked when the walk reached it) counts (V31-S2).
+    if (node === undefined || !node.visible || (owner === null && node.locked === true)) {
+      return false;
+    }
     const hit = () => clip() && take(owner ?? id);
     if (!isContainer(node) && node.type !== 'instance') {
       return hitsNode(node, parentPoint, zoom, custom) && hit();
@@ -614,9 +634,11 @@ export function marqueeHits(
 ): string[] {
   const tree = documentTree(document);
   const lookup = (id: string) => tree.node(id);
+  if (scope !== null && isLocked(document, scope)) return [];
   return childrenOf(tree, scope ?? page).filter((id) => {
     const node = tree.node(id);
-    if (node === undefined || !node.visible) return false;
+    // V31-E1: candidates are never effectively locked (the scope's own chain is checked above).
+    if (node === undefined || !node.visible || node.locked === true) return false;
     // A page child with rotation 0 uses the frame itself, bit-identical with P5; a scope's
     // child is in its parent's space, so it uses its page-space bounds.
     // A path uses the box of its curve (V-26), which is inside its frame.

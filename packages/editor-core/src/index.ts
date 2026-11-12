@@ -7,6 +7,13 @@ export {
   DEFAULT_SHAPE_STROKE,
 } from './edits.js';
 export { createCounterIdSource } from './ids.js';
+export {
+  MAX_GRID_LINES,
+  layoutGridLines,
+  type LayoutGridBand,
+  type LayoutGridGeometry,
+  type LayoutGridLine,
+} from './layout-grid.js';
 export { starExtension, type StarCreateArgs } from './star.js';
 export { extensionCommand, type ExtensionCommandBuilder } from './extension-command.js';
 export {
@@ -36,6 +43,10 @@ export type {
   Dash,
   DropShadowEffect,
   Effect,
+  BandLayoutGrid,
+  Guide,
+  LayoutGrid,
+  UniformLayoutGrid,
   DocumentErrorCode,
   DocumentV8,
   EllipseNodeV6,
@@ -60,6 +71,8 @@ export type {
   ModelErrorCode,
   NodeBaseV2,
   NodeEffects,
+  NodeLock,
+  NodeLayoutGrids,
   NodeV8,
   PageV1,
   PageV2,
