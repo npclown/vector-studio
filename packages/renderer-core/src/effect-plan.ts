@@ -231,8 +231,8 @@ export function effectBounds(
 
 /** One planned layer of a tree for the budget: an E25 layer, or an effect root's two bounds. */
 export type BudgetLayer =
-  | Readonly<{ kind: 'layer'; width: number; height: number }>
-  | Readonly<{ kind: 'effect'; source: DeviceRect; output: DeviceRect }>;
+  | Readonly<{ kind: 'layer'; width: number; height: number; snapshot?: number }>
+  | Readonly<{ kind: 'effect'; source: DeviceRect; output: DeviceRect; snapshot?: number }>;
 
 /** A layer tree for the effect budget, in paint order. */
 export type EffectBudgetTree = Readonly<{
@@ -244,7 +244,7 @@ export type EffectBudgetTree = Readonly<{
    */
   withoutEffects: readonly Readonly<{
     rootId: string;
-    layers: readonly Readonly<{ width: number; height: number }>[];
+    layers: readonly Readonly<{ width: number; height: number; snapshot?: number }>[];
   }>[];
   /** The effect roots of the tree, for the notice. */
   effectRoots: readonly string[];
@@ -267,6 +267,7 @@ export type TreeNotice = Readonly<{ nodeId: string; bytes: number; limit: number
  *
  * - an E25 layer at 4 bytes per pixel; an effect root at `4 (S + O)`;
  * - shared scratch `4 × (2 + 2/3) × max O` over the admitted effect roots;
+ * - V35-K6: a blend root's backdrop snapshot, 4 bytes per pixel of its `snapshot` area;
  * - E25's tile set over the widest admitted layer or source bound.
  *
  * A tree with effects that does not fit, or holds a bound over `maxTextureDimension`, drops its
@@ -283,6 +284,8 @@ export function planEffectBudget(
   withEffects: ReadonlySet<string>;
   /** The E25 trees admitted from trees that dropped their effects, by root. */
   plainAdmitted: ReadonlySet<string>;
+  /** V35-K6: every tree not admitted whole, by root, with the bytes it would have needed. */
+  rejected: ReadonlyMap<string, number>;
   effectNotices: readonly EffectBudgetNotice[];
   layerNotices: readonly TreeNotice[];
 }> {
@@ -291,6 +294,7 @@ export function planEffectBudget(
   const withEffects = new Set<string>();
   const effectNotices: EffectBudgetNotice[] = [];
   const layerNotices: TreeNotice[] = [];
+  const rejected = new Map<string, number>();
   let resident = 0;
   let maxWidth = 0;
   let maxHeight = 0;
@@ -303,6 +307,7 @@ export function planEffectBudget(
     let output = maxOutput;
     let oversize = false;
     for (const layer of tree.layers) {
+      bytes += 4 * (layer.snapshot ?? 0);
       if (layer.kind === 'layer') {
         bytes += layer.width * layer.height * 4;
         width = Math.max(width, layer.width);
@@ -328,6 +333,7 @@ export function planEffectBudget(
       maxOutput = output;
       continue;
     }
+    rejected.set(tree.rootId, total);
     if (tree.effectRoots.length > 0) {
       effectNotices.push(
         Object.freeze({ nodeId: tree.rootId, bytes: total, limit, overTextureLimit: oversize }),
@@ -339,7 +345,7 @@ export function planEffectBudget(
       width = maxWidth;
       height = maxHeight;
       for (const layer of sub.layers) {
-        plain += layer.width * layer.height * 4;
+        plain += (layer.width * layer.height + (layer.snapshot ?? 0)) * 4;
         width = Math.max(width, layer.width);
         height = Math.max(height, layer.height);
       }
@@ -359,6 +365,7 @@ export function planEffectBudget(
     admitted,
     withEffects,
     plainAdmitted,
+    rejected,
     effectNotices: Object.freeze(effectNotices),
     layerNotices: Object.freeze(layerNotices),
   });

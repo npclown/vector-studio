@@ -3,6 +3,7 @@ import type {
   GlyphRasterPort,
   RenderNodeSnapshot,
   SceneAffine,
+  SceneBlendMode,
   SceneVersion,
 } from '@vector-studio/contracts';
 import type {
@@ -87,6 +88,7 @@ import {
   type TextFrame,
 } from './text-atlas.js';
 import { planEffectLayers, type EffectLayer } from './effect-layers.js';
+import { asksForBlendLayer, planBlendLayers, type BlendResourceNotice } from './backdrop-plan.js';
 import {
   E41_LAYER_REACH_MAX,
   cullTarget,
@@ -98,6 +100,7 @@ import {
   layerBound,
   planLayerBudget,
   type DeviceRect,
+  type BlendRootMode,
   type LayerResourceNotice,
   type LayerScope,
 } from './layer-plan.js';
@@ -397,6 +400,10 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   #effectsOverBudget = new Set<string>();
   #effectNotices: EffectBudgetNotice[] = [];
   #effectNoticesDropped = 0;
+  /** V35-K6: the blend notices, queued as the effect notices are. */
+  #blendOverBudget = new Set<string>();
+  #blendNotices: BlendResourceNotice[] = [];
+  #blendNoticesDropped = 0;
   #effectStatistics: Readonly<{ roots: number; clampedSigmas: number }> = NO_EFFECT_STATISTICS;
   /** E41-K2 and section 5.4: the device's `maxTextureDimension2D`. */
   readonly #maxTextureDimension: number;
@@ -558,6 +565,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     } else {
       if (this.#layersOverBudget.size > 0) this.#layersOverBudget = new Set();
       if (this.#effectsOverBudget.size > 0) this.#effectsOverBudget = new Set();
+      if (this.#blendOverBudget.size > 0) this.#blendOverBudget = new Set();
       this.#effectStatistics = NO_EFFECT_STATISTICS;
     }
     // P4 contract, U4: mask levels are planned over the drawn content in paint order; content
@@ -954,8 +962,12 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     }
     const layerNotices = this.#layerNotices.slice(0, LAYER_NOTICES_PER_PACKET);
     const effectNotices = this.#effectNotices.slice(0, LAYER_NOTICES_PER_PACKET);
+    const blendNotices = this.#blendNotices.slice(0, LAYER_NOTICES_PER_PACKET);
     const layersPart: LayerPacketPart | null =
-      layered === null && layerNotices.length === 0 && effectNotices.length === 0
+      layered === null &&
+      layerNotices.length === 0 &&
+      effectNotices.length === 0 &&
+      blendNotices.length === 0
         ? null
         : Object.freeze({
             layoutVersion: 0 as const,
@@ -969,6 +981,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
                   draws: Object.freeze(layered?.layers[index] ?? []),
                   meshDraws: Object.freeze(meshByLayer.get(index) ?? []),
                   ...effectRecordOf(layerPlan!.effects.get(layer)),
+                  ...blendRecordOf(layerPlan!.blends.get(layer), layer),
                 }),
               ),
             ),
@@ -977,6 +990,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
             ),
             notices: Object.freeze(layerNotices),
             ...(effectNotices.length === 0 ? {} : { effectNotices: Object.freeze(effectNotices) }),
+            ...(blendNotices.length === 0 ? {} : { blendNotices: Object.freeze(blendNotices) }),
           });
     // E28 contract, section 4: the text part; present while text is drawn, the atlas holds or
     // releases pages, a notice is pending or clusters are deferred (whose acknowledgement
@@ -1081,6 +1095,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     this.#maskNotices.splice(0, packet.clipNotices?.length ?? 0);
     this.#layerNotices.splice(0, packet.layers?.notices.length ?? 0);
     this.#effectNotices.splice(0, packet.layers?.effectNotices?.length ?? 0);
+    this.#blendNotices.splice(0, packet.layers?.blendNotices?.length ?? 0);
     this.#atlas?.consumeNotices(textPart?.notices.length ?? 0);
     this.#pending = Object.freeze({
       packet,
@@ -1268,7 +1283,9 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
         : this.#layerContentOf(visible, texts, pathDraws, paths, pathLayers);
     if (!this.#fullDerivation) this.#layerContent = Object.freeze({ inputs, content });
     const view = { x: camera.position.x, y: camera.position.y, zoom: camera.zoom };
-    if (scopes.some((scope) => scope.effects !== undefined)) {
+    // V35-K3: blend roots and isolating containers are planned with E41's plan, which also
+    // knows how to dissolve a scope (K6, K7).
+    if (scopes.some((scope) => scope.effects !== undefined || asksForBlendLayer(scope))) {
       return this.#planWithEffects(scopes, content, view, target);
     }
     // Scopes are in pre-order, so the reverse visits every layer after the layers nested in it.
@@ -1334,11 +1351,13 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       );
     const indices = new Map(order.map((scope, index) => [scope, index] as const));
     this.#queueEffectNotices([]);
+    this.#queueBlendNotices([]);
     this.#effectStatistics = NO_EFFECT_STATISTICS;
     return {
       order,
       bounds,
       effects: new Map(),
+      blends: new Map(),
       contains: (layer) => layer === null || layer === undefined || indices.has(layer),
       indexOf: (layer) => (layer === null || layer === undefined ? -1 : (indices.get(layer) ?? -1)),
     };
@@ -1355,15 +1374,26 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     target: PrimitiveTarget,
   ): DrawnLayers {
     // Section 5.4: the device limit when the backend passes it (U5), else the option's.
-    const plan = planEffectLayers(
-      scopes,
-      content,
-      view,
-      target,
-      target.maxTextureDimension2D ?? this.#maxTextureDimension,
-    );
+    const maxTextureDimension = target.maxTextureDimension2D ?? this.#maxTextureDimension;
+    // V35-K6, K7: with V-35 requests, the plan that drops them where needed; V-35 layers need a
+    // backend that draws the blend composite (`blendLayers`).
+    const plan = scopes.some(asksForBlendLayer)
+      ? planBlendLayers(
+          scopes,
+          content,
+          view,
+          target,
+          maxTextureDimension,
+          target.blendLayers === true,
+        )
+      : {
+          ...planEffectLayers(scopes, content, view, target, maxTextureDimension),
+          blends: new Map<LayerScope, BlendRootMode>(),
+          blendNotices: [],
+        };
     this.#queueLayerNotices(plan.layerNotices);
     this.#queueEffectNotices(plan.effectNotices);
+    this.#queueBlendNotices(plan.blendNotices);
     const states = new Map(plan.states);
     const resolve = (layer: LayerScope | null | undefined): LayerScope | null => {
       let scope = layer ?? null;
@@ -1426,6 +1456,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       order,
       bounds,
       effects,
+      blends: new Map([...plan.blends].filter(([scope]) => states.get(scope) === 'drawn')),
       contains: (layer) => {
         const scope = resolve(layer);
         return scope === null || indices.has(scope);
@@ -1445,6 +1476,21 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       else this.#effectNoticesDropped += 1;
     }
     this.#effectsOverBudget = current;
+  }
+
+  #queueBlendNotices(notices: readonly BlendResourceNotice[]): void {
+    const current = new Set(notices.map((notice) => notice.nodeId));
+    for (const notice of notices) {
+      if (this.#blendOverBudget.has(notice.nodeId)) continue;
+      if (this.#blendNotices.length < LAYER_NOTICES_QUEUED) this.#blendNotices.push(notice);
+      else this.#blendNoticesDropped += 1;
+    }
+    this.#blendOverBudget = current;
+  }
+
+  /** V35-K6: blend resource notices dropped because the queue was full. */
+  public getBlendNoticesDropped(): number {
+    return this.#blendNoticesDropped;
   }
 
   /** E41-S8: effect budget notices dropped because the queue was full. */
@@ -2582,7 +2628,8 @@ function derivePrimitives(
     const node = scene.getNode(item.id)!;
     present.add(node.id);
     if (node.kind !== 'container') {
-      // E41 section 5.2: a visible leaf with effects is a layer root of its own.
+      // E41 section 5.2 and V35-K3: a visible leaf with effects, or with a blend mode, is a
+      // layer root of its own.
       const leafRoot = leafEffectScope(node, item, sequence);
       if (leafRoot !== null) layerScopes.push(leafRoot);
       const leafItem =
@@ -2591,7 +2638,10 @@ function derivePrimitives(
           : {
               ...item,
               layer: leafRoot,
-              reach: extendEffectReach(item.reach, leafRoot.effects!, leafRoot.world!, item.chain),
+              reach:
+                leafRoot.effects === undefined
+                  ? item.reach
+                  : extendEffectReach(item.reach, leafRoot.effects, leafRoot.world!, item.chain),
             };
       const leaf = deriveLeaf(node, leafItem, sequence, cache, slots);
       if (leaf.kind === 'primitive') {
@@ -2646,8 +2696,11 @@ function derivePrimitives(
     // 0 < opacity < 1 it is one layer, not two.
     const effects = node.effects !== undefined && node.effects.length > 0 ? node.effects : null;
     const isolated = node.opacity < 1 || isolateUnitOpacity;
+    // V35-K3: a container blend root, or an isolating container (mode `normal`); a mask source's
+    // mode is ignored (it never paints). It is one layer with an E25 layer or effect root.
+    const blendFields = blendScopeFields(node.blendMode, isolated || effects !== null);
     let reach = item.reach;
-    if (!subtreeHidden && (isolated || effects !== null)) {
+    if (!subtreeHidden && (isolated || effects !== null || blendFields !== null)) {
       if (effects !== null) reach = extendEffectReach(item.reach, effects, world, item.chain);
       layer = {
         nodeId: node.id,
@@ -2661,6 +2714,7 @@ function derivePrimitives(
           ? {}
           : // E41-K2: the root's own mask is target-based too.
             { effects, world, isolated, outerChain: item.chain, hasMask: isMask }),
+        ...blendFields,
       };
       layerScopes.push(layer);
     }
@@ -2717,11 +2771,12 @@ function leafEffectScope(
   item: DeriveItem,
   sequence: number,
 ): LayerScope | null {
-  if (node.effects === undefined || node.effects.length === 0) return null;
+  const effects = node.effects !== undefined && node.effects.length > 0 ? node.effects : null;
+  // V35-K3: a leaf blend root; `normal` is never stored on a leaf (scene validation drops it).
+  const blendFields = blendScopeFields(node.blendMode, effects !== null);
+  if (effects === null && blendFields === null) return null;
   if (item.parentHidden || item.maskSource || !node.visible || !(node.opacity > 0)) return null;
-  const world = composeSceneAffine(item.parentWorld, node.transform);
-  if (world === null) return null;
-  return {
+  const base = {
     nodeId: node.id,
     opacity: 1,
     parent: item.layer,
@@ -2729,7 +2784,16 @@ function leafEffectScope(
     chain: item.chain,
     start: sequence,
     end: sequence,
-    effects: node.effects,
+    ...blendFields,
+  };
+  // V35-K3: a leaf blend root's draws keep the leaf's opacity, and its `R` is composited at
+  // opacity 1 with its mode; dropping its mode dissolves it (the leaf then draws directly).
+  if (effects === null) return base;
+  const world = composeSceneAffine(item.parentWorld, node.transform);
+  if (world === null) return null;
+  return {
+    ...base,
+    effects,
     world,
     isolated: false,
     contentOpacity: node.opacity,
@@ -2737,6 +2801,25 @@ function leafEffectScope(
     hasMask: false,
   };
 }
+
+/**
+ * V35-K3: the layer-scope fields of a node's mode. A mode outside `normal` and `passThrough`
+ * makes a blend root (with a backdrop snapshot, margin 0); `normal` on a container makes an
+ * isolating container. `blendOnly` marks a scope that is a layer only for V-35 (`layered` is
+ * whether E25 or E41 make it one). Null for the defaults.
+ */
+function blendScopeFields(
+  mode: SceneBlendMode | undefined,
+  layered: boolean,
+): Pick<LayerScope, 'blend' | 'backdrop' | 'isolating' | 'blendOnly'> | null {
+  if (mode === undefined || mode === 'passThrough') return null;
+  const only = layered ? {} : { blendOnly: true };
+  if (mode === 'normal') return { isolating: true, ...only };
+  return { blend: mode, backdrop: BLEND_BACKDROP, ...only };
+}
+
+/** V35-K4: a blend root reads its backdrop at its own bound (margin 0). */
+const BLEND_BACKDROP = Object.freeze({ margin: 0 });
 
 type LeafOutput =
   | Readonly<{ kind: 'primitive'; primitive: DerivedPrimitive }>
@@ -2907,8 +2990,10 @@ function patchDerivation(
           : previous.texts.leaves[leaf.index]!.node;
     // Defensive: a valid set that moves a leaf also writes a container or the root order.
     if (before.parentId !== node.parentId) return null;
-    // E41: a leaf effect root owns a layer scope, which only a full derivation rebuilds.
+    // E41: a leaf effect root owns a layer scope, which only a full derivation rebuilds; so does
+    // a leaf blend root (V35-K3).
     if ((before.effects?.length ?? 0) > 0 || (node.effects?.length ?? 0) > 0) return null;
+    if (before.blendMode !== undefined || node.blendMode !== undefined) return null;
     updates.push({ leaf, node });
   }
   if (updates.length === 0) return Object.freeze({ ...previous, serial: scene.changeSerial });
@@ -3102,6 +3187,8 @@ type DrawnLayers = Readonly<{
   bounds: ReadonlyMap<LayerScope, DeviceRect>;
   /** E41: the drawn effect roots. */
   effects: ReadonlyMap<LayerScope, EffectLayer>;
+  /** V35-K3: the drawn blend roots and their modes. */
+  blends: ReadonlyMap<LayerScope, BlendRootMode>;
   /** Whether content of `layer` is drawn (in it, or in an ancestor it dissolves into). */
   contains(layer: LayerScope | null | undefined): boolean;
   /** The layer's index in `order` (after dissolving), or -1 for the main pass. */
@@ -3181,6 +3268,15 @@ function compositeClipStates(
 }
 
 /** E41: the packet record of a drawn effect root, spread into its layer entry. */
+/** V35-K3, K4: a drawn blend root's mode and backdrop request, for its packet layer. */
+function blendRecordOf(
+  blend: BlendRootMode | undefined,
+  scope: LayerScope,
+): { blend?: BlendRootMode; backdrop?: Readonly<{ margin: number }> } {
+  if (blend === undefined) return {};
+  return { blend, backdrop: scope.backdrop ?? Object.freeze({ margin: 0 }) };
+}
+
 function effectRecordOf(effect: EffectLayer | undefined): { effect?: LayerEffectRecord } {
   if (effect === undefined) return {};
   return {
