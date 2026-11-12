@@ -293,6 +293,7 @@ describe('M2-A11 default bindings run their actions through input', () => {
       'Shift+ArrowLeft',
       'Shift+ArrowRight',
       'Shift+ArrowUp',
+      'Shift+KeyP',
     ]);
     expect(keymap.find((binding) => binding.chord === 'KeyR')).toEqual({
       chord: 'KeyR',
@@ -772,6 +773,8 @@ describe('M2-A11 rest (M2-U7): every default binding through input, and host-bou
     { chord: 'L', key: 'l', check: tool('line') },
     { chord: 'F', key: 'f', check: tool('frame') },
     { chord: 'P', key: 'p', check: tool('path') },
+    // V-40: the pencil on Shift+P (Figma).
+    { chord: 'Shift+P', key: 'P', modifiers: mods('shift'), check: tool('pencil') },
     // M6b-U3 (M6b contract, section 1.2).
     { chord: 'T', key: 't', check: tool('text') },
     { chord: 'Delete', key: 'Delete', check: order(['a', 'c']) },

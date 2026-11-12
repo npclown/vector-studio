@@ -17,6 +17,14 @@ const PATHS: Readonly<Record<string, ReactNode>> = {
     </>
   ),
   text: <path d="M3 3.5 H13 M8 3.5 V13.5 M6 13.5 H10" />,
+  // V-40: a freehand squiggle with a pencil tip, and a pentagon.
+  pencil: (
+    <>
+      <path d="M1.5 12.5 C3 9.5 5 14 7 11 S9.5 8 10.5 9" />
+      <path d="M9.5 6.5 L13 3 L14.5 4.5 L11 8 L9 8.5 Z" />
+    </>
+  ),
+  polygon: <path d="M8 2 L14 6.5 L11.7 13.5 H4.3 L2 6.5 Z" />,
   undo: <path d="M5.5 3.5 L2.5 6.5 L5.5 9.5 M2.5 6.5 H10 A3.5 3.5 0 0 1 10 13.5 H7" />,
   redo: <path d="M10.5 3.5 L13.5 6.5 L10.5 9.5 M13.5 6.5 H6 A3.5 3.5 0 0 0 6 13.5 H9" />,
   group: (

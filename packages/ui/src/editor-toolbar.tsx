@@ -158,6 +158,7 @@ export function EditorToolbar({ children }: EditorToolbarProps) {
           />
         ))}
       </span>
+      {tool === 'polygon' ? <PolygonSidesField onResult={show} /> : null}
       {groups.map(([label, ids]) => (
         <span key={label} role="group" aria-label={label} style={ROW}>
           <Divider />
@@ -196,6 +197,58 @@ export function EditorToolbar({ children }: EditorToolbarProps) {
         </output>
       )}
     </div>
+  );
+}
+
+const polygonSidesOf = (snapshot: EditorSnapshot): number => snapshot.polygonSides;
+
+/**
+ * V-40: the polygon tool's side count (`polygon-sides`, 3 to 60), shown while the polygon tool is
+ * active. A value outside the range or not a whole number is refused by `setPolygonSides`, and
+ * the field shows the session's count again.
+ */
+function PolygonSidesField({ onResult }: Readonly<{ onResult: (result: CommandResult) => void }>) {
+  const execute = useEditorCommands();
+  const sides = useEditorSelector(polygonSidesOf);
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => {
+    if (draft === null) return;
+    const value = Number(draft);
+    setDraft(null);
+    if (draft.trim() !== '' && value !== sides) {
+      onResult(execute({ type: 'setPolygonSides', sides: value }));
+    }
+  };
+  return (
+    <span role="group" aria-label="polygon" style={ROW}>
+      <Divider />
+      <label className="vs-polygon-sides" style={ROW}>
+        Sides
+        <input
+          data-testid="polygon-sides"
+          type="number"
+          min={3}
+          max={60}
+          step={1}
+          value={draft ?? String(sides)}
+          style={{ width: '3.5em' }}
+          onChange={(event) => {
+            const text = event.currentTarget.value;
+            // The spinner arrows step by one: apply at once; typed text applies on Enter or blur.
+            const value = Number(text);
+            if (Number.isInteger(value) && Math.abs(value - sides) === 1) {
+              setDraft(null);
+              onResult(execute({ type: 'setPolygonSides', sides: value }));
+            } else setDraft(text);
+          }}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') commit();
+            if (event.key === 'Escape') setDraft(null);
+          }}
+        />
+      </label>
+    </span>
   );
 }
 
