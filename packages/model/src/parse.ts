@@ -15,8 +15,10 @@ import type {
   BindingKey,
   BindingRef,
   Bindings,
+  BlendMode,
   Color,
   ColorStyle,
+  ContainerBlendMode,
   Variable,
   VariableSet,
   Constraint,
@@ -31,6 +33,7 @@ import type {
   DocumentV8,
   BandLayoutGrid,
   Effect,
+  Fill,
   Guide,
   LayoutGrid,
   NodeV6,
@@ -129,6 +132,8 @@ export const MAX_DASH_ENTRIES = 16;
 
 /** The most effects of one node (E41-S3), at most one of them a layer blur. */
 export const MAX_EFFECTS = 8;
+/** V35-S3: the most fills a node holds. */
+export const MAX_FILLS = 16;
 
 /** The largest effect radius, and the largest shadow offset magnitude (E41-S3). */
 export const MAX_EFFECT_RADIUS = 1000;
@@ -675,7 +680,7 @@ export function migrateV4toV5(document: DocumentV4): ParseResultV5 {
 export function migrateV5toV6(document: DocumentV5): ParseResultV6 {
   return guarded(() => ({
     schemaVersion: 6,
-    ...readTree({ ...document, schemaVersion: 6 }, V5_TO_V6, true),
+    ...(readTree({ ...document, schemaVersion: 6 }, V5_TO_V6, true) as unknown as Tree<DocumentV6>),
   }));
 }
 
@@ -686,7 +691,11 @@ export function migrateV5toV6(document: DocumentV5): ParseResultV6 {
 export function migrateV6toV7(document: DocumentV6): ParseResultV7 {
   return guarded(() => ({
     schemaVersion: 7,
-    ...(readTree({ ...document, schemaVersion: 7 }, V6_TO_V7, true) as Tree<DocumentV7>),
+    ...(readTree(
+      { ...document, schemaVersion: 7 },
+      V6_TO_V7_ONLY,
+      true,
+    ) as unknown as Tree<DocumentV7>),
   }));
 }
 
@@ -803,6 +812,13 @@ type Schema = Readonly<{
    */
   tables?: 'read';
   /**
+   * The node's `fills` and `blendMode` (V-35 contract, V35-S1): `none` before v8 (a node has
+   * v6's `fill`), `added` when an older input is read into v8 (`fill` becomes `fills`, the default
+   * `blendMode` is added, as `migrateV7toV8` does), `read` at v8 (V35-S2, S3, with the unreleased
+   * v8's legacy `fill`).
+   */
+  fills: 'none' | 'added' | 'read';
+  /**
    * The node's optional `locked` (V-31 contract, V31-S1): `read` at v8 only. Its default is no
    * key (unlocked), so `added` (an older input read into v8) and `none` both add nothing and a
    * `locked` key in an older input fails as unknown.
@@ -820,8 +836,13 @@ const V4_TYPES = Object.keys(NODE_KEYS_V2) as NodeTypeKey[];
 const V3_TYPES = V4_TYPES.filter((type) => type !== 'text');
 const V2_TYPES = V3_TYPES.filter((type) => type !== 'symbol' && type !== 'instance');
 const OLDER = { containerOpacity: 'one' } as const;
-const NO_EFFECTS = { effects: 'none', effectKinds: 'v7', locked: 'none' } as const;
-const ADD_EFFECTS = { effects: 'added', effectKinds: 'v7', locked: 'added' } as const;
+const NO_EFFECTS = { effects: 'none', effectKinds: 'v7', fills: 'none', locked: 'none' } as const;
+const ADD_EFFECTS = {
+  effects: 'added',
+  effectKinds: 'v7',
+  fills: 'added',
+  locked: 'added',
+} as const;
 const V2: Schema = {
   types: V2_TYPES,
   overrides: 'none',
@@ -855,19 +876,21 @@ const V6_TO_V7: Schema = {
   containerOpacity: 'any',
   ...ADD_EFFECTS,
 };
-const V7: Schema = { ...V6_TO_V7, effects: 'read' };
+/** `migrateV6toV7` only: a v7 result keeps v6's `fill`. */
+const V6_TO_V7_ONLY: Schema = { ...V6_TO_V7, fills: 'none' };
 /**
- * A v7 input read into v8: v7's fields and effect kinds. V8 adds V-36's effect kinds and the
- * V-38 `layout` keys, which every schema that
- * reads an older input leaves unset, so their default (absent) is what that input gets. An item
- * adding a v8 field adds its dimension to every schema that reads into v8 (`V2_TO_V7` to
- * `V6_TO_V7` too, which `validateAnyDocument` uses for older inputs); see
- * docs/plans/viz-schema-v8.md, Where a field addition goes.
+ * A v7 input read into v8 (V35-S1, V31-S1): v7's fields and effect kinds. V8 adds V-36's effect
+ * kinds and the V-38 `layout` keys, which every schema that reads an older input leaves unset, so
+ * their default (absent) is what that input gets. An item adding a v8 field adds its dimension to
+ * every schema that reads into v8 (`V2_TO_V7` to `V6_TO_V7` too, which `validateAnyDocument` uses
+ * for older inputs); see docs/plans/viz-schema-v8.md, Where a field addition goes.
  */
-const V7_TO_V8: Schema = { ...V7, locked: 'added' };
+const V7: Schema = { ...V6_TO_V7, effects: 'read' };
+const V7_TO_V8: Schema = { ...V7, fills: 'added', locked: 'added' };
 const V8: Schema = {
   ...V7,
   effectKinds: 'v8',
+  fills: 'read',
   locked: 'read',
   layout: 'read',
   tables: 'read',
@@ -1138,8 +1161,9 @@ function readNode(key: string, value: unknown, path: Path, schema: Schema): Node
     raw = rest;
     bindings = own;
   }
-  const node = readNodeFields(key, raw, path, schema);
-  if (schema.effects === 'none') return node as NodeV8;
+  const legacy = schema.fills === 'read' ? readFillsShim(raw, path) : null;
+  const node = readNodeFields(key, legacy === null ? raw : legacy.shim, path, schema);
+  if (schema.effects === 'none') return node as unknown as NodeV8;
   const record = raw as Record<string, unknown>;
   const effects =
     schema.effects === 'read'
@@ -1149,6 +1173,26 @@ function readNode(key: string, value: unknown, path: Path, schema: Schema): Node
           schema.effectKinds === 'v8' ? EFFECT_KINDS_V8 : EFFECT_KINDS_V7,
         )
       : [];
+  if (schema.fills === 'none') return { ...node, effects } as unknown as NodeV8;
+  // `fills` takes `fill`'s place, so the value's key order is the written one (V35-S2).
+  const withFills: Record<string, unknown> = {};
+  for (const [key, field] of Object.entries(node)) {
+    if (key !== 'fill') {
+      withFills[key] = field;
+      continue;
+    }
+    const fill = field as Paint | null;
+    withFills.fills =
+      legacy !== null && legacy.fills
+        ? readFills(record.fills, [...path, 'fills'])
+        : fill === null
+          ? []
+          : [defaultFill(fill)];
+  }
+  const blendMode =
+    legacy !== null && legacy.blend
+      ? readBlendMode(record.blendMode, node.type, [...path, 'blendMode'])
+      : defaultBlendMode(node.type);
   // V31-S1: absent or `false` is unlocked and normalizes to no key.
   const lock =
     schema.locked === 'read' &&
@@ -1156,13 +1200,105 @@ function readNode(key: string, value: unknown, path: Path, schema: Schema): Node
     readBoolean(record.locked, [...path, 'locked'])
       ? { locked: true as const }
       : {};
-  if (raw === value) return { ...node, effects, ...lock };
+  const result = { ...withFills, blendMode, effects, ...lock };
+  if (raw === value) return result as unknown as NodeV8;
   return {
-    ...node,
-    effects,
-    ...lock,
+    ...result,
     bindings: readBindings(bindings, node.type, [...path, 'bindings']),
-  };
+  } as unknown as NodeV8;
+}
+
+/** V35-S2: the node types that hold `fills`. */
+const FILL_TYPES: ReadonlySet<string> = new Set([
+  'rectangle',
+  'ellipse',
+  'path',
+  'custom',
+  'frame',
+  'symbol',
+]);
+/** V35-S2: the node types that take `passThrough`. */
+const CONTAINER_BLEND_TYPES: ReadonlySet<string> = new Set([
+  'group',
+  'maskGroup',
+  'frame',
+  'symbol',
+  'instance',
+]);
+const BLEND_MODES: readonly BlendMode[] = [
+  'normal',
+  'multiply',
+  'screen',
+  'overlay',
+  'darken',
+  'lighten',
+  'colorDodge',
+  'colorBurn',
+  'hardLight',
+  'softLight',
+  'difference',
+  'exclusion',
+  'hue',
+  'saturation',
+  'color',
+  'luminosity',
+];
+const CONTAINER_BLEND_MODES: readonly ContainerBlendMode[] = [...BLEND_MODES, 'passThrough'];
+
+/** V35-S1: `passThrough` on containers and instances, `normal` on leaves. */
+function defaultBlendMode(type: string): ContainerBlendMode {
+  return CONTAINER_BLEND_TYPES.has(type) ? 'passThrough' : 'normal';
+}
+
+/** V35-S1: the one fill a v7 `fill` becomes. */
+function defaultFill(paint: Paint): Fill {
+  return { paint, visible: true, opacity: 1, blendMode: 'normal' };
+}
+
+function readBlendMode(value: unknown, type: string, path: Path): ContainerBlendMode {
+  return readEnum(
+    value,
+    CONTAINER_BLEND_TYPES.has(type) ? CONTAINER_BLEND_MODES : BLEND_MODES,
+    path,
+  );
+}
+
+/** V35-S2, S3: at most MAX_FILLS entries, each `paint, visible, opacity, blendMode`. */
+function readFills(value: unknown, path: Path): Fill[] {
+  if (!Array.isArray(value) || value.length > MAX_FILLS) invalid(path);
+  return readArray(value, path, (entry, entryPath): Fill => {
+    const record = readRecord(entry, ['paint', 'visible', 'opacity', 'blendMode'], entryPath);
+    return {
+      paint: readPaint(record.paint, [...entryPath, 'paint']),
+      visible: readBoolean(record.visible, [...entryPath, 'visible']),
+      opacity: readNumber(record.opacity, [...entryPath, 'opacity'], 0, 1),
+      blendMode: readEnum(record.blendMode, BLEND_MODES, [...entryPath, 'blendMode']),
+    };
+  });
+}
+
+/**
+ * V35-S1 at v8: a node value with `fills` and `blendMode` taken out (`fill: null` standing in for
+ * `fills`, so the v7 field reader runs unchanged), and which of the two it carried. A node with
+ * both `fill` and `fills` fails at `fill`; `fills` or `blendMode` on a type without them fails
+ * at that key, as an unknown key does.
+ */
+function readFillsShim(
+  value: unknown,
+  path: Path,
+): { shim: unknown; fills: boolean; blend: boolean } | null {
+  if (!isPlainObject(value)) return null;
+  const fills = Object.hasOwn(value, 'fills');
+  const blend = Object.hasOwn(value, 'blendMode');
+  const shim: Record<string, unknown> = { ...value };
+  delete shim.fills;
+  delete shim.blendMode;
+  if (fills) {
+    if (Object.hasOwn(value, 'fill')) invalid([...path, 'fill']);
+    if (!FILL_TYPES.has(value.type as string)) invalid([...path, 'fills']);
+    shim.fill = null;
+  }
+  return { shim, fills, blend };
 }
 
 /**

@@ -8,6 +8,7 @@ import {
   type PageV2,
   type SymbolNodeV8,
 } from '@vector-studio/model';
+import { fillDraws, leafSceneCount } from './fills.js';
 import { IDENTITY, localTransform, multiply, type Matrix } from './geometry.js';
 
 // Tree queries over a v2 document (M1 contract, M1-S3). The model bounds the tree depth by 256,
@@ -292,16 +293,68 @@ export function effectiveOpacity(tree: TreeView, node: NodeV8): number {
   return source?.type === 'symbol' ? node.opacity * source.opacity : node.opacity;
 }
 
-/** The isolation count of `id`: its container ancestors with opacity below 1. */
+/** The effects a node draws: an instance's own when it has any, else its source's (E41-S10). */
+function drawnEffects(tree: TreeView, node: NodeV8): NodeV8['effects'] {
+  if (node.type !== 'instance' || node.effects.length > 0) return node.effects;
+  const source = tree.node(node.symbol);
+  return source?.type === 'symbol' ? source.effects : node.effects;
+}
+
+/** Whether a drawing fill of `node` has a mode other than `normal`, a layer of its own (K3). */
+export function hasBlendedFill(node: NodeV8): boolean {
+  return (
+    'fills' in node && node.fills.some((fill) => fillDraws(fill) && fill.blendMode !== 'normal')
+  );
+}
+
+/**
+ * How many levels below `node`'s own count its fill leaves with a mode (K3 blend roots) sit, or
+ * null when it has none (V35-P6): a frame's or symbol's background, and an instance's (its
+ * source's fills), sit inside the unit, one lower when the unit isolates; a leaf's fill leaves sit
+ * in its P2 container, one lower when that container is a layer (opacity below 1, a mode, or
+ * effects).
+ */
+function blendedFillOffset(tree: TreeView, node: NodeV8): number | null {
+  if (node.type === 'instance') {
+    const source = tree.node(node.symbol);
+    if (source?.type !== 'symbol' || !hasBlendedFill(source)) return null;
+    return isolates(tree, node) ? 1 : 0;
+  }
+  if (!hasBlendedFill(node)) return null;
+  if (isContainer(node)) return isolates(tree, node) ? 1 : 0;
+  const opacity = effectiveOpacity(tree, node);
+  const effects = drawnEffects(tree, node).some((effect) => effect.visible) && opacity > 0;
+  return opacity < 1 || node.blendMode !== 'normal' || effects ? 1 : 0;
+}
+
+/**
+ * Whether `node` draws as an isolated layer, counted conservatively on the document (V-35
+ * contract, V35-P6): opacity below 1 (an instance's effective opacity), visible effects at
+ * opacity above 0 (E41; an instance's inherited effects included), a container or instance mode
+ * other than `passThrough`, a leaf mode other than `normal`, a leaf with a non-normal drawing
+ * fill, or a leaf whose fills expand (two or more) at opacity below 1.
+ */
+export function isolates(tree: TreeView, node: NodeV8): boolean {
+  const opacity = effectiveOpacity(tree, node);
+  const effects = drawnEffects(tree, node).some((effect) => effect.visible);
+  if (effects && opacity > 0) return true;
+  if (isContainer(node) || node.type === 'instance') {
+    return opacity < 1 || node.blendMode !== 'passThrough';
+  }
+  if (node.blendMode !== 'normal' || hasBlendedFill(node)) return true;
+  return opacity < 1 && 'fills' in node && leafSceneCount(node) > 1;
+}
+
+/** The isolation count of `id`: its container ancestors that isolate (V35-P6). */
 export function isolationCount(tree: TreeView, id: string): number {
-  return ancestors(tree, id).filter((node) => node.opacity < 1).length;
+  return ancestors(tree, id).filter((node) => isolates(tree, node)).length;
 }
 
 /** The isolation count a new child of `owner` (a page or container) has. */
 export function childIsolationCount(tree: TreeView, owner: string): number {
   const node = tree.node(owner);
   if (!isContainer(node)) return 0;
-  return isolationCount(tree, owner) + (node.opacity < 1 ? 1 : 0);
+  return isolationCount(tree, owner) + (isolates(tree, node) ? 1 : 0);
 }
 
 /**
@@ -320,9 +373,14 @@ function sourceIsolationLevels(tree: TreeView, source: string): SourceIsolationL
     const entry = tree.node(id);
     if (entry === undefined) continue;
     if (level > node) node = level;
-    if (entry.type === 'frame' && entry.opacity < 1 && level > unit) unit = level;
+    if (entry.type !== 'group' && entry.type !== 'maskGroup' && isolates(tree, entry)) {
+      if (level > unit) unit = level;
+    }
+    // A fill leaf with a mode is a leaf layer, at or below its node's level (V35-P6).
+    const offset = blendedFillOffset(tree, entry);
+    if (offset !== null && level + offset > unit) unit = level + offset;
     if (isContainer(entry)) {
-      const next = entry.opacity < 1 ? level + 1 : level;
+      const next = isolates(tree, entry) ? level + 1 : level;
       for (const child of entry.children) stack.push([child, next]);
     }
   }
@@ -355,12 +413,15 @@ export function isolationBreaks(
   levelsOf: (source: string) => SourceIsolationLevels = isolationLevelsMemo(tree),
 ): boolean {
   if (count > MAX_ISOLATION_COUNT) return true;
-  const opacity = effectiveOpacity(tree, node);
-  const unit = node.type === 'frame' || node.type === 'symbol' || node.type === 'instance';
-  if (unit && opacity < 1 && count > MAX_ISOLATED_UNIT_COUNT) return true;
+  // A frame unit or a leaf that is a layer puts its content one level below it (V35-P6).
+  const layered = node.type !== 'group' && node.type !== 'maskGroup' && isolates(tree, node);
+  if (layered && count > MAX_ISOLATED_UNIT_COUNT) return true;
+  // A fill leaf with a mode is a leaf layer, at or below the node's count (V35-P6).
+  const offset = blendedFillOffset(tree, node);
+  if (offset !== null && count + offset > MAX_ISOLATED_UNIT_COUNT) return true;
   if (node.type !== 'instance') return false;
   const levels = levelsOf(node.symbol);
-  const below = count + (opacity < 1 ? 1 : 0);
+  const below = count + (isolates(tree, node) ? 1 : 0);
   return (
     (levels.node >= 0 && below + levels.node > MAX_ISOLATION_COUNT) ||
     (levels.unit >= 0 && below + levels.unit > MAX_ISOLATED_UNIT_COUNT)
@@ -383,7 +444,7 @@ function isolationViolators(
       if (node === undefined) continue;
       if (isolationBreaks(tree, node, count, levelsOf)) found.add(id);
       if (isContainer(node)) {
-        const next = node.opacity < 1 ? count + 1 : count;
+        const next = isolates(tree, node) ? count + 1 : count;
         for (const child of node.children) stack.push([child, next]);
       }
     }
@@ -428,9 +489,10 @@ export function documentIsolationViolation(document: DocumentV8): string | null 
 /**
  * The first node a change from `base` to `document` makes break the isolation rule (section
  * 4.3), or null. Only these can: the subtrees of the nodes the change created, reparented or
- * retyped, of an instance whose source changed, and of a container or instance whose opacity it
- * lowered from 1, and every instance of each source that holds such a node or is one. Reported
- * in `pages` order then page-tree pre-order.
+ * retyped, of an instance whose source changed, of a container or instance whose opacity it
+ * lowered from 1, of a node it made isolate or gave a fill with a mode (V35-P6), and every
+ * instance of each source that holds such a node or is one. Reported in `pages` order then
+ * page-tree pre-order.
  */
 export function isolationViolation(
   base: DocumentV8,
@@ -438,6 +500,7 @@ export function isolationViolation(
   touched: Iterable<string>,
 ): string | null {
   const tree = documentTree(document);
+  const baseTree = documentTree(base);
   const changed: string[] = [];
   for (const id of touched) {
     if (!Object.hasOwn(document.nodes, id)) continue;
@@ -448,7 +511,11 @@ export function isolationViolation(
       before.parent !== node.parent ||
       before.type !== node.type ||
       (before.type === 'instance' && node.type === 'instance' && before.symbol !== node.symbol) ||
-      ((isContainer(node) || node.type === 'instance') && before.opacity === 1 && node.opacity < 1)
+      ((isContainer(node) || node.type === 'instance') &&
+        before.opacity === 1 &&
+        node.opacity < 1) ||
+      (!isolates(baseTree, before) && isolates(tree, node)) ||
+      (blendedFillOffset(baseTree, before) ?? -1) < (blendedFillOffset(tree, node) ?? -1)
     ) {
       changed.push(id);
     }

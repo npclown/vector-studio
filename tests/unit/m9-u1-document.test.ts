@@ -65,9 +65,10 @@ const loaded = loadScenarioDocument('m9-v2');
  * Pinned digest of the canonical generated v2 document (U1); a change is a new version. The
  * M9-U1 pre-run fix (run boundaries at word starts) changed it from 6104db99…0407, and schema v7
  * (E41-U4: `effects: []` on every node, E41-S1) from cae67383…895c, and schema v8 (the v8
- * scaffold of 2026-11-12) from 876b1868…dfd89.
+ * scaffold of 2026-11-12) from 876b1868…dfd89, and V-35's `fills` and `blendMode` (V35-S1)
+ * from 2f74ad3b…9275.
  */
-const M9_V2_SHA256 = '2f74ad3be7ff3664b378e5a99715c848b71dfa1fb77a48ab2c9d1f5bb4fd9275';
+const M9_V2_SHA256 = '9881e5e3f80a8d06c895a8d762c8f5d78f662d60e87b7df20ddadc185e8c2a76';
 /** The section 3.1 counts, pinned. */
 const COUNTS = {
   documentNodes: 10_000,
@@ -93,7 +94,8 @@ const DRAWN_LEAVES = 6_809;
 /**
  * The configuration hashes at DPR 1, five repetitions: the v1 ones as at 75be15b, re-pinned at
  * E41-U4, where the loaded documents became schema v7 (E41-S1) and so did each configuration's
- * `schemaVersion` and document digest, and again at the v8 scaffold (2026-11-12) for v8.
+ * `schemaVersion` and document digest, and again at the v8 scaffold (2026-11-12) for v8
+ * and at V-35 (V35-S1: `fills` and `blendMode` on the nodes).
  */
 const V1_HASHES = {
   'e26-mixed-view-edit-10k/v1': '68becdb1e8f2aeff40f584ad03b0ed7b9eb581b10a2485142ca423d391085f7f',
@@ -103,12 +105,12 @@ const V1_HASHES = {
   'e26-pointer-busy-10k/v1': '3e1f82b533b8e71ae297601725ab17608524862cff6df1ed68802441ef42090e',
 };
 const V2_HASHES = {
-  'e26-mixed-view-edit-10k/v2': '7e7ab91e760d65c516c9cba29484aedbb8ce14a759fe7a1e80d626f59966ffda',
-  'e26-mixed-all-edit-10k/v2': '7a2838c0e6db5a586c6682aba417388abc812b998b7d2c87493c5c7a4e862a96',
-  'e26-mixed-all-pan-10k/v2': '4cc6bdd2a003785b9fa9c28d88b48789bcd066ff34e3790d01f4ed6fedbbf6de',
+  'e26-mixed-view-edit-10k/v2': '88bdf1a90d78535e0ec317195a209b6adb0e5a1eba9ee9729ed8cd4176c1e6b2',
+  'e26-mixed-all-edit-10k/v2': '8093967996a939703b7c86878142996fa0800ff510f126362e89b26bd5d24b28',
+  'e26-mixed-all-pan-10k/v2': '424cf95200d89f51c96b2849aa31e54e157f74ba40fee4d9f4be9f476d7ba830',
   'e26-simple-stress-10k/v2': 'ec3cba8e56bfb16aaff4fa80f52438c53c987bd7da6d9788678514325921ec53',
-  'e26-pointer-busy-10k/v2': '2b0d21397fadd5421c1a131cd5773efda6a5c6d65a3238af9074e1ec1e4112d0',
-  'm9-typing-10k/v1': '1bd8f1f8a76cd52792e06a12bd7bd7d90c94b1de2f4618389b37c93c86a8e579',
+  'e26-pointer-busy-10k/v2': 'a2382856fa88203d2af88e43a728a4468cf85d7aa2008217e45d4e99f5d52c39',
+  'm9-typing-10k/v1': 'b8b70dc09347e73aeeaa14ec50f4139e4975eea7c6d9a02df6c4bb58071a44fc',
 };
 
 /** Generating, projecting and hashing 10,000 nodes takes seconds. */

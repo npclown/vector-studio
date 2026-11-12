@@ -102,8 +102,7 @@ Since 2026-11-12 (Figma gap item 9; [V-39 contract](plans/viz-v39-styles-variabl
 
 - Drop shadows and layer blur ([E41](plans/d9-e41-boolean-effects-contract.md))
 - Inner shadows and background blur ([V-36](plans/viz-v36-inner-shadow-background-blur-contract.md)); background blur shows only on layers outside groups with opacity or effects
-
-Multiple fills and blend modes are deferred.
+- Multiple fills per node, each with its own opacity, visibility and blend mode, and the 16 W3C blend modes on nodes ([V-35](plans/viz-v35-fills-blend-contract.md), requested by the user 2026-11-12)
 
 ## Editing behavior
 
@@ -159,7 +158,7 @@ Untrusted plugins, sandbox execution, a marketplace, import of formats other tha
 Future considerations (recorded 2026-11-04 at the user's request; no work is scheduled). Today's extension surface ([host API guide](host-api.md#extensions)) covers path-shaped custom node types that use the node's own fill and stroke, commands, tools, key bindings and UI panels; import or export (deferred above) could later be built as extension commands on the public commands and queries. These need engine or core changes first, because the scene contract or the extension boundary has no place for them:
 
 - New paint types beyond solid, linear, radial and image (for example patterns, conic or mesh gradients).
-- Effects and filters beyond E41's drop shadow and layer blur (for example blend modes).
+- Effects and filters beyond E41's drop shadow and layer blur and V-35's blend modes.
 - Non-path content other than image fills, and any renderer-side extension (custom shaders, direct renderer access).
 
 A plugin contract is planned when the first concrete need for one of these appears. It would cover a renderer-side extension port for registering paints and effects, extension versioning and compatibility rules, and, only if untrusted plugins are wanted, runtime installation and a sandbox, which stay deferred until then.

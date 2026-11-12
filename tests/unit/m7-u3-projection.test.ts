@@ -320,7 +320,7 @@ describe('M7-A04 projection: scene structure and IDs (section 4.1)', () => {
       ...inner,
       kind: 'primitive',
       geometry: box,
-      style: { fill: s1.type === 'symbol' ? s1.fill : null, stroke: null },
+      style: { fill: s1.type === 'symbol' ? (s1.fills[0]?.paint ?? null) : null, stroke: null },
     });
     expect(node(`i1${BD}`)).toEqual({
       id: `i1${BD}`,

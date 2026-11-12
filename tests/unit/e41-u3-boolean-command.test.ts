@@ -146,7 +146,7 @@ describe('E41-A03 booleanNodes: result node (B1, B2)', () => {
       type: 'path',
       name: 'Base',
       rotation: 0,
-      fill: red,
+      fills: [{ paint: red }],
       frame: { x: 0, y: 0, width: 150, height: 75 },
     });
     if (result.type !== 'path') throw new Error('path');
@@ -190,7 +190,7 @@ describe('E41-A03 booleanNodes: result node (B1, B2)', () => {
     const result = node(target2, id!);
     expect(area(result)).toBeCloseTo(100 * 100 - 50 * 50, 6);
     // Style from A₀ (the big red square), its hole a second contour.
-    expect(result).toMatchObject({ fill: red });
+    expect(result).toMatchObject({ fills: [{ paint: red }] });
     expect(polygons(result)).toHaveLength(2);
   });
 
@@ -264,7 +264,8 @@ describe('E41-A03 booleanNodes: result node (B1, B2)', () => {
 /** The gradient-space point that page point `p` is painted from, for a rotation-0 parent. */
 function gradientPoint(target: Editor, id: string, p: { x: number; y: number }) {
   const n = node(target, id);
-  if (!('fill' in n) || n.fill === null || !('kind' in n.fill)) throw new Error('no gradient');
+  const paint = 'fills' in n ? n.fills[0]?.paint : undefined;
+  if (paint === undefined || !('kind' in paint)) throw new Error('no gradient');
   const unit = multiply(localTransform(n.frame, n.rotation), [
     n.frame.width,
     0,
@@ -273,7 +274,7 @@ function gradientPoint(target: Editor, id: string, p: { x: number; y: number }) 
     0,
     0,
   ]);
-  const m = multiply(unit, n.fill.transform);
+  const m = multiply(unit, paint.transform);
   const [a, b, c, d, e, f] = m;
   const det = a * d - b * c;
   const x = p.x - e;
@@ -311,7 +312,7 @@ describe('E41-A03 gradient re-map (B2)', () => {
       });
       const result = node(target, id!);
       expect(result).toMatchObject({
-        fill: { kind: 'linear', stops: gradient.stops, spread: 'reflect' },
+        fills: [{ paint: { kind: 'linear', stops: gradient.stops, spread: 'reflect' } }],
       });
     },
   );
@@ -650,7 +651,9 @@ describe('E41-A03 review follow-ups', () => {
     const zero = rect(flat, 0, 0, 0, 100, { fill: gradient });
     const c = rect(flat, 0, 0, 100, 100);
     const [id2] = ok(flat, { type: 'booleanNodes', ids: [zero, c], op: 'union' });
-    expect(node(flat, id2!)).toMatchObject({ fill: { transform: gradient.transform } });
+    expect(node(flat, id2!)).toMatchObject({
+      fills: [{ paint: { transform: gradient.transform } }],
+    });
   });
 
   it('undo restores a selection other than the inputs, filtered to the active page', () => {

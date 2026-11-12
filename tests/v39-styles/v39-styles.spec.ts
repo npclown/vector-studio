@@ -161,7 +161,11 @@ test('V39-A07 styles and variables: panel, style menu, bind buttons, modes', asy
   await ok(page, { type: 'setSelection', ids: [] });
   await panel.getByLabel('Active mode').selectOption(m2!);
   await ok(page, { type: 'setSelection', ids: [rect!] });
-  expect(await node(page, rect!)).toMatchObject({ fill: { r: 0, g: 0, b: 1, a: 1 }, opacity: 0.5 });
+  // V-35: a `fill` binding writes the top fill's paint.
+  expect(await node(page, rect!)).toMatchObject({
+    fills: [{ paint: { r: 0, g: 0, b: 1, a: 1 } }],
+    opacity: 0.5,
+  });
   await expect(page.getByTestId('opacity-binding')).toHaveText('Number 1 = 0.5');
   const pixel = await exportedCentre(page);
   expect(pixel[2]).toBe(255);

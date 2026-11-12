@@ -496,7 +496,45 @@ export type DocumentV7 = Readonly<{
 
 // Document schema v8 (docs/plans/viz-schema-v8.md, gap-list items V-31 to V-40): introduced as v7's shape
 // so the ten items can each add their fields to one unreleased version instead of bumping it in
-// turn. The v7 to v8 migration changes only `schemaVersion` until an item adds a field.
+// turn. V-35 replaces `fill` by `fills` and adds `blendMode` to every node (V35-S1, S2).
+
+/**
+ * V-35 contract (docs/plans/viz-v35-fills-blend-contract.md), V35-S2: the W3C Compositing Level 1
+ * blend modes, and `passThrough`, which only a container or instance takes.
+ */
+export type BlendMode =
+  | 'normal'
+  | 'multiply'
+  | 'screen'
+  | 'overlay'
+  | 'darken'
+  | 'lighten'
+  | 'colorDodge'
+  | 'colorBurn'
+  | 'hardLight'
+  | 'softLight'
+  | 'difference'
+  | 'exclusion'
+  | 'hue'
+  | 'saturation'
+  | 'color'
+  | 'luminosity';
+export type ContainerBlendMode = BlendMode | 'passThrough';
+
+/** V35-S2: one fill of a node, painted bottom first; `opacity` in `[0, 1]`. */
+export type Fill = Readonly<{
+  paint: Paint;
+  visible: boolean;
+  opacity: number;
+  blendMode: BlendMode;
+}>;
+
+/** V35-S2: the fills that replace v7's single `fill` (at most MAX_FILLS). */
+export type NodeFills = Readonly<{ fills: readonly Fill[] }>;
+/** V35-S2: a leaf's blend mode. */
+export type LeafBlend = Readonly<{ blendMode: BlendMode }>;
+/** V35-S2: a container's or instance's blend mode. */
+export type ContainerBlend = Readonly<{ blendMode: ContainerBlendMode }>;
 
 /** The field V-39 adds to every v8 node (V39-S4): its bindings, absent when it has none. */
 export type NodeBindings = Readonly<{ bindings?: Bindings }>;
@@ -507,16 +545,52 @@ export type NodeBindings = Readonly<{ bindings?: Bindings }>;
  */
 export type NodeLock = Readonly<{ locked?: boolean }>;
 
-export type RectangleNodeV8 = RectangleNodeV6 & NodeEffects & NodeLock & NodeBindings;
-export type EllipseNodeV8 = EllipseNodeV6 & NodeEffects & NodeLock & NodeBindings;
-export type LineNodeV8 = LineNodeV6 & NodeEffects & NodeLock & NodeBindings;
-export type PathNodeV8 = PathNodeV6 & NodeEffects & NodeLock & NodeBindings;
-export type CustomNodeV8 = CustomNodeV6 & NodeEffects & NodeLock & NodeBindings;
-export type TextNodeV8 = TextNode & NodeEffects & NodeLock & NodeBindings;
-export type InstanceNodeV8 = InstanceNodeV5 & NodeEffects & NodeLock & NodeBindings;
-export type GroupNodeV8 = GroupNode & NodeEffects & NodeLock & NodeBindings;
-export type FrameNodeV8 = FrameNodeV6 & NodeEffects & NodeLock & NodeLayoutGrids & NodeBindings;
-export type SymbolNodeV8 = SymbolNodeV6 & NodeEffects & NodeLock & NodeLayoutGrids & NodeBindings;
+export type RectangleNodeV8 = Omit<RectangleNodeV6, 'fill'> &
+  NodeFills &
+  LeafBlend &
+  NodeEffects &
+  NodeLock &
+  NodeBindings;
+export type EllipseNodeV8 = Omit<EllipseNodeV6, 'fill'> &
+  NodeFills &
+  LeafBlend &
+  NodeEffects &
+  NodeLock &
+  NodeBindings;
+export type LineNodeV8 = LineNodeV6 & LeafBlend & NodeEffects & NodeLock & NodeBindings;
+export type PathNodeV8 = Omit<PathNodeV6, 'fill'> &
+  NodeFills &
+  LeafBlend &
+  NodeEffects &
+  NodeLock &
+  NodeBindings;
+export type CustomNodeV8 = Omit<CustomNodeV6, 'fill'> &
+  NodeFills &
+  LeafBlend &
+  NodeEffects &
+  NodeLock &
+  NodeBindings;
+export type TextNodeV8 = TextNode & LeafBlend & NodeEffects & NodeLock & NodeBindings;
+export type InstanceNodeV8 = InstanceNodeV5 &
+  ContainerBlend &
+  NodeEffects &
+  NodeLock &
+  NodeBindings;
+export type GroupNodeV8 = GroupNode & ContainerBlend & NodeEffects & NodeLock & NodeBindings;
+export type FrameNodeV8 = Omit<FrameNodeV6, 'fill'> &
+  NodeFills &
+  ContainerBlend &
+  NodeEffects &
+  NodeLock &
+  NodeLayoutGrids &
+  NodeBindings;
+export type SymbolNodeV8 = Omit<SymbolNodeV6, 'fill'> &
+  NodeFills &
+  ContainerBlend &
+  NodeEffects &
+  NodeLock &
+  NodeLayoutGrids &
+  NodeBindings;
 
 export type LeafNodeV8 =
   | RectangleNodeV8

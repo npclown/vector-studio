@@ -27,7 +27,7 @@ import {
   type ParseResultV3,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
-import { v7Text, v7Value } from '../support/schema-v7.js';
+import { v7Text, v7Value, v8Node } from '../support/schema-v7.js';
 
 // MVP M7-U1 (M7 contract, section 2): schema v3 with `symbol` and `instance`, the M7-S rules and
 // codes, the version-only migration, the serialize order and `validateFragmentTree` (M7-A01).
@@ -374,9 +374,22 @@ describe('M7-A01 round trip and serialize order (section 7)', () => {
       'visible',
       'type',
     ];
-    expect(Object.keys(raw.nodes.s1!)).toEqual([...BASE, 'children', 'fill', 'stroke', 'effects']);
+    expect(Object.keys(raw.nodes.s1!)).toEqual([
+      ...BASE,
+      'children',
+      'fills',
+      'stroke',
+      'blendMode',
+      'effects',
+    ]);
     expect(Object.keys(raw.nodes.s1!)).toEqual(Object.keys(raw.nodes.d1!));
-    expect(Object.keys(raw.nodes.i1!)).toEqual([...BASE, 'symbol', 'textOverrides', 'effects']);
+    expect(Object.keys(raw.nodes.i1!)).toEqual([
+      ...BASE,
+      'symbol',
+      'textOverrides',
+      'blendMode',
+      'effects',
+    ]);
     // The order holds for an in-memory value built in another key order.
     const value = parsed(text);
     const { symbol: source, ...rest } = value.nodes.i1 as Extract<
@@ -714,7 +727,7 @@ describe('M7-A01 validateFragmentTree (section 6)', () => {
 describe('M7-A01 validateNode on v3 nodes', () => {
   it('accepts a symbol and an instance and applies M7-S4 to older inputs only', () => {
     // At v7 every node has `effects` (E41-S1).
-    const at = (node: object) => ({ ...node, effects: [] });
+    const at = (node: object) => v8Node(node as Record<string, unknown>);
     expect(validateNode(at(symbol('s', 'p'))).ok).toBe(true);
     expect(validateNode(at(instance('i', 'p', 's')))).toEqual({
       ok: true,

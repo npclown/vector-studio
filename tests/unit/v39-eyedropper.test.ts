@@ -30,7 +30,11 @@ function ok(target: Editor, command: Command): readonly string[] {
 }
 
 const sample = (target: Editor, point: PagePoint) => target.query({ type: 'sampleColor', point });
-const node = (target: Editor, id: string) => target.query({ type: 'node', id }) as NodeV8;
+/** The node, with V-35's top fill paint also read as `fill`. */
+const node = (target: Editor, id: string): NodeV8 & { fill?: unknown } => {
+  const value = target.query({ type: 'node', id }) as NodeV8;
+  return 'fills' in value ? { ...value, fill: value.fills.at(-1)?.paint ?? null } : value;
+};
 
 function rect(target: Editor, x: number, y: number, fill: Color | Gradient | null = red): string {
   return ok(target, {
@@ -84,6 +88,7 @@ function withText(): Editor {
     align: 'left',
     letterSpacing: 0,
     lineHeight: 1.2,
+    blendMode: 'normal',
     effects: [],
   };
   const page = document.pages[0]!;

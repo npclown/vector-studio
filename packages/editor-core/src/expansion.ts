@@ -1,3 +1,4 @@
+import { frameSceneCount, leafSceneCount } from './fills.js';
 import {
   validateNode,
   type DocumentV8,
@@ -148,10 +149,8 @@ function sameOverrides(a: Overrides, b: Overrides): boolean {
 export function sceneCount(objects: readonly NodeV8[]): number {
   let count = 0;
   for (const node of objects) {
-    count += 1;
-    if (node.type === 'frame') {
-      count += 1 + (node.fill === null ? 0 : 1) + (node.stroke === null ? 0 : 1);
-    }
+    count +=
+      node.type === 'frame' ? frameSceneCount(node.fills, node.stroke) : leafSceneCount(node);
   }
   return count;
 }
@@ -369,9 +368,7 @@ export class ExpansionCache {
           textChild,
           // The instance's outer and content nodes, and its background and border when present.
           count:
-            2 +
-            (node.fill === null ? 0 : 1) +
-            (node.stroke === null ? 0 : 1) +
+            frameSceneCount(node.fills, node.stroke) +
             children.reduce((sum, child) => sum + child.count, 0),
         };
     this.sources.set(id, state);

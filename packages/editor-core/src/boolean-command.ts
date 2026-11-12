@@ -1,3 +1,4 @@
+import { nodeFills } from './fills.js';
 import type { DocumentV8, NodeV8, Paint, PathNodeV8, PathVerb } from '@vector-studio/model';
 import {
   booleanOp,
@@ -226,7 +227,11 @@ export function booleanNodes(
   const base = inputs[0]!;
   const from = unitBox(base);
   const to = unitBox({ frame, rotation: 0 });
-  const fill = 'fill' in base && base.fill !== null ? remapPaint(base.fill, from, to) : null;
+  // V35-C4: the result takes A₀'s fills and blend mode (E41-B2's rule over the list).
+  const fills = nodeFills(base).map((entry) => ({
+    ...entry,
+    paint: remapPaint(entry.paint, from, to),
+  }));
   const stroke =
     'stroke' in base && base.stroke !== null
       ? { ...base.stroke, color: remapPaint(base.stroke.color, from, to) }
@@ -244,8 +249,9 @@ export function booleanNodes(
       visible: true,
       effects: base.effects,
       path: { verbs, points: unit, fillRule: 'nonzero' },
-      fill,
+      fills,
       stroke,
+      blendMode: base.blendMode === 'passThrough' ? 'normal' : base.blendMode,
       // V39-E4: the result carries the base's bindings; the draft drops those that fail.
       ...(base.bindings === undefined ? {} : { bindings: base.bindings }),
     };

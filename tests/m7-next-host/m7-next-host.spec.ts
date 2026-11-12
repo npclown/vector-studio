@@ -298,8 +298,9 @@ function expectDetached(document: DocumentV8, id: string, before: DocumentV8) {
     frame: original.frame,
     rotation: original.rotation,
     constraints: original.constraints,
-    fill: source.fill,
+    fills: source.fills,
     stroke: source.stroke,
+    blendMode: original.blendMode,
   });
   const copies = descendants(document, id);
   expect(copies.map((copy) => copy.type)).toEqual(SOURCE_TYPES);

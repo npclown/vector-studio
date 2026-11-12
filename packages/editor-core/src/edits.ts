@@ -4,9 +4,11 @@ import {
   validateGuides,
   validateNode,
   type DocumentV8,
+  type Fill,
   type Frame,
   type NodeV8,
   type PageV2,
+  type Paint,
   type Stroke,
   type SymbolNodeV8,
   type TextNodeV8,
@@ -21,8 +23,10 @@ import {
 import { booleanNodes } from './boolean-command.js';
 import { paste } from './clipboard.js';
 import { addEffect, removeEffect, setEffect } from './effect-commands.js';
+import { addFill, moveFill, removeFill, setFill } from './fill-commands.js';
 import { tableCommand } from './table-commands.js';
 import { Draft, fail, type Failure } from './draft.js';
+import { defaultBlendMode, paintFill } from './fills.js';
 import { ExpansionCache, expansionFailure } from './expansion.js';
 import {
   freshId,
@@ -141,20 +145,56 @@ const MAX_CLIP_CONTAINER_DEPTH = 31;
 const MAX_CLIP_DEPTH = 32;
 
 /** The props each node type has (section 4.2); any other prop is `editor.invalid-command`. */
-const COMMON_PROPS = ['name', 'opacity', 'visible', 'constraints', 'locked'];
+const COMMON_PROPS = ['name', 'opacity', 'visible', 'constraints', 'locked', 'blendMode'];
+
+/**
+ * V35-S5: `fill` in a command's props as the `fills` it stands for (one fill of the paint at
+ * opacity 1, `normal`, or none); `fill` with `fills` is `editor.invalid-command` at `fills`.
+ */
+function withFills(
+  props: Record<string, unknown>,
+  prefix: string,
+): Record<string, unknown> | Failure {
+  if (!Object.hasOwn(props, 'fill')) return props;
+  if (Object.hasOwn(props, 'fills')) return fail('editor.invalid-command', `${prefix}/fills`);
+  const { fill, ...rest } = props;
+  return { ...rest, fills: fill === null ? [] : [paintFill(fill as Paint)] };
+}
+
+/**
+ * A failure path of a node built from a command's `fill` (V35-S5): `/fills/0/paint…` is reported
+ * as `/fill…`, where the caller wrote it.
+ */
+function fillPath(path: string | undefined, fromFill: boolean): string | undefined {
+  if (!fromFill || path === undefined) return path;
+  if (path === '/fills/0/paint' || path.startsWith('/fills/0/paint/')) {
+    return `/fill${path.slice('/fills/0/paint'.length)}`;
+  }
+  return path === '/fills' || path === '/fills/0' ? '/fill' : path;
+}
+
+/** The `fills` of a created node from the command's `fill` or `fills` (V35-S5). */
+function createdFills(
+  command: Readonly<{ fill?: Paint | null; fills?: readonly Fill[] }>,
+  fallback: Paint | null,
+): unknown {
+  if (command.fills !== undefined) return command.fills;
+  const paint = command.fill === undefined ? fallback : command.fill;
+  return paint === null ? [] : [paintFill(paint)];
+}
 const PROPS: Readonly<Record<NodeV8['type'], readonly string[]>> = {
-  rectangle: [...COMMON_PROPS, 'fill', 'stroke', 'cornerRadii'],
-  ellipse: [...COMMON_PROPS, 'fill', 'stroke'],
+  rectangle: [...COMMON_PROPS, 'fill', 'fills', 'stroke', 'cornerRadii'],
+  ellipse: [...COMMON_PROPS, 'fill', 'fills', 'stroke'],
   line: [...COMMON_PROPS, 'stroke', 'startArrow', 'endArrow'],
-  path: [...COMMON_PROPS, 'fill', 'stroke'],
-  custom: [...COMMON_PROPS, 'fill', 'stroke', 'data'],
+  path: [...COMMON_PROPS, 'fill', 'fills', 'stroke'],
+  custom: [...COMMON_PROPS, 'fill', 'fills', 'stroke', 'data'],
   group: COMMON_PROPS,
   maskGroup: COMMON_PROPS,
   // V-38 contract, V38-C2: a frame's or symbol's `layoutGrids`.
-  frame: [...COMMON_PROPS, 'fill', 'stroke', 'layoutGrids'],
+  frame: [...COMMON_PROPS, 'fill', 'fills', 'stroke', 'layoutGrids'],
   // M7 contract: a symbol has a frame's props (section 1.2), an instance only the common ones
   // (section 5.1; its opacity any in `[0, 1]` since M4-U3, M4 contract, section 5).
-  symbol: [...COMMON_PROPS, 'fill', 'stroke', 'layoutGrids'],
+  symbol: [...COMMON_PROPS, 'fill', 'fills', 'stroke', 'layoutGrids'],
   instance: COMMON_PROPS,
   // M6a contract, section 6.1: a text node takes the common props only; its own props are
   // `setTextProps`'s.
@@ -285,8 +325,12 @@ export function applyEdit(
       for (const key of Object.keys(props)) {
         if (!PROPS[node.type].includes(key)) return fail('editor.invalid-command', `/props/${key}`);
       }
-      const result = validateNode({ ...node, ...props });
-      if (!result.ok) return fail(result.code, nodePath(node.id, result.path));
+      const merged = withFills(props, '/props');
+      if ('ok' in merged) return merged as Failure;
+      const result = validateNode({ ...node, ...merged });
+      if (!result.ok) {
+        return fail(result.code, nodePath(node.id, fillPath(result.path, 'fill' in props)));
+      }
       const rejected = custom.check(deepFreeze(result.node));
       if (rejected !== null) return fail(rejected.code, nodePath(node.id, rejected.path));
       const draft = new Draft(document);
@@ -336,6 +380,14 @@ export function applyEdit(
       return setEffect(document, command, context, custom, finish);
     case 'removeEffect':
       return removeEffect(document, command, context, custom, finish);
+    case 'addFill':
+      return addFill(document, command, context, custom, finish);
+    case 'setFill':
+      return setFill(document, command, context, custom, finish);
+    case 'removeFill':
+      return removeFill(document, command, context, custom, finish);
+    case 'moveFill':
+      return moveFill(document, command, context, custom, finish);
     case 'createColorStyle':
     case 'updateColorStyle':
     case 'removeColorStyle':
@@ -616,7 +668,7 @@ export function applyGestureEdit(
 }
 
 /** The fields of a node that hold content in its unit box, which a flip mirrors. */
-const CONTENT_KEYS = ['path', 'points', 'cornerRadii', 'fill', 'stroke'] as const;
+const CONTENT_KEYS = ['path', 'points', 'cornerRadii', 'fills', 'stroke'] as const;
 
 type CreateCommand = Extract<
   DocumentCommand,
@@ -695,6 +747,14 @@ function create(
     return fail('document.invalid-field', '/rotation');
   }
 
+  if (
+    'fill' in command &&
+    'fills' in command &&
+    command.fill !== undefined &&
+    command.fills !== undefined
+  ) {
+    return fail('editor.invalid-command', '/fills');
+  }
   // The node in page space, validated before an ID is drawn; failure paths are relative to it.
   const base = {
     id: PENDING_ID,
@@ -704,6 +764,13 @@ function create(
     opacity: 1,
     visible: true,
     effects: [],
+    blendMode: defaultBlendMode(
+      command.type === 'createFrame'
+        ? 'frame'
+        : command.type === 'createInstance'
+          ? 'instance'
+          : 'leaf',
+    ),
   };
   const fitted = points === null ? null : fitPoints(points, normalizeRotation(rotation));
   let candidate: Record<string, unknown>;
@@ -715,7 +782,7 @@ function create(
         frame: command.frame,
         type: 'rectangle',
         cornerRadii: command.cornerRadii ?? [0, 0, 0, 0],
-        fill: command.fill === undefined ? DEFAULT_RECTANGLE_FILL : command.fill,
+        fills: createdFills(command, DEFAULT_RECTANGLE_FILL),
         stroke: command.stroke ?? null,
       };
       break;
@@ -725,7 +792,7 @@ function create(
         name: command.name ?? 'Ellipse',
         frame: command.frame,
         type: 'ellipse',
-        fill: command.fill === undefined ? DEFAULT_RECTANGLE_FILL : command.fill,
+        fills: createdFills(command, DEFAULT_RECTANGLE_FILL),
         stroke: command.stroke ?? null,
       };
       break;
@@ -736,7 +803,7 @@ function create(
         frame: command.frame,
         type: 'frame',
         children: [],
-        fill: command.fill === undefined ? DEFAULT_FRAME_FILL : command.fill,
+        fills: createdFills(command, DEFAULT_FRAME_FILL),
         stroke: command.stroke ?? null,
       };
       break;
@@ -763,7 +830,7 @@ function create(
           points: fitted!.unit,
           fillRule: command.fillRule ?? 'nonzero',
         },
-        fill: command.fill ?? null,
+        fills: createdFills(command, null),
         stroke: command.stroke === undefined ? DEFAULT_PATH_STROKE : command.stroke,
       };
       break;
@@ -781,7 +848,7 @@ function create(
         type: 'custom',
         customType: command.customType,
         data,
-        fill: command.fill ?? null,
+        fills: createdFills(command, null),
         stroke: command.stroke === undefined ? DEFAULT_PATH_STROKE : command.stroke,
       };
       break;
@@ -829,7 +896,18 @@ function create(
     // Only extension `defaults()` can put an exotic value (a throwing getter or proxy) here.
     return fail('document.invalid-custom-data', '/data');
   }
-  if (!result.ok) return fail(result.code, result.path);
+  if (!result.ok) {
+    return fail(
+      result.code,
+      fillPath(
+        result.path,
+        command.type !== 'createInstance' &&
+          command.type !== 'createLine' &&
+          command.type !== 'createText' &&
+          command.fill !== undefined,
+      ),
+    );
+  }
   const inSymbol =
     owner?.type === 'symbol' || ancestors(tree, parent).some((node) => node.type === 'symbol');
   if (result.node.type === 'text') {
@@ -914,7 +992,7 @@ function create(
 }
 
 /** The keys of `setStyle`'s `style` and of a stroke patch (MVP M4 contract, section 4.2). */
-const STYLE_KEYS = ['fill', 'stroke', 'opacity', 'cornerRadii'];
+const STYLE_KEYS = ['fill', 'fills', 'stroke', 'opacity', 'cornerRadii', 'blendMode'];
 const STROKE_KEYS = ['color', 'width', 'cap', 'join', 'miterLimit', 'dash'];
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -959,6 +1037,14 @@ function setStyle(
       return fail('editor.invalid-command', `/style/${key}`);
     }
   }
+  if (keys.includes('fill') && keys.includes('fills')) {
+    return fail('editor.invalid-command', '/style/fills');
+  }
+  // V35-C1: `passThrough` applies to containers only, and is skipped on leaves.
+  const passThrough = style.blendMode === 'passThrough';
+  if (passThrough && !nodes.some((node) => defaultBlendMode(node.type) === 'passThrough')) {
+    return fail('editor.invalid-command', '/style/blendMode');
+  }
   const patch = style.stroke;
   if (patch !== undefined && patch !== null) {
     if (!isPlainRecord(patch)) return fail('editor.invalid-command', '/style/stroke');
@@ -973,6 +1059,9 @@ function setStyle(
     const props: Record<string, unknown> = {};
     for (const key of keys) {
       if (!PROPS[node.type].includes(key)) continue;
+      if (key === 'blendMode' && passThrough && defaultBlendMode(node.type) !== 'passThrough') {
+        continue;
+      }
       if (key !== 'stroke' || patch === null) {
         props[key] = style[key];
         continue;
@@ -985,14 +1074,18 @@ function setStyle(
       props.stroke = { ...(own ?? fallback), ...(patch as Record<string, unknown>) };
     }
     if (Object.keys(props).length === 0) continue;
-    const result = validateNode({ ...node, ...props });
-    if (!result.ok) return fail(result.code, nodePath(node.id, result.path));
+    const merged = withFills(props, '/style');
+    if ('ok' in merged) return merged as Failure;
+    const result = validateNode({ ...node, ...merged });
+    if (!result.ok) {
+      return fail(result.code, nodePath(node.id, fillPath(result.path, 'fill' in props)));
+    }
     const rejected = custom.check(deepFreeze(result.node));
     if (rejected !== null) return fail(rejected.code, nodePath(node.id, rejected.path));
     const next = result.node as Record<string, unknown>;
     const before = node as Record<string, unknown>;
     if (
-      Object.keys(props).every((key) => JSON.stringify(next[key]) === JSON.stringify(before[key]))
+      Object.keys(merged).every((key) => JSON.stringify(next[key]) === JSON.stringify(before[key]))
     ) {
       continue;
     }
@@ -1196,11 +1289,12 @@ function buildGroup(
     visible: true,
     children: members,
     effects: [],
+    blendMode: 'passThrough' as const,
   };
   // A source wraps the nodes as a group does, with no fill or stroke (M7 contract, section 5.1).
   const container: NodeV8 =
     kind === 'symbol'
-      ? { ...shared, name: 'Symbol', type: 'symbol', fill: null, stroke: null }
+      ? { ...shared, name: 'Symbol', type: 'symbol', fills: [], stroke: null }
       : { ...shared, name: kind === 'group' ? 'Group' : 'Mask group', type: kind };
   const draft = new Draft(document);
   draft.set(container);

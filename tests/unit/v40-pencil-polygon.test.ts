@@ -495,7 +495,9 @@ describe('V-40 polygon tool', () => {
     expect(node.name).toBe('Polygon');
     expect(node.frame).toEqual({ x: 10, y: 10, width: 100, height: 80 });
     expect(node.type === 'path' && node.path.verbs).toEqual(['move', 'line', 'line', 'close']);
-    expect(node.type === 'path' && node.fill).toEqual({ r: 0.8, g: 0.8, b: 0.8, a: 1 });
+    expect(node.type === 'path' && node.fills.map((fill) => fill.paint)).toEqual([
+      { r: 0.8, g: 0.8, b: 0.8, a: 1 },
+    ]);
     expect(node.type === 'path' && node.stroke).toBeNull();
     expect(target.query({ type: 'selection' })).toEqual([node.id]);
     expect(target.query({ type: 'history' }).undoDepth).toBe(1);

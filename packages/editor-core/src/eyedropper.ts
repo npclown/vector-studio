@@ -64,7 +64,10 @@ function hitPaint(hit: PaintHit): Paint | null {
   if (node.type === 'text') return hit.part === 'fill' ? (node.runs[0]?.color ?? null) : null;
   if (hit.part === 'stroke')
     return 'stroke' in node && node.stroke !== null ? node.stroke.color : null;
-  return 'fill' in node ? node.fill : null;
+  // V-35: the top fill that draws (fills are bottom first).
+  if (!('fills' in node)) return null;
+  const top = [...node.fills].reverse().find((fill) => fill.visible && fill.opacity > 0);
+  return top?.paint ?? null;
 }
 
 /**
@@ -88,7 +91,7 @@ export function sampleColor(
 
 /** Whether a node takes the picked colour as a fill (E7), else as a stroke colour. */
 function takesFill(node: NodeV8): boolean {
-  return 'fill' in node;
+  return 'fills' in node;
 }
 
 /**
