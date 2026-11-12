@@ -133,20 +133,44 @@ export function BindMenu({
   const trigger = useRef<HTMLButtonElement>(null);
   const buttonId = useId();
   const [place, setPlace] = useState<CSSProperties | null>(null);
-  // Places the open menu from its button, again on any scroll or resize while it is open.
+  /** Measures the button against the viewport without its scrollbars, as fixed boxes are. */
+  const measure = () => {
+    const rect = trigger.current?.getBoundingClientRect();
+    const root = globalThis.document?.documentElement;
+    if (rect === undefined || root === undefined) return;
+    const next = menuPlacement(rect, { width: root.clientWidth, height: root.clientHeight });
+    setPlace((last) => (JSON.stringify(last) === JSON.stringify(next) ? last : next));
+  };
+  // Every render while open: a re-render (a new selection, say) can move the button.
   useLayoutEffect(() => {
+    if (open) measure();
+  });
+  // A scroll moves the button: the menu follows it while the button stays inside the scrolled
+  // element and the viewport, and closes (keeping focus where the user put it) once the button
+  // leaves them, so it never floats detached. A resize places it again.
+  useEffect(() => {
     if (!open) return;
-    const update = () => {
-      const rect = trigger.current?.getBoundingClientRect();
-      if (rect === undefined) return;
-      setPlace(menuPlacement(rect, { width: window.innerWidth, height: window.innerHeight }));
+    const scrolled = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Node && box.current?.contains(target)) return;
+      const button = trigger.current?.getBoundingClientRect();
+      const root = globalThis.document?.documentElement;
+      if (button === undefined || root === undefined) return;
+      const area =
+        target instanceof Element
+          ? target.getBoundingClientRect()
+          : { top: 0, bottom: root.clientHeight };
+      const inside =
+        button.bottom > Math.max(0, area.top) &&
+        button.top < Math.min(root.clientHeight, area.bottom);
+      if (inside) measure();
+      else setOpen(false);
     };
-    update();
-    window.addEventListener('scroll', update, true);
-    window.addEventListener('resize', update);
+    window.addEventListener('scroll', scrolled, true);
+    window.addEventListener('resize', measure);
     return () => {
-      window.removeEventListener('scroll', update, true);
-      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', scrolled, true);
+      window.removeEventListener('resize', measure);
     };
   }, [open]);
   /** Closes the menu and gives focus back to its button, so keyboard users keep their place. */

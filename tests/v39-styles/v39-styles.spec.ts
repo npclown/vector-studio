@@ -231,6 +231,18 @@ test('V39-A07 styles and variables: panel, style menu, bind buttons, modes', asy
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('fill-menu')).toBeHidden();
   await expect(page.getByTestId('fill-bind')).toBeFocused();
+  // Scrolling the column moves the open menu with its button, and closes it once the button
+  // leaves the column: the menu is fixed and would otherwise float detached.
+  await page.getByTestId('fill-bind').click();
+  await expect(page.getByTestId('fill-menu')).toBeVisible();
+  const column = page.locator('aside.vs-right');
+  await column.evaluate((aside) => {
+    aside.scrollTop = aside.scrollHeight;
+  });
+  await expect(page.getByTestId('fill-menu')).toBeHidden();
+  await column.evaluate((aside) => {
+    aside.scrollTop = 0;
+  });
   // Two rectangles bound to different targets show Mixed.
   await ok(page, { type: 'setSelection', ids: [rect!, box!] });
   await expect(page.getByTestId('opacity-binding')).toHaveText('Mixed');
