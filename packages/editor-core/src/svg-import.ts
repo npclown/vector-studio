@@ -42,6 +42,7 @@ import {
   parseColor,
   parseLength,
   parseNumberList,
+  parseDeclarations,
   parseTransform,
   StyleSheet,
   type Style,
@@ -81,6 +82,8 @@ export type SvgImport = Readonly<{
 export const MAX_SVG_NODES = 10_000;
 const MAX_NODE_DEPTH = 200;
 const MAX_USE_DEPTH = 32;
+/** Elements visited while converting (`<use>` copies included), so fan-out over empty leaves is bounded. */
+const MAX_VISITS = 200_000;
 const TEXT_LINE_HEIGHT = 1.2;
 const MAX_TEXT_SIZE = 4096;
 const GENERIC_FAMILIES: ReadonlySet<string> = new Set([
@@ -237,6 +240,10 @@ class Converter {
   private readonly sheet = new StyleSheet();
   private readonly skippedNames: string[] = [];
   private count = 0;
+  private visits = 0;
+  /** The root viewport's normalized diagonal, the reference of percentage stroke lengths. */
+  private diagonal = 100;
+  private readonly parents = new Map<XmlElement, XmlElement>();
   private hasText = false;
   private readonly useStack: string[] = [];
 
@@ -245,6 +252,7 @@ class Converter {
     private readonly options: SvgImportOptions,
   ) {
     for (const element of elements(root)) {
+      for (const child of element.children) if (isElement(child)) this.parents.set(child, element);
       const id = element.attributes.get('id');
       if (id !== undefined && !this.ids.has(id)) this.ids.set(id, element);
       if (localName(element.name) === 'style') {
@@ -271,6 +279,7 @@ class Converter {
     const height = parseLength(attributes.get('height'), box?.[3] ?? 100) ?? box?.[3] ?? 100;
     const ctm = viewportMap(box, attributes.get('preserveAspectRatio'), 0, 0, width, height);
     const viewport = { width: box?.[2] ?? width, height: box?.[3] ?? height };
+    this.diagonal = Math.hypot(viewport.width, viewport.height) / Math.SQRT2;
     const children = this.children(this.root, ctm, style, viewport, 0);
     if (this.sheet.skippedSelector) this.skip('css-selector');
     let roots = children;
@@ -281,6 +290,28 @@ class Converter {
       const titleText = title === undefined ? '' : textOf(title).trim();
       const name = titleText !== '' ? titleText : (this.options.name ?? 'SVG');
       roots = [{ kind: 'group', name: name.slice(0, 1000), children, opacity: 1 }];
+    }
+    // The root's own opacity and clip (its viewport is not a clip, V33-M2).
+    const opacity = parseOpacity(style.opacity);
+    if (roots.length === 1 && opacity < 1) {
+      const only = roots[0]!;
+      roots = [
+        only.kind === 'group' && only.opacity === 1
+          ? { ...only, opacity }
+          : { kind: 'group', name: 'SVG', children: [only], opacity },
+      ];
+    }
+    if (roots.length === 1 && style['clip-path'] !== 'none') {
+      const clipped = this.clipPath(
+        roots[0]!,
+        style['clip-path'],
+        ctm,
+        this.root,
+        style,
+        viewport,
+        'SVG',
+      );
+      roots = clipped === null ? [] : [clipped];
     }
     return { roots, skipped: this.skippedNames, hasText: this.hasText };
   }
@@ -310,6 +341,8 @@ class Converter {
     styleOverride?: Style,
   ): Converted | null {
     if (depth > MAX_NODE_DEPTH) throw new TooLarge();
+    this.visits += 1;
+    if (this.visits > MAX_VISITS) throw new TooLarge();
     const name = localName(element.name);
     if (name.includes(':')) return null; // another namespace's element, skipped with its content
     if (SILENT.has(name)) return null;
@@ -366,7 +399,8 @@ class Converter {
         node = this.use(element, ctm, style, viewport, depth);
         break;
       case 'text':
-        node = style.visibility === 'hidden' ? null : this.text(element, ctm, style, label);
+        node =
+          style.visibility === 'hidden' ? null : this.text(element, ctm, style, label, viewport);
         break;
       case 'path':
       case 'rect':
@@ -375,6 +409,12 @@ class Converter {
       case 'line':
       case 'polyline':
       case 'polygon':
+        // Children of a shape (animation elements, `<title>`) draw nothing; report them.
+        for (const child of element.children) {
+          if (!isElement(child)) continue;
+          const childName = localName(child.name);
+          if (childName !== 'title' && childName !== 'desc') this.skip(childName);
+        }
         node =
           style.visibility === 'hidden'
             ? null
@@ -449,8 +489,8 @@ class Converter {
         geometry,
         multiply(space, parseTransform(child.attributes.get('transform'))),
       );
-      outline.verbs.push(...mapped.verbs);
-      outline.points.push(...mapped.points);
+      for (const verb of mapped.verbs) outline.verbs.push(verb);
+      for (const value of mapped.points) outline.points.push(value);
       rule = childStyle['clip-rule'] === 'evenodd' ? 'evenodd' : 'nonzero';
       shapes += 1;
     }
@@ -482,13 +522,9 @@ class Converter {
         const viewBox = parseNumberList(target.attributes.get('viewBox'));
         const box = viewBox !== null && viewBox.length === 4 ? viewBox : null;
         const width =
-          parseLength(element.attributes.get('width'), viewport.width) ??
-          box?.[2] ??
-          viewport.width;
+          parseLength(element.attributes.get('width'), viewport.width) ?? viewport.width;
         const height =
-          parseLength(element.attributes.get('height'), viewport.height) ??
-          box?.[3] ??
-          viewport.height;
+          parseLength(element.attributes.get('height'), viewport.height) ?? viewport.height;
         const inner = multiply(
           placed,
           viewportMap(box, target.attributes.get('preserveAspectRatio'), 0, 0, width, height),
@@ -500,22 +536,27 @@ class Converter {
           box === null ? viewport : { width: box[2]!, height: box[3]! },
           depth + 1,
         );
-        return this.group(target.attributes.get('id') ?? 'symbol', children, symbolStyle);
+        const symbol = this.group(target.attributes.get('id') ?? 'symbol', children, symbolStyle);
+        return symbol === null ? null : this.withOpacity(symbol, element, style);
       }
       const node = this.element(target, placed, style, viewport, depth + 1);
-      if (node === null) return null;
-      const opacity = parseOpacity(style.opacity);
-      if (opacity === 1) return node;
-      this.counted();
-      return {
-        kind: 'group',
-        name: element.attributes.get('id') ?? 'use',
-        children: [node],
-        opacity,
-      };
+      return node === null ? null : this.withOpacity(node, element, style);
     } finally {
       this.useStack.pop();
     }
+  }
+
+  /** `node` in a group carrying the `<use>`'s own opacity, when it has one below 1. */
+  private withOpacity(node: Converted, element: XmlElement, style: Style): Converted {
+    const opacity = parseOpacity(style.opacity);
+    if (opacity === 1) return node;
+    this.counted();
+    return {
+      kind: 'group',
+      name: element.attributes.get('id') ?? 'use',
+      children: [node],
+      opacity,
+    };
   }
 
   /** The user-space outline of a basic shape or path element, or null for other elements. */
@@ -727,6 +768,9 @@ class Converter {
         : ([fit.frame.width, 0, 0, fit.frame.height, fit.frame.x, fit.frame.y] as Matrix);
     const fill = this.paint(fillValue, style['fill-opacity'], style, ctm, bounds, unit);
     const stroke = this.stroke(style, ctm, scale, bounds, unit);
+    // A path that draws nothing: no area for a fill alone, no extent at all (V33-M3).
+    if (fit.frame.width === 0 && fit.frame.height === 0) return null;
+    if (stroke === null && (fit.frame.width === 0 || fit.frame.height === 0)) return null;
     if (fill === null && stroke === null) return null;
     const rule: FillRule = style['fill-rule'] === 'evenodd' ? 'evenodd' : 'nonzero';
     return this.pathNode(label, mapped, rule, fill, stroke, opacity);
@@ -858,7 +902,7 @@ class Converter {
       if (raw === undefined) return fallback;
       const text = raw.trim();
       if (bbox && text.endsWith('%')) return Number.parseFloat(text) / 100;
-      return parseLength(text, 100) ?? fallback;
+      return parseLength(text, this.diagonal) ?? fallback;
     };
     let space: Matrix;
     if (linear) {
@@ -912,7 +956,7 @@ class Converter {
   ): Stroke | null {
     const color = this.paint(style.stroke, style['stroke-opacity'], style, ctm, bounds, unit);
     if (color === null) return null;
-    const width = (parseLength(style['stroke-width'], 100) ?? 1) * scale;
+    const width = (parseLength(style['stroke-width'], this.diagonal) ?? 1) * scale;
     if (!(width > 0) || !Number.isFinite(width)) return null;
     const cap: StrokeCap =
       style['stroke-linecap'] === 'round' || style['stroke-linecap'] === 'square'
@@ -930,7 +974,7 @@ class Converter {
   private dash(style: Style, scale: number): Stroke['dash'] {
     const text = style['stroke-dasharray'].trim();
     if (text === 'none') return null;
-    const parts = text.split(/\s*,\s*|\s+/).map((part) => parseLength(part, 100));
+    const parts = text.split(/\s*,\s*|\s+/).map((part) => parseLength(part, this.diagonal));
     if (parts.some((part) => part === null || part < 0)) return null;
     let pattern = parts as number[];
     if (pattern.length % 2 === 1) pattern = [...pattern, ...pattern];
@@ -939,21 +983,28 @@ class Converter {
       this.skip('stroke-dasharray');
       return null;
     }
-    const phase = (parseLength(style['stroke-dashoffset'], 100) ?? 0) * scale;
+    const phase = (parseLength(style['stroke-dashoffset'], this.diagonal) ?? 0) * scale;
     return {
       pattern: pattern.map((value) => value * scale),
       phase: Number.isFinite(phase) ? phase : 0,
     };
   }
 
-  private text(element: XmlElement, ctm: Matrix, style: Style, label: string): Converted | null {
+  private text(
+    element: XmlElement,
+    ctm: Matrix,
+    style: Style,
+    label: string,
+    viewport: { width: number; height: number },
+  ): Converted | null {
     type Piece = { text: string; family: string; size: number; color: Color; newline: boolean };
     const pieces: Piece[] = [];
     let anchor: { x: number; y: number } | null = null;
     let lineY: number | null = null;
-    const first = (value: string | undefined) => {
-      const list = parseNumberList(value);
-      return list === null || list.length === 0 ? null : list[0]!;
+    // The first value of an `x` or `y` list, with units and percentages of the viewport.
+    const first = (value: string | undefined, reference: number) => {
+      const head = value?.trim().split(/\s*,\s*|\s+/)[0];
+      return head === undefined || head === '' ? null : parseLength(head, reference);
     };
     const visit = (node: XmlElement, nodeStyle: Style, preserve: boolean) => {
       for (const child of node.children) {
@@ -972,8 +1023,9 @@ class Converter {
         }
         const childStyle = computeStyle(child, nodeStyle, this.sheet);
         if (childStyle.display === 'none') continue;
-        const x = first(child.attributes.get('x'));
-        const y = first(child.attributes.get('y'));
+        this.styleSkips(child, childStyle);
+        const x = first(child.attributes.get('x'), viewport.width);
+        const y = first(child.attributes.get('y'), viewport.height);
         if (anchor === null && (x !== null || y !== null)) {
           anchor = { x: x ?? 0, y: y ?? 0 };
           lineY = y;
@@ -985,19 +1037,17 @@ class Converter {
         visit(child, childStyle, space === undefined ? preserve : space === 'preserve');
       }
     };
-    const x = first(element.attributes.get('x'));
-    const y = first(element.attributes.get('y'));
+    const x = first(element.attributes.get('x'), viewport.width);
+    const y = first(element.attributes.get('y'), viewport.height);
     if (x !== null || y !== null) {
       anchor = { x: x ?? 0, y: y ?? 0 };
       lineY = y;
     }
-    visit(element, style, xmlSpace(element, this.root) === 'preserve');
-    for (const property of ['font-weight', 'font-style', 'text-decoration'] as const) {
-      if (hasDeclaration(element, property)) this.skip(property);
-    }
+    visit(element, style, this.xmlSpace(element) === 'preserve');
+    this.styleSkips(element, style);
     if (style.stroke !== 'none') this.skip('text-stroke');
     // Join pieces: default whitespace collapses across pieces and trims the ends.
-    const preserve = xmlSpace(element, this.root) === 'preserve';
+    const preserve = this.xmlSpace(element) === 'preserve';
     const runs: { text: string; family: string; size: number; color: Color }[] = [];
     let total = '';
     for (const piece of pieces) {
@@ -1097,6 +1147,26 @@ class Converter {
     };
   }
 
+  /** Reports the text styles the model cannot hold (V33-M6), declared on `element` by any source. */
+  private styleSkips(element: XmlElement, style: Style): void {
+    for (const property of ['font-weight', 'font-style', 'text-decoration'] as const) {
+      const value = declaredValue(element, property, this.sheet);
+      if (value !== undefined && value !== 'normal' && value !== 'none' && value !== '400') {
+        this.skip(property);
+      }
+    }
+    if (style.stroke !== 'none') this.skip('text-stroke');
+  }
+
+  /** The inherited `xml:space` of `element`. */
+  private xmlSpace(element: XmlElement): string {
+    for (let at: XmlElement | undefined = element; at !== undefined; at = this.parents.get(at)) {
+      const value = at.attributes.get('xml:space');
+      if (value !== undefined) return value;
+    }
+    return 'default';
+  }
+
   private runStyle(style: Style): { family: string; size: number; color: Color } {
     const families = cssFamilies(style['font-family']);
     const firstFamily = families[0];
@@ -1105,7 +1175,18 @@ class Converter {
         ? (this.options.defaultFamily ?? 'Arial')
         : firstFamily.slice(0, 128);
     const size = Number(style['font-size']);
-    const fill = this.paint(style.fill, style['fill-opacity'], style, IDENTITY, null, null);
+    // A gradient fill takes its first stop (V33-M6); text colour is solid.
+    const url = parseUrl(style.fill);
+    const target = url === null ? undefined : this.ids.get(url.id);
+    const kind = target === undefined ? '' : localName(target.name);
+    const stops =
+      kind === 'linearGradient' || kind === 'radialGradient'
+        ? this.gradientStops(target!, parseOpacity(style['fill-opacity']))
+        : [];
+    const fill =
+      stops.length > 0
+        ? stops[0]!.color
+        : this.paint(style.fill, style['fill-opacity'], style, IDENTITY, null, null);
     const color =
       fill === null ? { r: 0, g: 0, b: 0, a: 0 } : 'kind' in fill ? fill.stops[0]!.color : fill;
     return { family, size: Number.isFinite(size) ? size : 16, color };
@@ -1156,27 +1237,17 @@ function collapse(text: string, preserve: boolean): string {
   return text.replace(/\r?\n/g, '').replace(/\t/g, ' ').replace(/ {2,}/g, ' ');
 }
 
-/** The inherited `xml:space` of `element` under `root`. */
-function xmlSpace(element: XmlElement, root: XmlElement): string {
-  const path: XmlElement[] = [];
-  const find = (node: XmlElement): boolean => {
-    path.push(node);
-    if (node === element) return true;
-    for (const child of node.children) if (isElement(child) && find(child)) return true;
-    path.pop();
-    return false;
-  };
-  find(root);
-  for (let i = path.length - 1; i >= 0; i -= 1) {
-    const value = path[i]!.attributes.get('xml:space');
-    if (value !== undefined) return value;
-  }
-  return 'default';
-}
-
-function hasDeclaration(element: XmlElement, property: string): boolean {
-  if (element.attributes.has(property)) return true;
-  return new RegExp(`(^|;)\\s*${property}\\s*:`).test(element.attributes.get('style') ?? '');
+/** The value of `property` declared on `element` by its style attribute, a sheet rule or an attribute. */
+function declaredValue(
+  element: XmlElement,
+  property: string,
+  sheet: StyleSheet,
+): string | undefined {
+  const inline = parseDeclarations(element.attributes.get('style') ?? '').get(property);
+  if (inline !== undefined) return inline.trim();
+  let fromSheet: string | undefined;
+  for (const rule of sheet.matching(element)) fromSheet = rule.get(property) ?? fromSheet;
+  return fromSheet?.trim() ?? element.attributes.get(property)?.trim();
 }
 
 /** The fragment node objects of converted roots (V33-M5 group frames, IDs `n1`, `n2`, …). */
@@ -1297,7 +1368,7 @@ export function svgToFragment(text: string, options: SvgImportOptions = {}): Svg
     if (converted.roots.length === 0) return fail('editor.empty-svg');
     emitted = emit(converted.roots);
   } catch (error) {
-    if (error instanceof TooLarge || error instanceof RangeError) return fail('editor.invalid-svg');
+    if (error instanceof TooLarge) return fail('editor.invalid-svg');
     throw error;
   }
   const body = JSON.stringify({

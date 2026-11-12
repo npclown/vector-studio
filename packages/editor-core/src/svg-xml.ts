@@ -37,8 +37,19 @@ const NAME_START = /[A-Za-z_:À-￿]/;
 const NAME_CHAR = /[A-Za-z0-9_:.\-·À-￿]/;
 const SPACE = /[ \t\r\n]/;
 
-/** Decodes the entity and character references of `raw` (attribute value or character data). */
-function decode(raw: string): string {
+/** Characters that internal entity expansion may add in all (V33-C2). */
+const MAX_EXPANSION = 16 * 1024 * 1024;
+
+/**
+ * Decodes the entity and character references of `raw` (attribute value or character data).
+ * `entities` holds the DOCTYPE's internal general entities, whose values are used as written
+ * (character references decoded, no nested entity references), so expansion is one level deep.
+ */
+function decode(
+  raw: string,
+  entities: ReadonlyMap<string, string>,
+  budget: { left: number },
+): string {
   if (!raw.includes('&')) return raw;
   return raw.replace(/&([^;&\s]*);?/g, (match, body: string) => {
     if (!match.endsWith(';')) throw new XmlError('unterminated reference');
@@ -54,8 +65,10 @@ function decode(raw: string): string {
       if (!/^[0-9]+$/.test(body.slice(1)) || code > 0x10ffff) throw new XmlError('bad reference');
       return String.fromCodePoint(code);
     }
-    const value = PREDEFINED[body];
+    const value = PREDEFINED[body] ?? entities.get(body);
     if (value === undefined) throw new XmlError(`unknown entity ${body}`);
+    budget.left -= value.length;
+    if (budget.left < 0) throw new XmlError('entity expansion too large');
     return value;
   });
 }
@@ -63,6 +76,8 @@ function decode(raw: string): string {
 class Reader {
   at = 0;
   elements = 0;
+  readonly entities = new Map<string, string>();
+  readonly budget = { left: MAX_EXPANSION };
   constructor(readonly text: string) {}
 
   fail(message: string): never {
@@ -95,7 +110,7 @@ class Reader {
   }
 
   /** Comments, processing instructions and a DOCTYPE before or after the root, and space. */
-  misc(allowDoctype: boolean): void {
+  misc(allowDoctype: boolean, skipSubset = false): void {
     for (;;) {
       this.skipSpace();
       if (this.startsWith('<!--')) {
@@ -105,13 +120,18 @@ class Reader {
         this.at += 2;
         this.skipPast('?>');
       } else if (allowDoctype && this.startsWith('<!DOCTYPE')) {
-        this.doctype();
+        this.doctype(skipSubset);
       } else return;
     }
   }
 
-  /** A DOCTYPE with an external ID at most; an internal subset is refused (V33-C2). */
-  doctype(): void {
+  /**
+   * A DOCTYPE with an external ID and an internal subset of internal general entity
+   * declarations, comments and processing instructions only (V33-C2); anything else in the
+   * subset (parameter or external entities, element or attribute declarations) is refused.
+   * `skipSubset` skips the subset unread (detection only, V33-C4).
+   */
+  doctype(skipSubset = false): void {
     this.at += '<!DOCTYPE'.length;
     let quote: string | null = null;
     while (this.at < this.text.length) {
@@ -120,10 +140,45 @@ class Reader {
       if (quote !== null) {
         if (character === quote) quote = null;
       } else if (character === '"' || character === "'") quote = character;
-      else if (character === '[') this.fail('DOCTYPE internal subset');
-      else if (character === '>') return;
+      else if (character === '[') {
+        if (skipSubset) this.skipPast(']');
+        else this.subset();
+      } else if (character === '>') return;
     }
     this.fail('unterminated DOCTYPE');
+  }
+
+  /** The internal subset after its `[`, up to and including `]`. */
+  subset(): void {
+    for (;;) {
+      this.skipSpace();
+      if (this.text[this.at] === ']') {
+        this.at += 1;
+        return;
+      }
+      if (this.startsWith('<!--')) {
+        this.at += 4;
+        this.skipPast('-->');
+      } else if (this.startsWith('<?')) {
+        this.at += 2;
+        this.skipPast('?>');
+      } else if (this.startsWith('<!ENTITY')) {
+        this.at += '<!ENTITY'.length;
+        this.skipSpace();
+        if (this.text[this.at] === '%') this.fail('parameter entity');
+        const name = this.name();
+        this.skipSpace();
+        const quote = this.text[this.at];
+        if (quote !== '"' && quote !== "'") this.fail('external entity');
+        this.at += 1;
+        const raw = this.skipPast(quote);
+        if (raw.includes('&') && /&[^#]/.test(raw)) this.fail('nested entity reference');
+        this.skipSpace();
+        if (this.text[this.at] !== '>') this.fail('expected >');
+        this.at += 1;
+        if (!this.entities.has(name)) this.entities.set(name, decode(raw, new Map(), this.budget));
+      } else this.fail('unsupported DOCTYPE declaration');
+    }
   }
 
   element(depth: number): XmlElement {
@@ -157,7 +212,7 @@ class Reader {
       if (raw.includes('<')) this.fail('< in an attribute value');
       if (attributes.has(key)) this.fail(`duplicate attribute ${key}`);
       // Attribute value normalization: whitespace characters become spaces.
-      attributes.set(key, decode(raw).replace(/[\t\r\n]/g, ' '));
+      attributes.set(key, decode(raw, this.entities, this.budget).replace(/[\t\r\n]/g, ' '));
     }
     const children: XmlNode[] = [];
     for (;;) {
@@ -187,7 +242,7 @@ class Reader {
       } else {
         const next = this.text.indexOf('<', this.at);
         const end = next < 0 ? this.text.length : next;
-        children.push({ text: decode(this.text.slice(this.at, end)) });
+        children.push({ text: decode(this.text.slice(this.at, end), this.entities, this.budget) });
         this.at = end;
       }
     }
@@ -216,7 +271,7 @@ export function parseXml(text: string): XmlElement {
 export function isSvgText(text: string): boolean {
   const reader = new Reader(text.startsWith('﻿') ? text.slice(1) : text);
   try {
-    reader.misc(true);
+    reader.misc(true, true);
     if (reader.text[reader.at] !== '<') return false;
     reader.at += 1;
     const name = reader.name();

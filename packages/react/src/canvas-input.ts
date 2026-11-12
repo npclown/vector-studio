@@ -1,5 +1,6 @@
 import {
   eventChord,
+  isSvgText,
   type CommandResult,
   type Editor,
   type InputEvent,
@@ -386,7 +387,7 @@ export class CanvasInput {
         void file.text().then(
           (body) => {
             // A file read that ends after edit mode began is dropped (V33-P2).
-            if (this.editor.getSnapshot().textEdit !== null) return;
+            if (this.editor.getSnapshot().textEdit !== null || !isSvgText(body)) return;
             this.editor.execute({
               type: 'paste',
               text: body,
@@ -414,9 +415,14 @@ export class CanvasInput {
    * time), each later file 16 page units further; resolves when every file is imported.
    */
   drop(event: DragEventLike): Promise<unknown> {
-    const files = event.dataTransfer?.files;
-    if (files === undefined || !Array.from(files).some(isSvgFile)) return Promise.resolve([]);
+    const transfer = event.dataTransfer;
+    if (transfer === null || !Array.from(transfer.types).includes('Files')) {
+      return Promise.resolve([]);
+    }
+    // Every file drop is prevented, so the browser never opens a dropped file (V33-P3).
     event.preventDefault();
+    const files = transfer.files;
+    if (!Array.from(files).some(isSvgFile)) return Promise.resolve([]);
     const canvas = this.canvas();
     const at = canvas === null ? undefined : this.toPage(canvas, event.clientX, event.clientY);
     return importSvgFiles(this.editor, files, at === undefined ? {} : { at });

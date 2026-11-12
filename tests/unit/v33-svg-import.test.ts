@@ -128,7 +128,14 @@ describe('V33-A01 XML subset and failures', () => {
     expect(code('<svg>&nbsp;</svg>')).toBe('editor.invalid-svg');
     expect(code('<svg>a & b</svg>')).toBe('editor.invalid-svg');
     expect(code('<html/>')).toBe('editor.invalid-svg');
-    expect(code('<!DOCTYPE svg [<!ENTITY x "y">]><svg/>')).toBe('editor.invalid-svg');
+    expect(code('<!DOCTYPE svg [<!ENTITY % x "y">]><svg/>')).toBe('editor.invalid-svg');
+    expect(code('<!DOCTYPE svg [<!ENTITY x SYSTEM "file:///etc/passwd">]><svg/>')).toBe(
+      'editor.invalid-svg',
+    );
+    expect(code('<!DOCTYPE svg [<!ENTITY a "x"><!ENTITY b "&a;&a;">]><svg/>')).toBe(
+      'editor.invalid-svg',
+    );
+    expect(code('<!DOCTYPE svg [<!ELEMENT svg ANY>]><svg/>')).toBe('editor.invalid-svg');
     expect(code('<svg/><svg/>')).toBe('editor.invalid-svg');
     expect(code(`<svg>${'<g>'.repeat(300)}${'</g>'.repeat(300)}</svg>`)).toBe('editor.invalid-svg');
     expect(code(`<svg>${'<g/>'.repeat(20_001)}</svg>`)).toBe('editor.invalid-svg');
@@ -137,6 +144,26 @@ describe('V33-A01 XML subset and failures', () => {
     expect(
       code(svg('<rect width="0" height="5"/><g display="none"><rect width="5" height="5"/></g>')),
     ).toBe('editor.empty-svg');
+  });
+
+  it('reads an Illustrator-style DOCTYPE with internal entities', () => {
+    const text =
+      '<?xml version="1.0"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [\n' +
+      '<!ENTITY ns_svg "http://www.w3.org/2000/svg"><!ENTITY st0 "fill:#ff0000;"><!-- c -->]>' +
+      '<svg xmlns="&ns_svg;"><rect style="&st0;" width="2" height="2"/></svg>';
+    expect(isSvgText(text)).toBe(true);
+    expect(only(text).fill).toEqual({ r: 1, g: 0, b: 0, a: 1 });
+  });
+
+  it('stops <use> fan-out over leaves that draw nothing', () => {
+    let body = '<defs><g id="a0"><rect width="0" height="0"/></g>';
+    for (let i = 1; i <= 8; i += 1)
+      body += `<g id="a${i}">${`<use href="#a${i - 1}"/>`.repeat(10)}</g>`;
+    body += '</defs><use href="#a8"/><rect width="1" height="1"/>';
+    const started = Date.now();
+    const result = svgToFragment(svg(body));
+    expect(result.ok ? 'ok' : result.code).toBe('editor.invalid-svg');
+    expect(Date.now() - started).toBeLessThan(5000);
   });
 
   it('stops <use> expansion past 10,000 nodes', () => {
@@ -440,6 +467,46 @@ describe('V33-A03 mapping', () => {
         ),
       ).skipped,
     ).toEqual(['image', 'foreignObject', 'mask', 'filter', 'marker']);
+  });
+
+  it('handles the review r1 cases: zero sizes, gradient text, use opacity, big paths, units', () => {
+    const zero = only(svg('<text>A<tspan font-size="0">HIDDEN</tspan></text>'));
+    expect((zero.runs as { text: string }[]).map((run) => run.text).join('')).toBe('A');
+    const gradient = only(
+      svg(
+        '<linearGradient id="g"><stop stop-color="red"/><stop offset="1" stop-color="blue"/></linearGradient><text fill="url(#g)">a</text>',
+      ),
+    );
+    expect((gradient.runs as { color: unknown }[])[0]!.color).toEqual({ r: 1, g: 0, b: 0, a: 1 });
+    const used = nodes(
+      svg('<symbol id="s"><rect width="5" height="5"/></symbol><use href="#s" opacity="0.5"/>'),
+    );
+    expect(used[0]!.opacity).toBe(0.5);
+    const big = Array.from({ length: 40_000 }, (_, i) => `L${i % 100} ${Math.floor(i / 100)}`).join(
+      '',
+    );
+    expect(only(svg(`<path d="M0 0${big}"/>`)).type).toBe('path');
+    expect(svgToFragment(svg('<path d="M5 5"/><path d="M0 0L10 0"/>'))).toEqual({
+      ok: false,
+      code: 'editor.empty-svg',
+    });
+    expect(only(svg('<path d="M0 0L10 0" stroke="red"/>')).frame.height).toBe(0);
+    const percent = only(svg('<text x="50%" y="10mm">a</text>', 'width="200" height="100"'));
+    expect(percent.frame.x).toBe(100);
+    expect(percent.frame.y).toBeCloseTo((10 * 96) / 25.4 - 9);
+    expect(
+      nodes(
+        svg('<rect width="2" height="2"/><rect x="4" width="2" height="2"/>', 'opacity="0.5"'),
+      )[0]!.opacity,
+    ).toBe(0.5);
+    expect(convert(svg('<text font-weight="normal">a</text>')).skipped).toEqual([]);
+    expect(
+      convert(svg('<style>.b{font-weight:bold}</style><text>a<tspan class="b">b</tspan></text>'))
+        .skipped,
+    ).toEqual(['font-weight']);
+    expect(
+      convert(svg('<rect width="1" height="1"><animate attributeName="x"/></rect>')).skipped,
+    ).toEqual(['animate']);
   });
 
   it('names the wrapping group by title, then options.name, then SVG', () => {
@@ -855,6 +922,30 @@ describe('V33-A06 canvas paste, drop and the Import panel model', () => {
     expect(importMessages(outcomes)).toEqual([
       'Imported 2 files',
       'Failed: c.svg (editor.empty-svg)',
+    ]);
+  });
+
+  it('prevents every file drop and refuses a .svg file that is not SVG', async () => {
+    const { input, pastes } = host();
+    let prevented = 0;
+    const event = {
+      clientX: 0,
+      clientY: 0,
+      dataTransfer: {
+        types: ['Files'],
+        files: [file('a.png', 'x', 'image/png')],
+        dropEffect: 'none',
+      },
+      preventDefault: () => (prevented += 1),
+    };
+    expect(await input.drop(event)).toEqual([]);
+    expect(prevented).toBe(1);
+    input.clipboardPaste(clipboard({}, [file('fake.svg', 'hello')]));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(pastes).toEqual([]);
+    expect(importMessages(await importSvgFiles(editor(), [file('fake.svg', 'hello')]))).toEqual([
+      'Import failed: editor.invalid-svg',
     ]);
   });
 

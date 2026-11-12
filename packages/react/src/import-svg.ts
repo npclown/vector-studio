@@ -1,4 +1,5 @@
 import {
+  isSvgText,
   svgToFragment,
   type CommandResult,
   type Editor,
@@ -63,7 +64,7 @@ export async function importSvgFiles(
   chosen.forEach((file, index) => {
     const text = texts[index];
     if (index > 0) editor.execute({ type: 'setSelection', ids: selection });
-    if (text === null || text === undefined) {
+    if (text === null || text === undefined || !isSvgText(text)) {
       out.push({ name: file.name, result: { ok: false, code: 'editor.invalid-svg' }, skipped: [] });
       return;
     }

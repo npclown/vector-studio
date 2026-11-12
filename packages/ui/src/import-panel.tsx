@@ -50,8 +50,8 @@ export function ImportPanel() {
       >
         Import SVG…
       </button>
-      {messages.map((line) => (
-        <span key={line} role="status" data-testid="import-message">
+      {messages.map((line, index) => (
+        <span key={index} role="status" data-testid="import-message">
           {line}
         </span>
       ))}

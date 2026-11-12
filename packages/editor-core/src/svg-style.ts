@@ -455,7 +455,10 @@ export function computeStyle(element: XmlElement, parent: Style | null, sheet: S
     parent ? Number(parent['font-size']) : 16,
     parent ? Number(parent['font-size']) : 16,
   );
-  style['font-size'] = String(size !== null && size > 0 ? size : parent ? parent['font-size'] : 16);
+  // A size of 0 is kept (the text draws nothing); a negative or invalid one inherits.
+  style['font-size'] = String(
+    size !== null && size >= 0 ? size : parent ? parent['font-size'] : 16,
+  );
   return style;
 }
 
