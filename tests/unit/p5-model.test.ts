@@ -254,6 +254,7 @@ describe('P5-A07 validation codes', () => {
       'document.cyclic-parent',
       'document.invalid-mask-source',
       'document.invalid-symbol',
+      'document.invalid-variant',
     ]);
   });
 

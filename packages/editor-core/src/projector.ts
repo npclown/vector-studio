@@ -31,7 +31,12 @@ import type {
 } from '@vector-studio/model';
 import { fillDraws } from './fills.js';
 import { MAX_FILLS } from '@vector-studio/model';
-import { ExpansionCache, type Expansion, type ExpansionResult } from './expansion.js';
+import {
+  ExpansionCache,
+  sourceAppearance,
+  type Expansion,
+  type ExpansionResult,
+} from './expansion.js';
 import { localTransform } from './geometry.js';
 import { lineDashes, type LineDash } from './line-dash.js';
 import { nodeText, type TextLayouter } from './text.js';
@@ -1229,8 +1234,7 @@ export function projectPage(
           visible: node.visible,
           // The effective opacity, instance × source (MVP M4 contract, M4-P6, M4-Q15 (a)).
           opacity: node.opacity * source.opacity,
-          fills: source.fills,
-          stroke: source.stroke,
+          ...sourceAppearance(node, source),
           // E41-S10: the instance's own effects when it has any, else its source's.
           effects: node.effects.length > 0 ? node.effects : source.effects,
           // V35-S4: the instance's own mode.
@@ -1276,14 +1280,16 @@ export function projectPage(
         node.type === 'group' ||
         node.type === 'maskGroup' ||
         node.type === 'frame' ||
-        node.type === 'symbol'
+        node.type === 'symbol' ||
+        node.type === 'symbolSet'
       ) {
         if (node.type === 'maskGroup') {
           const source = node.children[0];
           if (source === undefined || omit.has(source)) continue;
         }
         units.push(id);
-        const frameLike = node.type === 'frame' || node.type === 'symbol';
+        const frameLike =
+          node.type === 'frame' || node.type === 'symbol' || node.type === 'symbolSet';
         const children = walk(
           node.children,
           frameLike ? frameContentId(id) : id,

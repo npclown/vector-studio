@@ -169,6 +169,8 @@ const ADDED: Readonly<Record<keyof typeof AT_17A2B0A, readonly string[]>> = {
     'ExportPanel',
     // V-33 (SVG import).
     'ImportPanel',
+    // V-37 (the focused layer of an instance).
+    'InstanceFocus',
     'LayerTree',
     'LayerTreeProps',
     'PageList',
@@ -191,8 +193,13 @@ const ADDED: Readonly<Record<keyof typeof AT_17A2B0A, readonly string[]>> = {
     'UiExtension',
     'ZoomMenu',
     'importMessages',
+    'clearInstanceFocus',
+    'focusInstanceAt',
+    'getInstanceFocus',
     'resolvePanels',
     'selectForContextMenu',
+    'setInstanceFocus',
+    'useInstanceFocus',
     'usePanelErrors',
   ],
 };

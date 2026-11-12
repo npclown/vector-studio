@@ -431,10 +431,11 @@ describe('M7-A01 malformed v3 documents (M7-S1 to M7-S5)', () => {
   });
 
   it('lists document.invalid-symbol after the schema v2 codes', () => {
-    expect(DOCUMENT_ERROR_CODES.slice(-3)).toEqual([
+    expect(DOCUMENT_ERROR_CODES.slice(-4)).toEqual([
       'document.cyclic-parent',
       'document.invalid-mask-source',
       'document.invalid-symbol',
+      'document.invalid-variant',
     ]);
   });
 
