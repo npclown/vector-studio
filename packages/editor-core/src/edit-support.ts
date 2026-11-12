@@ -239,8 +239,8 @@ export function remapFailure(
 
 /**
  * Draws `count` fresh IDs (M2 contract, S8) in call order: each must be a valid ID that no page,
- * node or table entry (V39-S3) of `document` has and that this draw has not returned; at most `ID_ATTEMPTS` calls per
- * ID. Null when an ID cannot be drawn (`editor.duplicate-id`). Callers run every other check
+ * node or table entry (V39-S3) of `document` has and that this draw has not returned; at most
+ * `ID_ATTEMPTS` calls per ID. Null when an ID cannot be drawn (`editor.duplicate-id`). Callers run every other check
  * first, so a failed command draws no ID.
  */
 export function drawIds(document: DocumentV8, ids: IdSource, count: number): string[] | null {

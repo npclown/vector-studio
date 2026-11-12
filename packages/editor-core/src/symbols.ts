@@ -98,7 +98,7 @@ function detach(draft: Draft, document: DocumentV8, planned: Plan, ids: readonly
 }
 
 /** The bindings of a detached instance's frame, in V39-S7 order, or none. */
-function detachedBindings(
+export function detachedBindings(
   source: SymbolNodeV8,
   instance: InstanceNodeV8,
 ): { bindings?: Partial<Record<BindingKey, BindingRef>> } {

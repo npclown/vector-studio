@@ -655,3 +655,21 @@ describe('V-39 review r1 follow-ups', () => {
     });
   });
 });
+
+describe('V-39 review r2 follow-up', () => {
+  it('an instance pasted as a frame carries its source paint bindings', () => {
+    const from = editor();
+    const s = style(from, green);
+    const [frame] = ok(from, { type: 'createFrame', frame: { x: 0, y: 0, width: 20, height: 20 } });
+    bind(from, [frame!], 'fill', { style: s });
+    const [symbol] = ok(from, { type: 'createSymbol', ids: [frame!] });
+    const [instance] = ok(from, { type: 'createInstance', symbol: symbol! });
+    ok(from, { type: 'copy', ids: [instance!] });
+    const text = from.query({ type: 'clipboard' })!;
+    // The target has the same style ID and paint, and not the symbol.
+    const into = editor();
+    expect(style(into, green)).toBe(s);
+    const [pasted] = ok(into, { type: 'paste', text });
+    expect(node(into, pasted!)).toMatchObject({ type: 'frame', bindings: { fill: { style: s } } });
+  });
+});
