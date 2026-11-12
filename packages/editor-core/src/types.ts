@@ -12,6 +12,8 @@ import type {
 } from '@vector-studio/contracts';
 import type {
   Arrow,
+  BindingKey,
+  BindingRef,
   Color,
   Constraints,
   CornerRadii,
@@ -520,6 +522,48 @@ export type DocumentCommand =
    * document, as one step; with no frame change no step is recorded.
    */
   | Readonly<{ type: 'refitText'; ids?: readonly string[] }>
+  // V-39 contract, section 3: colour styles, variables, modes and bindings. A change of a
+  // style's paint, a variable's value or the active mode rewrites every bound node (E1).
+  /** Appends a colour style; returns its ID. */
+  | Readonly<{ type: 'createColorStyle'; name: string; paint: Paint }>
+  | Readonly<{ type: 'updateColorStyle'; id: string; name?: string; paint?: Paint }>
+  /** Removes a style; its users keep their values, detached (V39-Q7). */
+  | Readonly<{ type: 'removeColorStyle'; id: string }>
+  /**
+   * Appends a variable of `kind` with `value` in every mode, creating the set with one mode
+   * `Mode 1` when there is none; returns its ID.
+   */
+  | Readonly<{
+      type: 'createVariable';
+      name: string;
+      kind: 'color' | 'number';
+      value: Color | number;
+    }>
+  /** Renames, or sets the values of the listed modes (by mode ID). */
+  | Readonly<{
+      type: 'updateVariable';
+      id: string;
+      name?: string;
+      values?: Readonly<Record<string, Color | number>>;
+    }>
+  | Readonly<{ type: 'removeVariable'; id: string }>
+  /** Appends a mode whose values copy the active mode's; returns its ID. */
+  | Readonly<{ type: 'addVariableMode'; name: string }>
+  | Readonly<{ type: 'renameVariableMode'; id: string; name: string }>
+  | Readonly<{ type: 'removeVariableMode'; id: string }>
+  /** Sets the active mode. */
+  | Readonly<{ type: 'setVariableMode'; id: string }>
+  /**
+   * Binds `key` of the listed nodes (active page, any depth) to a style or variable, setting the
+   * property to its resolved value, or with `ref: null` detaches it (V39-E2). Returns the IDs it
+   * changed.
+   */
+  | Readonly<{
+      type: 'bindProperty';
+      ids: readonly string[];
+      key: BindingKey;
+      ref: BindingRef | null;
+    }>
   | Readonly<{ type: 'addPage'; name?: string; index?: number }>
   | Readonly<{ type: 'removePage'; id: string }>
   | Readonly<{ type: 'renamePage'; id: string; name: string }>
@@ -666,7 +710,15 @@ export type EditorErrorCode =
   | 'editor.boolean-too-large'
   | 'editor.boolean-failed'
   // E41 contract, section 6.
-  | 'editor.effect-limit';
+  | 'editor.effect-limit'
+  // V-39 contract, section 3 (V39-E3).
+  | 'editor.unknown-style'
+  | 'editor.unknown-variable'
+  | 'editor.unknown-mode'
+  | 'editor.binding-type'
+  | 'editor.binding-range'
+  | 'editor.table-limit'
+  | 'editor.last-mode';
 
 /**
  * `consumed` is present on `input` results only (M2-I3): whether navigation, the tool or a key

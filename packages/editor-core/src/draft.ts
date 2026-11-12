@@ -1,6 +1,11 @@
 import {
+  BINDING_KEYS,
   MAX_TREE_DEPTH,
+  bindingHolds,
+  tablesOf,
   validateNode,
+  type BindingTables,
+  type Bindings,
   type DocumentV8,
   type NodeV8,
   type PageV2,
@@ -58,10 +63,32 @@ export class Draft implements WritableTree {
    */
   expansions: ExpansionCache | undefined;
 
+  /** V-39: the colour styles and variables (V39-S1, S2), carried over and replaceable. */
+  private tableState: BindingTables;
+
   constructor(base: DocumentV8) {
     this.base = base;
     this.nodes = new Map(Object.entries(base.nodes));
     this.pages = [...base.pages];
+    this.tableState = tablesOf(base);
+  }
+
+  /** The draft's colour styles and variables (V-39). */
+  get tables(): BindingTables {
+    return this.tableState;
+  }
+
+  /** Replaces the tables (V-39 section 3); an absent key removes that table. */
+  setTables(tables: BindingTables): void {
+    this.tableState = {
+      ...(tables.colorStyles === undefined ? {} : { colorStyles: tables.colorStyles }),
+      ...(tables.variables === undefined ? {} : { variables: tables.variables }),
+    };
+  }
+
+  /** The IDs of every node, for the V-39 resync. */
+  nodeIds(): string[] {
+    return [...this.nodes.keys()];
   }
 
   node(id: string): NodeV8 | undefined {
@@ -160,6 +187,7 @@ export class Draft implements WritableTree {
     if (text !== null) return text;
     if (options.refit) this.refit(options.placementBase ?? this.base);
     this.pruneOverrides();
+    this.detachBindings();
     for (const id of this.unchecked) {
       const node = this.nodes.get(id);
       if (node === undefined) continue;
@@ -177,11 +205,37 @@ export class Draft implements WritableTree {
     return this.document();
   }
 
+  /**
+   * V-39 contract, E4: each touched node loses every binding that no longer holds against the
+   * draft's tables (a missing target, a field it can no longer carry, a value that differs), so
+   * a direct edit of a bound property detaches it. The node keeps its unchecked state.
+   */
+  private detachBindings(): void {
+    for (const id of this.touched) {
+      const node = this.nodes.get(id);
+      if (node?.bindings === undefined) continue;
+      const kept: Partial<Record<(typeof BINDING_KEYS)[number], Bindings[keyof Bindings]>> = {};
+      let dropped = false;
+      for (const key of BINDING_KEYS) {
+        const ref = node.bindings[key];
+        if (ref === undefined) continue;
+        if (bindingHolds(node, key, ref, this.tableState)) kept[key] = ref;
+        else dropped = true;
+      }
+      if (!dropped) continue;
+      const { bindings: _old, ...rest } = node;
+      void _old;
+      const next = (Object.keys(kept).length === 0 ? rest : { ...rest, bindings: kept }) as NodeV8;
+      this.nodes.set(id, next);
+    }
+  }
+
   /** The current state as a frozen document, without the `finish` rules. */
   document(): DocumentV8 {
     return deepFreeze({
       schemaVersion: 8,
       id: this.base.id,
+      ...this.tableState,
       pages: this.pages,
       // fromEntries defines own properties, so a "__proto__" ID stays data.
       nodes: Object.fromEntries(this.nodes),

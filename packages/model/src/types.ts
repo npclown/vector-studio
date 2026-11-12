@@ -436,16 +436,19 @@ export type DocumentV7 = Readonly<{
 // so the ten items can each add their fields to one unreleased version instead of bumping it in
 // turn. The v7 to v8 migration changes only `schemaVersion` until an item adds a field.
 
-export type RectangleNodeV8 = RectangleNodeV6 & NodeEffects;
-export type EllipseNodeV8 = EllipseNodeV6 & NodeEffects;
-export type LineNodeV8 = LineNodeV6 & NodeEffects;
-export type PathNodeV8 = PathNodeV6 & NodeEffects;
-export type CustomNodeV8 = CustomNodeV6 & NodeEffects;
-export type TextNodeV8 = TextNode & NodeEffects;
-export type InstanceNodeV8 = InstanceNodeV5 & NodeEffects;
-export type GroupNodeV8 = GroupNode & NodeEffects;
-export type FrameNodeV8 = FrameNodeV6 & NodeEffects;
-export type SymbolNodeV8 = SymbolNodeV6 & NodeEffects;
+/** The field V-39 adds to every v8 node (V39-S4): its bindings, absent when it has none. */
+export type NodeBindings = Readonly<{ bindings?: Bindings }>;
+
+export type RectangleNodeV8 = RectangleNodeV6 & NodeEffects & NodeBindings;
+export type EllipseNodeV8 = EllipseNodeV6 & NodeEffects & NodeBindings;
+export type LineNodeV8 = LineNodeV6 & NodeEffects & NodeBindings;
+export type PathNodeV8 = PathNodeV6 & NodeEffects & NodeBindings;
+export type CustomNodeV8 = CustomNodeV6 & NodeEffects & NodeBindings;
+export type TextNodeV8 = TextNode & NodeEffects & NodeBindings;
+export type InstanceNodeV8 = InstanceNodeV5 & NodeEffects & NodeBindings;
+export type GroupNodeV8 = GroupNode & NodeEffects & NodeBindings;
+export type FrameNodeV8 = FrameNodeV6 & NodeEffects & NodeBindings;
+export type SymbolNodeV8 = SymbolNodeV6 & NodeEffects & NodeBindings;
 
 export type LeafNodeV8 =
   | RectangleNodeV8
@@ -464,7 +467,42 @@ export type PageV8 = PageV6;
 export type DocumentV8 = Readonly<{
   schemaVersion: 8;
   id: string;
+  /** V-39 (V39-S1): named paints, 1 to 1,000 when present, in panel order. */
+  colorStyles?: readonly ColorStyle[];
+  /** V-39 (V39-S2): the variables and their modes, present only with a variable. */
+  variables?: VariableSet;
   /** One or more pages. */
   pages: readonly PageV8[];
   nodes: Readonly<Record<string, NodeV8>>;
 }>;
+
+// V-39 contract (docs/plans/viz-v39-styles-variables-contract.md), section 2: colour styles,
+// variables with modes, and the bindings of node properties to them. A bound property keeps its
+// concrete value (V39-Q1), equal to the reference's resolved value (V39-S5).
+
+/** A named paint (V39-S1). */
+export type ColorStyle = Readonly<{ id: string; name: string; paint: Paint }>;
+
+/** One mode of the variable set (V39-S2). */
+export type VariableMode = Readonly<{ id: string; name: string }>;
+
+/** A colour or number variable with exactly one value per mode (V39-S2). */
+export type Variable =
+  | Readonly<{ id: string; name: string; type: 'color'; values: Readonly<Record<string, Color>> }>
+  | Readonly<{ id: string; name: string; type: 'number'; values: Readonly<Record<string, number>> }>;
+
+/** The variables, their 1 to 16 modes and the active `mode` (V39-S2). */
+export type VariableSet = Readonly<{
+  modes: readonly VariableMode[];
+  mode: string;
+  items: readonly Variable[];
+}>;
+
+/** What a binding names: a colour style or a variable (V39-S4). */
+export type BindingRef = Readonly<{ style: string }> | Readonly<{ variable: string }>;
+
+/** The node properties a binding can hold (V39-S4), in canonical order. */
+export type BindingKey = 'fill' | 'stroke' | 'text' | 'opacity' | 'strokeWidth' | 'cornerRadius';
+
+/** A node's bindings (V39-S4): never empty when present. */
+export type Bindings = Readonly<Partial<Record<BindingKey, BindingRef>>>;

@@ -20,6 +20,7 @@ import {
 import { booleanNodes } from './boolean-command.js';
 import { paste } from './clipboard.js';
 import { addEffect, removeEffect, setEffect } from './effect-commands.js';
+import { tableCommand } from './table-commands.js';
 import { Draft, fail, type Failure } from './draft.js';
 import { ExpansionCache, expansionFailure } from './expansion.js';
 import {
@@ -331,6 +332,22 @@ export function applyEdit(
       return setEffect(document, command, context, custom, finish);
     case 'removeEffect':
       return removeEffect(document, command, context, custom, finish);
+    case 'createColorStyle':
+    case 'updateColorStyle':
+    case 'removeColorStyle':
+    case 'createVariable':
+    case 'updateVariable':
+    case 'removeVariable':
+    case 'addVariableMode':
+    case 'renameVariableMode':
+    case 'removeVariableMode':
+    case 'setVariableMode':
+    case 'bindProperty':
+      return tableCommand(document, command, context, finish, (node) =>
+        node.type === 'line' || node.type === 'path' || node.type === 'custom'
+          ? DEFAULT_PATH_STROKE
+          : DEFAULT_SHAPE_STROKE,
+      );
     case 'createSymbol':
       return createSymbol(document, command, context, finish);
     case 'createInstance':

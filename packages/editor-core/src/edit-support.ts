@@ -1,4 +1,10 @@
-import { isValidId, type DocumentV8, type NodeV8, type PathData } from '@vector-studio/model';
+import {
+  isValidId,
+  tableIds,
+  type DocumentV8,
+  type NodeV8,
+  type PathData,
+} from '@vector-studio/model';
 import { fail, type Draft, type Failure } from './draft.js';
 import { expansionFailure, type ExpansionCache } from './expansion.js';
 import type { CustomDefaults, CustomFailure } from './extensions.js';
@@ -82,12 +88,15 @@ export const ID_ATTEMPTS = 1000;
 export const PENDING_ID = 'pending';
 
 export function freshId(document: DocumentV8, ids: IdSource): string | null {
+  // V39-S3: style, variable and mode IDs are taken too.
+  const tables = new Set(tableIds(document));
   for (let attempt = 0; attempt < ID_ATTEMPTS; attempt += 1) {
     const id = ids();
     if (
       isValidId(id) &&
       !document.pages.some((page) => page.id === id) &&
-      !Object.hasOwn(document.nodes, id)
+      !Object.hasOwn(document.nodes, id) &&
+      !tables.has(id)
     ) {
       return id;
     }
