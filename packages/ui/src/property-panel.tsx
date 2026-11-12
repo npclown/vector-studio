@@ -6,11 +6,11 @@ import {
   useSelection,
   type Command,
   type Constraints,
-  type DocumentV7,
+  type DocumentV8,
   type KeyBinding,
-  type NodeV7,
+  type NodeV8,
   type TextEditState,
-  type TextNodeV7,
+  type TextNodeV8,
 } from '@vector-studio/react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { colorHex, parseNumber, type Common } from './appearance-model.js';
@@ -116,7 +116,7 @@ function TransformSection({
   target,
   run,
 }: {
-  nodes: readonly NodeV7[];
+  nodes: readonly NodeV8[];
   target: TransformTarget | null;
   run: Run;
 }) {
@@ -157,7 +157,7 @@ function TransformSection({
   );
 }
 
-function LayerSection({ nodes, run }: { nodes: readonly NodeV7[]; run: Run }) {
+function LayerSection({ nodes, run }: { nodes: readonly NodeV8[]; run: Run }) {
   const only = nodes.length === 1 ? nodes[0]! : null;
   const name = commonOf(nodes, (node) => node.name);
   const visible = commonOf(nodes, (node) => node.visible);
@@ -195,7 +195,7 @@ function LayerSection({ nodes, run }: { nodes: readonly NodeV7[]; run: Run }) {
   );
 }
 
-function LineSection({ nodes, run }: { nodes: readonly NodeV7[]; run: Run }) {
+function LineSection({ nodes, run }: { nodes: readonly NodeV8[]; run: Run }) {
   const lines = lineNodes(nodes);
   const only = nodes.length === 1 ? lines[0] : undefined;
   return (
@@ -226,7 +226,7 @@ function ConstraintSection({
   run,
 }: {
   /** The selected nodes whose constraints take effect. */
-  nodes: readonly NodeV7[];
+  nodes: readonly NodeV8[];
   /** One node is selected, and it is this node. */
   editable: boolean;
   run: Run;
@@ -261,7 +261,7 @@ function TextSection({
   run,
   exitTextEdit,
 }: {
-  texts: readonly TextNodeV7[];
+  texts: readonly TextNodeV8[];
   /** One node is selected, and it is this text node. */
   editable: boolean;
   textEdit: TextEditState | null;
@@ -411,7 +411,7 @@ function SymbolSection({
   selection,
   runAction,
 }: {
-  document: DocumentV7;
+  document: DocumentV8;
   selection: readonly string[];
   runAction: (action: PropertyAction) => void;
 }) {
@@ -455,7 +455,7 @@ function EffectRowFields({
   disabled,
   run,
 }: {
-  nodes: readonly NodeV7[];
+  nodes: readonly NodeV8[];
   row: EffectRow;
   disabled: boolean;
   run: Run;
@@ -567,8 +567,8 @@ function EffectsSection({
   nodes,
   run,
 }: {
-  document: DocumentV7;
-  nodes: readonly NodeV7[];
+  document: DocumentV8;
+  nodes: readonly NodeV8[];
   run: Run;
 }) {
   const masked = nodes.some((node) => isMaskSource(document, node));
@@ -615,7 +615,7 @@ function BooleanSection({
   keymap,
   run,
 }: {
-  document: DocumentV7;
+  document: DocumentV8;
   selection: readonly string[];
   keymap: readonly KeyBinding[];
   run: Run;

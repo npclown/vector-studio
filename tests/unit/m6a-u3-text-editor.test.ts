@@ -3,9 +3,9 @@ import {
   serializeDocument,
   validateDocument,
   type Color,
-  type DocumentV7,
+  type DocumentV8,
   type Frame,
-  type TextNodeV7,
+  type TextNodeV8,
   type TextRun,
 } from '@vector-studio/model';
 import { readFileSync } from 'node:fs';
@@ -71,9 +71,9 @@ function text(
   parent: string,
   frame: Frame,
   runs: readonly TextRun[],
-  props: Partial<Pick<TextNodeV7, 'sizing' | 'align' | 'letterSpacing' | 'lineHeight'>> & {
+  props: Partial<Pick<TextNodeV8, 'sizing' | 'align' | 'letterSpacing' | 'lineHeight'>> & {
     rotation?: number;
-    constraints?: TextNodeV7['constraints'];
+    constraints?: TextNodeV8['constraints'];
   } = {},
 ): Loose {
   return {
@@ -109,13 +109,13 @@ function container(
   return { ...base(id, parent, frame), type, children, ...extra };
 }
 
-function doc(nodes: Loose[], children: string[]): DocumentV7 {
+function doc(nodes: Loose[], children: string[]): DocumentV8 {
   return {
     schemaVersion: 6,
     id: 'doc',
     pages: [{ id: 'p1', name: 'Page 1', children }],
     nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
-  } as unknown as DocumentV7;
+  } as unknown as DocumentV8;
 }
 
 /** An ID source that counts its calls. */
@@ -132,7 +132,7 @@ function counted(prefix = 'n'): IdSource & { calls: number } {
 }
 
 function editor(
-  document?: DocumentV7,
+  document?: DocumentV8,
   port: TextLayoutPort | null = createFakeTextLayout(),
   ids: IdSource = createCounterIdSource('n'),
 ): Editor {
@@ -146,7 +146,7 @@ function editor(
 }
 
 const serialized = (target: Editor) => serializeDocument(target.query({ type: 'document' }));
-const nodeOf = (target: Editor, id: string) => target.query({ type: 'node', id }) as TextNodeV7;
+const nodeOf = (target: Editor, id: string) => target.query({ type: 'node', id }) as TextNodeV8;
 
 /** Runs `command`; the editor's document stays a valid v4 document either way. */
 function run_(target: Editor, command: Command): CommandResult {
@@ -222,7 +222,7 @@ describe('M6a-A06: createText', () => {
   });
 
   it('keeps the anchor (x + a·width, y) of the given frame for each align', () => {
-    const at = (align: TextNodeV7['align']) => {
+    const at = (align: TextNodeV8['align']) => {
       const target = editor();
       run_(target, create({ align }));
       return nodeOf(target, 'n1').frame;
@@ -525,7 +525,7 @@ describe('M6a-A06: failure codes in the section 6.1 order', () => {
 describe('M6a-A07: the growth anchor (section 6.2)', () => {
   it('keeps the top anchor of a rotated node on the page', () => {
     const rotation = Math.PI / 6;
-    const at = (align: TextNodeV7['align']) => {
+    const at = (align: TextNodeV8['align']) => {
       const target = editor(
         doc([text('t1', 'p1', f(100, 50, 10, 12), [run('ab')], { rotation, align })], ['t1']),
       );
@@ -594,7 +594,7 @@ describe('M6a-A07: setFrames (section 6.3, first row)', () => {
 });
 
 describe('M6a-A07: group resize (section 6.3)', () => {
-  const grouped = (sizing: TextNodeV7['sizing'] = 'autoWidth', size = 10) =>
+  const grouped = (sizing: TextNodeV8['sizing'] = 'autoWidth', size = 10) =>
     doc(
       [
         container('group', 'g1', 'p1', f(0, 0, 10 * (size / 10), 12 * (size / 10)), ['t1']),
@@ -649,7 +649,7 @@ describe('M6a-A07: group resize (section 6.3)', () => {
 });
 
 describe('M6a-A07: frame children (section 6.3)', () => {
-  const framed = (constraints: TextNodeV7['constraints']) =>
+  const framed = (constraints: TextNodeV8['constraints']) =>
     doc(
       [
         container('frame', 'f1', 'p1', f(0, 0, 100, 100), ['t1']),
@@ -897,7 +897,7 @@ describe('M6a-A09: the cache, the query and the generation', () => {
     const port = createFakeTextLayout();
     const cache = new TextLayoutCache(port);
     const node = (k: number) =>
-      text(`t${k}`, 'p1', f(0, 0, 0, 0), [run(`${k}`)]) as unknown as TextNodeV7;
+      text(`t${k}`, 'p1', f(0, 0, 0, 0), [run(`${k}`)]) as unknown as TextNodeV8;
     const first = node(0);
     cache.layout(first);
     for (let k = 1; k < TEXT_LAYOUT_CACHE_SIZE; k += 1) cache.layout(node(k));
@@ -1237,7 +1237,7 @@ describe('M6a-A07 (review S4): text in a group that is a frame child', () => {
 
 describe('M6a-A06, A07, A10 (review S6): rotation, rotated groups, counting and throwing ports', () => {
   it('createText with a rotation keeps the top anchor of the given frame for each align', () => {
-    const at = (align: TextNodeV7['align']) => {
+    const at = (align: TextNodeV8['align']) => {
       const target = editor();
       run_(target, create({ align, rotation: Math.PI / 6 }));
       return nodeOf(target, 'n1').frame;

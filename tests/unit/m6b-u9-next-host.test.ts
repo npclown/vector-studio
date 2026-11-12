@@ -11,7 +11,7 @@ import {
   type EditorSnapshot,
   type SelectionHandles,
 } from '../../packages/editor-core/src/index.js';
-import { validateAnyDocument, type DocumentV7 } from '../../packages/model/src/index.js';
+import { validateAnyDocument, type DocumentV8 } from '../../packages/model/src/index.js';
 import type * as RouteModule from '../../apps/next-host/app/m6b-text-edit.json/route.js';
 import type * as HostModule from '../../apps/next-host/src/m6a-text-host.js';
 import type * as EditModule from '../../apps/next-host/src/m6b-text-edit.js';
@@ -30,7 +30,7 @@ const FIXTURE_TEXT = readFileSync(
   path.join(root, 'tests/fixtures/m6-text/edit-host.v6.json'),
   'utf8',
 );
-const FIXTURE = JSON.parse(FIXTURE_TEXT) as DocumentV7;
+const FIXTURE = JSON.parse(FIXTURE_TEXT) as DocumentV8;
 const PAGE_SOURCE = readFileSync(path.join(appDir, 'app/page.tsx'), 'utf8');
 const UI_TOOLBAR_SOURCE = readFileSync(path.join(root, 'packages/ui/src/toolbar-model.ts'), 'utf8');
 

@@ -5,8 +5,8 @@ import type { Command, Editor, EditorEvent, SelectionHandles } from '@vector-stu
 import {
   parseEnvelope,
   serializeDocument,
-  type DocumentV7,
-  type NodeV7,
+  type DocumentV8,
+  type NodeV8,
 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
 import { expectLayoutBudget } from '../support/m8-n3-budget.js';
@@ -60,7 +60,7 @@ const FIXTURE_TEXT = readFileSync(
   path.join(root, 'tests/fixtures/m4-appearance/migrated/symbols.v6.json'),
   'utf8',
 );
-const FIXTURE = JSON.parse(FIXTURE_TEXT) as DocumentV7;
+const FIXTURE = JSON.parse(FIXTURE_TEXT) as DocumentV8;
 /** The canonical text of the fixture, as the editor's document serializes. */
 const FIXTURE_SERIALIZED = serializeDocument(FIXTURE);
 /** `s1`'s descendants in its pre-order: the order of a detached copy (section 5.2). */
@@ -150,11 +150,11 @@ async function screen(page: Page, p: Point): Promise<Point> {
   return { x: origin.x + (p.x - position.x) * zoom, y: origin.y + (p.y - position.y) * zoom };
 }
 
-async function readDocument(page: Page): Promise<DocumentV7> {
+async function readDocument(page: Page): Promise<DocumentV8> {
   const text = await page.evaluate(() =>
     JSON.stringify(window.__p5Host!.editor.query({ type: 'document' })),
   );
-  return JSON.parse(text) as DocumentV7;
+  return JSON.parse(text) as DocumentV8;
 }
 
 async function serialized(page: Page): Promise<string> {
@@ -275,8 +275,8 @@ async function expectPaints(
 }
 
 /** A node's descendants in pre-order (the node excluded). */
-function descendants(document: DocumentV7, id: string): NodeV7[] {
-  const out: NodeV7[] = [];
+function descendants(document: DocumentV8, id: string): NodeV8[] {
+  const out: NodeV8[] = [];
   const visit = (current: string) => {
     const node = document.nodes[current]!;
     if (current !== id) out.push(node);
@@ -287,10 +287,10 @@ function descendants(document: DocumentV7, id: string): NodeV7[] {
 }
 
 /** A detached instance (section 5.2): a frame with the source's fill and stroke and copies. */
-function expectDetached(document: DocumentV7, id: string, before: DocumentV7) {
+function expectDetached(document: DocumentV8, id: string, before: DocumentV8) {
   const node = document.nodes[id]!;
   const original = before.nodes[id]!;
-  const source = before.nodes.s1 as Extract<NodeV7, { type: 'symbol' }>;
+  const source = before.nodes.s1 as Extract<NodeV8, { type: 'symbol' }>;
   expect(node).toMatchObject({
     type: 'frame',
     name: original.name,
@@ -535,7 +535,7 @@ test('M7-A11: source edits reach instances; resize, detach, source delete and un
     type: 'line',
     frame: { x: LINE_START.x, y: LINE_START.y, width: length, height: 0 },
   });
-  const lineStroke = (lined.nodes[line!] as Extract<NodeV7, { type: 'line' }>).stroke!;
+  const lineStroke = (lined.nodes[line!] as Extract<NodeV8, { type: 'line' }>).stroke!;
   await run(page, {
     type: 'setNodeProps',
     id: line!,

@@ -21,7 +21,7 @@ import type {
   TextLayoutRequest,
   TextLayoutResult,
 } from '@vector-studio/contracts';
-import type { DocumentV7, TextNodeV7 } from '@vector-studio/model';
+import type { DocumentV8, TextNodeV8 } from '@vector-studio/model';
 import { layoutRequest } from '../../packages/editor-core/src/text.js';
 import { M9_V2_PAGE, projectM9Page } from './document.js';
 
@@ -55,11 +55,11 @@ export function requestKey(request: TextLayoutRequest): string {
 
 /** Every distinct layout request of the page's text, expanded copies included, in key order. */
 export function m9LayoutRequests(
-  document: DocumentV7,
+  document: DocumentV8,
   pageId = M9_V2_PAGE,
 ): readonly TextLayoutRequest[] {
   const requests = new Map<string, TextLayoutRequest>();
-  projectM9Page(document, pageId, (node: TextNodeV7) => {
+  projectM9Page(document, pageId, (node: TextNodeV8) => {
     const request = layoutRequest(node);
     requests.set(requestKey(request), request);
     return {
@@ -138,7 +138,7 @@ export function readM9LayoutTable(file = M9_LAYOUT_TABLE): M9LayoutTable {
 }
 
 /** A layouter answering from the table; a request it does not hold throws. */
-export function m9ReplayLayout(table: M9LayoutTable): (node: TextNodeV7) => TextLayoutResult {
+export function m9ReplayLayout(table: M9LayoutTable): (node: TextNodeV8) => TextLayoutResult {
   const cache = new Map<string, TextLayoutResult>();
   return (node) => {
     const key = requestKey(layoutRequest(node));

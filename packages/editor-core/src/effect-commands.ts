@@ -1,9 +1,9 @@
 import {
   MAX_EFFECTS,
   validateNode,
-  type DocumentV7,
+  type DocumentV8,
   type Effect,
-  type NodeV7,
+  type NodeV8,
 } from '@vector-studio/model';
 import { Draft, fail, type Failure } from './draft.js';
 import {
@@ -23,7 +23,7 @@ import type { DocumentCommand } from './types.js';
 // of each node that has one there (a visible toggle is a `visible` patch), and `removeEffect`
 // removes it. Each is one transaction (one undo step); a change of no value records no step.
 
-type Finish = (draft: Draft) => DocumentV7 | Failure;
+type Finish = (draft: Draft) => DocumentV8 | Failure;
 
 /** E41 contract, section 6: the defaults `addEffect` appends. */
 export const DEFAULT_DROP_SHADOW: Effect = deepFreeze({
@@ -52,10 +52,10 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 
 /** The listed nodes, all on the active page, or the failure `setStyle` gives. */
 function targets(
-  document: DocumentV7,
+  document: DocumentV8,
   ids: unknown,
   context: EditContext,
-): readonly NodeV7[] | Failure {
+): readonly NodeV8[] | Failure {
   const unique = uniqueIds(ids);
   if (unique === null || unique.length === 0) return fail('editor.invalid-command', '/ids');
   const tree = documentTree(document);
@@ -71,12 +71,12 @@ function targets(
 
 /** Validates each changed node and commits them in one transaction. */
 function commit(
-  document: DocumentV7,
-  changed: readonly NodeV7[],
+  document: DocumentV8,
+  changed: readonly NodeV8[],
   custom: CustomRules,
   finish: Finish,
 ): EditResult {
-  const checked: NodeV7[] = [];
+  const checked: NodeV8[] = [];
   for (const node of changed) {
     const result = validateNode(node);
     if (!result.ok) return fail(result.code, nodePath(node.id, result.path));
@@ -99,7 +99,7 @@ const isIndex = (value: unknown): value is number =>
 
 /** `addEffect`: E41-S3's limits refuse with `editor.effect-limit` and no change. */
 export function addEffect(
-  document: DocumentV7,
+  document: DocumentV8,
   command: Extract<DocumentCommand, { type: 'addEffect' }>,
   context: EditContext,
   custom: CustomRules,
@@ -137,7 +137,7 @@ export function addEffect(
  * model's check at the node's effect.
  */
 export function setEffect(
-  document: DocumentV7,
+  document: DocumentV8,
   command: Extract<DocumentCommand, { type: 'setEffect' }>,
   context: EditContext,
   custom: CustomRules,
@@ -161,7 +161,7 @@ export function setEffect(
       );
     }
   }
-  const changed: NodeV7[] = [];
+  const changed: NodeV8[] = [];
   for (const node of holders) {
     const before = node.effects[index]!;
     const keys = PATCH_KEYS[before.kind].filter((key) => Object.hasOwn(patch, key));
@@ -183,7 +183,7 @@ export function setEffect(
 
 /** `removeEffect`: removes the effect at `index` of each listed node that has one. */
 export function removeEffect(
-  document: DocumentV7,
+  document: DocumentV8,
   command: Extract<DocumentCommand, { type: 'removeEffect' }>,
   context: EditContext,
   custom: CustomRules,

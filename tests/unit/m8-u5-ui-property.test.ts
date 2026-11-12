@@ -8,8 +8,8 @@ import {
 import {
   serializeDocument,
   validateDocument,
-  type DocumentV7,
-  type TextNodeV7,
+  type DocumentV8,
+  type TextNodeV8,
 } from '@vector-studio/model';
 import {
   AppearancePanel,
@@ -176,7 +176,7 @@ const DOCUMENT = v7Value({
   },
 });
 
-function parsed(): DocumentV7 {
+function parsed(): DocumentV8 {
   const result = validateDocument(DOCUMENT);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -382,7 +382,7 @@ describe('M8-R4: text fields (M8-Q9 (a))', () => {
   });
 
   it('the run fields edit the non-collapsed selection, else the whole text; a caret disables them', () => {
-    const t = parsed().nodes.t as TextNodeV7;
+    const t = parsed().nodes.t as TextNodeV8;
     expect(textLength(t)).toBe(11);
     expect(textRange(t, null)).toEqual({ start: 0, end: 11 });
     expect(textRange(t, editing(8, 2))).toEqual({ start: 2, end: 8 });
@@ -407,7 +407,7 @@ describe('M8-R4: text fields (M8-Q9 (a))', () => {
 
   it('setTextStyle over the range and setTextProps, literal, each one undo step', () => {
     const target = editor();
-    const t = node(target, 't') as TextNodeV7;
+    const t = node(target, 't') as TextNodeV8;
     expect(textStyleCommand(t, { start: 2, end: 8 }, { size: 20 })).toEqual({
       type: 'setTextStyle',
       id: 't',
@@ -421,16 +421,16 @@ describe('M8-R4: text fields (M8-Q9 (a))', () => {
       align: 'center',
     });
     oneStep(target, textStyleCommand(t, { start: 0, end: 11 }, { family: 'Serif' }));
-    expect((node(target, 't') as TextNodeV7).runs.map((entry) => entry.family)).toEqual([
+    expect((node(target, 't') as TextNodeV8).runs.map((entry) => entry.family)).toEqual([
       'Serif',
       'Serif',
     ]);
     target.execute({ type: 'enterTextEdit', id: 't', anchor: 0, focus: 5 });
-    const range = textRange(node(target, 't') as TextNodeV7, target.getSnapshot().textEdit)!;
+    const range = textRange(node(target, 't') as TextNodeV8, target.getSnapshot().textEdit)!;
     expect(range).toEqual({ start: 0, end: 5 });
     oneStep(target, textStyleCommand(t, range, { color: RED }));
     expect(
-      (node(target, 't') as TextNodeV7).runs.map((entry) => [entry.text, entry.color]),
+      (node(target, 't') as TextNodeV8).runs.map((entry) => [entry.text, entry.color]),
     ).toEqual([
       ['Hello', RED],
       [' ', BLACK],
@@ -460,7 +460,7 @@ describe('M8-R4: text fields (M8-Q9 (a))', () => {
     expect(parseFamily('   ')).toBeNull();
     const target = editor();
     const before = serialized(target);
-    const t = node(target, 't') as TextNodeV7;
+    const t = node(target, 't') as TextNodeV8;
     const result = target.execute(
       textStyleCommand(t, { start: 0, end: 11 }, { family: 'a\u0001' }),
     );

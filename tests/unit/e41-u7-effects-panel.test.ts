@@ -5,7 +5,7 @@ import {
   createEditor,
   type Command,
   type Editor,
-  type NodeV7,
+  type NodeV8,
 } from '@vector-studio/editor-core';
 import { EditorProvider, PropertySections } from '@vector-studio/ui';
 import { createElement } from 'react';
@@ -42,7 +42,7 @@ function rect(target: Editor, x = 0): string {
   return ok(target, { type: 'createRectangle', frame: { x, y: 0, width: 20, height: 20 } })[0]!;
 }
 
-const nodesOf = (target: Editor, ids: readonly string[]): NodeV7[] =>
+const nodesOf = (target: Editor, ids: readonly string[]): NodeV8[] =>
   ids.map((id) => target.getSnapshot().document.nodes[id]!);
 
 function panel(target: Editor): string {

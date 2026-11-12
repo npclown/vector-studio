@@ -6,9 +6,9 @@ import type { Command, Editor, EditorEvent } from '@vector-studio/editor-core';
 import {
   parseEnvelope,
   serializeDocument,
-  type DocumentV7,
+  type DocumentV8,
   type Gradient,
-  type NodeV7,
+  type NodeV8,
   type Stroke,
 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
@@ -67,7 +67,7 @@ const FIXTURE_TEXT = readFileSync(
   path.join(root, 'tests/fixtures/m4-appearance/host.v6.json'),
   'utf8',
 );
-const FIXTURE = JSON.parse(FIXTURE_TEXT) as DocumentV7;
+const FIXTURE = JSON.parse(FIXTURE_TEXT) as DocumentV8;
 
 const INTERIOR_TOLERANCE = 2;
 const EDGE_TOLERANCE = 4;
@@ -115,11 +115,11 @@ async function settled(page: Page) {
   return status;
 }
 
-async function readDocument(page: Page): Promise<DocumentV7> {
+async function readDocument(page: Page): Promise<DocumentV8> {
   const text = await page.evaluate(() =>
     JSON.stringify(window.__p5Host!.editor.query({ type: 'document' })),
   );
-  return JSON.parse(text) as DocumentV7;
+  return JSON.parse(text) as DocumentV8;
 }
 
 async function serialized(page: Page): Promise<string> {
@@ -722,7 +722,7 @@ test('M4-A12: every panel control once, one undo step each', async ({ page }) =>
   // value replaces both in one step.
   await run(page, { type: 'setSelection', ids: ['h1', 'h2'] });
   await expect(select('Fill type')).toHaveAttribute('data-mixed', 'true');
-  const h2 = FIXTURE.nodes.h2 as NodeV7 & { fill: Gradient };
+  const h2 = FIXTURE.nodes.h2 as NodeV8 & { fill: Gradient };
   await step(
     'mixed fill type',
     () =>

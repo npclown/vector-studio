@@ -1,10 +1,10 @@
 import {
   MAX_TREE_DEPTH,
   validateNode,
-  type DocumentV7,
-  type NodeV7,
+  type DocumentV8,
+  type NodeV8,
   type PageV2,
-  type TextNodeV7,
+  type TextNodeV8,
 } from '@vector-studio/model';
 import type { ExpansionCache } from './expansion.js';
 import { deepFreeze } from './freeze.js';
@@ -24,11 +24,11 @@ export function fail(code: EditorErrorCode, path?: string): Failure {
 
 /** The extension check of a custom node; other nodes pass. `path` is relative to the node. */
 export type CustomCheck = (
-  node: NodeV7,
+  node: NodeV8,
 ) => Readonly<{ code: EditorErrorCode; path: string }> | null;
 
 /** Whether two versions of a node have the same parent, frame and rotation. */
-export function samePlacement(a: NodeV7, b: NodeV7): boolean {
+export function samePlacement(a: NodeV8, b: NodeV8): boolean {
   return (
     a.parent === b.parent &&
     a.rotation === b.rotation &&
@@ -40,8 +40,8 @@ export function samePlacement(a: NodeV7, b: NodeV7): boolean {
 }
 
 export class Draft implements WritableTree {
-  readonly base: DocumentV7;
-  private readonly nodes: Map<string, NodeV7>;
+  readonly base: DocumentV8;
+  private readonly nodes: Map<string, NodeV8>;
   private pages: PageV2[];
   /** Nodes created, changed or removed. */
   readonly touched = new Set<string>();
@@ -58,13 +58,13 @@ export class Draft implements WritableTree {
    */
   expansions: ExpansionCache | undefined;
 
-  constructor(base: DocumentV7) {
+  constructor(base: DocumentV8) {
     this.base = base;
     this.nodes = new Map(Object.entries(base.nodes));
     this.pages = [...base.pages];
   }
 
-  node(id: string): NodeV7 | undefined {
+  node(id: string): NodeV8 | undefined {
     return this.nodes.get(id);
   }
 
@@ -77,7 +77,7 @@ export class Draft implements WritableTree {
   }
 
   /** Replaces or adds a node; `finish` validates it with the model's field rules. */
-  set(node: NodeV7): void {
+  set(node: NodeV8): void {
     this.nodes.set(node.id, node);
     this.touched.add(node.id);
     this.unchecked.add(node.id);
@@ -88,7 +88,7 @@ export class Draft implements WritableTree {
    * Replaces or adds a node the command has already validated with the model's rules, and with
    * its extension when `custom` is true.
    */
-  setChecked(node: NodeV7, custom = false): void {
+  setChecked(node: NodeV8, custom = false): void {
     this.nodes.set(node.id, node);
     this.touched.add(node.id);
     this.unchecked.delete(node.id);
@@ -149,11 +149,11 @@ export class Draft implements WritableTree {
     check: CustomCheck,
     options: Readonly<{
       refit: boolean;
-      placementBase?: DocumentV7;
+      placementBase?: DocumentV8;
       expansions?: ExpansionCache;
       layout?: TextLayouter | undefined;
     }> = { refit: true },
-  ): DocumentV7 | Failure {
+  ): DocumentV8 | Failure {
     this.expansions = options.expansions;
     this.deleteEmptyGroups();
     const text = this.refitText(options.layout);
@@ -178,9 +178,9 @@ export class Draft implements WritableTree {
   }
 
   /** The current state as a frozen document, without the `finish` rules. */
-  document(): DocumentV7 {
+  document(): DocumentV8 {
     return deepFreeze({
-      schemaVersion: 7,
+      schemaVersion: 8,
       id: this.base.id,
       pages: this.pages,
       // fromEntries defines own properties, so a "__proto__" ID stays data.
@@ -196,7 +196,7 @@ export class Draft implements WritableTree {
       const result = validateNode(node);
       if (!result.ok) return fail(result.code, nodePath(id, result.path));
       if (layout === undefined) return fail('editor.no-text-layout');
-      const valid = result.node as TextNodeV7;
+      const valid = result.node as TextNodeV8;
       const frame = refitFrame(valid, layout(valid));
       if (frame !== valid.frame) this.set({ ...valid, frame });
     }
@@ -268,7 +268,7 @@ export class Draft implements WritableTree {
     }
   }
 
-  private refit(placementBase: DocumentV7): void {
+  private refit(placementBase: DocumentV8): void {
     const pending = new Set<string>();
     const consider = (owner: string | undefined) => {
       if (owner !== undefined && isGroup(this.nodes.get(owner))) pending.add(owner);

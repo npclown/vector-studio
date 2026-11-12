@@ -1,4 +1,4 @@
-import type { DocumentV7, Frame, NodeV7, Stroke } from '@vector-studio/model';
+import type { DocumentV8, Frame, NodeV8, Stroke } from '@vector-studio/model';
 import { apply, boundsOfPoints, localTransform } from './geometry.js';
 import type { PagePoint } from './types.js';
 
@@ -44,7 +44,7 @@ function include(box: Box, p: PagePoint, by = 0): Box {
 }
 
 /** The path rule above, in the node's unrotated frame. */
-function pathBox(node: Extract<NodeV7, { type: 'path' }>): Box {
+function pathBox(node: Extract<NodeV8, { type: 'path' }>): Box {
   const { frame, stroke } = node;
   let box = boxOf(frame);
   const points = node.path.points;
@@ -80,7 +80,7 @@ function strokeGrowth(stroke: Stroke): number {
  * - A `triangle` end (fill mode): one filled outline, the shaft and caps as above, triangle heads
  *   exactly, a `line` head as two w-wide bars (so its points grow by w/2).
  */
-function lineBox(node: Extract<NodeV7, { type: 'line' }>): Box {
+function lineBox(node: Extract<NodeV8, { type: 'line' }>): Box {
   const { frame, stroke } = node;
   const [x0, y0, x1, y1] = node.points;
   const p0 = { x: frame.x + x0 * frame.width, y: frame.y + y0 * frame.height };
@@ -126,7 +126,7 @@ function lineBox(node: Extract<NodeV7, { type: 'line' }>): Box {
 }
 
 /** A node's visual box in its own unrotated frame (coordinates of its parent's space). */
-function ownBox(document: DocumentV7, node: NodeV7): Box {
+function ownBox(document: DocumentV8, node: NodeV8): Box {
   switch (node.type) {
     case 'rectangle':
     case 'ellipse': {
@@ -187,7 +187,7 @@ function ownBox(document: DocumentV7, node: NodeV7): Box {
  * `|offsetX|` and `|offsetY|` (the box grows by the same amount on every side). An instance
  * without effects of its own draws with its symbol's (E41-S10).
  */
-function effectMargin(document: DocumentV7, node: NodeV7): number {
+function effectMargin(document: DocumentV8, node: NodeV8): number {
   let effects = node.effects;
   if (node.type === 'instance' && effects.length === 0) {
     effects = document.nodes[node.symbol]?.effects ?? [];
@@ -210,7 +210,7 @@ function effectMargin(document: DocumentV7, node: NodeV7): number {
  * reach (E41 section 5.5), turned by its rotation about its frame's centre. Contains
  * `rotatedBounds(node)`.
  */
-export function visualBounds(document: DocumentV7, node: NodeV7): Frame {
+export function visualBounds(document: DocumentV8, node: NodeV8): Frame {
   const box = grow(ownBox(document, node), effectMargin(document, node));
   if (node.rotation === 0) {
     return { x: box.minX, y: box.minY, width: box.maxX - box.minX, height: box.maxY - box.minY };

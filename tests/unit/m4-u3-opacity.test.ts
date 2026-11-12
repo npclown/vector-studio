@@ -6,7 +6,7 @@ import {
   validateDocument,
   validateFragmentTree,
   validateNode as validateNodeV7,
-  type DocumentV7,
+  type DocumentV8,
   type PathData,
   type Stroke,
 } from '@vector-studio/model';
@@ -112,7 +112,7 @@ function chain(
   return nodes;
 }
 
-function parsed(value: Json): DocumentV7 {
+function parsed(value: Json): DocumentV8 {
   const result = validateDocument(value);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -172,7 +172,7 @@ const unitTriangle: PathData = {
   fillRule: 'nonzero',
 };
 const custom = () => unitTriangle;
-const project = (document: DocumentV7, page: string) => projectPage(document, page, custom).nodes;
+const project = (document: DocumentV8, page: string) => projectPage(document, page, custom).nodes;
 const containerOf = (nodes: ReadonlyMap<string, RenderNodeSnapshot>, id: string) =>
   nodes.get(id) as Extract<RenderNodeSnapshot, { kind: 'container' }>;
 
@@ -405,7 +405,7 @@ describe('M4-A08 and M4-A10 effective opacity, instance × source (M4-P6, M4-Q15
 
   type Leaf = Extract<RenderNodeSnapshot, { kind: 'primitive' | 'path' }>;
   /** The drawn leaves of a page in projection order, with their geometry and style. */
-  const drawn = (document: DocumentV7, page: string) =>
+  const drawn = (document: DocumentV8, page: string) =>
     [...project(document, page).values()]
       .filter((node): node is Leaf => node.kind !== 'container')
       .map((node) => ({ kind: node.kind, geometry: node.geometry, style: node.style }));

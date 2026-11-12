@@ -12,7 +12,7 @@
 // text inside the sources and layout generation changes on both ports, and after every step and
 // bump checks each held text leaf against a fresh projection with no memo.
 import type { RenderChangeSet } from '@vector-studio/contracts';
-import { validateDocument, type DocumentV7 } from '@vector-studio/model';
+import { validateDocument, type DocumentV8 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   createEditor,
@@ -668,7 +668,7 @@ const SYMBOLS = JSON.parse(
 ) as Json;
 
 /** The symbols fixture after `edit`: page-2 holds g1 [i2, r2], f2 [i4], s2 and d1 [d1-r]. */
-function read(edit: (value: Json) => void = () => {}): DocumentV7 {
+function read(edit: (value: Json) => void = () => {}): DocumentV8 {
   const value = structuredClone(SYMBOLS);
   edit(value);
   // The fixture and the edits are v6; v7 adds `effects: []` to every node (E41-S1).
@@ -682,10 +682,10 @@ function read(edit: (value: Json) => void = () => {}): DocumentV7 {
  * other node object, as a command's result does.
  */
 function derive(
-  document: DocumentV7,
+  document: DocumentV8,
   nodes: Record<string, Record<string, unknown> | null>,
   pages: Record<string, string[]> = {},
-): DocumentV7 {
+): DocumentV8 {
   const next: Record<string, unknown> = { ...document.nodes };
   for (const [id, node] of Object.entries(nodes)) {
     if (node === null) delete next[id];
@@ -697,7 +697,7 @@ function derive(
     pages: document.pages.map((page) =>
       Object.hasOwn(pages, page.id) ? { ...page, children: pages[page.id]! } : page,
     ),
-  } as DocumentV7;
+  } as DocumentV8;
 }
 
 /** A projector on a recording renderer and one held to the whole page, fed the same changes. */
@@ -863,7 +863,7 @@ describe('E26-U4 projector cases outside the editor', () => {
     const beside = derive(start, { r2: { visible: false } });
     // The frame f2 goes, i4 with it.
     const gone = derive(beside, { f2: null, i4: null }, { 'page-2': ['g1', 's2', 'd1'] });
-    const steps: [DocumentV7, string[]][] = [
+    const steps: [DocumentV8, string[]][] = [
       [beside, ['r2']],
       [gone, ['f2']],
     ];
