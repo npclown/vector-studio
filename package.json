@@ -55,6 +55,7 @@
     "test:e26": "playwright test --config playwright.e26.config.ts",
     "test:e41-next-host": "playwright test --config playwright.e41-studio.config.ts",
     "test:e41-swiftshader": "playwright test --config playwright.e41-swiftshader.config.ts",
+    "test:v35-next-host": "playwright test --config playwright.v35-next-host.config.ts",
     "test:v35-swiftshader": "playwright test --config playwright.v35-swiftshader.config.ts",
     "test:v20-count": "playwright test --config playwright.v20-count.config.ts",
     "test:v21-count": "playwright test --config playwright.v21-count.config.ts",
