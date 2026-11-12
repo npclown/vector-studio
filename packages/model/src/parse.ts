@@ -1109,7 +1109,7 @@ function readNode(key: string, value: unknown, path: Path, schema: Schema): Node
     schema.effects === 'read'
       ? readEffects((raw as Record<string, unknown>).effects, [...path, 'effects'])
       : [];
-  if (bindings === undefined) return { ...node, effects };
+  if (raw === value) return { ...node, effects };
   return { ...node, effects, bindings: readBindings(bindings, node.type, [...path, 'bindings']) };
 }
 
@@ -1129,14 +1129,20 @@ function readBindings(value: unknown, type: string, path: Path): Bindings {
     const entry = value[key];
     const entryPath = [...path, key];
     if (hasExactKeys(entry, ['style'])) {
-      out[key] = { style: readId(entry.style, [...entryPath, 'style']) };
+      out[key] = { style: readBindingId(entry.style, entryPath) };
     } else if (hasExactKeys(entry, ['variable'])) {
-      out[key] = { variable: readId(entry.variable, [...entryPath, 'variable']) };
+      out[key] = { variable: readBindingId(entry.variable, entryPath) };
     } else {
       invalid(entryPath);
     }
   }
   return out;
+}
+
+/** A binding's reference ID (V39-S6): a valid ID, else `invalid-field` at the binding. */
+function readBindingId(value: unknown, path: Path): string {
+  if (typeof value !== 'string' || !isValidId(value)) invalid(path);
+  return value;
 }
 
 /** V39-S3: a table name, 1 to 200 UTF-16 units of valid run text. */

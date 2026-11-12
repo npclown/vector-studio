@@ -235,7 +235,7 @@ export function withBoundValue(
       if (typeof value !== 'number' || stroke == null) return null;
       return { ...node, stroke: { ...stroke, width: value } } as NodeV8;
     case 'opacity':
-      return typeof value === 'number' ? ({ ...node, opacity: value }) : null;
+      return typeof value === 'number' ? { ...node, opacity: value } : null;
     case 'cornerRadius':
       return typeof value === 'number'
         ? ({ ...node, cornerRadii: [value, value, value, value] } as NodeV8)

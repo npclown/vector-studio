@@ -1,4 +1,4 @@
-import { validateDocument, type NodeV8, type DocumentV8 } from '@vector-studio/model';
+import { validateDocument, validateNode, type NodeV8, type DocumentV8 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   createCounterIdSource,
@@ -578,5 +578,80 @@ describe('V39-A06 paste (E5)', () => {
     expect(node(from, a).bindings!.fill).toEqual({ style: s });
     const [other] = ok(into, { type: 'paste', text });
     expect(node(into, other!).bindings?.fill).toBeUndefined();
+  });
+});
+
+describe('V-39 review r1 follow-ups', () => {
+  it('new node IDs skip style, variable and mode IDs (S3), also when the counter restarts', () => {
+    const first = editor();
+    const a = rect(first);
+    style(first);
+    variable(first, 'number', 1);
+    const saved = doc(first);
+    const ids = new Set([
+      ...saved.colorStyles!.map((entry) => entry.id),
+      ...saved.variables!.items.map((entry) => entry.id),
+      ...saved.variables!.modes.map((entry) => entry.id),
+    ]);
+    // A new session: the same counter, so duplicate, paste and detach meet the table IDs.
+    const target = createEditor({ ids: createCounterIdSource('n'), document: saved });
+    for (let i = 0; i < 4; i += 1) ok(target, { type: 'duplicateNodes', ids: [a] });
+    ok(target, { type: 'copy', ids: [a] });
+    ok(target, { type: 'paste' });
+    const [symbol] = ok(target, { type: 'createSymbol', ids: [a] });
+    const [instance] = ok(target, { type: 'createInstance', symbol: symbol! });
+    ok(target, { type: 'detachInstances', ids: [instance!] });
+    for (const id of Object.keys(doc(target).nodes)) expect(ids.has(id), id).toBe(false);
+  });
+
+  it('a detached frame carries the bindings that still hold', () => {
+    const target = editor();
+    const [frame] = ok(target, {
+      type: 'createFrame',
+      frame: { x: 0, y: 0, width: 20, height: 20 },
+    });
+    const s = style(target, green);
+    const v = variable(target, 'number', 1);
+    bind(target, [frame!], 'fill', { style: s });
+    const [symbol] = ok(target, { type: 'createSymbol', ids: [frame!] });
+    const [instance] = ok(target, { type: 'createInstance', symbol: symbol! });
+    bind(target, [instance!], 'opacity', { variable: v });
+    ok(target, { type: 'detachInstances', ids: [instance!] });
+    expect(node(target, instance!).bindings).toEqual({
+      fill: { style: s },
+      opacity: { variable: v },
+    });
+  });
+
+  it('createVariable draws distinct mode and variable IDs', () => {
+    const queue = ['a', 'a', 'a', 'b'];
+    const target = createEditor({
+      ids: () => queue.shift() ?? `z${queue.length}`,
+      document: {
+        schemaVersion: 8,
+        id: 'd',
+        pages: [{ id: 'p', name: 'Page 1', children: [] }],
+        nodes: {},
+      },
+    });
+    const [id] = ok(target, { type: 'createVariable', name: 'X', kind: 'number', value: 1 });
+    expect(id).toBe('b');
+    expect(doc(target).variables!.mode).toBe('a');
+  });
+
+  it('checks every value before mode keys, and reference IDs by the ID rule', () => {
+    const target = editor();
+    const a = rect(target);
+    const o = variable(target, 'number', 1);
+    expect(
+      failure(target, { type: 'updateVariable', id: o, values: { aa: 2, zz: 'bad' } } as never),
+    ).toEqual({ code: 'editor.invalid-command', path: '/values/zz' });
+    expect(bind(target, [a], 'fill', { style: '' })).toMatchObject({ path: '/ref' });
+    const bad = { ...node(target, a), bindings: { fill: { style: 'a\u0000' } } };
+    expect(validateNode(bad)).toEqual({
+      ok: false,
+      code: 'document.invalid-field',
+      path: '/bindings/fill',
+    });
   });
 });

@@ -10,7 +10,9 @@ import {
   bindingTarget,
   bindingTypeFits,
   isColor,
+  isValidId,
   isValidRunText,
+  bindingHolds,
   resolvedValue,
   validatePaint,
   withBoundValue,
@@ -25,7 +27,14 @@ import {
   type Variable,
 } from '@vector-studio/model';
 import { Draft, fail, type Failure } from './draft.js';
-import { freshId, success, uniqueIds, type EditContext, type EditResult } from './edit-support.js';
+import {
+  drawIds,
+  freshId,
+  success,
+  uniqueIds,
+  type EditContext,
+  type EditResult,
+} from './edit-support.js';
 import { documentTree, pageOf } from './tree.js';
 import type { DocumentCommand } from './types.js';
 
@@ -114,7 +123,7 @@ function withBinding(
 function setBindings(node: NodeV8, bindings: Bindings | undefined): NodeV8 {
   const { bindings: _old, ...rest } = node;
   void _old;
-  return (bindings === undefined ? rest : { ...rest, bindings });
+  return bindings === undefined ? rest : { ...rest, bindings };
 }
 
 /**
@@ -129,7 +138,8 @@ function resync(draft: Draft, defaultStroke: DefaultStroke): void {
     let next: NodeV8 = node;
     for (const key of BINDING_KEYS) {
       const ref = node.bindings[key];
-      if (ref === undefined) continue;
+      // Untouched when it still holds (review r1 nit 7): no new object, no touched ID.
+      if (ref === undefined || bindingHolds(next, key, ref, tables)) continue;
       const target = bindingTarget(tables, ref);
       const value =
         target === null || !bindingTypeFits(target, key)
@@ -239,17 +249,12 @@ export function tableCommand(
       const value = validValue(kind, command.value);
       if (value === null) return fail('editor.invalid-command', '/value');
       if ((set?.items.length ?? 0) >= MAX_VARIABLES) return fail('editor.table-limit');
-      let modes = set?.modes;
-      let mode = set?.mode;
-      if (modes === undefined || mode === undefined) {
-        const modeId = fresh();
-        if (typeof modeId !== 'string') return modeId;
-        modes = [{ id: modeId, name: 'Mode 1' }];
-        mode = modeId;
-      }
-      let id = fresh();
-      if (typeof id === 'string' && id === mode) id = fresh();
-      if (typeof id !== 'string') return id;
+      // The mode (when the set is new) and the variable in one draw, so they differ.
+      const drawn = drawIds(document, context.ids, set === undefined ? 2 : 1);
+      if (drawn === null) return fail('editor.duplicate-id');
+      const id = drawn[drawn.length - 1]!;
+      const modes = set?.modes ?? [{ id: drawn[0]!, name: 'Mode 1' }];
+      const mode = set?.mode ?? drawn[0]!;
       const values = Object.fromEntries(modes.map((entry) => [entry.id, value]));
       const variable = { id, name: command.name, type: kind, values } as Variable;
       draft.setTables({
@@ -270,11 +275,18 @@ export function tableCommand(
       if (set === undefined || index < 0) return fail('editor.unknown-variable');
       const variable = set.items[index]!;
       const merged: Record<string, Color | number> = { ...variable.values };
-      for (const [key, raw] of Object.entries(values ?? {})) {
-        const value = validValue(variable.type, raw);
-        if (value === null) return fail('editor.invalid-command', `/values/${key}`);
+      const entries = Object.entries(values ?? {});
+      // E3: every malformed value before an unknown mode key.
+      const checked = entries.map(([key, raw]) => [key, validValue(variable.type, raw)] as const);
+      const bad = checked.find(([, value]) => value === null);
+      if (bad !== undefined)
+        return fail(
+          'editor.invalid-command',
+          `/values/${bad[0].replaceAll('~', '~0').replaceAll('/', '~1')}`,
+        );
+      for (const [key, value] of checked) {
         if (!Object.hasOwn(merged, key)) return fail('editor.unknown-mode');
-        merged[key] = value;
+        merged[key] = value!;
       }
       const next = {
         ...variable,
@@ -380,7 +392,8 @@ function bindProperty(
     ref === null ||
     (isRecord(ref) &&
       Object.keys(ref).length === 1 &&
-      (typeof ref.style === 'string' || typeof ref.variable === 'string'));
+      ((typeof ref.style === 'string' && isValidId(ref.style)) ||
+        (typeof ref.variable === 'string' && isValidId(ref.variable))));
   if (!shaped) return fail('editor.invalid-command', '/ref');
   const tree = documentTree(document);
   if (
