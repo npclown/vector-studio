@@ -49,9 +49,9 @@ const STROKE_TYPES: ReadonlySet<NodeV8['type']> = new Set([...FILL_TYPES, 'line'
 /** The `setStyle` keys a node type takes (editor-core's `PROPS`). */
 export function styleKeys(type: NodeV8['type']): readonly (keyof StyleProps)[] {
   const keys: (keyof StyleProps)[] = [];
-  if (FILL_TYPES.has(type)) keys.push('fill');
+  if (FILL_TYPES.has(type)) keys.push('fill', 'fills');
   if (STROKE_TYPES.has(type)) keys.push('stroke');
-  keys.push('opacity');
+  keys.push('opacity', 'blendMode');
   if (type === 'rectangle') keys.push('cornerRadii');
   return keys;
 }

@@ -8,6 +8,7 @@ import {
   type PageV2,
   type SymbolNodeV8,
 } from '@vector-studio/model';
+import { leafSceneCount } from './fills.js';
 import { IDENTITY, localTransform, multiply, type Matrix } from './geometry.js';
 
 // Tree queries over a v2 document (M1 contract, M1-S3). The model bounds the tree depth by 256,
@@ -292,16 +293,34 @@ export function effectiveOpacity(tree: TreeView, node: NodeV8): number {
   return source?.type === 'symbol' ? node.opacity * source.opacity : node.opacity;
 }
 
-/** The isolation count of `id`: its container ancestors with opacity below 1. */
+/**
+ * Whether `node` draws as an isolated layer, counted conservatively on the document (V-35
+ * contract, V35-P6): opacity below 1 (an instance's effective opacity), visible effects at
+ * opacity above 0 (E41), a container or instance mode other than `passThrough`, a leaf mode
+ * other than `normal`, or a leaf whose fills expand (two or more, or one non-normal) at opacity
+ * below 1 or with effects.
+ */
+export function isolates(tree: TreeView, node: NodeV8): boolean {
+  const opacity = effectiveOpacity(tree, node);
+  const effects = node.effects.some((effect) => effect.visible);
+  if (effects && opacity > 0) return true;
+  if (isContainer(node) || node.type === 'instance') {
+    return opacity < 1 || node.blendMode !== 'passThrough';
+  }
+  if (node.blendMode !== 'normal') return true;
+  return opacity < 1 && 'fills' in node && leafSceneCount(node) > 1;
+}
+
+/** The isolation count of `id`: its container ancestors that isolate (V35-P6). */
 export function isolationCount(tree: TreeView, id: string): number {
-  return ancestors(tree, id).filter((node) => node.opacity < 1).length;
+  return ancestors(tree, id).filter((node) => isolates(tree, node)).length;
 }
 
 /** The isolation count a new child of `owner` (a page or container) has. */
 export function childIsolationCount(tree: TreeView, owner: string): number {
   const node = tree.node(owner);
   if (!isContainer(node)) return 0;
-  return isolationCount(tree, owner) + (node.opacity < 1 ? 1 : 0);
+  return isolationCount(tree, owner) + (isolates(tree, node) ? 1 : 0);
 }
 
 /**
@@ -320,9 +339,11 @@ function sourceIsolationLevels(tree: TreeView, source: string): SourceIsolationL
     const entry = tree.node(id);
     if (entry === undefined) continue;
     if (level > node) node = level;
-    if (entry.type === 'frame' && entry.opacity < 1 && level > unit) unit = level;
+    if (entry.type !== 'group' && entry.type !== 'maskGroup' && isolates(tree, entry)) {
+      if (level > unit) unit = level;
+    }
     if (isContainer(entry)) {
-      const next = entry.opacity < 1 ? level + 1 : level;
+      const next = isolates(tree, entry) ? level + 1 : level;
       for (const child of entry.children) stack.push([child, next]);
     }
   }
@@ -355,12 +376,12 @@ export function isolationBreaks(
   levelsOf: (source: string) => SourceIsolationLevels = isolationLevelsMemo(tree),
 ): boolean {
   if (count > MAX_ISOLATION_COUNT) return true;
-  const opacity = effectiveOpacity(tree, node);
-  const unit = node.type === 'frame' || node.type === 'symbol' || node.type === 'instance';
-  if (unit && opacity < 1 && count > MAX_ISOLATED_UNIT_COUNT) return true;
+  // A frame unit or a leaf that is a layer puts its content one level below it (V35-P6).
+  const layered = node.type !== 'group' && node.type !== 'maskGroup' && isolates(tree, node);
+  if (layered && count > MAX_ISOLATED_UNIT_COUNT) return true;
   if (node.type !== 'instance') return false;
   const levels = levelsOf(node.symbol);
-  const below = count + (opacity < 1 ? 1 : 0);
+  const below = count + (isolates(tree, node) ? 1 : 0);
   return (
     (levels.node >= 0 && below + levels.node > MAX_ISOLATION_COUNT) ||
     (levels.unit >= 0 && below + levels.unit > MAX_ISOLATED_UNIT_COUNT)
@@ -383,7 +404,7 @@ function isolationViolators(
       if (node === undefined) continue;
       if (isolationBreaks(tree, node, count, levelsOf)) found.add(id);
       if (isContainer(node)) {
-        const next = node.opacity < 1 ? count + 1 : count;
+        const next = isolates(tree, node) ? count + 1 : count;
         for (const child of node.children) stack.push([child, next]);
       }
     }

@@ -336,6 +336,8 @@ describe('M4 section 8: the panel helpers', () => {
     ]);
     const styles: Readonly<Record<keyof StyleProps, StyleProps>> = {
       fill: { fill: BLUE },
+      fills: { fills: [] },
+      blendMode: { blendMode: 'multiply' },
       stroke: { stroke: { width: 7 } },
       opacity: { opacity: 0.25 },
       cornerRadii: { cornerRadii: [1, 2, 3, 4] },
