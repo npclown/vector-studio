@@ -1482,6 +1482,8 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         if (source === undefined) return;
         const target = this.#primitiveTarget();
         scene.setTarget(target);
+        // V-41 contract, V41-R3: the source's clear colour, opaque black when it has none.
+        scene.setClearColor?.(source.clearColor ?? { r: 0, g: 0, b: 0, a: 1 });
         let packet;
         const measuring = this.#measurementActive;
         const prepareStart = measuring ? this.#now() : 0;

@@ -379,6 +379,11 @@ export function orderedDocument(document: DocumentV8): Ordered {
       ...((page.guides?.length ?? 0) > 0
         ? { guides: page.guides!.map((guide) => ({ axis: guide.axis, value: guide.value })) }
         : {}),
+      // V41-S3: after the guides; an absent field is not written.
+      ...(page.background === undefined ? {} : { background: color(page.background) }),
+      ...(page.grid === undefined
+        ? {}
+        : { grid: { size: page.grid.size, color: color(page.grid.color) } }),
     })),
     nodes: Object.fromEntries(
       Object.keys(document.nodes)

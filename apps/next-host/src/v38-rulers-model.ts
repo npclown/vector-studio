@@ -197,3 +197,42 @@ export function dragStale(drag: GuideDrag, revision: number, page: string): bool
 export function pageGuides(document: DocumentV8, page: string): readonly Guide[] {
   return document.pages.find((entry) => entry.id === page)?.guides ?? [];
 }
+
+// V-41 contract, V41-H1: the page's canvas grid over the whole canvas.
+
+/** The smallest CSS px spacing the canvas grid draws at (V41-H1). */
+export const CANVAS_GRID_MIN_PX = 8;
+
+/** `size · 2^k` for the smallest whole `k >= 0` with a spacing of at least 8 CSS px at `zoom`. */
+export function canvasGridStep(size: number, zoom: number): number {
+  let step = size;
+  // A bounded loop: `size > 0` and `zoom > 0`, so 64 doublings cover every finite pair.
+  for (let k = 0; k < 64 && step * zoom < CANVAS_GRID_MIN_PX; k += 1) step *= 2;
+  return step;
+}
+
+/**
+ * The SVG path data of the canvas grid lines visible on a `width` × `height` CSS px canvas: the
+ * page multiples of `step` on both axes, each a full-height or full-width line at half-pixel
+ * offsets so a 1 px stroke stays crisp.
+ */
+export function canvasGridPath(
+  camera: RenderCamera,
+  width: number,
+  height: number,
+  step: number,
+): string {
+  const { position, zoom } = camera;
+  const parts: string[] = [];
+  const axis = (origin: number, extent: number, line: (px: number) => string) => {
+    const first = Math.ceil(origin / step);
+    const last = Math.floor((origin + extent / zoom) / step);
+    for (let k = first; k <= last; k += 1) {
+      const px = Math.round((k * step - origin) * zoom) + 0.5;
+      parts.push(line(px));
+    }
+  };
+  axis(position.x, width, (px) => `M${px} 0V${height}`);
+  axis(position.y, height, (px) => `M0 ${px}H${width}`);
+  return parts.join('');
+}

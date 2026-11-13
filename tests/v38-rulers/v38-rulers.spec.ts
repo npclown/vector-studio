@@ -149,9 +149,17 @@ test('a frame with columns draws them, and Shift+R hides the rulers', async ({ p
     },
   });
   const grid = page.locator(`[data-testid="layout-grid"][data-frame="${frame}"]`);
+  const canvasGrid = page.getByTestId('canvas-grid');
+  // V-41 contract, V41-H2: the studio starts with grids hidden; Grids shows the canvas grid
+  // (V41-H1) and the layout grids, and hides both again.
+  await expect(grid).toHaveCount(0);
+  await expect(canvasGrid).toHaveCount(0);
+  await page.getByTestId('toggle-layout-grids').click();
   await expect(grid).toHaveAttribute('data-bands', '4');
+  await expect(canvasGrid).toHaveAttribute('data-step', '10');
   await page.getByTestId('toggle-layout-grids').click();
   await expect(grid).toHaveCount(0);
+  await expect(canvasGrid).toHaveCount(0);
   await page.getByTestId('toggle-layout-grids').click();
   await expect(grid).toHaveCount(1);
 
@@ -224,4 +232,58 @@ test('a held Space picks up no guide, and a window blur ends a drag unwritten', 
   const now = await state(page);
   expect(now.guides).toEqual([{ axis: 'x', value: 300 }]);
   expect(now.undo).toBe(undo);
+});
+
+// V-41 contract, V41-U1 and V41-A8: with nothing selected the Canvas section sets the page's
+// background and grid colour (one undo step each); with a renderer (headed), the captured frame
+// shows the background where nothing is drawn.
+test('the Canvas section sets the background and grid colour; the frame clears to it', async ({
+  page,
+}) => {
+  const errors = await open(page);
+  await run(page, { type: 'setViewport', camera: { position: { x: 0, y: 0 }, zoom: 1 } });
+  const panel = page.getByTestId('canvas-panel');
+  await expect(panel).toBeVisible();
+  const background = panel.getByLabel('Canvas background', { exact: true });
+  await background.fill('#ffffff');
+  await background.press('Enter');
+  const gridColour = panel.getByLabel('Canvas grid colour', { exact: true });
+  await gridColour.fill('#ff0000');
+  await gridColour.press('Enter');
+  const page0 = await page.evaluate(() => {
+    const { editor } = (window as unknown as { __p5Host: Hook }).__p5Host;
+    const snapshot = editor.getSnapshot();
+    return snapshot.document.pages.find((entry) => entry.id === snapshot.activePage)!;
+  });
+  expect(page0.background).toEqual({ r: 1, g: 1, b: 1, a: 1 });
+  expect(page0.grid).toEqual({ size: 10, color: { r: 1, g: 0, b: 0, a: 0.35 } });
+  await page.getByTestId('toggle-layout-grids').click();
+  await expect(page.getByTestId('canvas-grid')).toHaveAttribute('stroke', 'rgba(255, 0, 0, 0.35)');
+
+  type Capture = Readonly<{
+    capture: () => Promise<{ width: number; devicePixelRatio: number; rgba: Uint8Array }>;
+  }>;
+  const hasRenderer = await page.evaluate(
+    () => (window as unknown as { __nextHostRenderer?: Capture }).__nextHostRenderer !== undefined,
+  );
+  if (hasRenderer) {
+    // A page point the empty document draws nothing at, away from the rulers.
+    const pixel = await page.evaluate(async () => {
+      const hook = (window as unknown as { __nextHostRenderer: Capture }).__nextHostRenderer;
+      let frame: Awaited<ReturnType<Capture['capture']>> | null = null;
+      for (let attempt = 0; frame === null; attempt += 1) {
+        try {
+          frame = await hook.capture();
+        } catch (error) {
+          if (attempt >= 60 || !String(error).includes('not-ready')) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+      }
+      const at = Math.floor(200 * frame.devicePixelRatio);
+      const offset = (at * frame.width + at) * 4;
+      return [frame.rgba[offset], frame.rgba[offset + 1], frame.rgba[offset + 2]];
+    });
+    expect(pixel).toEqual([255, 255, 255]);
+  }
+  expect(errors).toEqual([]);
 });

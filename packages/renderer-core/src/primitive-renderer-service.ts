@@ -10,6 +10,7 @@ import type {
   RendererSceneSynchronization,
   RenderSceneSnapshot,
   SceneApplyResult,
+  SceneColor,
   SceneSynchronizationState,
   StrokeMeshPort,
 } from '@vector-studio/contracts';
@@ -107,6 +108,9 @@ export type PrimitiveRendererServiceOptions = Readonly<{
    */
   textAtlasPageSizeForTesting?: number;
 }>;
+
+/** V41-R3: the clear colour before any `setClearColor`, the main pass's former fixed one. */
+const OPAQUE_BLACK: SceneColor = Object.freeze({ r: 0, g: 0, b: 0, a: 1 });
 
 /** Owns the CPU scene mirror and packet source while the backend owns scheduling and native state. */
 export class PrimitiveRendererService
@@ -314,6 +318,29 @@ export class PrimitiveRendererService
 
   public getCameraState(): RenderCameraState | null {
     return this.#mirror.getCameraState();
+  }
+
+  #clearColor: SceneColor = OPAQUE_BLACK;
+
+  /** V-41 contract, V41-R3: the colour the backend clears the main pass to; read per frame. */
+  public get clearColor(): SceneColor {
+    return this.#clearColor;
+  }
+
+  /**
+   * V41-R1, R3: keeps `color` (straight alpha) and redraws when it changes; a colour with a
+   * component that is not finite or outside [0, 1] is ignored, as is any call after dispose.
+   */
+  public setClearColor(color: SceneColor): void {
+    if (this.#disposed || typeof color !== 'object' || color === null) return;
+    const { r, g, b, a } = color;
+    const unit = (value: unknown) =>
+      typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+    if (!unit(r) || !unit(g) || !unit(b) || !unit(a)) return;
+    const current = this.#clearColor;
+    if (current.r === r && current.g === g && current.b === b && current.a === a) return;
+    this.#clearColor = Object.freeze({ r, g, b, a });
+    this.#invalidate('scene');
   }
 
   public prepare(target: PrimitiveTarget): PrimitivePacket | null {

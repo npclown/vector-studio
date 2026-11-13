@@ -1345,6 +1345,16 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     this.#staticResourceIds = staticResourceIds;
   }
 
+  /** V41-R3: the main pass's clear value, premultiplied; opaque black until set. */
+  #clearValue: GPUColorDict = { r: 0, g: 0, b: 0, a: 1 };
+
+  public setClearColor(color: Readonly<{ r: number; g: number; b: number; a: number }>): void {
+    const { r, g, b, a } = color;
+    const unit = (value: number) => Number.isFinite(value) && value >= 0 && value <= 1;
+    if (!unit(r) || !unit(g) || !unit(b) || !unit(a)) return;
+    this.#clearValue = { r: r * a, g: g * a, b: b * a, a };
+  }
+
   public setTarget(target: PrimitiveTarget): void {
     this.#requireActive();
     if (
@@ -1637,7 +1647,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
               ...(multisampleView === undefined || !last
                 ? {}
                 : { resolveTarget: presentationView }),
-              clearValue: { r: 0, g: 0, b: 0, a: 1 },
+              clearValue: this.#clearValue,
               loadOp: resume ? 'load' : 'clear',
               storeOp: multisampleView === undefined || !last ? 'store' : 'discard',
             },

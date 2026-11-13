@@ -124,6 +124,11 @@ export interface WebGpuPrimitiveScenePort extends PrimitivePacketConsumer {
     Record<'plain' | 'clip' | 'shifted' | 'clip-shifted', number>
   >;
   setTarget(target: PrimitiveTarget): void;
+  /**
+   * V-41 contract, V41-R3: the colour (straight alpha) the main pass's first segment clears to
+   * from the next submit on; the backend sets it before each submit. Optional for test fakes.
+   */
+  setClearColor?(color: Readonly<{ r: number; g: number; b: number; a: number }>): void;
   submitPrimitivePacket: PrimitivePacketConsumer['submitPrimitivePacket'];
   /**
    * @internal Tests only (E10 contract, section 3.2): arms the copy, and the count pass when

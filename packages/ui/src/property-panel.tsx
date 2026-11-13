@@ -74,6 +74,7 @@ import {
   type ResizingSection as ResizingState,
 } from './layout-model.js';
 import { AppearancePanel } from './appearance-panel.js';
+import { CanvasSection } from './canvas-panel.js';
 import { ColorWell, Swatches } from './color-controls.js';
 import { Choice, Row, TextField } from './fields.js';
 import {
@@ -1541,6 +1542,7 @@ export function PropertyPanel() {
     <section aria-label="Properties" data-testid="property-panel">
       <AppearancePanel layout="section" />
       <PropertySections />
+      <CanvasSection />
     </section>
   );
 }

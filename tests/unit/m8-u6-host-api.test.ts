@@ -185,6 +185,8 @@ const ADDED: Readonly<Record<keyof typeof AT_17A2B0A, readonly string[]>> = {
     'CanvasContextMenu',
     'CanvasContextMenuAt',
     'CanvasContextMenuProps',
+    // V-41 (canvas background and grid).
+    'CanvasSection',
     'EditorPanels',
     // V-25 (editor UI usability) adds the icon toolbar, the zoom menu and the tree's props.
     'EditorToolbar',

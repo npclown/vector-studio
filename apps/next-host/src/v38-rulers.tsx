@@ -7,6 +7,7 @@ import type {
   SelectionHandles,
 } from '@vector-studio/editor-core';
 import { layoutGridLines } from '@vector-studio/editor-core';
+import { DEFAULT_PAGE_GRID } from '@vector-studio/model';
 import { useEditorCommands, useEditorSelector } from '@vector-studio/react';
 import {
   useCallback,
@@ -25,6 +26,8 @@ import {
   guideScreen,
   guideValue,
   mayPickGuide,
+  canvasGridPath,
+  canvasGridStep,
   pageGuides,
   releaseRemoves,
   releasedGuides,
@@ -393,6 +396,36 @@ function LayoutGrids({
   return <>{shapes}</>;
 }
 
+/** V-41 contract, V41-H1: the page's canvas grid over the whole canvas, under the layout grids. */
+function CanvasGrid({
+  document,
+  page,
+  camera,
+  width,
+  height,
+}: {
+  document: DocumentV8;
+  page: string;
+  camera: RenderCamera;
+  width: number;
+  height: number;
+}) {
+  const grid = document.pages.find((entry) => entry.id === page)?.grid ?? DEFAULT_PAGE_GRID;
+  const step = canvasGridStep(grid.size, camera.zoom);
+  const { r, g, b, a } = grid.color;
+  return (
+    <path
+      data-testid="canvas-grid"
+      data-step={step}
+      d={canvasGridPath(camera, width, height, step)}
+      stroke={`rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`}
+      strokeWidth={1}
+      fill="none"
+      shapeRendering="crispEdges"
+    />
+  );
+}
+
 /**
  * V38-H2, H3: the layout grids and the page guides, under the selection overlay; draws only, the
  * pointer goes through. `drag` shows the dragged guide at its live value.
@@ -426,6 +459,9 @@ export function GridsAndGuides({
       style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
       data-testid="grids-and-guides"
     >
+      {grids ? (
+        <CanvasGrid document={document} page={page} camera={camera} width={width} height={height} />
+      ) : null}
       {grids ? <LayoutGrids document={document} page={page} camera={camera} /> : null}
       {shown.map(({ guide, index }) => {
         const at = guideScreen(guide, camera);
@@ -707,7 +743,7 @@ export function ViewToggles() {
         type="button"
         data-testid="toggle-layout-grids"
         aria-pressed={grids}
-        title="Layout grids (Ctrl+Shift+4)"
+        title="Grids: canvas grid and layout grids (Ctrl+Shift+4)"
         onClick={() => execute({ type: 'setLayoutGridsVisible', visible: !grids })}
       >
         Grids

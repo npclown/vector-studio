@@ -28,6 +28,8 @@ const REACT = 'packages/react';
 const OWN_VALUES = [
   'AppearancePanel',
   'CanvasContextMenu',
+  // V-41 (canvas background and grid).
+  'CanvasSection',
   'EditorPanels',
   'EditorToolbar',
   // V-30 (export).

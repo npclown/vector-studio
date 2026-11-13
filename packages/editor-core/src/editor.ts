@@ -416,6 +416,7 @@ const DOCUMENT_COMMANDS = new Set([
   'renamePage',
   'movePage',
   'setGuides',
+  'setPageCanvas',
   'rotateNodes',
   'alignNodes',
   'distributeNodes',

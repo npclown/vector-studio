@@ -43,6 +43,7 @@ import type {
   TextNodeV8,
   TextRun,
   Guide,
+  PageGrid,
   LayoutGrid,
 } from '@vector-studio/model';
 
@@ -736,6 +737,16 @@ export type DocumentCommand =
    * page's record no step. Each guide is validated as a load would (V38-S1).
    */
   | Readonly<{ type: 'setGuides'; page: string; guides: readonly Guide[] }>
+  /**
+   * Sets the canvas background and grid of `page` (V-41 contract, V41-C1) as one step: an absent
+   * key leaves its field, `null` removes it (the default); no change records no step.
+   */
+  | Readonly<{
+      type: 'setPageCanvas';
+      page: string;
+      background?: Color | null;
+      grid?: PageGrid | null;
+    }>
   | Readonly<{ type: 'movePage'; id: string; index: number }>;
 
 export type AlignEdge = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom';
