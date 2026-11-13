@@ -1,5 +1,6 @@
 import type { PagePoint, TextStyle } from '@vector-studio/editor-core';
 import {
+  DEFAULT_PAGE_BACKGROUND,
   isImagePaint,
   type Color,
   type DocumentV8,
@@ -16,8 +17,8 @@ import { nodePageCorners } from './m2-geometry';
 // the WebGPU renderer clears to opaque black. Only the two automatic colours are switched: a
 // colour the user set some other way is kept. Host only; the editor is unchanged.
 
-/** The renderer's clear colour (`native-primitive-scene.ts`, the primitive pass). */
-export const CANVAS_BACKDROP: Color = { r: 0, g: 0, b: 0, a: 1 };
+/** The canvas of a page without a background: the default page background (V41-S1). */
+export const CANVAS_BACKDROP: Color = DEFAULT_PAGE_BACKGROUND;
 
 const BLACK: Color = { r: 0, g: 0, b: 0, a: 1 };
 const WHITE: Color = { r: 1, g: 1, b: 1, a: 1 };
@@ -107,10 +108,15 @@ function backdropIn(
   return null;
 }
 
-/** The colour under the page point `point` of page `page`: a backdrop fill or the canvas. */
+/**
+ * The colour under the page point `point` of page `page`: a backdrop fill or the canvas, which is
+ * the page's background (V-41 contract, V41-H3), `CANVAS_BACKDROP` when it has none.
+ */
 export function backdropColor(document: DocumentV8, page: string, point: PagePoint): Color {
-  const children = document.pages.find((p) => p.id === page)?.children ?? [];
-  return backdropIn(document, children, point, 1) ?? CANVAS_BACKDROP;
+  const entry = document.pages.find((p) => p.id === page);
+  return (
+    backdropIn(document, entry?.children ?? [], point, 1) ?? entry?.background ?? CANVAS_BACKDROP
+  );
 }
 
 /** WCAG relative luminance of a colour's sRGB channels. */

@@ -2,13 +2,17 @@ import {
   MAX_TREE_DEPTH,
   normalizeRotation,
   validateGuides,
+  validatePageBackground,
+  validatePageGrid,
   validateNode,
+  type Color,
   type DocumentV8,
   type Fill,
   type FillPaint,
   type Frame,
   type NodeV8,
   type PageV2,
+  type PageV8,
   type Stroke,
   type SymbolNodeV8,
   type TextNodeV8,
@@ -612,6 +616,56 @@ export function applyEdit(
       const { guides: _drop, ...rest } = page;
       void _drop;
       pages[index] = result.guides.length === 0 ? rest : { ...rest, guides: result.guides };
+      draft.setPages(pages);
+      return success(finish(draft), draft, []);
+    }
+    case 'setPageCanvas': {
+      // V-41 contract, V41-C1: an absent key keeps its field, null removes it.
+      const id = command.page;
+      if (typeof id !== 'string') return fail('editor.invalid-command', '/page');
+      const index = document.pages.findIndex((entry) => entry.id === id);
+      if (index < 0) return fail('editor.unknown-page');
+      const page = document.pages[index]!;
+      let next: PageV8 = page;
+      if (command.background !== undefined) {
+        const { background: _drop, ...rest } = next;
+        void _drop;
+        if (command.background === null) next = rest;
+        else {
+          const result = validatePageBackground(command.background);
+          if (!result.ok) return fail(result.code, `/background${result.path}`);
+          next = { ...rest, background: result.value };
+        }
+      }
+      if (command.grid !== undefined) {
+        const { grid: _drop, ...rest } = next;
+        void _drop;
+        if (command.grid === null) next = rest;
+        else {
+          const result = validatePageGrid(command.grid);
+          if (!result.ok) return fail(result.code, `/grid${result.path}`);
+          next = { ...rest, grid: result.value };
+        }
+      }
+      const sameColor = (a: Color | undefined, b: Color | undefined) =>
+        a === b ||
+        (a !== undefined &&
+          b !== undefined &&
+          a.r === b.r &&
+          a.g === b.g &&
+          a.b === b.b &&
+          a.a === b.a);
+      const same =
+        sameColor(page.background, next.background) &&
+        (page.grid === next.grid ||
+          (page.grid !== undefined &&
+            next.grid !== undefined &&
+            page.grid.size === next.grid.size &&
+            sameColor(page.grid.color, next.grid.color)));
+      if (same) return { ok: true, document, touched: [], created: [] };
+      const draft = new Draft(document);
+      const pages = [...document.pages];
+      pages[index] = next;
       draft.setPages(pages);
       return success(finish(draft), draft, []);
     }

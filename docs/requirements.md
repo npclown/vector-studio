@@ -112,6 +112,7 @@ Since 2026-11-12 (Figma gap item 9; [V-39 contract](plans/viz-v39-styles-variabl
 - Align and distribute
 - Snapping to object/frame edges and centers, equal spacing, and rotation angles
 - Rulers, page guides and frame layout grids (grid, columns, rows), with snapping to guides and grid lines (since 2026-11-12, requested by the user; [V-38 contract](plans/viz-v38-rulers-guides-grids-contract.md))
+- A per-page canvas background colour and a canvas-wide grid with its colour and size, shown with the Grids toggle (since 2026-11-13, requested by the user; [V-41 contract](plans/viz-v41-canvas-background-grid-contract.md))
 - Zoom and pan
 - Copy and paste
 - Undo and redo

@@ -43,6 +43,7 @@ import type {
   LayoutGrid,
   NodeV6,
   NodeV8,
+  PageGrid,
   PageV8,
   Dash,
   FillRule,
@@ -169,6 +170,15 @@ export const MAX_EFFECT_OFFSET = 10_000;
 /** The most guides of one page, and the largest guide value magnitude (V38-S1). */
 export const MAX_GUIDES = 1000;
 export const MAX_GUIDE_VALUE = 1e7;
+
+/** V41-S1: the background of a page without `background`, the renderer's former clear colour. */
+export const DEFAULT_PAGE_BACKGROUND: Color = Object.freeze({ r: 0, g: 0, b: 0, a: 1 });
+
+/** V41-S2: the canvas grid of a page without `grid`. */
+export const DEFAULT_PAGE_GRID: PageGrid = Object.freeze({
+  size: 10,
+  color: Object.freeze({ r: 0.5, g: 0.5, b: 0.5, a: 0.35 }),
+});
 
 /** The most layout grids of one frame or symbol (V38-S2), and their number bounds. */
 export const MAX_LAYOUT_GRIDS = 16;
@@ -1992,20 +2002,70 @@ function readNodeFields(
 
 function readPage(value: unknown, path: Path, schema: Schema): PageV8 {
   const keys = ['id', 'name', 'children'];
-  if (schema.layout === 'read' && isPlainObject(value) && Object.hasOwn(value, 'guides')) {
-    keys.push('guides');
+  // V38-S1 and V41-S3: the optional page keys, read only at v8 (unknown, so refused, before).
+  if (schema.layout === 'read' && isPlainObject(value)) {
+    for (const key of ['guides', 'background', 'grid']) {
+      if (Object.hasOwn(value, key)) keys.push(key);
+    }
   }
   const record = readRecord(value, keys, path);
-  const page = {
+  let page: PageV8 = {
     id: readIdV2(record.id, [...path, 'id']),
     name: readString(record.name, [...path, 'name']),
     children: readArray(record.children, [...path, 'children'], (entry, entryPath) =>
       readIdV2(entry, entryPath),
     ),
   };
-  if (!keys.includes('guides')) return page;
-  const guides = readGuides(record.guides, [...path, 'guides']);
-  return guides.length === 0 ? page : { ...page, guides };
+  if (keys.includes('guides')) {
+    const guides = readGuides(record.guides, [...path, 'guides']);
+    if (guides.length > 0) page = { ...page, guides };
+  }
+  if (keys.includes('background')) {
+    page = { ...page, background: readPageBackground(record.background, [...path, 'background']) };
+  }
+  if (keys.includes('grid')) page = { ...page, grid: readPageGrid(record.grid, [...path, 'grid']) };
+  return page;
+}
+
+/** V41-S1: an opaque colour (`a` exactly 1). */
+function readPageBackground(value: unknown, path: Path): Color {
+  const color = readColor(value, path);
+  if (color.a !== 1) invalid([...path, 'a']);
+  return color;
+}
+
+/** V41-S2: `size` in (0, MAX_GRID_SIZE], then `color`. */
+function readPageGrid(value: unknown, path: Path): PageGrid {
+  const record = readRecord(value, ['size', 'color'], path);
+  const size = readNumber(record.size, [...path, 'size'], 0, MAX_GRID_SIZE);
+  if (size === 0) invalid([...path, 'size']);
+  return { size, color: readColor(record.color, [...path, 'color']) };
+}
+
+/** The result of `validatePageBackground` and `validatePageGrid`. */
+export type PageCanvasResult<T> =
+  | Readonly<{ ok: true; value: T }>
+  | Readonly<{ ok: false; code: 'document.invalid-field'; path: string }>;
+
+function validateWith<T>(read: (value: unknown, path: Path) => T, value: unknown) {
+  try {
+    return { ok: true, value: read(value, []) } as const;
+  } catch (error) {
+    if (error instanceof Failure) {
+      return { ok: false, code: 'document.invalid-field', path: pointer(error.path) } as const;
+    }
+    throw error;
+  }
+}
+
+/** V41-S3: a page background with the rules of `validateDocument`; `path` is relative to it. */
+export function validatePageBackground(value: unknown): PageCanvasResult<Color> {
+  return validateWith(readPageBackground, value);
+}
+
+/** V41-S3: a page grid with the rules of `validateDocument`; `path` is relative to it. */
+export function validatePageGrid(value: unknown): PageCanvasResult<PageGrid> {
+  return validateWith(readPageGrid, value);
 }
 
 const GUIDE_AXES: readonly Guide['axis'][] = ['x', 'y'];

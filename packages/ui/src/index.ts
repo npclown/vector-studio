@@ -164,6 +164,7 @@ export type {
   PageV4,
   PageV5,
   PageV6,
+  PageGrid,
   PageV8,
   Paint,
   PathAnchor,
@@ -298,6 +299,8 @@ export { LayerTree, PageList, type LayerTreeProps } from './layers.js';
 
 // Section 7.3: the property panel, with the M4 appearance panel moved here (M8-U5).
 export { AppearancePanel, type AppearancePanelProps } from './appearance-panel.js';
+// V-41 contract, V41-U1: the Canvas section (page background and canvas grid).
+export { CanvasSection } from './canvas-panel.js';
 export { PropertyPanel, PropertySections } from './property-panel.js';
 
 // V-25 (editor UI usability): a one-row icon toolbar and a zoom menu for a full-window editor.

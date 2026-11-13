@@ -467,6 +467,11 @@ export interface PrimitiveFrameSource {
    * image keys from. Optional; absent means image paints bind the transparent texture.
    */
   readonly imageSource?: ImageSourcePort;
+  /**
+   * V-41 contract, V41-R3: the colour (straight alpha) the backend clears the main pass to,
+   * read before each submit. Optional; absent means opaque black.
+   */
+  readonly clearColor?: SceneColor;
   prepare(target: PrimitiveTarget): PrimitivePacket | null;
   acknowledge(receipt: PrimitiveReceipt): void;
 }

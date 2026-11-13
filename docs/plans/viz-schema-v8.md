@@ -1,6 +1,6 @@
 # Document schema v8: one unreleased version for the gap-list items
 
-Status: **ADOPTED 2026-11-12**. Visualization track, shared by items V-31 to V-40 (the ten Figma gap-list features the user asked for on 2026-11-12, "1~10번까지 다 진행해줘"). Owner of the schema-version rule below; each item's contract owns its own fields.
+Status: **ADOPTED 2026-11-12**. Visualization track, shared by items V-31 to V-40 (the ten Figma gap-list features the user asked for on 2026-11-12, "1~10번까지 다 진행해줘") and, by amendment of 2026-11-13, V-41 (page background and grid, requested by the user that day), which adds two optional page fields under the same rule. Owner of the schema-version rule below; each item's contract owns its own fields.
 
 ## Rule
 

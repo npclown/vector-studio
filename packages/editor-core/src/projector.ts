@@ -33,7 +33,7 @@ import type {
   TextNodeV8,
 } from '@vector-studio/model';
 import { fillDraws } from './fills.js';
-import { MAX_FILLS, isImagePaint } from '@vector-studio/model';
+import { DEFAULT_PAGE_BACKGROUND, MAX_FILLS, isImagePaint } from '@vector-studio/model';
 import {
   ExpansionCache,
   sourceAppearance,
@@ -1669,6 +1669,24 @@ export class SceneProjector {
     this.textReported = false;
     this.imagesReported = false;
     this.sendSnapshot(document, page, touched);
+    this.syncClearColor(document, page);
+  }
+
+  /** The colour last sent through `setClearColor`, as `r,g,b,a`; null before the first. */
+  private clearSent: string | null = null;
+
+  /**
+   * V-41 contract, V41-R2: sends `page`'s background (the V41-S1 default when absent) to a
+   * renderer with `setClearColor`, when it differs from the colour last sent.
+   */
+  private syncClearColor(document: DocumentV8, page: string): void {
+    if (this.disposed || typeof this.renderer.setClearColor !== 'function') return;
+    const color =
+      document.pages.find((entry) => entry.id === page)?.background ?? DEFAULT_PAGE_BACKGROUND;
+    const key = `${color.r},${color.g},${color.b},${color.a}`;
+    if (key === this.clearSent) return;
+    this.renderer.setClearColor({ r: color.r, g: color.g, b: color.b, a: color.a });
+    this.clearSent = key;
   }
 
   /** The full snapshot of `replace`, also after `resync-required` and a bookkeeping retry. */
@@ -1767,6 +1785,11 @@ export class SceneProjector {
 
   /** Sends one change set for a document change on `page` that touched `touched`. */
   change(document: DocumentV8, page: string, touched: readonly string[]): void {
+    this.changeScene(document, page, touched);
+    this.syncClearColor(document, page);
+  }
+
+  private changeScene(document: DocumentV8, page: string, touched: readonly string[]): void {
     if (this.disposed) return;
     const excluded = this.excluded.size;
     const retry = this.release(document, touched);

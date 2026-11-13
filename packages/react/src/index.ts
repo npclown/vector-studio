@@ -193,6 +193,7 @@ export type {
   PageV4,
   PageV5,
   PageV6,
+  PageGrid,
   PageV8,
   Paint,
   PathAnchor,

@@ -751,6 +751,8 @@ function Surface({
   const guideDrag = useGuideDrag(editor, canvasHostRef);
   useEffect(() => {
     if (studio) editor.execute({ type: 'setRulersVisible', visible: true });
+    // V-41 contract, V41-H2: the studio starts with the canvas and layout grids hidden.
+    if (studio) editor.execute({ type: 'setLayoutGridsVisible', visible: false });
   }, [editor, studio]);
   // V-25: the canvas host, at the fixed size of the M8 layout or the studio's measured size.
   const canvasHost = (size: StudioCanvasSize) => (

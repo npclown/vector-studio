@@ -282,5 +282,11 @@ export interface RendererSceneSynchronization {
   getSynchronizationState(): SceneSynchronizationState;
   setCamera(camera: RenderCamera): CameraApplyResult;
   getCameraState(): RenderCameraState | null;
+  /**
+   * V-41 contract, V41-R1: the colour the canvas is cleared to before the scene is drawn,
+   * straight alpha. A colour with a component that is not finite or outside [0, 1] is ignored.
+   * Optional: a renderer without it keeps its own background.
+   */
+  setClearColor?(color: SceneColor): void;
   dispose(): void;
 }

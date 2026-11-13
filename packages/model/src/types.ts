@@ -684,8 +684,15 @@ export type ContainerNodeV8 = GroupNodeV8 | FrameNodeV8 | SymbolNodeV8 | SymbolS
 export type NodeV8 = LeafNodeV8 | ContainerNodeV8;
 export type NodeTypeV8 = NodeV8['type'];
 
-/** A page with its optional guides (V38-S1); absent means none. */
-export type PageV8 = PageV6 & Readonly<{ guides?: readonly Guide[] }>;
+/** V-41 contract, V41-S2: a page's canvas grid, lines every `size` page units. */
+export type PageGrid = Readonly<{ size: number; color: Color }>;
+
+/**
+ * A page with its optional guides (V38-S1; absent means none), canvas background (V41-S1) and
+ * canvas grid (V41-S2); an absent `background` or `grid` means the default above.
+ */
+export type PageV8 = PageV6 &
+  Readonly<{ guides?: readonly Guide[]; background?: Color; grid?: PageGrid }>;
 
 /** V-32 contract (docs/plans/viz-v32-image-contract.md), V32-M1: an image asset's format. */
 export type ImageMimeType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
