@@ -51,7 +51,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | V-40 | Pencil (freehand, smoothed and fitted with cubics) and polygon (3 to 60 sides) tools (Figma gap item 10) | Full | Done | Done 2026-11-12 (#570), headed m8 36/36 and manual drawing check at 8b0d021 ([contract](viz-v40-pencil-polygon-contract.md#9-record)) |
 | V-38 | Rulers, draggable page guides with snapping, and frame layout grids (grid, columns, rows) (Figma) | Full | Done | Done 2026-11-12 (#574), headed Chrome/Edge 5/5 and M2-U8 10/10 ([contract](viz-v38-rulers-guides-grids-contract.md)) |
 | V-39 | Eyedropper, colour styles and variables with modes (Figma gap item 9) | Full | Done | Done 2026-11-12 (#572, #575, #577, #586; M8 row 1 fix #587), headed Chrome and Edge `test:v39-styles` 2/2 and m8 36/36 on the main PC ([contract](viz-v39-styles-variables-contract.md#12-record)) |
-| V-41 | Canvas background colour per page, and a visible canvas grid with its colour and size under the Grids toggle (user request 2026-11-13) | Full | Active | Contract and implementation in review ([contract](viz-v41-canvas-background-grid-contract.md)) |
+| V-41 | Canvas background colour per page, and a visible canvas grid with its colour and size under the Grids toggle (user request 2026-11-13) | Full | Done | Done 2026-11-13 (#601), headed m8 36/36 and v38-rulers Chrome/Edge with the background pixel check ([contract](viz-v41-canvas-background-grid-contract.md#9-review-and-record)) |
 
 ## V-1: path appearance editing
 
