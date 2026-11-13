@@ -223,6 +223,9 @@ export function canvasGridPath(
   step: number,
 ): string {
   const { position, zoom } = camera;
+  // V41-H1: a step still under 8 CSS px after the bounded doubling (a tiny size at a small zoom)
+  // draws nothing, so the line count stays at most about width / 8 + 1 per axis.
+  if (!(step * zoom >= CANVAS_GRID_MIN_PX)) return '';
   const parts: string[] = [];
   const axis = (origin: number, extent: number, line: (px: number) => string) => {
     const first = Math.ceil(origin / step);

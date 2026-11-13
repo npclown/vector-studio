@@ -266,6 +266,8 @@ test('the Canvas section sets the background and grid colour; the frame clears t
   const hasRenderer = await page.evaluate(
     () => (window as unknown as { __nextHostRenderer?: Capture }).__nextHostRenderer !== undefined,
   );
+  // V41-A8: the headed projects must have a renderer; only the headless smoke project has none.
+  if (test.info().project.name !== 'smoke') expect(hasRenderer).toBe(true);
   if (hasRenderer) {
     // A page point the empty document draws nothing at, away from the rulers.
     const pixel = await page.evaluate(async () => {

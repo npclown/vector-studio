@@ -251,6 +251,18 @@ describe('V41-A5 canvas grid geometry (H1)', () => {
     }
     // Bounded for a tiny size.
     expect(Number.isFinite(canvasGridStep(Number.MIN_VALUE, 1e-3))).toBe(true);
+    // Review r1 (implementation) B1: such a step draws nothing rather than ~1e10 lines.
+    const tiny = canvasGridStep(1e-25, 1 / 64);
+    expect(canvasGridPath({ position: { x: 0, y: 0 }, zoom: 1 / 64 }, 1000, 1000, tiny)).toBe('');
+    for (const zoom of [0.01, 1, 256]) {
+      const d = canvasGridPath(
+        { position: { x: 0.3, y: -7 }, zoom },
+        1000,
+        600,
+        canvasGridStep(10, zoom),
+      );
+      expect(d.split('M').length - 1).toBeLessThanOrEqual(1000 / 8 + 1 + 600 / 8 + 1);
+    }
   });
 
   it('draws the visible multiples on both axes', () => {
